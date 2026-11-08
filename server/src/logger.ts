@@ -8,7 +8,11 @@ export type Redactor = (text: string) => string;
 
 /** Replaces every configured secret value. Applied to anything leaving the process. */
 export function createRedactor(secrets: readonly string[]): Redactor {
-  const values = secrets.filter((s) => s.length >= 4);
+  // Logs are serialized before redaction, so also match JSON-escaped secrets.
+  // Longest first prevents a shorter secret from exposing the rest of another.
+  const values = [...new Set(secrets.filter((s) => s.length >= 4)
+    .flatMap((s) => [s, JSON.stringify(s).slice(1, -1)]))]
+    .sort((a, b) => b.length - a.length);
   return (text) => values.reduce((out, secret) => out.split(secret).join('[REDACTED]'), text);
 }
 

@@ -373,21 +373,11 @@ interface CycleResult {
 interface ActivityEvent { id: number; type: string; level: 'info' | 'warn' | 'error'; message: string; postId: string | null; createdAt: string }
 ```
 
-## Frontend reconciliation
+## Frontend integration
 
-`src/api/types.ts` is marked provisional. Differences from this contract:
+`src/api/types.ts` models this contract, and `src/api/client.ts` provides typed requests. Post and idea lists return paginated objects; `posts.listAll()` fetches successive pages for calendar views. A post targets one platform, and scheduling and status changes use the action routes rather than a generic PATCH.
 
-| Provisional client | Backend |
-|---|---|
-| `Post.caption`, `title`, `platforms[]`, `error` | `body`, no title, one `platform` per post, `lastErrorMessage` |
-| `posts.list()` and `ideas.list()` return arrays | `{ items, total, limit, offset }` |
-| `PATCH /posts/:id` with `scheduledAt` or `status` | Rejected; use the action routes |
-| `GET /channels`, `PATCH /channels/:id` | `GET /platforms`, read-only. `connected` is `state === 'ready'`, and `canPublish` is `canPublishLive`. |
-| `Brand.pillars: string[]` | Separate `/pillars` resources |
-| `POST /ideas/generate` returns an array, with `platforms` in the body | Returns `{ items }`, requires `pillarId`; platforms come from the pillar |
-| `Idea.caption`, `Idea.platforms` | Not present; draft with `POST /ideas/:id/draft` |
-
-Already compatible: `/health`, `/autopilot*`, `/brand` (apart from `pillars`), and error messages, which the client's parser finds at top-level `message`.
+Platform readiness comes from `GET /platforms`. Only `published` means delivery succeeded; `simulated`, `blocked`, and `needs_attention` must remain distinct in the UI. Session expiry returns the frontend to sign-in, while validation errors include field details.
 
 ## Layout
 

@@ -193,6 +193,8 @@ test('HTTP status classification', async () => {
   assert.equal((await classify(400)).kind, 'failed');
   assert.equal((await classify(401)).kind, 'blocked');
   assert.equal((await classify(403)).kind, 'blocked');
+  // A request timeout may arrive after the provider applied the post.
+  assert.equal((await classify(408)).kind, 'unknown');
   const limited = await classify(429, { 'retry-after': '120' });
   assert.equal(limited.kind === 'retry' && limited.retryAfterMs, 120_000);
   assert.equal((await classify(503)).kind, 'retry');

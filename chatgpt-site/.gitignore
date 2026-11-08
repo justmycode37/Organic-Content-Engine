@@ -1,0 +1,13 @@
+/node_modules/
+/dist/
+/.build/
+/.wrangler/
+/.sites-runtime/
+/outputs/
+*.tsbuildinfo
+.env*
+!.env.example
+.dev.vars*
+!.dev.vars.example
+*.pem
+.DS_Store

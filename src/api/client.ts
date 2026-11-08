@@ -42,7 +42,13 @@ async function request<T>(path: string, init?: { method?: string; json?: unknown
   } catch {
     throw new ApiError('Cannot reach the backend.', 0);
   }
-  const text = await response.text();
+  let text: string;
+  try {
+    text = await response.text();
+  } catch {
+    // The connection can close after fetch resolves but before the body arrives.
+    throw new ApiError('Cannot reach the backend.', 0);
+  }
   let body: unknown = null;
   try {
     body = text ? JSON.parse(text) : null;
