@@ -1,0 +1,9 @@
+// Local preview only. Sites provisions the hosted Worker and D1 from .openai/hosting.json.
+{
+  "name": "organic-content-engine-local",
+  "main": "dist/server/index.js",
+  "no_bundle": true,
+  "compatibility_date": "2026-05-01",
+  "d1_databases": [{ "binding": "DB", "database_name": "local", "database_id": "local" }],
+  "send_metrics": false
+}

@@ -169,6 +169,31 @@ test('posts too far past their time are not published late', async () => {
   assert.equal(h.calls.length, 0);
 });
 
+test('rechecks lateness after earlier posts in the batch finish', async () => {
+  let h: ReturnType<typeof harness>;
+  h = harness({
+    env: LIVE_X,
+    responder: () => {
+      h.clock.advance(2);
+      return okX();
+    },
+  });
+  h.settings.update({ maxLatenessMinutes: 1 }, h.clock.now().toISOString());
+  const first = scheduledPost(h, 'x');
+  const second = scheduledPost(h, 'x');
+  h.clock.advance(1);
+
+  const result = await h.publisher.publishDue();
+
+  assert.equal(result.processed, 1);
+  assert.equal(result.missed, 1);
+  // Both posts have the same scheduled time, so either can be processed first.
+  const posts = [h.posts.get(first.id)!, h.posts.get(second.id)!];
+  assert.deepEqual(posts.map(post => post.status).sort(), ['failed', 'published']);
+  assert.equal(posts.find(post => post.status === 'failed')!.lastErrorCode, 'missed_window');
+  assert.equal(h.calls.length, 1);
+});
+
 test('an in-progress retry is not cancelled by the lateness rule', async () => {
   let call = 0;
   const h = harness({ env: LIVE_X, responder: () => (++call === 1 ? json({}, 503) : okX()) });

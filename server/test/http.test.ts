@@ -79,6 +79,13 @@ test('request bodies must be JSON and within limits', async () => {
   const h = harness();
   const wrongType = await h.request('/api/pillars', { method: 'POST', body: '{"name":"a"}', headers: { 'content-type': 'text/plain' } });
   assert.equal(wrongType.status, 415);
+  const lookalikeType = await h.request('/api/pillars', { method: 'POST', body: '{"name":"a"}', headers: { 'content-type': 'application/jsonp' } });
+  assert.equal(lookalikeType.status, 415);
+  assert.equal(((await (await h.request('/api/pillars')).json()) as any).items.length, 0);
+  const charset = await h.request('/api/pillars', {
+    method: 'POST', body: '{"name":"a"}', headers: { 'content-type': 'Application/JSON; charset=utf-8' },
+  });
+  assert.equal(charset.status, 201);
   assert.equal(((await h.request('/api/pillars', { method: 'POST', body: '{nope' })).status), 400);
   const huge = await h.request('/api/pillars', post({ name: 'a'.repeat(1024 * 1024 + 10) }));
   assert.equal(huge.status, 413);

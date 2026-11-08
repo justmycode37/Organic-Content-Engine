@@ -21,7 +21,14 @@ export function useLoad<T>(load: () => Promise<T>, deps: unknown[]): Loaded<T> {
       error => { if (id === latest.current) setState(s => ({ data: s.data, error: errorText(error), loading: false })); },
     );
   }, deps);
-  useEffect(reload, [reload]);
+  useEffect(() => {
+    reload();
+    return () => {
+      // A request can finish after its view unmounts (or its dependencies change).
+      // Invalidate it so it cannot update state in a component that is no longer active.
+      latest.current += 1;
+    };
+  }, [reload]);
   return { ...state, reload };
 }
 

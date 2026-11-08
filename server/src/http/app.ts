@@ -26,7 +26,10 @@ const MAX_BODY_BYTES = 1024 * 1024;
 async function readBody<S extends z.ZodType>(c: Context, schema: S): Promise<z.output<S>> {
   const raw = await c.req.text();
   if (raw.length === 0) return schema.parse({});
-  if (!c.req.header('content-type')?.toLowerCase().startsWith('application/json')) {
+  // Compare the media type itself: startsWith() also accepts lookalikes such as
+  // application/jsonp and application/json-seq.
+  const mediaType = c.req.header('content-type')?.split(';', 1)[0]?.trim().toLowerCase();
+  if (mediaType !== 'application/json') {
     throw new AppError(415, 'unsupported_media_type', 'Content-Type must be application/json');
   }
   let json: unknown;

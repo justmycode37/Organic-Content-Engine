@@ -56,7 +56,9 @@ export class PublisherService {
         result.skippedPaused = true;
         break;
       }
-      const lateMs = now.getTime() - Date.parse(post.scheduledAt as string);
+      // A previous publish in this batch may have taken long enough for this
+      // post to miss its window. Measure lateness when we reach the post.
+      const lateMs = this.now().getTime() - Date.parse(post.scheduledAt as string);
       if (post.attemptCount === 0 && lateMs > settings.maxLatenessMinutes * 60_000) {
         this.markMissed(post);
         result.missed += 1;

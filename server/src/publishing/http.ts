@@ -52,6 +52,9 @@ async function classifyStatus(response: Response): Promise<PublishError> {
   if ([409, 425, 429, 503].includes(status)) {
     return new PublishError('retryable', `http_${status}`, detail, parseRetryAfter(response));
   }
+  // A server timeout does not prove that it failed before applying the write.
+  // Keep it ambiguous so non-idempotent adapters cannot accidentally duplicate it.
+  if (status === 408) return new PublishError('ambiguous', 'http_408', detail);
   if (status >= 500) return new PublishError('ambiguous', `http_${status}`, detail);
   return new PublishError('permanent', `http_${status}`, detail);
 }

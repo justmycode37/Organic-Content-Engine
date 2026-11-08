@@ -1,0 +1,3 @@
+# Local preview only: copy to .dev.vars (untracked). Hosted values go through the native Sites tools.
+LOCAL_DEV_USER_ID=local_owner
+PUBLISH_MODE=dry_run

@@ -89,6 +89,8 @@ export function Pager({ total, limit, offset, onChange }: { total: number; limit
   );
 }
 
+const dialogStack: HTMLDivElement[] = [];
+
 /** Moves focus into the dialog, restores it on close, and closes on Escape. */
 function useDialogFocus(onClose: () => void) {
   const ref = useRef<HTMLDivElement>(null);
@@ -96,13 +98,35 @@ function useDialogFocus(onClose: () => void) {
   close.current = onClose;
   useEffect(() => {
     const previous = document.activeElement as HTMLElement | null;
-    ref.current?.focus();
+    const dialog = ref.current;
+    if (!dialog) return;
+    dialogStack.push(dialog);
+    dialog.focus();
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') { event.stopPropagation(); close.current(); }
+      if (dialogStack[dialogStack.length - 1] !== dialog) return;
+      if (event.key === 'Escape') { event.stopImmediatePropagation(); close.current(); return; }
+      if (event.key !== 'Tab') return;
+      const node = ref.current;
+      if (!node) return;
+      const items = Array.from(node.querySelectorAll<HTMLElement>(
+        'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      )).filter(item => item.tabIndex >= 0 && item.getClientRects().length > 0 && !item.closest('[inert], [aria-hidden="true"]'));
+      if (items.length === 0) { event.preventDefault(); node.focus(); return; }
+      const first = items[0];
+      const last = items[items.length - 1];
+      if (event.shiftKey && (document.activeElement === first || document.activeElement === node)) {
+        event.preventDefault(); last.focus();
+      } else if (!node.contains(document.activeElement) || (!event.shiftKey && document.activeElement === last)) {
+        event.preventDefault(); first.focus();
+      }
     };
-    const node = ref.current;
-    node?.addEventListener('keydown', onKey);
-    return () => { node?.removeEventListener('keydown', onKey); previous?.focus?.(); };
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('keydown', onKey);
+      const index = dialogStack.indexOf(dialog);
+      if (index !== -1) dialogStack.splice(index, 1);
+      if (previous?.isConnected) previous.focus();
+    };
   }, []);
   return ref;
 }
