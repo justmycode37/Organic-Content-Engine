@@ -100,6 +100,7 @@ const MIGRATIONS: string[] = [
     created_at TEXT NOT NULL
   );
   `,
+  `CREATE TABLE materials (id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, notes TEXT NOT NULL, enabled INTEGER NOT NULL, created_at TEXT NOT NULL, data BLOB NOT NULL);`,
 ];
 
 export function openDatabase(path: string): Db {

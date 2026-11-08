@@ -31,13 +31,13 @@ export function setUnauthorizedHandler(handler: () => void) {
   onUnauthorized = handler;
 }
 
-async function request<T>(path: string, init?: { method?: string; json?: unknown }): Promise<T> {
+async function request<T>(path: string, init?: { method?: string; json?: unknown; form?: FormData }): Promise<T> {
   let response: Response;
   try {
     response = await fetch(`${BASE}${path}`, {
       method: init?.method ?? 'GET',
       headers: init?.json !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-      body: init?.json !== undefined ? JSON.stringify(init.json) : undefined,
+      body: init?.form ?? (init?.json !== undefined ? JSON.stringify(init.json) : undefined),
     });
   } catch {
     throw new ApiError('Cannot reach the backend.', 0);
@@ -94,6 +94,20 @@ const at = (id: string) => encodeURIComponent(id);
 const post = <T>(path: string, json?: unknown) => request<T>(path, { method: 'POST', json });
 
 export const api = {
+  materials: {
+    analyze: (id: string) => post<Material>(`/materials/${at(id)}/analyze`),
+    list: () => request<{ items: Material[] }>('/materials'),
+    upload: (file: File) => { const form = new FormData(); form.set('file', file); return request<Material>('/materials', { method: 'POST', form }); },
+    update: (id: string, patch: { notes?: string; enabled?: boolean }) => request<Material>(`/materials/${at(id)}`, { method: 'PATCH', json: patch }),
+    remove: (id: string) => request<void>(`/materials/${at(id)}`, { method: 'DELETE' }),
+  },
+  chatgpt: {
+    get: () => request<ChatGPTStatus>('/chatgpt'),
+    connect: () => post<{ url: string }>('/chatgpt/connect'),
+    disconnect: () => request<{ revoked: boolean }>('/chatgpt', { method: 'DELETE' }),
+    models: () => request<{ items: { id: string; name: string }[] }>('/chatgpt/models'),
+    select: (model: string) => request<ChatGPTStatus>('/chatgpt', { method: 'PATCH', json: { model } }),
+  },
   session: {
     get: () => request<Session>('/session'),
     login: (token: string) => post<Session>('/session', { token }),
@@ -156,3 +170,6 @@ export const api = {
   },
   activity: (q: { limit?: number; beforeId?: number }) => request<{ items: ActivityEvent[] }>(`/activity${query(q)}`),
 };
+
+export interface Material { id: string; name: string; mime: string; size: number; notes: string; enabled: boolean; createdAt: string }
+export interface ChatGPTStatus { available: boolean; connected: boolean; connecting: boolean; email: string | null; model: string | null; error: string | null }

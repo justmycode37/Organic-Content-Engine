@@ -1,3 +1,6 @@
+import { Materials } from './services/materials.ts';
+import { ChatGPT } from './services/chatgpt.ts';
+import { createChatGPTGenerator } from './generation/chatgpt.ts';
 import type { Config } from './config.ts';
 import { openDatabase, type Db } from './db/database.ts';
 import { createAnthropicGenerator, createAnthropicParse } from './generation/anthropic.ts';
@@ -19,6 +22,8 @@ import { Scheduler } from './services/scheduler.ts';
 
 export interface Container {
   config: Config;
+  materials: Materials;
+  chatgpt: ChatGPT;
   db: Db;
   logger: Logger;
   redact: Redactor;
@@ -51,17 +56,27 @@ export function createContainer(config: Config, overrides: Overrides = {}): Cont
   const now = overrides.now ?? (() => new Date());
   const db = overrides.db ?? openDatabase(config.databasePath);
   const gateway = createGateway(config, redact, overrides.fetch ?? fetch, now);
-  const generator = overrides.generator ?? (config.generator.kind === 'anthropic'
+  const materials = new Materials(db);
+  const chatgpt = new ChatGPT(config, overrides.fetch ?? fetch);
+  const fallback = overrides.generator ?? (config.generator.kind === 'anthropic'
     ? createAnthropicGenerator(createAnthropicParse(config.generator.anthropicApiKey, config.generator.anthropicModel))
     : createTemplateGenerator());
 
+  const chatgptGenerator = createChatGPTGenerator(chatgpt, materials);
+  const active = () => chatgpt.status().connected ? chatgptGenerator : fallback;
+  const generator: ContentGenerator = {
+    get id() { return active().id; },
+    get reviewRequired() { return active().reviewRequired; },
+    generateIdeas: input => active().generateIdeas(input),
+    draftPost: input => active().draftPost(input),
+  };
   const settings = new SettingsRepository(db);
   const pillars = new PillarsRepository(db);
   const ideas = new IdeasRepository(db);
   const posts = new PostsRepository(db);
   const activity = new ActivityRepository(db);
 
-  const ideation = new IdeationService({ ideas, pillars, settings, generator, gateway, now });
+  const ideation = new IdeationService({ materials, ideas, pillars, settings, generator, gateway, now });
   const postService = new PostService({ db, posts, ideas, pillars, settings, activity, ideation, generator, gateway, now });
   const publisher = new PublisherService({ db, posts, settings, activity, gateway, now });
   const autonomy = new AutonomyService({ db, posts, ideas, pillars, settings, activity, ideation, postService, generator, gateway, logger, now });
@@ -74,5 +89,5 @@ export function createContainer(config: Config, overrides: Overrides = {}): Cont
     enabled: config.scheduler.enabled,
   });
 
-  return { config, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, activity, ideation, postService, publisher, autonomy, scheduler };
+  return { config, materials, chatgpt, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, activity, ideation, postService, publisher, autonomy, scheduler };
 }

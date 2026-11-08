@@ -7,7 +7,7 @@ export interface IdeaCandidate {
 }
 
 export interface ContentGenerator {
-  readonly id: 'template' | 'anthropic';
+  readonly id: 'template' | 'anthropic' | 'chatgpt';
   /** When true, generated posts always wait for human approval, even with autoApprove on. */
   readonly reviewRequired: boolean;
   generateIdeas(input: {

@@ -373,3 +373,14 @@ select { width: auto; max-width: 100%; }
   .drawer-foot { padding: 10px 16px; }
   .drawer-body { padding: 16px; }
 }
+
+.upload-zone { border: 1px dashed var(--line, #aaa); border-radius: 12px; padding: 38px 24px; text-align: center; margin: 20px 0; background: var(--surface, #fff); }
+.upload-zone.dragging { outline: 2px solid #222; background: #eee; }
+.upload-zone h3 { margin: 12px 0 8px; overflow-wrap: anywhere; }
+.upload-zone p { color: #666; margin-bottom: 20px; }
+.storage-toolbar { justify-content: space-between; margin: 24px 0; }
+.material-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 16px; }
+.material-card h3 { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.material-card .card-head { gap: 12px; }
+.material-card textarea { width: 100%; resize: vertical; }
+.material-card .row { margin-top: 16px; justify-content: space-between; }

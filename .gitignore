@@ -11,3 +11,6 @@ data/
 *.tsbuildinfo
 .DS_Store
 coverage/
+
+chatgpt-credentials.json
+chatgpt-credentials.json.*.tmp

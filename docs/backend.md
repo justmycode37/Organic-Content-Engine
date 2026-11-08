@@ -394,3 +394,27 @@ server/src/
   http/            routes, schemas, auth and origin checks
 server/test/       node:test suite; no network, no real credentials
 ```
+
+## Storage and ChatGPT plan usage
+
+The local account flow and source-material behavior are described in the README.
+All endpoints below require the existing workspace authentication where enabled.
+
+| Route | Contract |
+|---|---|
+| `GET /chatgpt` | Connection availability, state, account email, model, and sign-in error; never tokens |
+| `POST /chatgpt/connect` | `{ url }` for browser navigation to OpenAI consent; five-minute local callback listener |
+| `GET /chatgpt/models` | `{ items: [{ id, name }] }` from the connected account's model catalog |
+| `PATCH /chatgpt` | `{ model }`; validates against account catalog |
+| `DELETE /chatgpt` | Cancels pending login and clears local credentials; `{ revoked }` reports remote revocation |
+| `GET /materials` | `{ items: Material[] }` metadata only |
+| `POST /materials` | Multipart form with one `file`; maximum 100 MB; returns 201 Material |
+| `PATCH /materials/:id` | `{ notes?, enabled? }`; notes up to 12,000 characters |
+| `GET /materials/:id/file` | Private attachment download, served as application/octet-stream |
+| `POST /materials/:id/analyze` | Explicit ChatGPT analysis, appends reference notes; requires a connected account and chosen model |
+| `DELETE /materials/:id` | Deletes metadata and binary; 204 |
+
+Material metadata: `id`, `name`, `mime`, `size`, `notes`, `enabled`, `createdAt`.
+Only the multipart upload endpoint has the larger request-body limit. JSON
+endpoints retain the 1 MB limit. Storage is workspace-wide in this single-user
+application; this change does not introduce multi-tenant isolation.

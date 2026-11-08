@@ -1,3 +1,6 @@
+import { analyzeMaterial } from '../services/analyze.ts';
+import { MAX_UPLOAD } from '../services/materials.ts';
+import { z as validator } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
@@ -80,12 +83,17 @@ export function createApp(container: Container): Hono {
     maxAge: 600,
   }));
   app.use('/api/*', originGuard(config));
-  app.use('/api/*', bodyLimit({
-    maxSize: MAX_BODY_BYTES,
-    onError: () => {
-      throw new AppError(413, 'payload_too_large', 'Request body too large');
-    },
-  }));
+  app.use('/api/*', async (c, next) => {
+    if (c.req.path === '/api/materials' && c.req.method === 'POST') {
+      return bodyLimit({ maxSize: MAX_UPLOAD + 65536, onError: () => { throw new AppError(413, 'payload_too_large', 'Maximum file size is 100 MB'); } })(c, next);
+    }
+    return bodyLimit({
+      maxSize: MAX_BODY_BYTES,
+      onError: () => {
+        throw new AppError(413, 'payload_too_large', 'Request body too large');
+      },
+    })(c, next);
+  });
 
   // --- Public ---
   app.get('/api/health', (c) => {
@@ -178,6 +186,38 @@ export function createApp(container: Container): Hono {
   api.get('/autopilot', (c) => c.json(autopilot()));
   api.post('/autopilot/start', (c) => c.json(setAutopilot(true)));
   api.post('/autopilot/pause', (c) => c.json(setAutopilot(false)));
+
+  // Local account connection and private reference library.
+  api.get('/chatgpt', c => c.json(container.chatgpt.status()));
+  api.post('/chatgpt/connect', async c => {
+    const origin = c.req.header('origin');
+    const returnUrl = origin && config.corsOrigins.includes(origin) ? origin : (config.corsOrigins[0] ?? 'http://127.0.0.1:5173');
+    return c.json({ url: await container.chatgpt.start(returnUrl) });
+  });
+  api.delete('/chatgpt', async c => c.json(await container.chatgpt.disconnect()));
+  api.get('/chatgpt/models', async c => c.json({ items: await container.chatgpt.models() }));
+  api.patch('/chatgpt', async c => {
+    const { model } = await readBody(c, validator.object({ model: validator.string().min(1) }).strict());
+    await container.chatgpt.selectModel(model);
+    return c.json(container.chatgpt.status());
+  });
+  api.get('/materials', c => c.json({ items: container.materials.list() }));
+  api.post('/materials', async c => {
+    const form = await c.req.formData();
+    const file = form.get('file');
+    if (!(file instanceof File)) throw new AppError(400, 'file_required', 'Choose a file to upload');
+    return c.json(container.materials.add(file.name, file.type, new Uint8Array(await file.arrayBuffer())), 201);
+  });
+  api.post('/materials/:id/analyze', async c => c.json(await analyzeMaterial(container.materials, container.chatgpt, c.req.param('id'))));
+  api.patch('/materials/:id', async c => c.json(container.materials.update(c.req.param('id'), await readBody(c,
+    validator.object({ notes: validator.string().max(12000).optional(), enabled: validator.boolean().optional() }).strict()))));
+  api.delete('/materials/:id', c => { container.materials.remove(c.req.param('id')); return c.body(null, 204); });
+  api.get('/materials/:id/file', c => {
+    const file = container.materials.get(c.req.param('id'));
+    c.header('Content-Type', 'application/octet-stream');
+    c.header('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(file.name)}`);
+    return c.body(new Uint8Array(file.data));
+  });
 
   // Pillars
   const requirePillar = (id: string) => {
