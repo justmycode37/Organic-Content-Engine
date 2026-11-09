@@ -71,3 +71,11 @@ limits and access at [ChatGPT usage settings](https://chatgpt.com/settings/usage
 
 OAuth and generation are tested using mocks; a real user must complete consent
 to validate plan eligibility and live inference.
+
+## Evidence-backed content instructions
+
+The AI prompts now use versioned Markdown for [format research](docs/content-engine/format-research.md)
+and [content drafting](docs/content-engine/content-drafting.md). See the
+[workflow integration and research roadmap](docs/content-engine/README.md) for
+usage, limitations, and policy synchronization. Live social research is not yet
+implemented; missing evidence must not be replaced with invented viral examples.

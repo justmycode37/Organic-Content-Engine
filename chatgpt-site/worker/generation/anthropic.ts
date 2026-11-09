@@ -1,3 +1,4 @@
+import { FORMAT_RESEARCH, CONTENT_DRAFTING } from './content-policies.ts';
 import Anthropic from '@anthropic-ai/sdk';
 import { betaZodOutputFormat } from '@anthropic-ai/sdk/helpers/beta/zod';
 import { z } from 'zod';
@@ -57,10 +58,10 @@ export function createAnthropicParse(apiKey: string | null, model: string): Pars
 }
 
 export function createAnthropicGenerator(parse: ParseFn): ContentGenerator {
-  const call = async <T>(prompt: string, schema: z.ZodType<T>): Promise<T> => {
+  const call = async <T>(prompt: string, schema: z.ZodType<T>, policy: string): Promise<T> => {
     let reply: Awaited<ReturnType<ParseFn>>;
     try {
-      reply = await parse({ system: SYSTEM, prompt, schema });
+      reply = await parse({ system: `${SYSTEM}\n\n${policy}`, prompt, schema });
     } catch (error) {
       if (error instanceof GenerationError) throw error;
       const status = error instanceof Anthropic.APIError ? ` (HTTP ${error.status})` : '';
@@ -82,14 +83,14 @@ export function createAnthropicGenerator(parse: ParseFn): ContentGenerator {
         ? `\n\nDo not repeat or closely paraphrase these existing ideas:\n${avoidTitles.map((t) => `- ${t}`).join('\n')}`
         : '';
       const extra = direction ? `\n\nDirection for this batch: ${direction}` : '';
-      const prompt = `${brief(brand, pillar)}\n\nPropose ${count} distinct post ideas. For each, give a short title and a one or two sentence angle saying what the post argues or teaches.${extra}${avoid}`;
-      const { ideas } = await call(prompt, IdeasSchema);
+      const prompt = `${brief(brand, pillar)}\n\nPropose ${count} distinct post ideas. For each, give a short title and an evidence brief in angle following the research policy. Target platforms: ${pillar.platforms.join(', ')}.${extra}${avoid}`;
+      const { ideas } = await call(prompt, IdeasSchema, FORMAT_RESEARCH);
       return ideas.slice(0, count);
     },
     async draftPost({ brand, pillar, idea, platform, maxChars, revisionNote }) {
       const note = revisionNote ? `\n\nA previous draft was rejected: ${revisionNote}` : '';
       const prompt = `${brief(brand, pillar)}\n\nWrite one ${PLATFORMS[platform].displayName} post.\nIdea: ${idea.title}\nAngle: ${idea.angle}\n\nHard limit: ${maxChars} characters including spaces and hashtags. Aim well under it. Follow the platform's norms for length and formatting.${note}`;
-      const { body } = await call(prompt, DraftSchema);
+      const { body } = await call(prompt, DraftSchema, CONTENT_DRAFTING);
       return body.trim();
     },
   };
