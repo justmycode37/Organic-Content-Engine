@@ -36,7 +36,10 @@ export function createTemplateGenerator(): ContentGenerator {
       }
       return ideas;
     },
-    async draftPost({ idea, maxChars }) {
+    async draftPost({ idea, maxChars, feedbackContext, revisionNote }) {
+      // Deterministic fallback cannot semantically apply editorial notes; appending
+      // them would risk exposing internal instructions in user-facing copy.
+      void feedbackContext; void revisionNote;
       const full = `${idea.title}\n\n${idea.angle}`;
       if (countChars(full) <= maxChars) return full;
       if (countChars(idea.title) <= maxChars) return idea.title;

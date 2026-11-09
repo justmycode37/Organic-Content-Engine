@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import { AtSign, Cloud, Facebook, Instagram, Linkedin, MessageCircle, Music2, Pin, Twitter, Youtube } from 'lucide-react';
 import type { PlatformId } from '../api/types';
 
-export const PLATFORM_IDS: PlatformId[] = ['bluesky', 'mastodon', 'linkedin', 'x', 'threads', 'facebook', 'instagram', 'tiktok', 'youtube', 'pinterest'];
+export const PLATFORM_IDS: PlatformId[] = ['instagram','tiktok','x','youtube','linkedin'];
 
 const ICONS: Record<PlatformId, ReactNode> = {
   bluesky: <Cloud size={14} aria-hidden />,
@@ -27,7 +27,7 @@ export const PLATFORM_ACCESS: Record<PlatformId, string> = {
   x: 'User OAuth with tweet.write. Developer plan limits apply.',
   threads: 'Threads OAuth with threads_content_publish. Meta app review beyond testers.',
   facebook: 'Page token with pages_manage_posts. Pages only, not personal profiles.',
-  instagram: 'Professional account and Meta app review. Media must be at a public URL.',
+  instagram: 'Professional account and Meta app permissions. Reels upload directly from private Storage.',
   tiktok: 'Content Posting API. Unaudited clients can only post privately.',
   youtube: 'Google OAuth with youtube.upload. Unverified projects may be restricted.',
   pinterest: 'OAuth with pins:write. Every Pin needs a destination board.',

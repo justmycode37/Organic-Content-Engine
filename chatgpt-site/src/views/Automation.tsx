@@ -50,15 +50,15 @@ export function AutomationView() {
 
   return (
     <>
-      <PageHead eyebrow="Configure" title="Automation">Two separate controls: autopilot decides whether new posts get generated, the kill switch decides whether anything goes out.</PageHead>
+      <PageHead eyebrow="Configure" title="Automation">Automation controls background generation and scheduled publishing. The publishing switch also blocks manual publishing.</PageHead>
 
       <div className="split">
         <section className="card">
           <div className="card-head">
-            <h3>Autopilot</h3>
+            <h3>Automation</h3>
             <span className={`badge ${current?.running ? 'state-ready' : ''}`}>{current ? (current.running ? 'Enabled' : 'Paused') : '…'}</span>
           </div>
-          <p>Generates ideas and drafts each time the job endpoint runs and a cycle is due. Pausing does not stop posts that are already scheduled.</p>
+          <p>When enabled, background runs process scheduled posts and prepare drafts for review. When paused, background publishing and new generation stop. Work already in progress may finish.</p>
           {autopilot.error && <LoadError message={autopilot.error} onRetry={autopilot.reload} />}
           <dl className="meta">
             <dt>Last run</dt><dd>{fmtDateTime(current?.lastRunAt)}</dd>
@@ -69,8 +69,8 @@ export function AutomationView() {
           {usablePillars === 0 && <Notice>No active pillar has a platform, so a cycle would create nothing.</Notice>}
           <div className="row">
             {current?.running
-              ? <Button variant="primary" busy={busy === 'pause'} disabled={!!busy} onClick={() => void run('pause', async () => { setOverride(await api.autopilot.pause()); ws.toast('Autopilot paused. Scheduled posts still go out.'); })}><Pause size={14} aria-hidden /> Pause autopilot</Button>
-              : <Button variant="primary" busy={busy === 'start'} disabled={!!busy || !current} onClick={() => void run('start', async () => { setOverride(await api.autopilot.start()); ws.toast('Autopilot enabled. Cycles run when the job endpoint is called.'); })}><Play size={14} aria-hidden /> Start autopilot</Button>}
+              ? <Button variant="primary" busy={busy === 'pause'} disabled={!!busy} onClick={() => void run('pause', async () => { setOverride(await api.autopilot.pause()); ws.toast('Automation paused. Background publishing and generation are blocked.'); })}><Pause size={14} aria-hidden /> Pause automation</Button>
+              : <Button variant="primary" busy={busy === 'start'} disabled={!!busy || !current} onClick={() => void run('start', async () => { setOverride(await api.autopilot.start()); ws.toast('Automation enabled. Background work can run on the next hourly check.'); })}><Play size={14} aria-hidden /> Start automation</Button>}
             <Button busy={busy === 'cycle'} disabled={!!busy} title="Runs even while autopilot is paused, and follows all review rules." onClick={() => void run('cycle', async () => {
               const { result } = await api.scheduler.runCycle();
               ws.toast(result.error ? `Cycle error: ${result.error}` : describeCycle(result), result.error ? 'error' : 'info');
@@ -86,7 +86,7 @@ export function AutomationView() {
           <p>Stops every outgoing post, scheduled or publish-now. Posts keep their place and wait. Any that fall more than the lateness limit behind fail as missed rather than going out late.</p>
           <dl className="meta">
             <dt>Mode</dt><dd>{status.publishMode === 'dry_run' ? 'Dry run: nothing is posted' : 'Live: real posts'}</dd>
-            <dt>Scheduler</dt><dd>No background timer. Runs only when <code>POST {status.scheduler.jobPath}</code> is called.</dd>
+            <dt>Scheduler</dt><dd>ChatGPT checks hourly. Pausing Automation blocks background work here; the ChatGPT task must be paused separately to stop its hourly invocation.</dd>
             <dt>Job credential</dt><dd>{status.scheduler.jobCredentialConfigured ? 'Configured' : 'None: only you, signed in, can call it'}</dd>
             <dt>Last job call</dt><dd>{fmtDateTime(status.scheduler.lastTickAt)}</dd>
           </dl>
@@ -102,6 +102,7 @@ export function AutomationView() {
         </section>
       </div>
 
+      <Notice>To stop hourly ChatGPT invocations too, pause “Run Organic Content Engine” in ChatGPT Tasks. This site cannot change that task’s enabled state. Resume both controls when restarting automation.</Notice>
       <SettingsCard />
       <ActivityFeed />
     </>

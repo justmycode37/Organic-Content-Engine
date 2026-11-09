@@ -9,6 +9,7 @@ import type { PublishingGateway } from '../publishing/gateway.ts';
 import type { IdeasRepository } from '../repositories/ideas.ts';
 import type { PillarsRepository } from '../repositories/pillars.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
+import type { FeedbackRepository } from '../repositories/feedback.ts';
 
 const AVOID_TITLES_LIMIT = 100;
 
@@ -19,6 +20,7 @@ export class IdeationService {
   private readonly settings: SettingsRepository;
   private readonly generator: ContentGenerator;
   private readonly gateway: PublishingGateway;
+  private readonly feedback: FeedbackRepository;
   private readonly now: () => Date;
 
   constructor(deps: {
@@ -28,6 +30,7 @@ export class IdeationService {
     settings: SettingsRepository;
     generator: ContentGenerator;
     gateway: PublishingGateway;
+    feedback: FeedbackRepository;
     now: () => Date;
   }) {
     this.materials = deps.materials;
@@ -36,6 +39,7 @@ export class IdeationService {
     this.settings = deps.settings;
     this.generator = deps.generator;
     this.gateway = deps.gateway;
+    this.feedback = deps.feedback;
     this.now = deps.now;
   }
 
@@ -53,6 +57,7 @@ export class IdeationService {
       pillar,
       count,
       prompt,
+      feedbackContext: pillar.platforms.map(platform => this.feedback.context(platform, pillar.id)).filter(Boolean).join('\n'),
       avoidTitles: this.ideas.recentTitles(pillar.id, AVOID_TITLES_LIMIT),
     });
     const created: Idea[] = [];
@@ -66,14 +71,15 @@ export class IdeationService {
   }
 
   /** Over-long drafts get one revision. Text is never silently truncated. */
-  async draft(pillar: Pillar, idea: Idea, platform: PlatformId): Promise<string> {
+  async draft(pillar: Pillar, idea: Idea, platform: PlatformId, revisionNote?: string): Promise<string> {
+    if (revisionNote && this.generator.id === 'template') throw new GenerationError('The template generator cannot produce feedback-based revisions; connect an AI generator first');
     const maxChars = this.gateway.maxChars(platform);
-    const input = { brand: this.brandWithMaterials(), pillar, idea, platform, maxChars };
+    const input = { brand: this.brandWithMaterials(), pillar, idea, platform, maxChars, feedbackContext: this.feedback.context(platform, pillar.id), revisionNote };
     let body = await this.generator.draftPost(input);
     if (countChars(body) > maxChars) {
       body = await this.generator.draftPost({
         ...input,
-        revisionNote: `it was ${countChars(body)} characters; the limit is ${maxChars}.`,
+        revisionNote: [revisionNote, `the previous draft was ${countChars(body)} characters; the limit is ${maxChars}.`].filter(Boolean).join(' '),
       });
     }
     if (countChars(body) > maxChars) {

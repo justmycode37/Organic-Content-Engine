@@ -14,6 +14,7 @@ export const STATUS: Record<PostStatus, StatusMeta> = {
   needs_review: { label: 'Needs review', help: 'Generated and holding its proposed slot. Nothing goes out until you approve it.', icon: <Eye size={13} aria-hidden /> },
   scheduled: { label: 'Scheduled', help: 'Will publish at its scheduled time, unless publishing is paused.', icon: <Clock size={13} aria-hidden /> },
   publishing: { label: 'Publishing', help: 'A request is in flight.', icon: <LoaderCircle size={13} className="spin" aria-hidden /> },
+  processing: { label: 'Processing media', help: 'Uploaded; waiting for the provider to confirm delivery.', icon: <LoaderCircle size={13} className="spin" aria-hidden /> },
   published: { label: 'Published', help: 'The provider confirmed this post.', icon: <CircleCheck size={13} aria-hidden /> },
   simulated: { label: 'Simulated', help: 'Dry run. Nothing was posted.', icon: <FlaskConical size={13} aria-hidden /> },
   failed: { label: 'Failed', help: 'Did not post. Fix the cause, then schedule it again.', icon: <CircleX size={13} aria-hidden /> },
@@ -27,7 +28,7 @@ export function StatusBadge({ status }: { status: PostStatus }) {
   return <span className={`badge st-${status}`} title={meta.help}>{meta.icon}{meta.label}</span>;
 }
 
-/** Allowed-from lists enforced by worker/services/posts.ts. */
+/** Allowed-from lists in docs/backend.md. */
 export const CAN_EDIT: readonly PostStatus[] = ['draft', 'needs_review', 'scheduled', 'failed', 'blocked', 'simulated'];
 export const CAN_DELETE: readonly PostStatus[] = ['draft', 'needs_review', 'failed', 'blocked', 'simulated', 'cancelled'];
 export const CAN_SCHEDULE: readonly PostStatus[] = ['draft', 'needs_review', 'scheduled', 'failed', 'blocked', 'simulated', 'cancelled'];

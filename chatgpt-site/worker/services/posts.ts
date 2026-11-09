@@ -77,6 +77,7 @@ export class PostService {
     platform: PlatformId;
     body: string;
     mediaUrls: string[];
+    publishOptions?: Record<string, unknown>;
     pillarId?: string | null;
     scheduledAt?: string | null;
   }): Promise<Post> {
@@ -90,6 +91,7 @@ export class PostService {
       platform: input.platform,
       body: input.body,
       mediaUrls: input.mediaUrls,
+      publishOptions: input.publishOptions ?? {},
       pillarId: input.pillarId ?? null,
       status: scheduledAt ? 'scheduled' : 'draft',
       scheduledAt,
@@ -123,11 +125,12 @@ export class PostService {
     return post;
   }
 
-  async update(id: string, patch: { body?: string; mediaUrls?: string[]; platform?: PlatformId }): Promise<Post> {
+  async update(id: string, patch: { body?: string; mediaUrls?: string[]; platform?: PlatformId; publishOptions?: Record<string,unknown> }): Promise<Post> {
     const post = await this.require(id);
     const next = {
       body: patch.body ?? post.body,
       mediaUrls: patch.mediaUrls ?? post.mediaUrls,
+      publishOptions: patch.publishOptions ?? post.publishOptions ?? {},
       platform: patch.platform ?? post.platform,
     };
     if (post.status === 'scheduled') this.assertPublishable(next.platform, next.body, next.mediaUrls);
@@ -215,6 +218,7 @@ export class PostService {
     platform: PlatformId;
     body: string;
     mediaUrls: string[];
+    publishOptions?: Record<string, unknown>;
     pillarId: string | null;
     ideaId?: string | null;
     origin?: Post['origin'];
@@ -230,6 +234,7 @@ export class PostService {
       platform: input.platform,
       body: input.body,
       mediaUrls: input.mediaUrls,
+      publishOptions: input.publishOptions ?? {},
       status: input.status,
       origin: input.origin ?? 'manual',
       generator: input.generator ?? null,

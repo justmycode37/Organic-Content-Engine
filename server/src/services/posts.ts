@@ -11,6 +11,7 @@ import type { IdeasRepository } from '../repositories/ideas.ts';
 import type { PillarsRepository } from '../repositories/pillars.ts';
 import type { PostsRepository } from '../repositories/posts.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
+import type { FeedbackRepository } from '../repositories/feedback.ts';
 import type { IdeationService } from './ideation.ts';
 import { enumerateSlots } from './slots.ts';
 
@@ -33,6 +34,7 @@ export class PostService {
   private readonly ideation: IdeationService;
   private readonly generator: ContentGenerator;
   private readonly gateway: PublishingGateway;
+  private readonly feedback: FeedbackRepository;
   private readonly now: () => Date;
 
   constructor(deps: {
@@ -45,6 +47,7 @@ export class PostService {
     ideation: IdeationService;
     generator: ContentGenerator;
     gateway: PublishingGateway;
+    feedback: FeedbackRepository;
     now: () => Date;
   }) {
     this.db = deps.db;
@@ -56,6 +59,7 @@ export class PostService {
     this.ideation = deps.ideation;
     this.generator = deps.generator;
     this.gateway = deps.gateway;
+    this.feedback = deps.feedback;
     this.now = deps.now;
   }
 
@@ -120,6 +124,20 @@ export class PostService {
         scheduledAt,
       }));
     });
+  }
+
+  /** Creates a fresh review-only revision, retaining the published/original post. */
+  async revise(id: string): Promise<Post> {
+    const original = this.require(id);
+    const feedback = this.feedback.get(id);
+    if (!feedback) throw new AppError(409, 'feedback_required', 'Add feedback before requesting a revision');
+    const idea = original.ideaId ? this.ideas.get(original.ideaId) : null;
+    const pillar = original.pillarId ? this.pillars.get(original.pillarId) : null;
+    if (!idea || !pillar) throw new AppError(409, 'revision_context_missing', 'This post has no linked idea and pillar to revise');
+    const body = await this.ideation.draft(pillar, idea, original.platform, `Revise this prior post substantively. Original post: ${original.body.slice(0,2500)}. Operator verdict: ${feedback.verdict ?? 'unspecified'}. Feedback: ${feedback.notes || '(none)'}. Do not copy the prior example verbatim.`);
+    return this.posts.insert(this.build({ platform: original.platform, body, mediaUrls: original.mediaUrls,
+      pillarId: original.pillarId, ideaId: original.ideaId, origin: original.origin, generator: this.generator.id,
+      status: 'needs_review', scheduledAt: null }));
   }
 
   update(id: string, patch: { body?: string; mediaUrls?: string[]; platform?: PlatformId }): Post {

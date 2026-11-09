@@ -1,80 +1,45 @@
-# Organic Content Engine: hosted Site
+# Organic Content Engine — ChatGPT Site
 
-The Organic Content Engine workspace as a ChatGPT Site: a Cloudflare Worker with durable D1 storage, serving the React UI and the `/api` contract. It needs no asset binding because the compiled frontend is embedded in the Worker.
+Private social content workspace on ChatGPT Sites, backed by D1 and R2. The enabled networks are Instagram, TikTok, X, YouTube, and LinkedIn. The local Node application at the repository root is separate.
 
-## Build and check
+## Access
 
-```sh
-npm ci
-npm run build     # dist/server/index.js + dist/.openai/hosting.json
-npm run check     # typecheck, build, artifact validation, smoke suite
-```
+Sites supplies signed-in identity and owner-only hosting. The browser then requires the workspace password. Password verification and rate limits live on the server; the browser receives a signed HttpOnly, Secure cookie bound to the owner identity. No password is included in the source or frontend bundle. Runtime `APP_PASSWORD_HASH` is a salt and 100,000-round PBKDF2-SHA256 hash. Account credentials are AES-GCM encrypted in D1 with a separate runtime secret.
 
-`npm test` runs the built Worker in workerd with a real local D1 and mocked providers. It makes no external calls.
+## Generation with the ChatGPT plan
 
-## Local run
+This Site does **not** call a metered model API or reuse its identity cookie as an inference credential. Its private MCP server exposes bounded generation requests and draft-saving tools. Publishing provisions the Organic Content Engine plugin; connect it in ChatGPT if it is not automatically available.
 
-```sh
-cp .dev.vars.example .dev.vars
-npm run build
-npm run db:local    # once per local database
-npm run dev:local   # http://127.0.0.1:8787
-```
+In the Site, prepare ideas, drafts, analysis, or video requests. Open the request in ChatGPT. ChatGPT reads the brand and enabled source material through the Site plugin, generates using the current conversation's plan, and saves the results back. This is a ChatGPT handoff, not an embedded in-page model call. An eligible, separately registered hosted SIWC integration would be needed for direct subscription inference inside the page.
 
-Sites dispatch does not run locally, so `LOCAL_DEV_USER_ID` stands in for sign-in. It is ignored on any non-loopback hostname.
+Video generation uses the user's **Monid MCP connection in ChatGPT**, `https://mcp.monid.ai/v1`. A Site login does not forward other ChatGPT connections. ChatGPT discovers and inspects a video endpoint, checks the chosen spending limit, submits a run, waits for its actual result, and calls `save_video_result`. The Site imports supported completed MP4 downloads into R2. Monid usage consumes the Monid balance separately from ChatGPT plan usage. Unsupported download hosts require downloading the result and uploading it through Storage. No paid video runs occur merely from viewing the Site.
 
-## Layout
+## Storage
 
-```
-.openai/hosting.json  Site identity and the D1 binding DB. Keep project_id.
-db/schema.ts          Schema, used only to generate migrations (npm run db:generate)
-drizzle/              Migrations and journal. Applied files are immutable; append new ones.
-src/                  React UI, ported from the parent project
-worker/               Worker: http, services, repositories, publishing, generation
-scripts/              Build, artifact validation, smoke suite
-```
+Upload any file up to 100 MB. Files stream to private R2; metadata and notes persist in D1. Supported image/video previews remain authenticated. The **Use for content** toggle excludes files from future AI context. Text and notes supply up to 24,000 context characters across the 30 newest enabled files. ChatGPT can read JPEG/PNG/WebP images up to 5 MB through `read_material`. Other documents, video and audio need notes, sampled images, or transcripts; this host does not run ffmpeg or claim full footage understanding. Uploading media does not publish it.
 
-## Identity and access
+## Social publishing
 
-- Sites provides identity through `oai-authenticated-user-*` headers, read only in `worker/http/security.ts`. Sign-in and sign-out are top-level links to the Sites-owned routes. `POST` and `DELETE /api/session` return 405.
-- There is one workspace, owned by one account. The first signed-in visitor is recorded as owner in D1, and every other identity gets 403 `forbidden_user`. This relies on the Site being owner-private when it is first opened; set `OWNER_USER_ID` to pin the owner explicitly.
-- API calls must be same-origin (`Sec-Fetch-Site`, falling back to `Origin`). The HTML is not protected against framing, because Sites may frame the page.
+The Platforms screen offers account authorization, connection state, and disconnect/revocation. Configure developer app registrations first using the names in `.env.example`, with each exact callback shown by the UI. These are application credentials, not social-account passwords. The engine cannot bypass provider app review, eligibility, spending limits, or revoked permissions.
+
+- **Instagram:** MP4/MOV Reels for professional accounts. Create a resumable container, stream bytes to the provider's returned upload URI, wait for processing, then publish. This avoids exposing private Site files as public download URLs. Photo posts, carousels, and Stories are not included.
+- **TikTok:** MP4/MOV video, creator-info-driven privacy options, comments/Duet/Stitch controls, commercial disclosure, and explicit music/content consent. The server checks these before scheduling and again at delivery. Unaudited apps remain restricted by TikTok. File uploads are chunked directly to TikTok; accepted uploads remain `processing` until the provider confirms completion.
+- **YouTube:** Resumable MP4/MOV uploads, title, description, visibility, audience, and synthetic-media disclosure. The upload session and video ID persist; only processed videos are reported as delivered. Provider quotas and actual visibility remain subject to Google policy and account settings.
+- **X and LinkedIn:** Account connections and text publishing. X refreshes renewable tokens; LinkedIn refresh availability depends on the app's grant, otherwise the user reconnects on expiry. LinkedIn requires an explicit supported API version.
+
+Each post is bound to the reviewed account ID. Replacing an account requires reviewing its queued posts again. Media referenced by queued/in-progress posts cannot be deleted. Durable delivery state prevents repeated container/session creation while checking processing. An ambiguous final publish is marked `needs_attention` for a person; the engine does not guess or blindly publish again. The pause control stops new delivery work, but cannot revoke a request already accepted by a provider.
 
 ## Background work
 
-**A Worker has no timer, so nothing happens in the background by itself.** Scheduled posts and autopilot advance only when `POST /api/jobs/tick` is called. Each call publishes due posts, then runs an autopilot cycle if one is due. `/api/status` reports `scheduler.enabled: false` and `lastTickAt`, and the UI warns when no call has arrived recently.
+There is no persistent timer in a Worker. The owner-authenticated MCP tools `prepare_autopilot` and `process_due_posts` let a linked ChatGPT task prepare bounded requests and process approved scheduled posts while the Site is closed. Autopilot drafts always wait for review; TikTok requires its per-post creator settings and consent. The authenticated `/api/jobs/tick` route remains available for machine callers with `JOB_TOKEN`. A saved schedule is not evidence that an update ran; verify the writer and persisted result after deployment.
 
-Posts more than `maxLatenessMinutes` past their time when first processed fail as `missed_window` rather than going out late, so the schedule's interval must be well under that limit.
+## Build and verification
 
-The endpoint accepts any one of:
+```sh
+npm ci
+npm run check
+```
 
-| Caller | Requirement |
-|---|---|
-| Signed-in owner | None |
-| Any client | `Authorization: Bearer <JOB_TOKEN>`, min 32 characters |
-| Sites service access | `SITES_SERVICE_ACCESS_TRUSTED=true`. Set it only while the Site is confirmed owner-private, and remove it before widening the audience, because it accepts any request with no identity on this route. |
+`check` typechecks the frontend and Worker, builds `dist/server/index.js`, validates its manifest, and runs the actual Worker in workerd with D1/R2 and mocked providers. Tests cover password access, owner isolation, uploads, generation tools, OAuth state, delivery processing and retries. Mocked provider tests do not verify real app approvals, account eligibility, or live social delivery.
 
-With neither value set, only the signed-in owner can call it. A Site schedule still has to be created after publishing (see the Sites recurring updates reference); this repository does not create one.
-
-## Configuration
-
-`.env.example` lists every variable by name. Set hosted values through Site runtime values and secrets. An invalid value makes the API return 500 `config_invalid`, naming the variable and never its value.
-
-Publishing keeps the parent's gates: `PUBLISH_MODE` defaults to `dry_run`, which makes no network calls and ends posts as `simulated`. Live posting also needs complete credentials for that platform, and a post with an ambiguous outcome goes to `needs_attention` for a person to resolve.
-
-| Platform | Support on this host |
-|---|---|
-| Bluesky, Mastodon, LinkedIn, X | Direct adapter, text only. Tested against mocks only; never run against a live account. |
-| Threads, Facebook Pages, Instagram, TikTok, YouTube, Pinterest | Blocked unless routed through your own external gateway (`PUBLISHING_GATEWAY_*`). |
-
-`template` generation writes prompts for a person to finish, and those posts always wait for review. `CONTENT_GENERATOR=anthropic` needs `ANTHROPIC_API_KEY` and has been tested only against a mocked API.
-
-## Differences from the Node server
-
-| Node server | This Site |
-|---|---|
-| `node:sqlite` with interactive transactions | D1, with atomic groups through `batch()` |
-| `setInterval` scheduler | `POST /api/jobs/tick`, called externally |
-| `API_TOKEN` and session cookie | ChatGPT identity plus owner check |
-| In-memory autonomy guard | `job_locks` row in D1, expiring after 15 minutes |
-| `redirect: 'error'` | `redirect: 'manual'`, since Workers rejects `error`. A 3xx is treated as an ambiguous result and never followed. |
+Schema changes are declared in `db/schema.ts` and appended under `drizzle/`; applied migrations are immutable. `.openai/hosting.json` preserves the existing Site ID and declares D1, R2, and MCP. Publish with the Sites workflow to apply pending migrations before deployment.

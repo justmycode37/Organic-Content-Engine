@@ -9,6 +9,7 @@ const toPost = (r: Row): Post => ({
   platform: r.platform as PlatformId,
   body: r.body as string,
   mediaUrls: JSON.parse(r.media_urls as string),
+  publishOptions: JSON.parse((r.publish_options as string) || '{}'),
   status: r.status as PostStatus,
   origin: r.origin as Post['origin'],
   generator: r.generator as string | null,
@@ -59,7 +60,7 @@ export interface FinishFields {
 }
 
 /** Statuses holding a slot on the calendar. */
-const SLOT_HOLDERS = `('needs_review','scheduled','publishing')`;
+const SLOT_HOLDERS = `('needs_review','scheduled','publishing','processing')`;
 
 export class PostsRepository {
   private readonly db: Db;
@@ -92,10 +93,10 @@ export class PostsRepository {
   insertStatement(p: Post): D1PreparedStatement {
     return this.db
       .prepare(
-        `INSERT INTO posts (id, idea_id, pillar_id, platform, body, media_urls, status, origin, generator, scheduled_at, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO posts (id, idea_id, pillar_id, platform, body, media_urls, publish_options, status, origin, generator, scheduled_at, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .bind(p.id, p.ideaId, p.pillarId, p.platform, p.body, JSON.stringify(p.mediaUrls), p.status, p.origin, p.generator, p.scheduledAt, p.createdAt, p.updatedAt);
+      .bind(p.id, p.ideaId, p.pillarId, p.platform, p.body, JSON.stringify(p.mediaUrls), JSON.stringify(p.publishOptions ?? {}), p.status, p.origin, p.generator, p.scheduledAt, p.createdAt, p.updatedAt);
   }
 
   async insert(p: Post): Promise<Post> {
@@ -107,13 +108,13 @@ export class PostsRepository {
   async updateContent(
     id: string,
     fromStatuses: readonly PostStatus[],
-    content: { body: string; mediaUrls: string[]; platform: PlatformId },
+    content: { body: string; mediaUrls: string[]; platform: PlatformId; publishOptions?: Record<string,unknown> },
     now: string,
   ): Promise<boolean> {
     const placeholders = fromStatuses.map(() => '?').join(',');
     const result = await this.db
-      .prepare(`UPDATE posts SET body = ?, media_urls = ?, platform = ?, updated_at = ? WHERE id = ? AND status IN (${placeholders})`)
-      .bind(content.body, JSON.stringify(content.mediaUrls), content.platform, now, id, ...fromStatuses)
+      .prepare(`UPDATE posts SET body = ?, media_urls = ?, publish_options = ?, platform = ?, updated_at = ? WHERE id = ? AND status IN (${placeholders})`)
+      .bind(content.body, JSON.stringify(content.mediaUrls), JSON.stringify(content.publishOptions ?? {}), content.platform, now, id, ...fromStatuses)
       .run();
     return changed(result) > 0;
   }
@@ -147,7 +148,7 @@ export class PostsRepository {
   async due(now: string, limit: number): Promise<Post[]> {
     const { results } = await this.db
       .prepare(
-        `SELECT * FROM posts WHERE status = 'scheduled' AND scheduled_at <= ?
+        `SELECT * FROM posts WHERE status IN ('scheduled','processing') AND scheduled_at <= ?
            AND (next_attempt_at IS NULL OR next_attempt_at <= ?)
          ORDER BY scheduled_at, id LIMIT ?`,
       )
@@ -160,8 +161,8 @@ export class PostsRepository {
   async claim(id: string, now: string): Promise<boolean> {
     const result = await this.db
       .prepare(
-        `UPDATE posts SET status = 'publishing', lease_at = ?, attempt_count = attempt_count + 1, updated_at = ?
-         WHERE id = ? AND status = 'scheduled'`,
+        `UPDATE posts SET status = 'publishing', lease_at = ?, attempt_count = attempt_count + CASE WHEN status = 'processing' THEN 0 ELSE 1 END, updated_at = ?
+         WHERE id = ? AND status IN ('scheduled','processing')`,
       )
       .bind(now, now, id)
       .run();

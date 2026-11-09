@@ -3,7 +3,7 @@
  * claim that a platform works: `direct` means an adapter ships here; `gateway_only`
  * means posting is possible only through an operator-configured external gateway.
  */
-export const PLATFORM_IDS = [
+export const ALL_PLATFORM_IDS = [
   'bluesky',
   'mastodon',
   'linkedin',
@@ -16,7 +16,8 @@ export const PLATFORM_IDS = [
   'pinterest',
 ] as const;
 
-export type PlatformId = (typeof PLATFORM_IDS)[number];
+export type PlatformId = (typeof ALL_PLATFORM_IDS)[number];
+export const PLATFORM_IDS = ['instagram','tiktok','x','youtube','linkedin'] as const;
 
 export interface PlatformDefinition {
   id: PlatformId;
@@ -33,9 +34,9 @@ export const PLATFORMS: Record<PlatformId, PlatformDefinition> = {
   x: { id: 'x', displayName: 'X', support: 'direct', maxChars: 280, requiresMedia: false },
   threads: { id: 'threads', displayName: 'Threads', support: 'gateway_only', maxChars: 500, requiresMedia: false },
   facebook: { id: 'facebook', displayName: 'Facebook Pages', support: 'gateway_only', maxChars: 63206, requiresMedia: false },
-  instagram: { id: 'instagram', displayName: 'Instagram', support: 'gateway_only', maxChars: 2200, requiresMedia: true },
-  tiktok: { id: 'tiktok', displayName: 'TikTok', support: 'gateway_only', maxChars: 2200, requiresMedia: true },
-  youtube: { id: 'youtube', displayName: 'YouTube', support: 'gateway_only', maxChars: 5000, requiresMedia: true },
+  instagram: { id: 'instagram', displayName: 'Instagram', support: 'direct', maxChars: 2200, requiresMedia: true },
+  tiktok: { id: 'tiktok', displayName: 'TikTok', support: 'direct', maxChars: 2200, requiresMedia: true },
+  youtube: { id: 'youtube', displayName: 'YouTube', support: 'direct', maxChars: 5000, requiresMedia: true },
   pinterest: { id: 'pinterest', displayName: 'Pinterest', support: 'gateway_only', maxChars: 500, requiresMedia: true },
 };
 

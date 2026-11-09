@@ -95,6 +95,7 @@ export class PublisherService {
         platform: post.platform,
         text: post.body,
         mediaUrls: post.mediaUrls,
+        options: post.publishOptions,
         idempotencyKey: await idempotencyKey(post),
       });
     } catch (error) {
@@ -107,6 +108,8 @@ export class PublisherService {
   private describe(post: Post, outcome: PublishOutcome, now: Date): { attempt: AttemptOutcome; activity: string; fields: FinishFields } {
     const iso = now.toISOString();
     switch (outcome.kind) {
+      case 'processing':
+        return { attempt: 'retry_scheduled', activity: `Media is processing on ${post.platform}`, fields: { status: 'processing', nextAttemptAt: new Date(now.getTime() + 30000).toISOString() } };
       case 'published':
         return {
           attempt: 'published',
@@ -134,6 +137,7 @@ export class PublisherService {
           fields: { status: 'needs_attention', errorCode: outcome.code, errorMessage: outcome.message },
         };
       case 'retry': {
+        if (['instagram','tiktok','youtube'].includes(post.platform)) return { attempt: 'retry_scheduled', activity: outcome.message, fields: { status: 'processing', nextAttemptAt: new Date(now.getTime() + Math.max(30000,outcome.retryAfterMs??0)).toISOString(), errorCode: outcome.code, errorMessage: outcome.message } };
         if (post.attemptCount >= MAX_ATTEMPTS) {
           return {
             attempt: 'failed',
@@ -199,6 +203,12 @@ export class PublisherService {
     const now = this.now();
     const stale = await this.posts.staleLeases(new Date(now.getTime() - LEASE_MS).toISOString());
     for (const post of stale) {
+      const delivery=await this.db.prepare('SELECT stage FROM delivery_jobs WHERE key=?').bind(await idempotencyKey(post)).first<{stage:string}>();
+      if(delivery&&(['container','processing','done'].includes(delivery.stage)||(post.platform==='youtube'&&delivery.stage==='uploading'))){
+        await this.posts.finishStatement(post.id,{status:'processing',nextAttemptAt:now.toISOString()},now.toISOString()).run();
+        continue;
+      }
+
       await this.record(post, {
         kind: 'unknown',
         route: null,
@@ -211,7 +221,7 @@ export class PublisherService {
 }
 
 /** Stable across retries of the same text, and different once the text changes. */
-export async function idempotencyKey(post: Pick<Post, 'id' | 'body'>): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${post.id}\0${post.body}`));
+export async function idempotencyKey(post: Pick<Post, 'id' | 'body' | 'platform' | 'mediaUrls' | 'publishOptions'>): Promise<string> {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(JSON.stringify([post.id,post.platform,post.body,post.mediaUrls,post.publishOptions])));
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 }

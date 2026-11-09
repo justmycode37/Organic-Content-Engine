@@ -1,4 +1,6 @@
-import { CalendarDays, FlaskConical, Layers3, Lightbulb, LoaderCircle, LogOut, Menu, Palette, Radio, Bot, Tags, OctagonPause, Play, X } from 'lucide-react';
+import {StorageView} from './views/Storage';
+import {GenerationView} from './views/Generation';
+import { CalendarDays, FlaskConical, Layers3, Lightbulb, LoaderCircle, LogOut, Menu, Palette, Radio, Bot, Tags, OctagonPause, Play, X, ChartNoAxesCombined } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, errorText, setUnauthorizedHandler } from './api/client';
 import type { Pillar, PlatformStatus, Session, Status } from './api/types';
@@ -8,6 +10,7 @@ import { AutomationView } from './views/Automation';
 import { BrandView } from './views/Brand';
 import { CalendarView } from './views/Calendar';
 import { IdeasView } from './views/Ideas';
+import { FeedbackView } from './views/Feedback';
 import { LibraryView } from './views/Library';
 import { LoginView, signOutHref } from './views/Login';
 import { PillarsView } from './views/Pillars';
@@ -21,6 +24,9 @@ const TICK_STALE_MS = 2 * 60 * 60_000;
 const NAV: { id: ViewId; label: string; icon: ReactNode; group: 'Plan' | 'Configure' }[] = [
   { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={16} aria-hidden />, group: 'Plan' },
   { id: 'library', label: 'Library', icon: <Layers3 size={16} aria-hidden />, group: 'Plan' },
+  { id: 'feedback', label: 'Feedback', icon: <ChartNoAxesCombined size={16} aria-hidden />, group: 'Plan' },
+  { id: 'storage', label: 'Storage', icon: <Layers3 size={16} aria-hidden />, group: 'Plan' },
+  { id: 'generation', label: 'ChatGPT', icon: <Bot size={16} aria-hidden />, group: 'Plan' },
   { id: 'ideas', label: 'Ideas', icon: <Lightbulb size={16} aria-hidden />, group: 'Plan' },
   { id: 'pillars', label: 'Pillars', icon: <Tags size={16} aria-hidden />, group: 'Configure' },
   { id: 'brand', label: 'Brand', icon: <Palette size={16} aria-hidden />, group: 'Configure' },
@@ -68,7 +74,7 @@ export default function App() {
 
   if (phase === 'loading') return <main className="gate"><LoaderCircle className="spin" size={20} aria-label="Loading" /></main>;
   if (phase === 'unreachable') return <Unreachable message={failure} onRetry={check} />;
-  if (phase === 'login') return <LoginView session={session} />;
+  if (phase === 'login') return <LoginView session={session} onDone={check} />;
   return <Shell user={session?.user ?? null} onUnreachable={error => { setFailure(error); setPhase('unreachable'); }} />;
 }
 
@@ -232,6 +238,9 @@ function Shell({ user, onUnreachable }: { user: Session['user']; onUnreachable: 
             <main className="content">
               {route.view === 'calendar' && <CalendarView />}
               {route.view === 'library' && <LibraryView />}
+              {route.view === 'feedback' && <FeedbackView />}
+              {route.view === 'storage' && <StorageView />}
+              {route.view === 'generation' && <GenerationView />}
               {route.view === 'ideas' && <IdeasView />}
               {route.view === 'pillars' && <PillarsView />}
               {route.view === 'brand' && <BrandView />}

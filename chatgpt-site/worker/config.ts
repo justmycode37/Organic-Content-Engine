@@ -21,7 +21,7 @@ const schema = z.object({
   LOCAL_DEV_USER_ID: optionalString,
   PUBLISH_MODE: z.enum(['dry_run', 'live']).default('dry_run'),
   PUBLISH_HTTP_TIMEOUT_MS: z.coerce.number().int().min(1000).max(120000).default(20000),
-  CONTENT_GENERATOR: z.enum(['template', 'anthropic']).default('template'),
+  CONTENT_GENERATOR: z.enum(['template', 'anthropic', 'chatgpt-plan']).default('chatgpt-plan'),
   ANTHROPIC_API_KEY: optionalString,
   ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
   BLUESKY_HANDLE: optionalString,
@@ -46,7 +46,7 @@ export interface Config {
   localDevUserId: string | null;
   publishMode: PublishMode;
   publishHttpTimeoutMs: number;
-  generator: { kind: 'template' | 'anthropic'; anthropicApiKey: string | null; anthropicModel: string };
+  generator: { kind: 'template' | 'anthropic' | 'chatgpt-plan'; anthropicApiKey: string | null; anthropicModel: string };
   bluesky: { handle: string | null; appPassword: string | null; serviceUrl: string };
   mastodon: { instanceUrl: string | null; accessToken: string | null; maxChars: number };
   linkedin: { accessToken: string | null; authorUrn: string | null; apiVersion: string | null };

@@ -78,7 +78,7 @@ export function createApp(container: Container): Hono {
   app.use('/api/*', cors({
     origin: (origin) => (config.corsOrigins.includes(origin) ? origin : null),
     credentials: true,
-    allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowMethods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowHeaders: ['Authorization', 'Content-Type'],
     maxAge: 600,
   }));
@@ -289,10 +289,35 @@ export function createApp(container: Container): Hono {
     const { items, total } = posts.list(q);
     return c.json({ items: items.map(present), total, limit: q.limit, offset: q.offset });
   });
+  api.get('/feedback', (c) => c.json({ entries: container.feedback.list(), formats: container.feedback.insights() }));
   api.post('/posts', async (c) => c.json(present(postService.create(await readBody(c, schemas.postCreate))), 201));
   api.get('/posts/:id', (c) => {
     const post = postService.require(c.req.param('id'));
     return c.json({ ...present(post), attempts: posts.attempts(post.id) });
+  });
+  api.put('/posts/:id/feedback', async (c) => {
+    const id = c.req.param('id');
+    const post = postService.require(id);
+    const schema = validator.object({
+      format: validator.string().trim().min(1).max(120),
+      verdict: validator.enum(['successful', 'iterate', 'discard']).nullable(),
+      notes: validator.string().max(4000),
+      impressions: validator.number().int().min(0).max(2_000_000_000).optional(),
+      engagements: validator.number().int().min(0).max(2_000_000_000).optional(),
+      conversions: validator.number().int().min(0).max(2_000_000_000).optional(),
+    }).strict();
+    const input = await readBody(c, schema);
+    if (input.impressions !== undefined && input.engagements !== undefined && input.engagements > input.impressions) {
+      throw new AppError(422, 'invalid_metrics', 'Engagements cannot exceed impressions');
+    }
+    const hasMetrics = input.impressions !== undefined || input.engagements !== undefined || input.conversions !== undefined;
+    if (hasMetrics && post.status !== 'published') throw new AppError(422, 'metrics_require_published', 'Metrics can only be recorded for a published post');
+    container.feedback.save(id, input, now().toISOString());
+    return c.json(container.feedback.get(id));
+  });
+  api.post('/posts/:id/revise', async (c) => {
+    const post = await postService.revise(c.req.param('id'));
+    return c.json(present(post), 201);
   });
   api.patch('/posts/:id', async (c) =>
     c.json(present(postService.update(c.req.param('id'), await readBody(c, schemas.postUpdate)))));

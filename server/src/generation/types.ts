@@ -17,6 +17,7 @@ export interface ContentGenerator {
     avoidTitles: string[];
     /** Optional one-off direction from the operator. */
     prompt?: string;
+    feedbackContext?: string;
   }): Promise<IdeaCandidate[]>;
   draftPost(input: {
     brand: Brand;
@@ -25,6 +26,7 @@ export interface ContentGenerator {
     platform: PlatformId;
     maxChars: number;
     revisionNote?: string;
+    feedbackContext?: string;
   }): Promise<string>;
 }
 

@@ -1,0 +1,1 @@
+ALTER TABLE `materials` ADD `uploaded` integer DEFAULT 0 NOT NULL;

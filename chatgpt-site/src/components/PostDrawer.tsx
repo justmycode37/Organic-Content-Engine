@@ -1,3 +1,4 @@
+import {PublishingControls} from './PublishingControls';
 import { ExternalLink } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
 import { api, errorText } from '../api/client';
@@ -8,6 +9,7 @@ import { PLATFORM_IDS } from '../lib/platforms';
 import { CAN_CANCEL, CAN_DELETE, CAN_EDIT, CAN_PUBLISH_NOW, CAN_SCHEDULE, CAN_UNSCHEDULE, STATUS, StatusBadge } from '../lib/postStatus';
 import { useWorkspace, type PostTarget } from '../workspace';
 import { Button, Drawer, Field, Notice, Spinner } from './common';
+import { hrefFor } from '../workspace';
 
 interface Form {
   platform: PlatformId;
@@ -15,11 +17,13 @@ interface Form {
   media: string;
   pillarId: string;
   time: string;
+  options:Record<string,unknown>;
 }
 
 const mediaList = (text: string) => text.split('\n').map(line => line.trim()).filter(Boolean);
 
 const formFrom = (post: Post): Form => ({
+  options:post.publishOptions??{},
   platform: post.platform,
   body: post.body,
   media: post.mediaUrls.join('\n'),
@@ -32,6 +36,7 @@ function publishOutcome(post: Post, name: string): { message: string; kind: 'inf
   const reason = post.lastErrorMessage ? ` ${post.lastErrorMessage}` : '';
   switch (post.status) {
     case 'published': return { message: `Published to ${name}.`, kind: 'info' };
+    case 'processing': return {message:'Uploaded. The provider is processing your video; delivery will be checked automatically.',kind:'info'};
     case 'simulated': return { message: 'Dry run: simulated. Nothing was posted.', kind: 'info' };
     case 'blocked': return { message: `Blocked. Nothing was posted.${reason}`, kind: 'error' };
     case 'failed': return { message: `Failed. Nothing was posted.${reason}`, kind: 'error' };
@@ -46,8 +51,8 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   const [post, setPost] = useState<PostDetail | null>(null);
   const [form, setForm] = useState<Form>(() => {
     const defaults = target.kind === 'new' ? target : null;
-    const platform = defaults?.platform ?? ws.platforms.find(p => p.state === 'ready')?.id ?? ws.platforms.find(p => p.support === 'direct')?.id ?? 'bluesky';
-    return { platform, body: '', media: '', pillarId: defaults?.pillarId ?? '', time: toLocalInput(defaults?.scheduledAt) };
+    const platform = defaults?.platform ?? ws.platforms.find(p => p.state === 'ready')?.id ?? ws.platforms.find(p => p.support === 'direct')?.id ?? 'x';
+    return { options:{}, platform, body: '', media: '', pillarId: defaults?.pillarId ?? '', time: toLocalInput(defaults?.scheduledAt) };
   });
   const [loading, setLoading] = useState(target.kind === 'existing');
   const [busy, setBusy] = useState<string | null>(null);
@@ -65,7 +70,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   }, [target, adopt]);
 
   // A publish in flight settles on the server; keep the drawer honest until it does.
-  const inFlight = post?.status === 'publishing';
+  const inFlight = post?.status === 'publishing' || post?.status === 'processing';
   const postId = post?.id;
   useEffect(() => {
     if (!inFlight || !postId) return;
@@ -83,7 +88,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   const originalTime = toLocalInput(post?.scheduledAt);
   const timeChanged = form.time !== originalTime;
   const contentDirty = post
-    ? form.body !== post.body || form.platform !== post.platform || form.media !== post.mediaUrls.join('\n')
+    ? form.body !== post.body || form.platform !== post.platform || form.media !== post.mediaUrls.join('\n') || JSON.stringify(form.options)!==JSON.stringify(post.publishOptions??{})
     : form.body !== '' || form.media !== '';
   const timeInFuture = !!form.time && new Date(form.time).getTime() > Date.now();
   const paused = ws.status.publishingPaused;
@@ -111,7 +116,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
 
   /** Saves edits first, so an action never runs on stale text. Keeps what it saved if the action then fails. */
   const persist = async (): Promise<Post> => {
-    const content = { platform: form.platform, body: form.body, mediaUrls: media };
+    const content = { platform: form.platform, body: form.body, publishOptions:form.options, mediaUrls: media };
     if (!post) {
       const created = await api.posts.create({ ...content, pillarId: form.pillarId || undefined });
       setPost({ ...created, attempts: [] });
@@ -135,7 +140,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   const approve = () => run('approve', async () => {
     const chosen = timeChanged ? fromLocalInput(form.time) ?? undefined : undefined;
     if (!post && chosen) {
-      const created = await api.posts.create({ platform: form.platform, body: form.body, mediaUrls: media, pillarId: form.pillarId || undefined, scheduledAt: chosen });
+      const created = await api.posts.create({ platform: form.platform, body: form.body, publishOptions:form.options, mediaUrls: media, pillarId: form.pillarId || undefined, scheduledAt: chosen });
       await settle(created.id);
       ws.toast(`Scheduled for ${fmtDateTime(created.scheduledAt)}.`);
       return;
@@ -244,6 +249,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
               <div className="post-state-head">
                 <StatusBadge status={post.status} />
                 {post.externalUrl && <a className="link" href={post.externalUrl} target="_blank" rel="noreferrer">View on {name} <ExternalLink size={12} aria-hidden /></a>}
+                <a className="link" href={hrefFor('feedback', { post: post.id })}>Record performance feedback <ExternalLink size={12} aria-hidden /></a>
               </div>
               <p>{STATUS[post.status].help}</p>
               {post.lastErrorCode && <p className="post-error"><code>{post.lastErrorCode}</code> {post.lastErrorMessage}</p>}
@@ -270,7 +276,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
           )}
 
           <Field label="Platform" hint={platformHint(platform, dryRun)}>
-            <select value={form.platform} disabled={!editable} onChange={e => setForm({ ...form, platform: e.target.value as PlatformId })}>
+            <select value={form.platform} disabled={!editable} onChange={e => setForm({ ...form, platform: e.target.value as PlatformId,media:'',options:{} })}>
               {PLATFORM_IDS.map(id => {
                 const p = ws.platform(id);
                 return <option key={id} value={id}>{p?.displayName ?? id}{p?.state === 'unsupported' ? ' (no route)' : ''}</option>;
@@ -283,16 +289,8 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
           </Field>
           <div className={`counter ${maxChars && chars > maxChars ? 'counter-over' : ''}`}>{chars} / {maxChars.toLocaleString()}</div>
 
-          <Field
-            label="Media URLs"
-            hint={platform?.limits.requiresMedia
-              ? `${name} requires media. One https URL per line, up to 10.`
-              : platform?.limits.supportsMedia === false
-                ? 'This route is text only: a post with media is rejected, not posted without it.'
-                : 'One https URL per line, up to 10.'}
-          >
-            <textarea rows={2} value={form.media} readOnly={!editable} onChange={e => setForm({ ...form, media: e.target.value })} />
-          </Field>
+          {['instagram','tiktok','youtube','x','linkedin'].includes(form.platform)?<PublishingControls platform={form.platform} media={form.media} options={form.options} disabled={!editable} onChange={(media,options)=>setForm(f=>({...f,media,options}))}/>:<Field label="Media URLs" hint="One https URL per line, up to 10."><textarea rows={2} value={form.media} readOnly={!editable} onChange={e=>setForm({...form,media:e.target.value})}/></Field>}
+
 
           {!post && (
             <Field label="Pillar">
