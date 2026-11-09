@@ -1,4 +1,4 @@
-/** The API contract served by worker/http/app.ts. */
+/** The API contract from docs/backend.md. */
 
 export type PlatformId =
   | 'bluesky' | 'mastodon' | 'linkedin' | 'x' | 'threads'
@@ -20,7 +20,7 @@ export interface PlatformStatus {
 export type PublishMode = 'dry_run' | 'live';
 
 export const POST_STATUSES = [
-  'draft', 'needs_review', 'scheduled', 'publishing', 'published',
+  'draft', 'needs_review', 'scheduled', 'publishing', 'processing', 'published',
   'simulated', 'failed', 'blocked', 'needs_attention', 'cancelled',
 ] as const;
 export type PostStatus = (typeof POST_STATUSES)[number];
@@ -37,6 +37,7 @@ export interface Post {
   platform: PlatformId;
   body: string;
   mediaUrls: string[];
+  publishOptions?: Record<string, unknown>;
   status: PostStatus;
   origin: 'manual' | 'autonomous';
   generator: string | null;
@@ -73,6 +74,7 @@ export interface PostCreate {
   platform: PlatformId;
   body: string;
   mediaUrls?: string[];
+  publishOptions?: Record<string, unknown>;
   pillarId?: string;
   scheduledAt?: string;
 }
@@ -192,12 +194,10 @@ export interface Status {
   };
   scheduler: {
     enabled: boolean;
+    jobPath?:string;
+    jobCredentialConfigured?:boolean;
     running: boolean;
     tickSeconds: number;
-    /** No timer exists on this host. Background work advances only when the job path is called. */
-    mode: 'external_job';
-    jobPath: string;
-    jobCredentialConfigured: boolean;
     lastTickAt: string | null;
     lastError: string | null;
   };
@@ -206,11 +206,11 @@ export interface Status {
 }
 
 export interface Session {
+  passwordRequired?: boolean;
+  forbidden?: boolean;
+  user?: { displayName: string; email: string } | null;
   authRequired: boolean;
   authenticated: boolean;
-  /** Signed in, but not the account that owns this workspace. */
-  forbidden: boolean;
-  user: { displayName: string; email: string } | null;
 }
 
 export interface ActivityEvent {
@@ -220,4 +220,27 @@ export interface ActivityEvent {
   message: string;
   postId: string | null;
   createdAt: string;
+}
+
+export type FeedbackVerdict = 'successful' | 'iterate' | 'discard' | null;
+export interface FeedbackEntry {
+  postId: string;
+  platform: PlatformId;
+  pillarId: string | null;
+  format: string;
+  verdict: FeedbackVerdict;
+  notes: string;
+  impressions?: number;
+  engagements?: number;
+  conversions?: number;
+  updatedAt: string;
+}
+export interface FormatInsight {
+  format: string;
+  platform: PlatformId;
+  samples: number;
+  successes: number;
+  iterations: number;
+  discards: number;
+  recommendation: 'explore' | 'reuse' | 'iterate' | 'retire';
 }

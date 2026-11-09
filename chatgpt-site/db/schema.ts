@@ -69,6 +69,7 @@ export const posts = sqliteTable('posts', {
   platform: text('platform').notNull(),
   body: text('body').notNull(),
   mediaUrls: text('media_urls').notNull(),
+  publishOptions: text('publish_options').notNull().default('{}'),
   status: text('status').notNull(),
   origin: text('origin').notNull(),
   generator: text('generator'),
@@ -110,3 +111,21 @@ export const activity = sqliteTable('activity', {
   postId: text('post_id'),
   createdAt: text('created_at').notNull(),
 });
+
+export const materials=sqliteTable('materials',{id:text('id').primaryKey(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),notes:text('notes').notNull().default(''),enabled:integer('enabled').notNull().default(1),createdAt:text('created_at').notNull(),pathname:text('pathname').notNull().unique(),uploaded:integer('uploaded').notNull().default(0)});
+export const socialAccounts=sqliteTable('social_accounts',{platform:text('platform').primaryKey(),accountId:text('account_id').notNull(),name:text('name').notNull(),credentials:text('credentials').notNull(),updatedAt:text('updated_at').notNull()});
+export const oauthPending=sqliteTable('oauth_pending',{state:text('state').primaryKey(),platform:text('platform').notNull(),verifier:text('verifier').notNull(),expires:integer('expires').notNull(),browserHash:text('browser_hash').notNull()});
+export const deliveryJobs=sqliteTable('delivery_jobs',{key:text('key').primaryKey(),platform:text('platform').notNull(),accountId:text('account_id').notNull(),stage:text('stage').notNull(),data:text('data').notNull(),updatedAt:text('updated_at').notNull()});
+export const loginLimits=sqliteTable('login_limits',{key:text('key').primaryKey(),attempts:integer('attempts').notNull(),resetAt:integer('reset_at').notNull()});
+export const generationJobs=sqliteTable('generation_jobs',{id:text('id').primaryKey(),kind:text('kind').notNull(),input:text('input').notNull(),status:text('status').notNull().default('pending'),result:text('result'),createdAt:text('created_at').notNull()});
+
+export const postFeedback = sqliteTable('post_feedback', {
+  postId: text('post_id').primaryKey().references(() => posts.id, { onDelete: 'cascade' }),
+  format: text('format').notNull(),
+  verdict: text('verdict'),
+  notes: text('notes').notNull().default(''),
+  impressions: integer('impressions'),
+  engagements: integer('engagements'),
+  conversions: integer('conversions'),
+  updatedAt: text('updated_at').notNull(),
+}, (t) => [check('post_feedback_verdict', sql`${t.verdict} IS NULL OR ${t.verdict} IN ('successful','iterate','discard')`), index('feedback_by_format').on(t.format)]);

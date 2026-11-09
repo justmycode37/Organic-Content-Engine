@@ -214,3 +214,13 @@ export interface ActivityEvent {
   postId: string | null;
   createdAt: string;
 }
+
+export interface FeedbackEntry {
+  postId: string; platform: PlatformId; pillarId: string | null; format: string;
+  verdict: 'successful' | 'iterate' | 'discard' | null; notes: string;
+  impressions?: number; engagements?: number; conversions?: number; updatedAt: string;
+}
+export interface FormatInsight {
+  format: string; platform: PlatformId; samples: number; successes: number; iterations: number; discards: number;
+  recommendation: 'explore' | 'reuse' | 'iterate' | 'retire';
+}

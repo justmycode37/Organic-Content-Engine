@@ -1,6 +1,6 @@
 import type {
   ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
-  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status,
+  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight,
 } from './types';
 
 const BASE = '/api';
@@ -87,8 +87,31 @@ const at = (id: string) => encodeURIComponent(id);
 const post = <T>(path: string, json?: unknown) => request<T>(path, { method: 'POST', json });
 
 export const api = {
+  social: {
+    list: () => request<{items:SocialConnection[]}>('/social'),
+    connect: (platform:string) => post<{url:string}>(`/social/${at(platform)}/connect`),
+    disconnect: (platform:string) => request<{revoked:boolean}>(`/social/${at(platform)}`,{method:'DELETE'}),
+    creator: () => request<CreatorInfo>('/social/tiktok/creator'),
+  },
+  generation: {
+    list:()=>request<{items:GenerationRequest[]}>('/generation'),
+    create:(input:unknown)=>post<{id:string}>('/generation',input),
+  },
+  materials: {
+    list:()=>request<{items:Material[]}>('/materials'),
+    upload:async(file:File)=>{
+      const material=await post<Material>('/materials',{name:file.name,mime:file.type,size:file.size});
+      const result=await fetch(`/api/materials/${at(material.id)}/content`,{method:'PUT',body:file});
+      if(!result.ok){const error=await result.json() as {message?:string};throw new Error(error.message??'File upload failed');}
+      return await result.json() as Material;
+    },
+    update:(id:string,patch:{notes?:string;enabled?:boolean})=>request<Material>(`/materials/${at(id)}`,{method:'PATCH',json:patch}),
+    remove:(id:string)=>request<void>(`/materials/${at(id)}`,{method:'DELETE'}),
+  },
   session: {
     get: () => request<Session>('/session'),
+    login:(token:string)=>post<Session>('/session',{token}),
+    logout:()=>request<void>('/session',{method:'DELETE'}),
   },
   status: () => request<Status>('/status'),
   platforms: () => request<{ items: PlatformStatus[]; publishMode: PublishMode }>('/platforms'),
@@ -140,10 +163,18 @@ export const api = {
     cancel: (id: string) => post<Post>(`/posts/${at(id)}/cancel`),
     publishNow: (id: string) => post<Post>(`/posts/${at(id)}/publish-now`),
     resolve: (id: string, input: { outcome: 'published' | 'not_published'; externalUrl?: string }) => post<Post>(`/posts/${at(id)}/resolve`, input),
+    feedback: (id: string, input: { format: string; verdict: 'successful' | 'iterate' | 'discard' | null; notes: string; impressions?: number; engagements?: number; conversions?: number }) => request<FeedbackEntry>(`/posts/${at(id)}/feedback`, { method: 'PUT', json: input }),
+    revise: (id: string) => post<Post | { id: string; kind: 'draft'; status: 'pending' }>(`/posts/${at(id)}/revise`),
   },
+  feedback: () => request<{ entries: FeedbackEntry[]; formats: FormatInsight[] }>('/feedback'),
   scheduler: {
     runPublish: () => post<{ job: 'publish'; result: PublishRunResult }>('/scheduler/run', { job: 'publish' }),
     runCycle: () => post<{ job: 'autonomy'; result: CycleResult }>('/scheduler/run', { job: 'autonomy' }),
   },
   activity: (q: { limit?: number; beforeId?: number }) => request<{ items: ActivityEvent[] }>(`/activity${query(q)}`),
 };
+
+export interface Material{id:string;name:string;mime:string;size:number;notes:string;enabled:boolean;createdAt:string}
+export interface SocialConnection{platform:string;connected:boolean;name:string|null;accountId:string|null;setupRequired:string[];callback:string}
+export interface CreatorInfo{creator_username:string;creator_nickname:string;creator_avatar_url:string;privacy_level_options:string[];comment_disabled:boolean;duet_disabled:boolean;stitch_disabled:boolean;max_video_post_duration_sec:number}
+export interface GenerationRequest{id:string;kind:string;status:string;result:string|null;created_at:string}

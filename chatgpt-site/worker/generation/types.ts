@@ -1,5 +1,6 @@
 import type { PlatformId } from '../domain/platforms.ts';
 import type { Brand, Idea, Pillar } from '../domain/types.ts';
+import type { FormatInsight } from '../repositories/feedback.ts';
 
 export interface IdeaCandidate {
   title: string;
@@ -7,7 +8,7 @@ export interface IdeaCandidate {
 }
 
 export interface ContentGenerator {
-  readonly id: 'template' | 'anthropic';
+  readonly id: 'template' | 'anthropic' | 'chatgpt-plan';
   /** When true, generated posts always wait for human approval, even with autoApprove on. */
   readonly reviewRequired: boolean;
   generateIdeas(input: {
@@ -17,6 +18,9 @@ export interface ContentGenerator {
     avoidTitles: string[];
     /** Optional one-off direction from the operator. */
     prompt?: string;
+    feedback?: FormatInsight[];
+    feedbackNotes?: Array<{format:string;verdict:string|null;notes:string}>;
+    feedbackExamples?: Array<{format:string;verdict:string|null;body:string}>;
   }): Promise<IdeaCandidate[]>;
   draftPost(input: {
     brand: Brand;
@@ -25,6 +29,9 @@ export interface ContentGenerator {
     platform: PlatformId;
     maxChars: number;
     revisionNote?: string;
+    feedback?: FormatInsight[];
+    feedbackNotes?: Array<{format:string;verdict:string|null;notes:string}>;
+    feedbackExamples?: Array<{format:string;verdict:string|null;body:string}>;
   }): Promise<string>;
 }
 

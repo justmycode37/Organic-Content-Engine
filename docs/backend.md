@@ -329,6 +329,7 @@ Only `published` means a post went out. Do not present `simulated` or `blocked` 
 | `POST /posts/:id/cancel` | | draft, needs_review, scheduled, failed, blocked, simulated | |
 | `POST /posts/:id/publish-now` | | draft, needs_review, scheduled, failed, blocked, simulated | Waits for the result. **Check `status` in the 200 response**: it can be `blocked`, `failed`, `simulated` or `needs_attention`. |
 | `POST /posts/:id/resolve` | `{ outcome: 'published' \| 'not_published', externalUrl? }` | needs_attention | Only way out of `needs_attention`. |
+| `POST /posts/:id/revise` | | | Synchronous generation returns 201 `Post`; hosted ChatGPT plan generation returns 202 `GenerationJob`. Completion creates a new `needs_review` post and leaves the original unchanged. Requires saved feedback and a linked idea and pillar. |
 
 Any other starting status returns 409 `invalid_state`.
 
@@ -349,6 +350,44 @@ interface PublishAttempt {
 ```
 
 Common `lastErrorCode` values: `credentials_missing`, `credentials_rejected`, `platform_unsupported`, `content_invalid`, `missed_window`, `network_uncertain`, `interrupted`, `confirmed_not_published`, `http_<status>`.
+
+### Feedback
+
+Feedback is entered manually and is available to generation as aggregate
+format guidance. Metrics require a published post; a verdict and notes can be
+saved earlier. Feedback does not change delivery state or import analytics
+from social networks. See [feedback.md](feedback.md) for how to interpret the
+aggregates, capture comparable measurements, and understand the recommendation
+limits.
+
+| Route | Body / query | Response |
+|---|---|---|
+| `GET /feedback` | | `{ entries: FeedbackEntry[], formats: FormatInsight[] }` |
+| `PUT /posts/:id/feedback` | `{ format, verdict, notes, impressions?, engagements?, conversions? }` | Saved `FeedbackEntry` |
+
+`verdict` is `successful`, `iterate`, `discard`, or `null`. The optional counts
+are manually supplied non-negative integer outcomes and can only be recorded
+after the post is `published`; each count is capped at 2,000,000,000, and
+engagements cannot exceed impressions when both are provided. A verdict and
+notes can be saved earlier. Saving feedback replaces that post's existing
+entry. Feedback is associated with the post's platform; the format is a
+manually selected label. Repeated poor results can lead recommendations to
+retire a format from future generation, but do not delete posts, drafts, or
+format history. Exact aggregate and recommendation behavior is documented in
+[feedback.md](feedback.md).
+
+```ts
+interface FeedbackEntry {
+  postId: string; platform: PlatformId; pillarId: string | null; format: string;
+  verdict: 'successful' | 'iterate' | 'discard' | null; notes: string;
+  impressions?: number; engagements?: number; conversions?: number; updatedAt: string;
+}
+interface FormatInsight {
+  format: string; platform: PlatformId; samples: number; successes: number;
+  iterations: number; discards: number;
+  recommendation: 'explore' | 'reuse' | 'iterate' | 'retire';
+}
+```
 
 ### Operations
 

@@ -384,3 +384,15 @@ select { width: auto; max-width: 100%; }
 .material-card .card-head { gap: 12px; }
 .material-card textarea { width: 100%; resize: vertical; }
 .material-card .row { margin-top: 16px; justify-content: space-between; }
+
+.feedback-editor { padding: 14px; margin: 16px 0; border: 1px solid var(--line); border-radius: 8px; background: var(--surface, var(--bg)); }
+.feedback-editor > p { margin: 4px 0 12px; color: var(--text-2); font-size: 13px; }
+.feedback-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.feedback-metrics input { min-width: 0; }
+.feedback-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr)); gap: 12px; }
+.feedback-card { padding: 14px; border: 1px solid var(--line); border-radius: 8px; }
+.feedback-card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.feedback-card p { margin-top: 10px; font-size: 13px; }
+.feedback-note { max-width: 280px; white-space: normal; }
+.tag-explore, .tag-reuse, .tag-iterate, .tag-retire { border-radius: 999px; padding: 3px 8px; font-size: 11px; font-weight: 650; background: var(--surface-2, #eee); }
+@media (max-width: 760px) { .feedback-metrics { grid-template-columns: 1fr; gap: 0; } }

@@ -1,5 +1,6 @@
 import { StorageView } from './views/Storage';
-import { CalendarDays, FlaskConical, Layers3, Lightbulb, LoaderCircle, LogOut, Menu, Palette, Radio, Bot, Tags, OctagonPause, Play, X } from 'lucide-react';
+import { FeedbackView } from './views/Feedback';
+import { CalendarDays, FlaskConical, Layers3, Lightbulb, LoaderCircle, LogOut, Menu, Palette, Radio, Bot, Tags, OctagonPause, Play, X, ChartNoAxesCombined } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, ApiError, errorText, setUnauthorizedHandler } from './api/client';
 import type { Pillar, PlatformStatus, Status } from './api/types';
@@ -22,6 +23,7 @@ const NAV: { id: ViewId; label: string; icon: ReactNode; group: 'Plan' | 'Config
   { id: 'library', label: 'Library', icon: <Layers3 size={16} aria-hidden />, group: 'Plan' },
   { id: 'storage', label: 'Storage', icon: <Layers3 size={16} aria-hidden />, group: 'Plan' },
   { id: 'ideas', label: 'Ideas', icon: <Lightbulb size={16} aria-hidden />, group: 'Plan' },
+  { id: 'feedback', label: 'Feedback', icon: <ChartNoAxesCombined size={16} aria-hidden />, group: 'Plan' },
   { id: 'pillars', label: 'Pillars', icon: <Tags size={16} aria-hidden />, group: 'Configure' },
   { id: 'brand', label: 'Brand', icon: <Palette size={16} aria-hidden />, group: 'Configure' },
   { id: 'platforms', label: 'Platforms', icon: <Radio size={16} aria-hidden />, group: 'Configure' },
@@ -228,6 +230,7 @@ function Shell({ authRequired, onUnreachable, onLogout }: { authRequired: boolea
               {route.view === 'library' && <LibraryView />}
               {route.view === 'storage' && <StorageView />}
               {route.view === 'ideas' && <IdeasView />}
+              {route.view === 'feedback' && <FeedbackView />}
               {route.view === 'pillars' && <PillarsView />}
               {route.view === 'brand' && <BrandView />}
               {route.view === 'platforms' && <PlatformsView />}

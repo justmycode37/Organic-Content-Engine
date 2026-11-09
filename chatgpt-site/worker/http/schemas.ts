@@ -6,6 +6,8 @@ import { isValidTimeZone } from '../services/slots.ts';
 const platform = z.enum(PLATFORM_IDS);
 /** Accepts any offset, normalizes to UTC so stored times sort correctly. */
 const instant = z.iso.datetime({ offset: true }).transform((value) => new Date(value).toISOString());
+const mediaSource = z.string().max(2000).refine(v => /^storage:[a-f0-9-]{36}$/.test(v) || /^https:\/\//.test(v), 'Choose a Storage file or an https URL');
+const publishOptions = z.object({title:z.string().max(100).optional(),privacy:z.string().max(60).optional(),accountId:z.string().max(200).optional(),duration:z.number().positive().max(43200).optional(),madeForKids:z.boolean().optional(),synthetic:z.boolean().optional(),allowComment:z.boolean().optional(),allowDuet:z.boolean().optional(),allowStitch:z.boolean().optional(),commercial:z.boolean().optional(),ownBrand:z.boolean().optional(),branded:z.boolean().optional(),consent:z.boolean().optional()}).strict();
 const httpsUrl = z.url({ protocol: /^https$/ }).max(2000);
 const text = (max: number) => z.string().trim().max(max);
 
@@ -83,7 +85,8 @@ export const postQuery = pageQuery.extend({
 export const postCreate = z.strictObject({
   platform,
   body: z.string().max(70000),
-  mediaUrls: z.array(httpsUrl).max(10).default([]),
+  publishOptions: publishOptions.optional(),
+  mediaUrls: z.array(mediaSource).max(10).default([]),
   pillarId: z.string().optional(),
   scheduledAt: instant.optional(),
 });
@@ -91,7 +94,8 @@ export const postCreate = z.strictObject({
 export const postUpdate = z.strictObject({
   platform: platform.optional(),
   body: z.string().max(70000).optional(),
-  mediaUrls: z.array(httpsUrl).max(10).optional(),
+  publishOptions: publishOptions.optional(),
+  mediaUrls: z.array(mediaSource).max(10).optional(),
 });
 
 export const postSchedule = z.strictObject({ scheduledAt: instant });
@@ -100,6 +104,15 @@ export const postResolve = z.strictObject({
   outcome: z.enum(['published', 'not_published']),
   externalUrl: httpsUrl.optional(),
 });
+
+export const feedbackBody = z.strictObject({
+  format: text(120).min(1),
+  verdict: z.enum(['successful','iterate','discard']).nullable(),
+  notes: text(4000),
+  impressions: z.number().int().min(0).max(2_000_000_000).optional(),
+  engagements: z.number().int().min(0).max(2_000_000_000).optional(),
+  conversions: z.number().int().min(0).max(2_000_000_000).optional(),
+}).refine(v => v.impressions === undefined || v.engagements === undefined || v.engagements <= v.impressions, { path:['engagements'], message:'cannot exceed impressions' });
 
 const slot = z.strictObject({
   days: z.array(z.number().int().min(0).max(6)).min(1).max(7),
@@ -125,3 +138,5 @@ export const activityQuery = z.object({
 });
 
 export const schedulerRun = z.strictObject({ job: z.enum(['publish', 'autonomy']) });
+
+export const sessionBody = z.strictObject({ token: z.string().min(1).max(1000) });

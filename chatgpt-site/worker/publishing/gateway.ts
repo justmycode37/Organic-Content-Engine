@@ -32,6 +32,7 @@ export interface ContentIssue {
 }
 
 export type PublishOutcome =
+  | { kind: 'processing'; route: Route }
   | { kind: 'published'; route: Route; externalId: string; externalUrl: string | null }
   | { kind: 'simulated'; route: Route }
   | { kind: 'blocked'; route: Route | null; code: string; message: string }
@@ -98,6 +99,7 @@ export class PublishingGateway {
 
   /** Whether a post for this platform could reach a terminal result in the current mode. */
   canTarget(platform: PlatformId): boolean {
+    if(!(PLATFORM_IDS as readonly string[]).includes(platform))return false;
     const { state } = this.status(platform);
     return this.mode === 'live' ? state === 'ready' : state !== 'unsupported';
   }
@@ -153,6 +155,7 @@ export class PublishingGateway {
 
     try {
       const result = await adapter.publish(request);
+      if ('pending' in result) return { kind: 'processing', route };
       return { kind: 'published', route, externalId: result.externalId, externalUrl: result.externalUrl };
     } catch (error) {
       return this.toOutcome(error, route, adapter);
@@ -181,7 +184,7 @@ export class PublishingGateway {
   }
 }
 
-export function createGateway(config: Config, redact: Redactor, fetchImpl: FetchLike, now: () => Date): PublishingGateway {
+export function createGateway(config: Config, redact: Redactor, fetchImpl: FetchLike, now: () => Date, extra: Partial<Record<PlatformId, PublishingAdapter>> = {}): PublishingGateway {
   const http = createHttpClient(fetchImpl, config.publishHttpTimeoutMs);
   return new PublishingGateway({
     mode: config.publishMode,
@@ -191,6 +194,7 @@ export function createGateway(config: Config, redact: Redactor, fetchImpl: Fetch
       mastodon: createMastodonAdapter(config.mastodon, http),
       linkedin: createLinkedInAdapter(config.linkedin, http),
       x: createXAdapter(config.x, http),
+      ...extra,
     },
     relay: createRelayAdapter(config.gateway, http),
     relayPlatforms: config.gateway.platforms,

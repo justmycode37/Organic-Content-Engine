@@ -7,6 +7,7 @@ import type { PublishingGateway } from '../publishing/gateway.ts';
 import type { IdeasRepository } from '../repositories/ideas.ts';
 import type { PillarsRepository } from '../repositories/pillars.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
+import type { FeedbackRepository } from '../repositories/feedback.ts';
 
 const AVOID_TITLES_LIMIT = 100;
 
@@ -17,6 +18,7 @@ export class IdeationService {
   private readonly generator: ContentGenerator;
   private readonly gateway: PublishingGateway;
   private readonly now: () => Date;
+  private readonly feedback: FeedbackRepository;
 
   constructor(deps: {
     ideas: IdeasRepository;
@@ -25,6 +27,7 @@ export class IdeationService {
     generator: ContentGenerator;
     gateway: PublishingGateway;
     now: () => Date;
+    feedback: FeedbackRepository;
   }) {
     this.ideas = deps.ideas;
     this.pillars = deps.pillars;
@@ -32,6 +35,7 @@ export class IdeationService {
     this.generator = deps.generator;
     this.gateway = deps.gateway;
     this.now = deps.now;
+    this.feedback = deps.feedback;
   }
 
   async addManual(input: { pillarId: string; title: string; angle: string }): Promise<Idea> {
@@ -43,12 +47,16 @@ export class IdeationService {
 
   /** Stores new ideas, skipping duplicates, so the result can be shorter than `count`. */
   async generate(pillar: Pillar, count: number, prompt?: string): Promise<Idea[]> {
+    const feedbackLearning=await Promise.all(pillar.platforms.map(platform=>this.feedback.learning(platform,pillar.id)));
     const candidates = await this.generator.generateIdeas({
       brand: await this.settings.getBrand(),
       pillar,
       count,
       prompt,
       avoidTitles: await this.ideas.recentTitles(pillar.id, AVOID_TITLES_LIMIT),
+      feedback: feedbackLearning.flatMap(x=>x.formats),
+      feedbackNotes: feedbackLearning.flatMap(x=>x.notes),
+      feedbackExamples: feedbackLearning.flatMap(x=>x.examples),
     });
     const created: Idea[] = [];
     for (const candidate of candidates) {
@@ -61,14 +69,15 @@ export class IdeationService {
   }
 
   /** Over-long drafts get one revision. Text is never silently truncated. */
-  async draft(pillar: Pillar, idea: Idea, platform: PlatformId): Promise<string> {
+  async draft(pillar: Pillar, idea: Idea, platform: PlatformId, revisionNote?: string): Promise<string> {
     const maxChars = this.gateway.maxChars(platform);
-    const input = { brand: await this.settings.getBrand(), pillar, idea, platform, maxChars };
+    const learning=await this.feedback.learning(platform,pillar.id);
+    const input = { brand: await this.settings.getBrand(), pillar, idea, platform, maxChars, feedback:learning.formats, feedbackNotes:learning.notes, feedbackExamples:learning.examples, ...(revisionNote ? { revisionNote } : {}) };
     let body = await this.generator.draftPost(input);
     if (countChars(body) > maxChars) {
       body = await this.generator.draftPost({
         ...input,
-        revisionNote: `it was ${countChars(body)} characters; the limit is ${maxChars}.`,
+        revisionNote: [revisionNote, `The previous generated response was ${countChars(body)} characters; the limit is ${maxChars}. Shorten it while preserving the feedback and intent.`].filter(Boolean).join('\n\n'),
       });
     }
     if (countChars(body) > maxChars) {

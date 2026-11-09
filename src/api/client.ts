@@ -1,6 +1,6 @@
 import type {
   ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
-  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status,
+  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight,
 } from './types';
 
 const BASE = '/api';
@@ -163,6 +163,11 @@ export const api = {
     cancel: (id: string) => post<Post>(`/posts/${at(id)}/cancel`),
     publishNow: (id: string) => post<Post>(`/posts/${at(id)}/publish-now`),
     resolve: (id: string, input: { outcome: 'published' | 'not_published'; externalUrl?: string }) => post<Post>(`/posts/${at(id)}/resolve`, input),
+    revise: (id: string) => post<Post>(`/posts/${at(id)}/revise`),
+  },
+  feedback: {
+    list: () => request<{ entries: FeedbackEntry[]; formats: FormatInsight[] }>('/feedback'),
+    save: (id: string, input: { format: string; verdict: 'successful' | 'iterate' | 'discard' | null; notes: string; impressions?: number; engagements?: number; conversions?: number }) => request<FeedbackEntry>(`/posts/${at(id)}/feedback`, { method: 'PUT', json: input }),
   },
   scheduler: {
     runPublish: () => post<{ job: 'publish'; result: PublishRunResult }>('/scheduler/run', { job: 'publish' }),

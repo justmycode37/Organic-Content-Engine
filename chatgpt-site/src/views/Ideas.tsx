@@ -35,11 +35,9 @@ export function IdeasView() {
     event.preventDefault();
     setBusy('generate');
     try {
-      const { items } = await api.ideas.generate({ pillarId, count, prompt: prompt.trim() || undefined });
-      const dropped = count - items.length;
-      ws.toast(items.length === 0
-        ? 'No new ideas: everything generated was a duplicate.'
-        : `${items.length} idea${items.length === 1 ? '' : 's'} added${dropped > 0 ? `, ${dropped} dropped as duplicate${dropped === 1 ? '' : 's'}` : ''}.`);
+      await api.generation.create({kind:'ideas',pillarId,count,prompt:prompt.trim()||undefined});
+      ws.toast('Idea request prepared. Open it in ChatGPT.');
+      window.location.hash='#/generation';
       setPrompt('');
       ws.refresh();
     } catch (e) {
@@ -82,7 +80,7 @@ export function IdeasView() {
 
       {ws.status.generator.id === 'template' && (
         <Notice>
-          The <code>template</code> generator is active. It works offline and writes prompts for you to finish, not publishable copy. Set <code>CONTENT_GENERATOR=anthropic</code> and <code>ANTHROPIC_API_KEY</code> as Site runtime values for written drafts.
+          The <code>template</code> generator is active. It works offline and writes prompts for you to finish, not publishable copy. Use the ChatGPT tab to generate written drafts with your plan.
         </Notice>
       )}
 
@@ -162,8 +160,8 @@ function IdeaRow({ idea }: { idea: Idea }) {
   };
 
   const draft = () => run('draft', async () => {
-    const post = await api.ideas.draft(idea.id, { platform });
-    ws.openPost({ kind: 'existing', id: post.id });
+    await api.generation.create({kind:'draft',ideaId:idea.id,platform});
+    window.location.hash='#/generation';
   });
 
   const remove = async () => {

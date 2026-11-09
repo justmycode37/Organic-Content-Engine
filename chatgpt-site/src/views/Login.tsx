@@ -1,3 +1,6 @@
+import {useState,type FormEvent} from 'react';
+import {api,errorText} from '../api/client';
+import {Button,Field,Notice} from '../components/common';
 import type { Session } from '../api/types';
 
 const here = () => `${window.location.pathname}${window.location.search}${window.location.hash}`;
@@ -5,7 +8,10 @@ const here = () => `${window.location.pathname}${window.location.search}${window
 export const signOutHref = '/signout-with-chatgpt?return_to=%2F';
 
 /** Sign-in has to be a top-level navigation; Sites owns these routes and the session behind them. */
-export function LoginView({ session }: { session: Session | null }) {
+export function LoginView({session,onDone}:{session:Session|null;onDone:()=>void}) {
+  const [password,setPassword]=useState('');const [busy,setBusy]=useState(false);const [error,setError]=useState('');
+  const submit=async(e:FormEvent)=>{e.preventDefault();setBusy(true);try{await api.session.login(password);onDone();}catch(error){setError(errorText(error));}finally{setBusy(false);}};
+  if(session?.passwordRequired)return <main className="gate"><form className="gate-card" onSubmit={e=>void submit(e)}><div className="mark">O</div><h1>Private workspace</h1><p>Enter the password to open Organic Content Engine.</p>{error&&<Notice tone="alert">{error}</Notice>}<Field label="Password"><input type="password" autoComplete="current-password" autoFocus required value={password} onChange={e=>setPassword(e.target.value)}/></Field><Button variant="primary" type="submit" busy={busy}>Open workspace</Button></form></main>;
   if (session?.forbidden) {
     return (
       <main className="gate">

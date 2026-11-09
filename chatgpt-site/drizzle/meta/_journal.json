@@ -8,6 +8,27 @@
       "when": 1794079081775,
       "tag": "0000_initial",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1794163981530,
+      "tag": "0001_abnormal_power_man",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1794164028627,
+      "tag": "0002_abandoned_loa",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1794220000000,
+      "tag": "0003_persisted_feedback",
+      "breakpoints": true
     }
   ]
 }

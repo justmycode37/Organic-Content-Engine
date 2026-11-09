@@ -1,3 +1,4 @@
+import {AccountConnections} from '../components/AccountConnections';
 import type { PlatformStatus } from '../api/types';
 import { Notice, PageHead } from '../components/common';
 import { ADAPTER_LIMITS, PLATFORM_ACCESS, platformIcon } from '../lib/platforms';
@@ -29,6 +30,7 @@ export function PlatformsView() {
         Read-only. Platforms are configured through this Site's runtime values and secrets. Being listed here does not mean a platform is connected.
       </PageHead>
 
+      <AccountConnections />
       <Notice>
         {dryRun
           ? <><b>Mode: dry run.</b> No request leaves this Site and posts end as Simulated. Set <code>PUBLISH_MODE=live</code> to allow real posts.</>

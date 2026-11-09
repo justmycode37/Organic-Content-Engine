@@ -22,6 +22,12 @@ Direct adapters support text on Bluesky, Mastodon, LinkedIn, and X. Instagram, F
 
 The intended pipeline is brand configuration → ideation → platform adaptation → scheduling → publishing → delivery tracking. Missing credentials must leave delivery blocked rather than report a successful publication.
 
+Feedback can be recorded manually with a verdict and notes; optional outcome
+counts are available after a post is published. Aggregate feedback informs
+conservative format guidance for future ideas and drafts; it does not import
+analytics from social networks.
+See [feedback tracking](docs/feedback.md) for the workflow and limitations.
+
 ## Architecture
 
 - `src/`: React and TypeScript workspace, calendar, editor, ideas, channels, and settings.

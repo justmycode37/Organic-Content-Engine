@@ -1,3 +1,12 @@
+import {videoPreflight} from '../services/video-preflight.ts';
+import {preparePlanCycle} from '../services/plan-cycle.ts';
+import { randomHex } from '../lib/crypto.ts';
+import { getCookie,setCookie,deleteCookie } from 'hono/cookie';
+import { z as validator } from 'zod';
+import { unlocked,login,logout } from './password.ts';
+import { platformOf } from '../services/social.ts';
+import { generationRequest,requestGeneration } from '../services/generation-jobs.ts';
+import { mcpApp } from './mcp.ts';
 import { Hono, type Context } from 'hono';
 import { bodyLimit } from 'hono/body-limit';
 import { secureHeaders } from 'hono/secure-headers';
@@ -79,54 +88,60 @@ export function createApp(): Hono<AppEnv> {
     c.header('Cache-Control', 'no-store');
   });
   app.use('/api/*', async (c, next) => {
-    assertSameOrigin(c);
+    if (!/^\/api\/social\/(instagram|tiktok|youtube|x|linkedin)\/callback$/.test(c.req.path) && !c.req.path.startsWith('/api/media/')) assertSameOrigin(c);
     await next();
   });
-  app.use('/api/*', bodyLimit({
+  app.use('/api/*', async (c,next)=>{if(/^\/api\/materials\/[a-f0-9-]+\/content$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: () => {
       throw new AppError(413, 'payload_too_large', 'Request body too large');
     },
-  }));
+  })(c,next);});
 
   // Answers with no database or valid config, so it stays a pure liveness check for anonymous callers.
   app.get('/api/health', async (c) => {
     if (!readUser(c, null)) return c.json({ ok: true });
-    const container = createContainer(c.env);
+    const container = await createContainer(c.env);
     const access = await resolveAccess(c, container.config, container.settings, container.now().toISOString());
     if (access.kind !== 'owner') return c.json({ ok: true });
     return c.json({
       ok: true,
-      aiConfigured: container.generator.id !== 'template' && container.config.generator.anthropicApiKey !== null,
+      aiConfigured: container.generator.id === 'chatgpt-plan' || (container.generator.id !== 'template' && container.config.generator.anthropicApiKey !== null),
       publishingConfigured: container.gateway.statuses().some((p) => p.state === 'ready'),
     });
   });
 
+  app.get('/api/social/:platform/callback',async c=>{
+    const container=await createContainer(c.env);const access=await resolveAccess(c,container.config,container.settings,new Date().toISOString());assertOwner(access);if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Unlock the workspace and try connecting again');
+    const platform=platformOf(c.req.param('platform'));
+    try{await container.social.callback(platform,c.req.query('state')??'',getCookie(c,'oce_oauth')??'',c.req.query('code')??'',c.req.query('error'));deleteCookie(c,'oce_oauth',{path:'/api/social'});return c.redirect(`/#/platforms?connected=${platform}`);}catch(error){return c.redirect(`/#/platforms?connectionError=${encodeURIComponent(error instanceof AppError?error.message:'Connection failed. Try again.')}`);}
+  });
+
   app.use('/api/*', async (c, next) => {
-    const container = createContainer(c.env);
+    const container = await createContainer(c.env);
     c.set('container', container);
     c.set('access', await resolveAccess(c, container.config, container.settings, container.now().toISOString()));
     await next();
   });
 
-  app.get('/api/session', (c) => {
+  app.get('/api/session', async (c) => {
     const access = c.get('access');
     return c.json({
       authRequired: true,
-      authenticated: access.kind === 'owner',
+      authenticated: access.kind === 'owner' && await unlocked(c,c.env,access.user.userId),
+      passwordRequired: access.kind === 'owner',
       forbidden: access.kind === 'forbidden',
       user: access.kind === 'anonymous' ? null : { displayName: access.user.displayName, email: access.user.email },
     });
   });
-  // ChatGPT owns sign-in; it has to be a top-level navigation, never an API call.
-  const sessionManaged = (c: AppContext) => c.json(errorBody('session_managed_by_chatgpt', 'Sign-in and sign-out go through /signin-with-chatgpt and /signout-with-chatgpt'), 405);
-  app.post('/api/session', sessionManaged);
-  app.delete('/api/session', sessionManaged);
+  app.post('/api/session',async c=>{const access=c.get('access');assertOwner(access);if(access.kind!=='owner')throw new AppError(401,'unauthorized','Sign in first');const body=await readBody(c,validator.object({token:validator.string().min(1).max(1000)}).strict());return login(c,c.env,c.get('container').db,access.user.userId,body.token);});
+  app.delete('/api/session',c=>logout(c));
 
   /** The only way background work advances on this host. Call it from a Site schedule. */
   app.post(JOB_PATH, async (c) => {
     const { config, publisher, autonomy, settings, now, redact } = c.get('container');
     await assertJobCaller(c, config, c.get('access'));
+    if (!(await settings.get()).autonomyEnabled) return c.json({ ok: true, paused: true, publish: null, autonomy: null, errors: [] });
     const ranAt = now().toISOString();
     const errors: string[] = [];
     const describe = (error: unknown) => redact(error instanceof Error ? error.message : String(error));
@@ -140,7 +155,7 @@ export function createApp(): Hono<AppEnv> {
         errors.push(`publish: ${describe(error)}`);
       }
       try {
-        if (await autonomy.isDue()) cycle = await autonomy.runCycle();
+        if (await autonomy.isDue()) cycle = (c.get('container').generator.id==='chatgpt-plan'?await preparePlanCycle(c.get('container')):await autonomy.runCycle()) as CycleResult;
       } catch (error) {
         if (!(error instanceof AppError && error.code === 'cycle_running')) errors.push(`autonomy: ${describe(error)}`);
       }
@@ -154,7 +169,8 @@ export function createApp(): Hono<AppEnv> {
   // --- Everything below is for the workspace owner only ---
   const api = new Hono<AppEnv>();
   api.use('*', async (c, next) => {
-    assertOwner(c.get('access'));
+    const access=c.get('access');assertOwner(access);
+    if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Enter the workspace password');
     await next();
   });
 
@@ -237,6 +253,20 @@ export function createApp(): Hono<AppEnv> {
   api.post('/autopilot/start', async (c) => c.json(await setAutopilot(c.get('container'), true)));
   api.post('/autopilot/pause', async (c) => c.json(await setAutopilot(c.get('container'), false)));
 
+  api.get('/social',async c=>c.json({items:await c.get('container').social.statuses()}));
+  api.post('/social/:platform/connect',async c=>{const browser=randomHex(32);const url=await c.get('container').social.start(platformOf(c.req.param('platform')),browser);setCookie(c,'oce_oauth',browser,{httpOnly:true,secure:true,sameSite:'Lax',path:'/api/social',maxAge:600});return c.json({url});});
+  api.delete('/social/:platform',async c=>c.json(await c.get('container').social.disconnect(platformOf(c.req.param('platform')))));
+  api.get('/social/tiktok/creator',async c=>c.json(await c.get('container').social.creator()));
+  api.get('/materials',async c=>c.json({items:await c.get('container').materials.list()}));
+  api.post('/materials',async c=>c.json(await c.get('container').materials.init(await readBody(c,validator.object({name:validator.string().min(1).max(255),mime:validator.string().max(150),size:validator.number().int().positive().max(100*1024*1024)}).strict())),201));
+  api.put('/materials/:id/content',async c=>{if(!c.req.raw.body)throw new AppError(400,'file_missing','Choose a file');return c.json(await c.get('container').materials.upload(c.req.param('id'),c.req.raw.body,Number(c.req.header('content-length'))));});
+  api.patch('/materials/:id',async c=>c.json(await c.get('container').materials.update(c.req.param('id'),await readBody(c,validator.object({notes:validator.string().max(12000).optional(),enabled:validator.boolean().optional()}).strict()))));
+  api.delete('/materials/:id',async c=>{await c.get('container').materials.remove(c.req.param('id'));return c.body(null,204);});
+  api.get('/materials/:id/file',async c=>{const f=await c.get('container').materials.read(c.req.param('id'));return new Response(f.stream,{headers:{'Content-Type':'application/octet-stream','Content-Disposition':`attachment; filename*=UTF-8''${encodeURIComponent(f.material.name)}`}});});
+  api.get('/materials/:id/preview',async c=>{const f=await c.get('container').materials.read(c.req.param('id'),c.req.header('range'));if(!['image/jpeg','image/png','image/webp','video/mp4','video/quicktime'].includes(f.material.mime))throw new AppError(422,'preview_unsupported','Preview is unavailable for this file');const headers=new Headers({'Content-Type':f.material.mime,'Accept-Ranges':'bytes','Cache-Control':'no-store'});const range=f.object.range as {offset:number;length:number}|undefined;if(range){headers.set('Content-Range',`bytes ${range.offset}-${range.offset+range.length-1}/${f.material.size}`);headers.set('Content-Length',String(range.length));}return new Response(f.stream,{status:range?206:200,headers});});
+  api.post('/generation',async c=>c.json(await requestGeneration(c.get('container'),await readBody(c,generationRequest)),201));
+  api.get('/generation',async c=>c.json({items:(await c.get('container').db.prepare('SELECT id,kind,status,result,created_at FROM generation_jobs ORDER BY created_at DESC LIMIT 50').all()).results}));
+
   // Pillars
   const requirePillar = async ({ pillars }: Container, id: string) => {
     const pillar = await pillars.get(id);
@@ -305,6 +335,7 @@ export function createApp(): Hono<AppEnv> {
   });
 
   // Posts
+  api.get('/feedback', async (c) => c.json(await c.get('container').feedback.list()));
   api.get('/posts', async (c) => {
     const container = c.get('container');
     const q = readQuery(c, schemas.postQuery);
@@ -313,16 +344,40 @@ export function createApp(): Hono<AppEnv> {
   });
   api.post('/posts', async (c) => {
     const container = c.get('container');
-    return c.json(present(container, await container.postService.create(await readBody(c, schemas.postCreate))), 201);
+    const input=await readBody(c,schemas.postCreate);if(input.scheduledAt)await videoPreflight(container,input);
+    return c.json(present(container, await container.postService.create(input)), 201);
   });
   api.get('/posts/:id', async (c) => {
     const container = c.get('container');
     const post = await container.postService.require(c.req.param('id'));
-    return c.json({ ...present(container, post), attempts: await container.posts.attempts(post.id) });
+    return c.json({ ...present(container, post), attempts: await container.posts.attempts(post.id), feedback: await container.feedback.get(post.id) });
+  });
+  api.put('/posts/:id/feedback', async (c) => {
+    const container=c.get('container'), id=c.req.param('id'), post=await container.postService.require(id), input=await readBody(c,schemas.feedbackBody);
+    if ((input.impressions!==undefined||input.engagements!==undefined||input.conversions!==undefined) && post.status!=='published') throw new AppError(422,'metrics_require_published_post','Performance metrics can only be recorded for a published post');
+    await container.feedback.save({postId:id,...input,updatedAt:container.now().toISOString()});
+    return c.json(await container.feedback.get(id));
+  });
+  api.post('/posts/:id/revise', async c => {
+    const container=c.get('container'), source=await container.postService.require(c.req.param('id')), feedback=await container.feedback.get(source.id);
+    if(!feedback)throw new AppError(409,'feedback_required','Add feedback before requesting a revision');
+    if(!source.ideaId)throw new AppError(409,'idea_required','This post has no linked idea to revise');
+    if(source.status==='scheduled'||source.status==='publishing') throw new AppError(409,'post_not_revisable','Unschedule the post before requesting a revision');
+    const idea=await container.ideas.get(source.ideaId); if(!idea)throw notFound('Idea',source.ideaId);
+    const pillar=await container.pillars.get(idea.pillarId);if(!pillar)throw notFound('Pillar',idea.pillarId);
+    const revisionNote=`Prior post text:\n${source.body.slice(0,6000)}\n\nEditorial feedback (${feedback.verdict??'no verdict'}):\n${feedback.notes.slice(0,2000)}`;
+    if(container.generator.id==='chatgpt-plan'){
+      return c.json(await requestGeneration(container,{kind:'draft',ideaId:idea.id,platform:source.platform,revisionNote,sourcePostId:source.id}),202);
+    }
+    const body=await container.ideation.draft(pillar,idea,source.platform,revisionNote);
+    const revised=container.postService.build({platform:source.platform,body,mediaUrls:source.mediaUrls,publishOptions:source.publishOptions,pillarId:source.pillarId,ideaId:source.ideaId,generator:container.generator.id,status:'needs_review',scheduledAt:null});
+    await container.posts.insert(revised);
+    return c.json(present(container,revised),201);
   });
   api.patch('/posts/:id', async (c) => {
     const container = c.get('container');
-    return c.json(present(container, await container.postService.update(c.req.param('id'), await readBody(c, schemas.postUpdate))));
+    const patch=await readBody(c,schemas.postUpdate);const current=await container.postService.require(c.req.param('id'));if(current.status==='scheduled')await videoPreflight(container,{...current,...defined(patch)});
+    return c.json(present(container, await container.postService.update(c.req.param('id'), patch)));
   });
   api.delete('/posts/:id', async (c) => {
     await c.get('container').postService.delete(c.req.param('id'));
@@ -330,11 +385,13 @@ export function createApp(): Hono<AppEnv> {
   });
   api.post('/posts/:id/approve', async (c) => {
     const container = c.get('container');
+    await videoPreflight(container,await container.postService.require(c.req.param('id')));
     const { scheduledAt } = await readBody(c, schemas.postApprove);
     return c.json(present(container, await container.postService.approve(c.req.param('id'), scheduledAt)));
   });
   api.post('/posts/:id/schedule', async (c) => {
     const container = c.get('container');
+    await videoPreflight(container,await container.postService.require(c.req.param('id')));
     const { scheduledAt } = await readBody(c, schemas.postSchedule);
     return c.json(present(container, await container.postService.schedule(c.req.param('id'), scheduledAt)));
   });
@@ -350,6 +407,7 @@ export function createApp(): Hono<AppEnv> {
     const container = c.get('container');
     const post = await container.postService.require(c.req.param('id'));
     container.postService.assertPublishable(post.platform, post.body, post.mediaUrls);
+    await videoPreflight(container,post);
     return c.json(present(container, await keepAlive(c, container.publisher.publishNow(post.id))));
   });
   api.post('/posts/:id/resolve', async (c) => {
@@ -362,13 +420,14 @@ export function createApp(): Hono<AppEnv> {
     const { publisher, autonomy } = c.get('container');
     const { job } = await readBody(c, schemas.schedulerRun);
     if (job === 'publish') return c.json({ job, result: await keepAlive(c, publisher.publishDue()) });
-    return c.json({ job, result: await autonomy.runCycle() });
+    return c.json({ job, result: c.get('container').generator.id==='chatgpt-plan'?await preparePlanCycle(c.get('container')):await autonomy.runCycle() });
   });
   api.get('/activity', async (c) => {
     const { limit, beforeId } = readQuery(c, schemas.activityQuery);
     return c.json({ items: await c.get('container').activity.list(limit, beforeId) });
   });
 
+  app.route('/mcp',mcpApp());
   app.route('/api', api);
   app.get('*', (c) => {
     if (c.req.path === '/api' || c.req.path.startsWith('/api/')) throw new AppError(404, 'not_found', 'Route not found');

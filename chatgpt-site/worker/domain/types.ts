@@ -4,7 +4,7 @@ export const POST_STATUSES = [
   'draft',
   'needs_review',
   'scheduled',
-  'publishing',
+  'publishing', 'processing',
   'published',
   'simulated',
   'failed',
@@ -48,6 +48,7 @@ export interface Post {
   platform: PlatformId;
   body: string;
   mediaUrls: string[];
+  publishOptions?: Record<string, unknown>;
   status: PostStatus;
   origin: 'manual' | 'autonomous';
   generator: string | null;

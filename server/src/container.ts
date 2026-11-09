@@ -13,6 +13,7 @@ import { ActivityRepository } from './repositories/activity.ts';
 import { IdeasRepository } from './repositories/ideas.ts';
 import { PillarsRepository } from './repositories/pillars.ts';
 import { PostsRepository } from './repositories/posts.ts';
+import { FeedbackRepository } from './repositories/feedback.ts';
 import { SettingsRepository } from './repositories/settings.ts';
 import { AutonomyService } from './services/autonomy.ts';
 import { IdeationService } from './services/ideation.ts';
@@ -34,6 +35,7 @@ export interface Container {
   pillars: PillarsRepository;
   ideas: IdeasRepository;
   posts: PostsRepository;
+  feedback: FeedbackRepository;
   activity: ActivityRepository;
   ideation: IdeationService;
   postService: PostService;
@@ -74,10 +76,11 @@ export function createContainer(config: Config, overrides: Overrides = {}): Cont
   const pillars = new PillarsRepository(db);
   const ideas = new IdeasRepository(db);
   const posts = new PostsRepository(db);
+  const feedback = new FeedbackRepository(db);
   const activity = new ActivityRepository(db);
 
-  const ideation = new IdeationService({ materials, ideas, pillars, settings, generator, gateway, now });
-  const postService = new PostService({ db, posts, ideas, pillars, settings, activity, ideation, generator, gateway, now });
+  const ideation = new IdeationService({ materials, ideas, pillars, settings, generator, gateway, feedback, now });
+  const postService = new PostService({ db, posts, ideas, pillars, settings, activity, ideation, generator, gateway, feedback, now });
   const publisher = new PublisherService({ db, posts, settings, activity, gateway, now });
   const autonomy = new AutonomyService({ db, posts, ideas, pillars, settings, activity, ideation, postService, generator, gateway, logger, now });
   const scheduler = new Scheduler({
@@ -89,5 +92,5 @@ export function createContainer(config: Config, overrides: Overrides = {}): Cont
     enabled: config.scheduler.enabled,
   });
 
-  return { config, materials, chatgpt, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, activity, ideation, postService, publisher, autonomy, scheduler };
+  return { config, materials, chatgpt, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, feedback, activity, ideation, postService, publisher, autonomy, scheduler };
 }

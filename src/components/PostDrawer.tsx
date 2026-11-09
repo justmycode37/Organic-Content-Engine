@@ -8,6 +8,7 @@ import { PLATFORM_IDS } from '../lib/platforms';
 import { CAN_CANCEL, CAN_DELETE, CAN_EDIT, CAN_PUBLISH_NOW, CAN_SCHEDULE, CAN_UNSCHEDULE, STATUS, StatusBadge } from '../lib/postStatus';
 import { useWorkspace, type PostTarget } from '../workspace';
 import { Button, Drawer, Field, Notice, Spinner } from './common';
+import { FeedbackEditor } from './FeedbackEditor';
 
 interface Form {
   platform: PlatformId;
@@ -250,6 +251,8 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
               {post.nextAttemptAt && <p>Next attempt: {fmtDateTime(post.nextAttemptAt)}</p>}
             </section>
           )}
+
+          {post && <FeedbackEditor post={post} />}
 
           {post?.status === 'needs_attention' && (
             <section className="resolve">

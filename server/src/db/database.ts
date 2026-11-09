@@ -101,6 +101,7 @@ const MIGRATIONS: string[] = [
   );
   `,
   `CREATE TABLE materials (id TEXT PRIMARY KEY, name TEXT NOT NULL, mime TEXT NOT NULL, size INTEGER NOT NULL, notes TEXT NOT NULL, enabled INTEGER NOT NULL, created_at TEXT NOT NULL, data BLOB NOT NULL);`,
+  `CREATE TABLE post_feedback (post_id TEXT PRIMARY KEY REFERENCES posts(id) ON DELETE CASCADE, format TEXT NOT NULL, verdict TEXT CHECK (verdict IN ('successful','iterate','discard') OR verdict IS NULL), notes TEXT NOT NULL, impressions INTEGER, engagements INTEGER, conversions INTEGER, updated_at TEXT NOT NULL); CREATE INDEX feedback_by_format ON post_feedback(format);`,
 ];
 
 export function openDatabase(path: string): Db {

@@ -4,11 +4,12 @@ export interface PublishRequest {
   platform: PlatformId;
   text: string;
   mediaUrls: string[];
+  options?: Record<string, unknown>;
   /** Stable across retries of the same content. */
   idempotencyKey: string;
 }
 
-export interface PublishResult {
+export type PublishResult = { pending: true } | {
   externalId: string;
   externalUrl: string | null;
 }
