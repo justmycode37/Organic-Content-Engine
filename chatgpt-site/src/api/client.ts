@@ -1,3 +1,4 @@
+import type { EditPlan, Voice } from '../studio/plan';
 import type {
   ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
   PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight,
@@ -96,11 +97,17 @@ export const api = {
   generation: {
     list:()=>request<{items:GenerationRequest[]}>('/generation'),
     create:(input:unknown)=>post<{id:string}>('/generation',input),
+    saveEdit:(id:string,edit:EditPlan)=>request<VideoResult>(`/generation/${at(id)}/edit`,{method:'PUT',json:{edit}}),
+    finish:(id:string,input:{materialId:string;edit:EditPlan})=>post<VideoResult>(`/generation/${at(id)}/finish`,input),
+  },
+  voiceover: {
+    voices:()=>request<{configured:boolean;voices:VoiceOption[];defaultVoiceId:string|null}>('/voiceover/voices'),
+    create:(input:{text:string;voiceId:string})=>post<Voice>('/voiceover',input),
   },
   materials: {
     list:()=>request<{items:Material[]}>('/materials'),
-    upload:async(file:File)=>{
-      const material=await post<Material>('/materials',{name:file.name,mime:file.type,size:file.size});
+    upload:async(file:File,kind:'source'|'finished'='source')=>{
+      const material=await post<Material>('/materials',{name:file.name,mime:file.type,size:file.size,kind});
       const result=await fetch(`/api/materials/${at(material.id)}/content`,{method:'PUT',body:file});
       if(!result.ok){const error=await result.json() as {message?:string};throw new Error(error.message??'File upload failed');}
       return await result.json() as Material;
@@ -174,7 +181,9 @@ export const api = {
   activity: (q: { limit?: number; beforeId?: number }) => request<{ items: ActivityEvent[] }>(`/activity${query(q)}`),
 };
 
-export interface Material{id:string;name:string;mime:string;size:number;notes:string;enabled:boolean;createdAt:string}
+export interface Material{id:string;name:string;mime:string;size:number;notes:string;enabled:boolean;createdAt:string;kind:'source'|'raw_clip'|'finished'|'voiceover'}
+export interface VoiceOption{id:string;name:string;gender:string;useCase:string;age:string;accent:string;description:string;previewUrl:string|null}
+export interface VideoResult{clips:{materialId:string;runId:string}[];edit:EditPlan|null;finishedMaterialId:string|null}
 export interface SocialConnection{platform:string;connected:boolean;name:string|null;accountId:string|null;setupRequired:string[];callback:string}
 export interface CreatorInfo{creator_username:string;creator_nickname:string;creator_avatar_url:string;privacy_level_options:string[];comment_disabled:boolean;duet_disabled:boolean;stitch_disabled:boolean;max_video_post_duration_sec:number}
-export interface GenerationRequest{id:string;kind:string;status:string;result:string|null;created_at:string}
+export interface GenerationRequest{id:string;kind:string;status:string;result:string|null;created_at:string;renderErrorCode?:string|null;renderErrorMessage?:string|null}

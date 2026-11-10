@@ -57,7 +57,7 @@ function MaterialCard({ material, onChange }: { material: Material; onChange: ()
   return <article className="card material-card">
     <div className="card-head"><h3 title={material.name}>{material.name}</h3><a aria-label={`Download ${material.name}`} href={`/api/materials/${material.id}/file`}><Download size={16} /></a></div>
     {material.mime.startsWith('video/')?<video controls preload="metadata" src={`/api/materials/${material.id}/preview`} style={{width:'100%',maxHeight:240}}/>:['image/jpeg','image/png','image/webp'].includes(material.mime)?<img alt={material.name} loading="lazy" src={`/api/materials/${material.id}/preview`} style={{width:'100%',maxHeight:240,objectFit:'contain'}}/>:null}
-    <p className="muted">{material.mime} · {(material.size / 1024 / 1024).toFixed(2)} MB</p>
+    <p className="muted">{material.mime} · {(material.size / 1024 / 1024).toFixed(2)} MB{material.kind === 'raw_clip' ? ' · Raw footage, finish in the Studio before publishing' : material.kind === 'finished' ? ' · Finished video' : ''}</p>
     <div className="switch-row"><b>Use for content</b><Toggle label={`Use ${material.name} for content`} checked={material.enabled} onChange={enabled => { if (!busy) void run(() => api.materials.update(material.id, { enabled })); }} /></div>
     <Field label="Context for the AI"><textarea rows={4} maxLength={12000} placeholder="What is in this file? Add key moments, facts, a transcript, or how it can be used." value={notes} onChange={e => setNotes(e.target.value)} /></Field>
     <Button disabled={busy || notes !== material.notes} onClick={() => void run(() => api.generation.create({kind:'analyze',materialId:material.id}).then(()=>{window.location.hash='#/generation';}))}>Analyze with ChatGPT</Button>

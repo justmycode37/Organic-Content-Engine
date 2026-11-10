@@ -8,6 +8,7 @@ export async function videoPreflight(c:Container,p:{platform:PlatformId;mediaUrl
  if(o.accountId!==account.account_id)throw new AppError(422,'account_review_required','Review the post for the currently connected account');
  if(p.mediaUrls.length!==1||!p.mediaUrls[0]?.startsWith('storage:'))throw new AppError(422,'select_video','Select one video from Storage');
  const material=await c.materials.get(p.mediaUrls[0].slice(8));if(!material.uploaded||!['video/mp4','video/quicktime'].includes(material.mime))throw new AppError(422,'video_required','Select a completed MP4 or MOV upload');
+ if(material.kind==='raw_clip')throw new AppError(422,'finish_required','This is unedited generated footage. Finish it in the Studio, then select the finished video.');
  if(p.platform==='youtube'){
   if(typeof o.title!=='string'||!o.title.trim()||o.title.length>100)throw new AppError(422,'title_required','Enter a YouTube title (up to 100 characters)');
   if(!['public','unlisted','private'].includes(String(o.privacy)))throw new AppError(422,'privacy_required','Choose YouTube visibility');

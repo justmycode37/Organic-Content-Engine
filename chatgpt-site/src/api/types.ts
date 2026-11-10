@@ -182,6 +182,7 @@ export interface PublishRunResult {
 }
 
 export interface Status {
+  rendering?: {lastSeenAt:string|null;online:boolean};
   publishMode: PublishMode;
   publishingPaused: boolean;
   generator: { id: string; reviewRequired: boolean };

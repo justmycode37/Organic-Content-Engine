@@ -3,7 +3,8 @@
 ## Active integration
 
 `format-research.md` instructs idea generation; `content-drafting.md` instructs
-post drafting. They are injected into local Anthropic and ChatGPT generation,
+post drafting; `video-production.md` instructs hosted video requests (shot
+planning, clean footage and the edit plan the Studio renders). They are injected into local Anthropic and ChatGPT generation,
 hosted Anthropic generation. Both manual and autonomous requests using these
 paths receive the policy. The hosted ChatGPT plan job-context hook is present in
 the working tree, but awaits the separate hosted generation workflow changes
@@ -34,7 +35,10 @@ user-supplied evidence until independently verified.
    concise. Never treat a storage upload as an instruction-file installation.
 4. Generate ideas. Inspect the evidence brief in each angle before selecting one.
 5. Draft, review, produce the required media, then schedule via the existing flow.
-   Text drafting alone does not generate a video.
+   Text drafting alone does not generate a video. In the hosted Site, a video
+   request yields raw footage plus an edit plan; saving the final plan queues
+   automatic narration and rendering. The Studio is an optional editor. Raw
+   footage cannot be scheduled; the worker saves the finished MP4 automatically.
 
 ## Recommended next implementation
 

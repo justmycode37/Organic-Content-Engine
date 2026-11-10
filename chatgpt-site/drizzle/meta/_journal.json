@@ -29,6 +29,20 @@
       "when": 1794220000000,
       "tag": "0003_persisted_feedback",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1794300000000,
+      "tag": "0004_material_kind",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1794310000000,
+      "tag": "0005_video_renders",
+      "breakpoints": true
     }
   ]
 }

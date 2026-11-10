@@ -423,8 +423,8 @@ test('only the requested five platforms are exposed and unsupported requests fai
  await stop();
 });
 
-async function storeFile(instance,{name='clip.mp4',mime='video/mp4',bytes=Buffer.from('test-video-content')}={}){
- const item=(await instance.call('POST','/api/materials',{json:{name,mime,size:bytes.length}})).body;
+async function storeFile(instance,{name='clip.mp4',mime='video/mp4',bytes=Buffer.from('test-video-content'),kind}={}){
+ const item=(await instance.call('POST','/api/materials',{json:{name,mime,size:bytes.length,...(kind?{kind}:{})}})).body;
  const response=await instance.mf.dispatchFetch(`https://site.example/api/materials/${item.id}/content`,{method:'PUT',headers:{...OWNER,cookie:COOKIE,'content-length':String(bytes.length)},body:bytes});
  assert.equal(response.status,200,await response.clone().text());return await response.json();
 }
@@ -469,6 +469,204 @@ test('Monid video requests carry a spending limit and reject unsafe result impor
  const context=await mcp(instance,'get_generation_context',{jobId:job.id});assert.match(JSON.stringify(context),/mcp.monid.ai/);assert.equal(JSON.parse(context.result.content[0].text).request.budget,1);
  const blocked=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://127.0.0.1/secret',runId:'run-1'});assert.equal(blocked.result.isError,true);
  assert.equal((await call('GET','/api/generation')).body.items[0].status,'pending');
+ await stop();
+});
+
+test('generated footage needs an edit plan and a finished render before it can be scheduled',async()=>{
+ let downloads=0;
+ const instance=await start({PUBLISH_MODE:'live'}, {persist:'studio',outboundService:async request=>{
+  const url=new URL(request.url);
+  if(url.hostname==='cdn.monid.ai'){downloads++;return new Response('raw-footage-bytes',{headers:{'content-type':'video/mp4','content-length':'17'}});}
+  throw new Error(`Unexpected request ${request.url}`);
+ }});
+ const {call,stop}=instance;const read=tool=>JSON.parse(tool.result.content[0].text);
+ const job=(await call('POST','/api/generation',{json:{kind:'video',prompt:'A product story',duration:12,budget:5}})).body;
+ let context=read(await mcp(instance,'get_generation_context',{jobId:job.id}));
+ assert.match(context.contentPolicy,/edit plan/);assert.match(context.contentPolicy,/no on-screen text/);assert.deepEqual(context.source.savedRunIds,[]);
+ const edit={hook:'Nobody tells you this',cta:'Follow for part two',shots:[{runId:'run-1',start:0.4,end:3},{runId:'run-2',start:0,end:2.5}],captions:[{text:'It failed in public',start:2.6,end:4.2}]};
+ const early=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/1.mp4',runId:'run-1',edit});
+ assert.equal(early.result.isError,true);assert.match(early.result.content[0].text,/run-2/);assert.equal(downloads,0);
+ let saved=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/1.mp4',runId:'run-1'});assert.ok(!saved.result.isError,JSON.stringify(saved));
+ saved=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/1.mp4',runId:'run-1'});assert.equal(read(saved).clips,1);assert.equal(downloads,1);
+ saved=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/2.mp4',runId:'run-2',edit});assert.equal(read(saved).editSaved,true);assert.equal(downloads,2);
+ context=read(await mcp(instance,'get_generation_context',{jobId:job.id}));assert.deepEqual(context.source.savedRunIds,['run-1','run-2']);
+ assert.deepEqual(read(await mcp(instance,'list_generation_requests')),{paused:true,requests:[],reason:'Automation is off. Do not generate content or invoke Monid.'});
+ let listed=(await call('GET','/api/generation')).body.items[0];assert.equal(listed.status,'render_queued');
+ let result=JSON.parse(listed.result);assert.equal(result.clips.length,2);assert.equal(result.edit.hook,'Nobody tells you this');assert.equal(result.edit.musicMaterialId,null);
+ const materials=(await call('GET','/api/materials')).body.items;assert.deepEqual(materials.map(m=>m.kind),['raw_clip','raw_clip']);
+ const raw=result.clips[0].materialId;
+ await connectFixture(instance,'instagram');
+ const post=(await call('POST','/api/posts',{json:{platform:'instagram',body:'Caption',mediaUrls:[`storage:${raw}`],publishOptions:{accountId:'account-1'}}})).body;
+ const refused=await call('POST',`/api/posts/${post.id}/publish-now`);assert.equal(refused.status,422);assert.equal(refused.body.error.code,'finish_required');
+ assert.equal((await call('POST',`/api/generation/${job.id}/finish`,{json:{materialId:raw}})).status,422);
+ assert.equal((await call('PUT',`/api/generation/${job.id}/edit`,{json:{edit:{...edit,shots:[{runId:'missing',start:0,end:2}]}}})).status,422);
+ assert.equal((await call('PUT',`/api/generation/${job.id}/edit`,{json:{edit:{...edit,hook:'A sharper hook'}}})).body.edit.hook,'A sharper hook');
+ const finished=await storeFile(instance,{name:'video-finished.mp4',kind:'finished'});assert.equal(finished.kind,'finished');
+ result=(await call('POST',`/api/generation/${job.id}/finish`,{json:{materialId:finished.id,edit}})).body;assert.equal(result.finishedMaterialId,finished.id);
+ listed=(await call('GET','/api/generation')).body.items[0];assert.equal(listed.status,'completed');
+ assert.equal((await call('POST','/api/materials',{json:{name:'x.mp4',mime:'video/mp4',size:4,kind:'raw_clip'}})).status,400);
+ await stop();
+});
+
+test('Studio stays usable without an ElevenLabs key and voice routes require the owner',async()=>{
+ const {call,stop}=await start({}, {persist:'voiceover-off'});
+ assert.deepEqual((await call('GET','/api/voiceover/voices')).body,{configured:false,voices:[],defaultVoiceId:null});
+ assert.equal((await call('POST','/api/voiceover',{json:{text:'Hello',voiceId:'FemaleSocial123'}})).body.error.code,'voiceover_not_configured');
+ for(const route of ['/api/voiceover/voices','/api/voiceover']){
+  const method=route.endsWith('/voices')?'GET':'POST';
+  assert.equal((await call(method,route,{headers:{}})).status,401);
+  assert.equal((await call(method,route,{headers:STRANGER})).status,403);
+ }
+ await stop();
+});
+
+test('ElevenLabs paginated voices, timestamped narration, private audio and edit persistence',async()=>{
+ const key='eleven-test-key-must-stay-private';let generated=0;let pages=0;
+ const raw='123',spoken='one two three';
+ const alignment=text=>({characters:[...text],character_start_times_seconds:[...text].map((_,i)=>i/10),character_end_times_seconds:[...text].map((_,i)=>(i+1)/10)});
+ const bytes=Buffer.from('test-mp3-audio');
+ const instance=await start({ELEVENLABS_API_KEY:key}, {persist:'voiceover-on',outboundService:async request=>{
+  assert.equal(request.headers.get('xi-api-key'),key);
+  const url=new URL(request.url);assert.equal(url.origin,'https://api.elevenlabs.io');
+  if(url.pathname==='/v2/voices'){
+   pages++;
+   if(!url.searchParams.has('next_page_token'))return Response.json({voices:[{voice_id:'MaleVoice123',name:'Narrator',labels:{gender:'male',use_case:'narration'}}],has_more:true,next_page_token:'page-two'});
+   assert.equal(url.searchParams.get('next_page_token'),'page-two');
+   return Response.json({voices:[{voice_id:'FemaleSocial123',name:'Bright creator',labels:{gender:'female',use_case:'social_media'},description:'Upbeat and conversational'}],has_more:false});
+  }
+  assert.equal(url.pathname,'/v1/text-to-speech/FemaleSocial123/with-timestamps');
+  assert.equal(url.searchParams.get('output_format'),'mp3_44100_128');
+  const input=await request.json();assert.equal(input.text,raw);assert.equal(input.model_id,'eleven_multilingual_v2');assert.equal(input.voice_settings.speed,1.08);generated++;
+  return Response.json({audio_base64:bytes.toString('base64'),alignment:alignment(raw),normalized_alignment:alignment(spoken)});
+ }});
+ const {call,stop,mf,db}=instance;
+ const voices=await call('GET','/api/voiceover/voices');assert.equal(voices.status,200);assert.equal(pages,2);assert.equal(voices.body.defaultVoiceId,'FemaleSocial123');assert.doesNotMatch(JSON.stringify(voices.body),new RegExp(key));
+ for(const json of [{text:'',voiceId:'FemaleSocial123'},{text:'a'.repeat(1501),voiceId:'FemaleSocial123'},{text:raw,voiceId:'../bad'}])assert.equal((await call('POST','/api/voiceover',{json})).status,400);
+ assert.equal(generated,0);
+ const response=await call('POST','/api/voiceover',{json:{text:raw,voiceId:voices.body.defaultVoiceId}});assert.equal(response.status,201,JSON.stringify(response.body));
+ const take=response.body;assert.deepEqual(take.words,[{text:'one',start:0,end:.3},{text:'two',start:.4,end:.7},{text:'three',start:.8,end:1.3}]);assert.equal(take.duration,1.3);assert.equal(generated,1);
+ const material=(await call('GET','/api/materials')).body.items.find(item=>item.id===take.materialId);assert.equal(material.kind,'voiceover');assert.equal(material.enabled,false);assert.equal(material.mime,'audio/mpeg');
+ const preview=await mf.dispatchFetch(`https://site.example/api/materials/${take.materialId}/preview`,{headers:{...OWNER,cookie:COOKIE}});assert.equal(preview.status,200);assert.equal(preview.headers.get('content-type'),'audio/mpeg');assert.deepEqual(Buffer.from(await preview.arrayBuffer()),bytes);
+ const partial=await mf.dispatchFetch(`https://site.example/api/materials/${take.materialId}/preview`,{headers:{...OWNER,cookie:COOKIE,range:'bytes=0-3'}});assert.equal(partial.status,206);assert.equal(await partial.text(),'test');
+ assert.equal((await call('GET',`/api/materials/${take.materialId}/preview`,{headers:{}})).status,401);
+ const footage=await storeFile(instance);const job=(await call('POST','/api/generation',{json:{kind:'video',prompt:'A story',duration:6,budget:1}})).body;
+ await db.prepare('UPDATE generation_jobs SET status=?,result=? WHERE id=?').bind('ready_to_finish',JSON.stringify({clips:[{materialId:footage.id,runId:'run-voice'}],edit:null,finishedMaterialId:null}),job.id).run();
+ const edit={hook:'A story',voiceover:raw,voice:take};const saved=await call('PUT',`/api/generation/${job.id}/edit`,{json:{edit}});assert.equal(saved.status,200,JSON.stringify(saved.body));assert.deepEqual(saved.body.edit.voice,take);
+ const context=await mcp(instance,'get_generation_context',{jobId:job.id});assert.doesNotMatch(JSON.stringify(context),/Synthetic voiceover from ElevenLabs/);
+ const lockedUntil=new Date(Date.now()+60000).toISOString();await db.prepare('INSERT INTO job_locks (name,locked_until) VALUES (?,?)').bind('studio:voiceover',lockedUntil).run();
+ assert.equal((await call('POST','/api/voiceover',{json:{text:raw,voiceId:'FemaleSocial123'}})).body.error.code,'voiceover_busy');assert.equal(generated,1);
+ await stop();
+});
+
+test('ElevenLabs failures preserve credits on validation errors and never expose provider bodies',async()=>{
+ let status=401;let invalidAudio=false;let calls=0;
+ const instance=await start({ELEVENLABS_API_KEY:'eleven-test-private-key'}, {persist:'voiceover-errors',outboundService:async()=>{
+  calls++;if(status!==200)return Response.json({detail:'PRIVATE_PROVIDER_BODY eleven-test-private-key'},{status});
+  return invalidAudio?Response.json({audio_base64:'bad%base64'}):Response.json({audio_base64:Buffer.from('audio').toString('base64'),alignment:{characters:['x'],character_start_times_seconds:[2],character_end_times_seconds:[1]}});
+ }});
+ const {call,db,stop}=instance;
+ for(const [httpStatus,code] of [[401,'voiceover_auth'],[403,'voiceover_auth'],[429,'voiceover_quota'],[404,'voice_missing'],[500,'voiceover_failed'],[200,'voiceover_failed']]){
+  status=httpStatus;const result=await call('POST','/api/voiceover',{json:{text:'Hello',voiceId:'FemaleSocial123'}});
+  assert.equal(result.body.error.code,code);assert.doesNotMatch(JSON.stringify(result.body),/PRIVATE_PROVIDER_BODY|eleven-test-private-key/);
+  assert.equal(await db.prepare("SELECT * FROM job_locks WHERE name='studio:voiceover'").first(),null,'a failed generation releases its lock');
+ }
+ invalidAudio=true;assert.equal((await call('POST','/api/voiceover',{json:{text:'Hello',voiceId:'FemaleSocial123'}})).body.error.code,'voiceover_failed');
+ assert.equal((await call('GET','/api/materials')).body.items.length,0);assert.equal(calls,7);
+ await stop();
+});
+
+test('the dedicated Mac credential only authorizes rendering, with legacy plans recovered on connection',async()=>{
+ const token='render-worker-only-secret-render-worker-only';
+ const instance=await start({RENDER_WORKER_TOKEN:token}, {persist:'mac-render-auth'});
+ const {call,db,stop}=instance,headers={authorization:`Bearer ${token}`};
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers})).status,200);
+ assert.equal((await call('POST','/api/jobs/tick',{headers})).status,401);
+ assert.equal((await call('GET','/api/posts',{headers})).status,401);
+ const footage=await storeFile(instance,{name:'generated-old.mp4'});
+ await call('PATCH',`/api/materials/${footage.id}`,{json:{notes:'Generated through Monid. Run old.'}});
+ assert.equal((await call('GET','/api/materials')).body.items.find(item=>item.id===footage.id).kind,'raw_clip');
+ const job=(await call('POST','/api/generation',{json:{kind:'video',prompt:'Saved before automatic editing',duration:6,budget:1}})).body;
+ await db.prepare('UPDATE generation_jobs SET status=?,result=? WHERE id=?').bind('ready_to_finish',JSON.stringify({clips:[{materialId:footage.id,runId:'old'}],edit:{hook:'Old plan',cta:'Follow',shots:[{runId:'old',start:0,end:5}]},finishedMaterialId:null}),job.id).run();
+ const claimed=await call('POST','/api/jobs/render/claim',{headers});assert.equal(claimed.body.job.id,job.id);
+ assert.equal((await call('GET','/api/generation')).body.items[0].status,'rendering');
+ await stop();
+});
+
+test('a saved AI edit finishes unattended with exclusive leases and idempotent private output',async()=>{
+ const instance=await start({JOB_TOKEN}, {persist:'auto-render',outboundService:async()=>new Response('footage',{headers:{'content-type':'video/mp4','content-length':'7'}})});
+ const {call,db,mf,stop}=instance,headers={authorization:`Bearer ${JOB_TOKEN}`};
+ const draft=(await call('POST','/api/posts',{json:{platform:'instagram',body:'An automatically finished video'}})).body;
+ const [requested,parallel]=await Promise.all([mcp(instance,'request_video_for_post',{postId:draft.id,prompt:'Automatic story',duration:6,budget:1}),mcp(instance,'request_video_for_post',{postId:draft.id,prompt:'Automatic story',duration:6,budget:1})]);assert.ok(!requested.result.isError,JSON.stringify(requested));assert.equal(JSON.parse(parallel.result.content[0].text).id,JSON.parse(requested.result.content[0].text).id);
+ const job=JSON.parse(requested.result.content[0].text);
+ const reused=await mcp(instance,'request_video_for_post',{postId:draft.id,prompt:'Automatic story',duration:6,budget:1});assert.equal(JSON.parse(reused.result.content[0].text).id,job.id);
+ const edit={hook:'An automatic edit',cta:'Follow along',shots:[{runId:'run-auto',start:0,end:5}],captions:[{text:'A useful point',start:2.7,end:3.8}]};
+ assert.ok(!(await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/auto.mp4',runId:'run-auto',edit})).result.isError);
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers:{}})).status,401);
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers:STRANGER})).status,403);
+ const [a,b]=await Promise.all([call('POST','/api/jobs/render/claim',{headers}),call('POST','/api/jobs/render/claim',{headers})]);
+ const claim=a.body.job??b.body.job;assert.ok(claim,JSON.stringify([a,b]));assert.ok(!a.body.job||!b.body.job,'only one worker owns the render');
+ const prefix=`/api/jobs/render/${job.id}/${claim.lease}`;
+ assert.equal((await call('POST',`${prefix}/heartbeat`,{headers})).status,200);
+ assert.equal((await call('GET','/api/status')).body.rendering.online,true);
+ assert.equal((await call('GET',`${prefix}/media/${claim.clips[0].materialId}`,{headers})).body,'footage');
+ const unrelated=await storeFile(instance);assert.equal((await call('GET',`${prefix}/media/${unrelated.id}`,{headers})).status,403);
+ const duplicate=await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/auto.mp4',runId:'run-auto',edit});assert.ok(!duplicate.result.isError);
+ assert.equal((await db.prepare('SELECT lease_id FROM video_renders WHERE job_id=?').bind(job.id).first()).lease_id,claim.lease,'duplicate AI saves preserve the in-flight lease');
+ const bytes=Buffer.from('finished-output');
+ const upload=()=>mf.dispatchFetch(`https://site.example${prefix}/output`,{method:'PUT',headers:{...headers,'content-length':String(bytes.length),'content-type':'video/mp4'},body:bytes});
+ const first=await upload();assert.equal(first.status,200,await first.clone().text());const saved=await first.json();assert.ok(saved.finishedMaterialId);
+ const again=await upload();assert.equal(again.status,200);assert.equal((await again.json()).finishedMaterialId,saved.finishedMaterialId);
+ const material=(await call('GET','/api/materials')).body.items.find(item=>item.id===saved.finishedMaterialId);assert.equal(material.kind,'finished');assert.equal(material.enabled,false);
+ assert.equal((await call('GET','/api/generation')).body.items[0].status,'completed');
+ const attached=(await call('GET',`/api/posts/${draft.id}`)).body;assert.deepEqual(attached.mediaUrls,[`storage:${saved.finishedMaterialId}`]);assert.equal(attached.status,'draft');
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers})).body.job,null);
+ await stop();
+});
+
+test('automatic narration is cached across retries, and stale or failed renders return to the AI',async()=>{
+ let tts=0;
+ const instance=await start({JOB_TOKEN,ELEVENLABS_API_KEY:'eleven-key-test'}, {persist:'auto-render-retry',outboundService:async request=>{
+  const url=new URL(request.url);
+  if(url.hostname==='cdn.monid.ai')return new Response('footage',{headers:{'content-type':'video/mp4','content-length':'7'}});
+  if(url.pathname==='/v2/voices')return Response.json({voices:[{voice_id:'FemaleSocial123',name:'Creator',labels:{gender:'female',use_case:'social_media'}}],has_more:false});
+  tts++;return Response.json({audio_base64:Buffer.from('fake-audio').toString('base64'),normalized_alignment:{characters:[...'Hi'],character_start_times_seconds:[0,.1],character_end_times_seconds:[.1,.2]}});
+ }});
+ const {call,db,stop}=instance,headers={authorization:`Bearer ${JOB_TOKEN}`};
+ const job=(await call('POST','/api/generation',{json:{kind:'video',prompt:'A narrated edit',duration:6,budget:1}})).body;
+ const edit={hook:'Hello',cta:'Follow',shots:[{runId:'run-retry',start:0,end:5}],voiceover:'Hi'};
+ await mcp(instance,'save_video_result',{jobId:job.id,url:'https://cdn.monid.ai/auto.mp4',runId:'run-retry',edit});
+ let claim=(await call('POST','/api/jobs/render/claim',{headers})).body.job;assert.ok(claim);assert.equal(tts,1);const take=claim.plan.voice.materialId;
+ await call('POST',`/api/jobs/render/${job.id}/${claim.lease}/fail`,{headers,json:{code:'render_failed',message:'Transient encoder failure'}});
+ await db.prepare("UPDATE video_renders SET next_attempt_at=? WHERE job_id=?").bind(past(1),job.id).run();
+ const stale=claim.lease;claim=(await call('POST','/api/jobs/render/claim',{headers})).body.job;
+ assert.equal(tts,1);assert.equal(claim.plan.voice.materialId,take);
+ assert.equal((await call('POST',`/api/jobs/render/${job.id}/${stale}/fail`,{headers,json:{code:'late',message:'old'}})).status,409);
+ assert.equal((await call('POST',`/api/jobs/render/${job.id}/${stale}/heartbeat`,{headers})).status,409);
+ await call('POST',`/api/jobs/render/${job.id}/${claim.lease}/fail`,{headers,json:{code:'narration_too_long',message:'Shorten the script'}});
+ const context=JSON.parse((await mcp(instance,'get_generation_context',{jobId:job.id})).result.content[0].text);assert.equal(context.source.render.errorCode,'narration_too_long');assert.equal(context.source.edit.voice.materialId,take);
+ await call('POST','/api/autopilot/start');
+ const pending=JSON.parse((await mcp(instance,'list_generation_requests')).result.content[0].text);assert.ok(pending.some(request=>request.id===job.id));
+ const repaired=await mcp(instance,'save_video_edit',{jobId:job.id,edit:{...edit,voiceover:'A shorter script'}});assert.ok(!repaired.result.isError,JSON.stringify(repaired));
+ assert.equal((await db.prepare('SELECT repairs FROM video_renders WHERE job_id=?').bind(job.id).first()).repairs,1);
+ claim=(await call('POST','/api/jobs/render/claim',{headers})).body.job;assert.equal(tts,2);
+ await call('PUT',`/api/generation/${job.id}/edit`,{json:{edit:{...edit,hook:'Manual override'}}});
+ assert.equal((await call('GET',`/api/jobs/render/${job.id}/${claim.lease}/media/${claim.clips[0].materialId}`,{headers})).status,409,'changing the edit invalidates the older lease');
+ await db.prepare("UPDATE video_renders SET repairs=2,status='failed' WHERE job_id=?").bind(job.id).run();await db.prepare("UPDATE generation_jobs SET status='render_failed' WHERE id=?").bind(job.id).run();
+ const bounded=await mcp(instance,'save_video_edit',{jobId:job.id,edit});assert.equal(bounded.result.isError,true);assert.match(bounded.result.content[0].text,/repairs are exhausted/);
+ await stop();
+});
+
+test('missing narration credentials wait without exhausting retries and expired workers stop after three attempts',async()=>{
+ const instance=await start({JOB_TOKEN}, {persist:'auto-render-wait'});const {call,db,stop}=instance,headers={authorization:`Bearer ${JOB_TOKEN}`};
+ const footage=await storeFile(instance);const job=(await call('POST','/api/generation',{json:{kind:'video',prompt:'Wait for key',duration:6,budget:1}})).body;
+ await db.prepare('UPDATE generation_jobs SET result=? WHERE id=?').bind(JSON.stringify({clips:[{materialId:footage.id,runId:'wait'}],edit:null,finishedMaterialId:null}),job.id).run();
+ await mcp(instance,'save_video_edit',{jobId:job.id,edit:{hook:'Hello',cta:'Follow',shots:[{runId:'wait',start:0,end:5}],voiceover:'Hello'}});
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers})).body.job,null);
+ const waiting=await db.prepare('SELECT attempts,error_code FROM video_renders WHERE job_id=?').bind(job.id).first();assert.deepEqual(waiting,{attempts:0,error_code:'voiceover_not_configured'});
+ assert.equal((await call('GET','/api/generation')).body.items[0].status,'waiting_for_voice');
+ await db.prepare("UPDATE video_renders SET status='rendering',attempts=3,lease_id=?,lease_until=? WHERE job_id=?").bind(crypto.randomUUID(),past(1),job.id).run();await db.prepare("UPDATE generation_jobs SET status='rendering' WHERE id=?").bind(job.id).run();
+ assert.equal((await call('POST','/api/jobs/render/claim',{headers})).body.job,null);
+ assert.equal((await call('GET','/api/generation')).body.items[0].status,'render_failed');
  await stop();
 });
 
