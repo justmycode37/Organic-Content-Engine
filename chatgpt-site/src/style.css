@@ -1,4 +1,4 @@
-@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Manrope:wght@500;600;700;800&display=swap');
 
 :root {
   color-scheme: light;
@@ -402,3 +402,13 @@ select { width: auto; max-width: 100%; }
 .material-card .card-head { gap: 12px; }
 .material-card textarea { width: 100%; resize: vertical; }
 .material-card .row { margin-top: 16px; justify-content: space-between; }
+
+/* Studio */
+.studio-grid { display: grid; grid-template-columns: minmax(200px, 300px) minmax(0, 1fr); gap: 24px; align-items: start; }
+.studio-stage { display: grid; gap: 10px; position: sticky; top: 16px; }
+.studio-frame { width: 100%; aspect-ratio: 9 / 16; background: #000; border-radius: 10px; display: block; }
+.studio-stage input[type='range'] { width: 100%; accent-color: var(--ink); }
+.studio-controls textarea { width: 100%; resize: vertical; font-family: var(--mono); font-size: 13px; }
+.studio-controls .row { margin-top: 16px; }
+@media (max-width: 720px) { .studio-grid { grid-template-columns: 1fr; } .studio-stage { position: static; max-width: 300px; } }
+.studio-controls textarea.studio-prose { font-family: var(--body); font-size: 14px; }

@@ -11,6 +11,8 @@ const CSP = [
   'font-src https://fonts.gstatic.com',
   "img-src 'self' data: https:",
   "connect-src 'self'",
+  // The Studio previews a freshly rendered video from memory before it is saved.
+  "media-src 'self' blob:",
   "base-uri 'none'",
   "form-action 'self'",
   "object-src 'none'",

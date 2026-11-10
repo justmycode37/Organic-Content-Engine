@@ -74,6 +74,14 @@ export async function assertJobCaller(c: Context, config: Config, access: Access
   throw new AppError(401, 'unauthorized', 'Job calls need the workspace owner or a valid JOB_TOKEN');
 }
 
+/** The Mac renderer receives access to the render queue, without permission to publish. */
+export async function assertRenderCaller(c: Context, config: Config, access: Access): Promise<void> {
+  if(access.kind==='forbidden')throw new AppError(403,'forbidden_user','This workspace belongs to another account');
+  const header=c.req.header('authorization');
+  if(config.renderWorkerToken&&header?.startsWith('Bearer ')&&await safeEqual(header.slice(7),config.renderWorkerToken))return;
+  await assertJobCaller(c,config,access);
+}
+
 /**
  * Blocks cross-site browser calls. Fetch metadata comes first because it does not depend on
  * how the platform rewrites Host; sibling Sites on a shared domain count as `same-site`, so

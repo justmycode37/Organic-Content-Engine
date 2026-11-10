@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { uniqueIndex, check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
 
 /**
  * Schema declaration used only by drizzle-kit to generate migrations under drizzle/.
@@ -112,12 +112,12 @@ export const activity = sqliteTable('activity', {
   createdAt: text('created_at').notNull(),
 });
 
-export const materials=sqliteTable('materials',{id:text('id').primaryKey(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),notes:text('notes').notNull().default(''),enabled:integer('enabled').notNull().default(1),createdAt:text('created_at').notNull(),pathname:text('pathname').notNull().unique(),uploaded:integer('uploaded').notNull().default(0)});
+export const materials=sqliteTable('materials',{id:text('id').primaryKey(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),notes:text('notes').notNull().default(''),enabled:integer('enabled').notNull().default(1),createdAt:text('created_at').notNull(),pathname:text('pathname').notNull().unique(),uploaded:integer('uploaded').notNull().default(0),kind:text('kind').notNull().default('source')});
 export const socialAccounts=sqliteTable('social_accounts',{platform:text('platform').primaryKey(),accountId:text('account_id').notNull(),name:text('name').notNull(),credentials:text('credentials').notNull(),updatedAt:text('updated_at').notNull()});
 export const oauthPending=sqliteTable('oauth_pending',{state:text('state').primaryKey(),platform:text('platform').notNull(),verifier:text('verifier').notNull(),expires:integer('expires').notNull(),browserHash:text('browser_hash').notNull()});
 export const deliveryJobs=sqliteTable('delivery_jobs',{key:text('key').primaryKey(),platform:text('platform').notNull(),accountId:text('account_id').notNull(),stage:text('stage').notNull(),data:text('data').notNull(),updatedAt:text('updated_at').notNull()});
 export const loginLimits=sqliteTable('login_limits',{key:text('key').primaryKey(),attempts:integer('attempts').notNull(),resetAt:integer('reset_at').notNull()});
-export const generationJobs=sqliteTable('generation_jobs',{id:text('id').primaryKey(),kind:text('kind').notNull(),input:text('input').notNull(),status:text('status').notNull().default('pending'),result:text('result'),createdAt:text('created_at').notNull()});
+export const generationJobs=sqliteTable('generation_jobs',{id:text('id').primaryKey(),kind:text('kind').notNull(),input:text('input').notNull(),status:text('status').notNull().default('pending'),result:text('result'),createdAt:text('created_at').notNull()},t=>[uniqueIndex('generation_video_post').on(sql`json_extract(${t.input}, '$.postId')`).where(sql`${t.kind}='video' AND json_extract(${t.input}, '$.postId') IS NOT NULL`)]);
 
 export const postFeedback = sqliteTable('post_feedback', {
   postId: text('post_id').primaryKey().references(() => posts.id, { onDelete: 'cascade' }),
@@ -129,3 +129,5 @@ export const postFeedback = sqliteTable('post_feedback', {
   conversions: integer('conversions'),
   updatedAt: text('updated_at').notNull(),
 }, (t) => [check('post_feedback_verdict', sql`${t.verdict} IS NULL OR ${t.verdict} IN ('successful','iterate','discard')`), index('feedback_by_format').on(t.format)]);
+
+export const videoRenders=sqliteTable('video_renders',{jobId:text('job_id').primaryKey().references(()=>generationJobs.id,{onDelete:'cascade'}),status:text('status').notNull().default('queued'),leaseId:text('lease_id'),leaseUntil:text('lease_until'),attempts:integer('attempts').notNull().default(0),repairs:integer('repairs').notNull().default(0),nextAttemptAt:text('next_attempt_at').notNull(),outputMaterialId:text('output_material_id'),errorCode:text('error_code'),errorMessage:text('error_message'),updatedAt:text('updated_at').notNull()},t=>[index('video_renders_due').on(t.status,t.nextAttemptAt)]);

@@ -17,6 +17,7 @@ const secureUrl = z.string().url().refine((value) => {
 const schema = z.object({
   OWNER_USER_ID: optionalString,
   JOB_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
+  RENDER_WORKER_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
   SITES_SERVICE_ACCESS_TRUSTED: z.enum(['true', 'false']).default('false'),
   LOCAL_DEV_USER_ID: optionalString,
   PUBLISH_MODE: z.enum(['dry_run', 'live']).default('dry_run'),
@@ -24,6 +25,9 @@ const schema = z.object({
   CONTENT_GENERATOR: z.enum(['template', 'anthropic', 'chatgpt-plan']).default('chatgpt-plan'),
   ANTHROPIC_API_KEY: optionalString,
   ANTHROPIC_MODEL: z.string().default('claude-opus-5-5'),
+  ELEVENLABS_API_KEY: optionalString,
+  ELEVENLABS_VOICE_ID: z.string().regex(/^[A-Za-z0-9]{8,64}$/, 'must be an ElevenLabs voice ID').optional(),
+  ELEVENLABS_MODEL: z.string().regex(/^[a-z0-9_]{3,64}$/).default('eleven_multilingual_v2'),
   BLUESKY_HANDLE: optionalString,
   BLUESKY_APP_PASSWORD: optionalString,
   BLUESKY_SERVICE_URL: secureUrl.default('https://bsky.social'),
@@ -42,11 +46,14 @@ const schema = z.object({
 export interface Config {
   ownerUserId: string | null;
   jobToken: string | null;
+  renderWorkerToken: string | null;
   serviceAccessTrusted: boolean;
   localDevUserId: string | null;
   publishMode: PublishMode;
   publishHttpTimeoutMs: number;
   generator: { kind: 'template' | 'anthropic' | 'chatgpt-plan'; anthropicApiKey: string | null; anthropicModel: string };
+  /** Studio narration. Without a key the Studio works, minus voiceover. */
+  voiceover: { apiKey: string | null; voiceId: string | null; model: string };
   bluesky: { handle: string | null; appPassword: string | null; serviceUrl: string };
   mastodon: { instanceUrl: string | null; accessToken: string | null; maxChars: number };
   linkedin: { accessToken: string | null; authorUrn: string | null; apiVersion: string | null };
@@ -82,7 +89,9 @@ export function loadConfig(rawEnv: object): Config {
 
   const secrets = [
     e.JOB_TOKEN,
+    e.RENDER_WORKER_TOKEN,
     e.ANTHROPIC_API_KEY,
+    e.ELEVENLABS_API_KEY,
     e.BLUESKY_APP_PASSWORD,
     e.MASTODON_ACCESS_TOKEN,
     e.LINKEDIN_ACCESS_TOKEN,
@@ -93,6 +102,7 @@ export function loadConfig(rawEnv: object): Config {
   return {
     ownerUserId: e.OWNER_USER_ID ?? null,
     jobToken: e.JOB_TOKEN ?? null,
+    renderWorkerToken: e.RENDER_WORKER_TOKEN ?? null,
     serviceAccessTrusted: e.SITES_SERVICE_ACCESS_TRUSTED === 'true',
     localDevUserId: e.LOCAL_DEV_USER_ID ?? null,
     publishMode: e.PUBLISH_MODE,
@@ -102,6 +112,7 @@ export function loadConfig(rawEnv: object): Config {
       anthropicApiKey: e.ANTHROPIC_API_KEY ?? null,
       anthropicModel: e.ANTHROPIC_MODEL,
     },
+    voiceover: { apiKey: e.ELEVENLABS_API_KEY ?? null, voiceId: e.ELEVENLABS_VOICE_ID ?? null, model: e.ELEVENLABS_MODEL },
     bluesky: {
       handle: e.BLUESKY_HANDLE ?? null,
       appPassword: e.BLUESKY_APP_PASSWORD ?? null,

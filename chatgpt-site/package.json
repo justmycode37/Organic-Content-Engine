@@ -5,18 +5,24 @@
   "type": "module",
   "scripts": {
     "build": "node scripts/build.mjs",
-    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.render.json --noEmit",
     "validate": "node scripts/validate-artifact.mjs",
-    "test": "node --test scripts/smoke.mjs",
+    "test": "node --test scripts/studio.test.mjs scripts/render-worker.test.mjs scripts/smoke.mjs",
     "check": "npm run typecheck && npm run build && npm run validate && npm test",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 execute DB --local --config wrangler.local.jsonc --persist-to .wrangler/state --file drizzle/0000_initial.sql",
-    "dev:local": "wrangler dev --config wrangler.local.jsonc --persist-to .wrangler/state --ip 127.0.0.1"
+    "dev:local": "wrangler dev --config wrangler.local.jsonc --persist-to .wrangler/state --ip 127.0.0.1",
+    "render:worker": "node --env-file-if-exists=.renderer.env scripts/render-worker.mjs",
+    "render:mac:install": "node scripts/macos-renderer.mjs install",
+    "render:mac:status": "node scripts/macos-renderer.mjs status",
+    "render:mac:stop": "node scripts/macos-renderer.mjs stop",
+    "render:mac:start": "node scripts/macos-renderer.mjs start"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "1.6.0",
     "hono": "4.13.17",
     "lucide-react": "0.468.0",
+    "mp4-muxer": "5.2.2",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "zod": "4.6.7"
@@ -30,6 +36,7 @@
     "drizzle-kit": "0.31.10",
     "drizzle-orm": "0.45.2",
     "esbuild": "0.28.2",
+    "playwright-core": "1.65.0",
     "typescript": "7.0.2",
     "vite": "8.3.6",
     "wrangler": "4.92.0"
