@@ -132,14 +132,16 @@ async function music(mood,seconds,key){
 
 /** Caption phrases follow the voice in readable chunks without splitting sentence beats. */
 export function captionsFromSpeech(say,words,offset,sceneEnd){
- const marked=markupWords(say),groups=[];let group=[];
+ const marked=markupWords(say),groups=[];let segment=[];
+ const chars=list=>list.reduce((sum,item)=>sum+item.text.replaceAll('*','').length,0)+Math.max(0,list.length-1);
+ // Split at sentence ends first, then break long segments into BALANCED chunks (no orphaned last word).
+ const flush=()=>{if(!segment.length)return;const parts=Math.max(Math.ceil(segment.length/6),Math.ceil(chars(segment)/34));let i=0;for(let part=parts;part>0;part--){let end=part===1?segment.length:i+Math.ceil((segment.length-i)/part);if(part>1){for(const d of [0,-1,1]){const k=end+d;if(k>i+1&&k<segment.length&&/[,;]$/.test(segment[k-1].text)){end=k;break;}}}groups.push(segment.slice(i,end));i=end;}segment=[];};
  words.forEach((word,index)=>{
   const text=marked[index]?.accent?`*${word.text}*`:word.text;
-  group.push({...word,text});
-  const length=group.reduce((sum,item)=>sum+item.text.replaceAll('*','').length,0)+Math.max(0,group.length-1);
-  if(group.length>=6||length>=34||/[.!?…][”’"')\]]*$/.test(word.text)){groups.push(group);group=[];}
+  segment.push({...word,text});
+  if(/[.!?…:][”’"')\]]*$/.test(word.text))flush();
  });
- if(group.length)groups.push(group);
+ flush();
  return groups.map((items,index)=>{
   const next=groups[index+1]?.[0];
   const start=offset+items[0].start,end=Math.min(sceneEnd,next?offset+next.start:offset+items.at(-1).end+0.3);
@@ -287,12 +289,14 @@ export function arrange(spec,spoken,defs=sceneDefs){
   return {...rest,duration,...(events?{events}:{}),...(scene.hits?{hits:scene.hits.map(hit=>Math.round(Math.min(duration-0.05,hit*duration/scene.duration)*100)/100)}:{})};
  });
  const timed={...spec,scenes};
- const placed=placeScenes(timed),captions=[],cues=[];
+ const placed=placeScenes(timed),cues=[],speech=[];
  placed.forEach((scene,index)=>{
   const voice=spoken[index];
   if(voice){
    cues.push({file:voice.audio,at:scene.start+LEAD,gain:1});
-   captions.push(...captionsFromSpeech(spec.scenes[index].say,voice.words,scene.start+LEAD,scene.end));
+   // Narration is one continuous paragraph: collect every word on the reel timeline, chunk once at the end
+   // so caption phrases can span cuts ("must buy", "last tickets") instead of orphaning words at scene ends.
+   speech.push({say:spec.scenes[index].say,words:voice.words.map(word=>({...word,start:scene.start+LEAD+word.start,end:scene.start+LEAD+word.end}))});
   }
   const length=scene.end-scene.start;
   const transition=scene.spec.transitionSound==='none'?null:scene.spec.transitionSound;
@@ -393,10 +397,11 @@ export function arrange(spec,spoken,defs=sceneDefs){
  });
  // A warm two-note button begins 0.9 s before the reel ends and uses a 460 ms natural ring.
  const reelEnd=placed.at(-1)?.end??0;
- if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:1.995262,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
+ if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:5.6,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
  const musicAutomation=deriveMusicAutomation(placed);
  const governed=governCues(cues,reelEnd,placed),voiceCues=cues.filter(cue=>!cue.sfx);
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
+ const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd):[];
  if(captions.length)timed.captions=captions;
  return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats,musicAutomation};
 }
