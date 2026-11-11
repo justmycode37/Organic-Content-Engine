@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { uniqueIndex, check, index, integer, sqliteTable, text, unique } from 'drizzle-orm/sqlite-core';
+import { uniqueIndex, check, index, integer, sqliteTable, text, unique, primaryKey } from 'drizzle-orm/sqlite-core';
 
 /**
  * Schema declaration used only by drizzle-kit to generate migrations under drizzle/.
@@ -113,8 +113,9 @@ export const activity = sqliteTable('activity', {
 });
 
 export const materials=sqliteTable('materials',{id:text('id').primaryKey(),name:text('name').notNull(),mime:text('mime').notNull(),size:integer('size').notNull(),notes:text('notes').notNull().default(''),enabled:integer('enabled').notNull().default(1),createdAt:text('created_at').notNull(),pathname:text('pathname').notNull().unique(),uploaded:integer('uploaded').notNull().default(0),kind:text('kind').notNull().default('source')});
-export const socialAccounts=sqliteTable('social_accounts',{platform:text('platform').primaryKey(),accountId:text('account_id').notNull(),name:text('name').notNull(),credentials:text('credentials').notNull(),updatedAt:text('updated_at').notNull()});
-export const oauthPending=sqliteTable('oauth_pending',{state:text('state').primaryKey(),platform:text('platform').notNull(),verifier:text('verifier').notNull(),expires:integer('expires').notNull(),browserHash:text('browser_hash').notNull()});
+export const socialAccounts=sqliteTable('social_accounts',{workspaceAccountId:text('workspace_account_id').notNull().default(''),platform:text('platform').primaryKey(),accountId:text('account_id').notNull(),name:text('name').notNull(),credentials:text('credentials').notNull(),updatedAt:text('updated_at').notNull()});
+export const accountSocialCredentials=sqliteTable('account_social_credentials',{workspaceAccountId:text('workspace_account_id').notNull(),platform:text('platform').notNull(),accountId:text('account_id').notNull(),name:text('name').notNull(),credentials:text('credentials').notNull(),updatedAt:text('updated_at').notNull()},t=>[primaryKey({columns:[t.platform,t.workspaceAccountId]})]);
+export const oauthPending=sqliteTable('oauth_pending',{workspaceAccountId:text('workspace_account_id'),state:text('state').primaryKey(),platform:text('platform').notNull(),verifier:text('verifier').notNull(),expires:integer('expires').notNull(),browserHash:text('browser_hash').notNull()});
 export const deliveryJobs=sqliteTable('delivery_jobs',{key:text('key').primaryKey(),platform:text('platform').notNull(),accountId:text('account_id').notNull(),stage:text('stage').notNull(),data:text('data').notNull(),updatedAt:text('updated_at').notNull()});
 export const loginLimits=sqliteTable('login_limits',{key:text('key').primaryKey(),attempts:integer('attempts').notNull(),resetAt:integer('reset_at').notNull()});
 export const generationJobs=sqliteTable('generation_jobs',{id:text('id').primaryKey(),kind:text('kind').notNull(),input:text('input').notNull(),status:text('status').notNull().default('pending'),result:text('result'),createdAt:text('created_at').notNull()},t=>[uniqueIndex('generation_video_post').on(sql`json_extract(${t.input}, '$.postId')`).where(sql`${t.kind}='video' AND json_extract(${t.input}, '$.postId') IS NOT NULL`)]);
@@ -134,3 +135,5 @@ export const videoRenders=sqliteTable('video_renders',{jobId:text('job_id').prim
 
 export const accounts = sqliteTable('accounts', {id:text('id').primaryKey(),value:text('value').notNull(),createdAt:text('created_at').notNull(),updatedAt:text('updated_at').notNull()});
 export const accountRuns = sqliteTable('account_runs', {id:text('id').primaryKey(),accountId:text('account_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}),scheduledAt:text('scheduled_at').notNull(),status:text('status').notNull().default('blocked'),outputMaterialId:text('output_material_id'),error:text('error')},t=>[unique('account_runs_slot').on(t.accountId,t.scheduledAt)]);
+
+export const accountAutomationJobs=sqliteTable('account_automation_jobs',{id:text('id').primaryKey(),accountId:text('account_id').notNull().references(()=>accounts.id,{onDelete:'cascade'}),scheduledAt:text('scheduled_at').notNull(),status:text('status').notNull().default('pending'),attempts:integer('attempts').notNull().default(0),leaseId:text('lease_id'),leaseUntil:text('lease_until'),outputMaterialId:text('output_material_id'),spec:text('spec'),provenance:text('provenance'),postId:text('post_id'),publishUntil:text('publish_until'),externalId:text('external_id'),externalUrl:text('external_url'),error:text('error'),createdAt:text('created_at').notNull(),updatedAt:text('updated_at').notNull()},t=>[unique('account_automation_slot').on(t.accountId,t.scheduledAt),index('account_automation_due').on(t.status,t.scheduledAt,t.leaseUntil)]);

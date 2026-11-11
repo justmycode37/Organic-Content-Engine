@@ -1,10 +1,12 @@
 # Hedgy implementation status
 
-The hosted application (`chatgpt-site`) now presents an accounts-only interface. Migration 0006 seeds Hedgy with independent settings and planned schedule slots. Account connection credentials have not yet been migrated from the existing platform-wide social service; health therefore remains blocked for every account. Slots describe intended times and are not published posts.
+The hosted application presents independent accounts and the Hedgy brand policy. Its durable queue schedules production ahead of each account's local posting time, leases work to the account worker, stores finished MP4s in R2, and publishes through account-scoped Instagram credentials. Rendering and paid inference run in the installed Mac account worker, outside a user browser tab. The Mac must be awake and online.
 
-`POST /api/accounts/:id/generate` is owner/password protected and calls the OpenAI Responses API with server runtime `OPENAI_API_KEY`. It uses gpt-6.1-sol at medium effort for the plan and assembly, with twelve gpt-6-luna specialists and four concurrent requests. Each response has a token ceiling and timeout, and the assembled reel is validated. There is no subscription fallback. Sol/Luna model access was verified in the metered API test run. This endpoint currently returns a production spec; it does not persist or enqueue it for rendering or publishing. Do not enable unattended paid calls until durable job claiming and retry accounting are connected.
+OpenAI and ElevenLabs keys are server/worker secrets. The owner-only account UI offers Instagram connection and truthful readiness. A Meta developer app's Instagram Client ID and secret are still required, followed by Instagram professional-account authorization. These cannot be inferred from an Instagram username or login. Missing credentials block scheduled paid generation and publishing.
 
-The missing integration work is account-scoped OAuth credentials, durable per-account generation/render/publish queue and worker, runtime key setup, migrations/deployment and live verification. Root local app remains unchanged. Existing hosted ChatGPT generation services remain in source but are no longer in primary navigation.
+Unpublished account migrations were consolidated into one generated schema-only migration before first deployment. Applied migrations 0000–0005 remain unchanged; Hedgy's initial account and current brand policy are seeded through application DML rather than data migrations.
+
+Jobs have exclusive leases and heartbeats. Interrupted paid generation requires inspection rather than blindly paying again. Cached specs and audio are reused. Ambiguous publication is marked for attention rather than repeated automatically.
 
 ## Test reel
 

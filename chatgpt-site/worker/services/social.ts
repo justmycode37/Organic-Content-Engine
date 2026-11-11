@@ -7,21 +7,22 @@ interface Credentials { access_token:string;refresh_token?:string;expires_at:num
 interface Account { platform:SocialPlatform;account_id:string;name:string;credentials:string;updated_at:string }
 export const platformOf=(value:string):SocialPlatform=>{if(!(SOCIAL as readonly string[]).includes(value))throw new AppError(400,'invalid_platform','Choose Instagram, TikTok, or YouTube');return value as SocialPlatform;};
 export class SocialAccounts {
-  db:Db; network:typeof fetch; env:Record<string,string|undefined>;
-  constructor(db:Db,env:Record<string,string|undefined>,network:typeof fetch=fetch){this.db=db;this.env=env;this.network=(input,init)=>network(input,init);}
+  db:Db; network:typeof fetch; env:Record<string,string|undefined>; workspaceAccountId:string;
+  constructor(db:Db,env:Record<string,string|undefined>,network:typeof fetch=fetch,workspaceAccountId?:string){this.db=db;this.env=env;this.network=(input,init)=>network(input,init);this.workspaceAccountId=workspaceAccountId??'';}
+  get table(){return this.workspaceAccountId?'account_social_credentials':'social_accounts';}
   config(platform:SocialPlatform) {
     const prefix={instagram:'INSTAGRAM',tiktok:'TIKTOK',youtube:'YOUTUBE',x:'X',linkedin:'LINKEDIN'}[platform];
     const id=this.env[`${prefix}_CLIENT_ID`];const secret=this.env[`${prefix}_CLIENT_SECRET`];
     const missing=[!id&&`${prefix}_CLIENT_ID`,!secret&&`${prefix}_CLIENT_SECRET`,!this.env.PUBLIC_BASE_URL&&'PUBLIC_BASE_URL',!this.env.TOKEN_ENCRYPTION_KEY&&'TOKEN_ENCRYPTION_KEY'].filter(Boolean) as string[];
     return {id:id??'',secret:secret??'',missing,callback:`${this.env.PUBLIC_BASE_URL}/api/social/${platform}/callback`};
   }
-  async account(platform:SocialPlatform) {return this.db.prepare('SELECT * FROM social_accounts WHERE platform=?').bind(platform).first<Account>();}
+  async account(platform:SocialPlatform) {return this.db.prepare(`SELECT * FROM ${this.table} WHERE platform=? AND workspace_account_id IS ?`).bind(platform,this.workspaceAccountId).first<Account>();}
   async statuses() {return Promise.all(SOCIAL.map(async platform=>{const account=await this.account(platform);const config=this.config(platform);return {platform,connected:Boolean(account),name:account?.name??null,accountId:account?.account_id??null,setupRequired:config.missing,callback:config.callback};}));}
   async start(platform:SocialPlatform,browser:string) {
     const c=this.config(platform);if(c.missing.length)throw new AppError(409,'provider_setup_required',`Application setup needed: ${c.missing.join(', ')}`);
     const state=randomHex(32),verifier=randomHex(48);
     await this.db.prepare('DELETE FROM oauth_pending WHERE expires<?').bind(Date.now()).run();
-    await this.db.prepare('INSERT INTO oauth_pending (state,platform,verifier,expires,browser_hash) VALUES (?,?,?,?,?)').bind(state,platform,verifier,Date.now()+600000,await digest(browser)).run();
+    await this.db.prepare('INSERT INTO oauth_pending (state,platform,verifier,expires,browser_hash,workspace_account_id) VALUES (?,?,?,?,?,?)').bind(state,platform,verifier,Date.now()+600000,await digest(browser),this.workspaceAccountId).run();
     const params=new URLSearchParams({redirect_uri:c.callback,response_type:'code',state});let base='';
     if(platform==='instagram'){base='https://www.instagram.com/oauth/authorize';params.set('client_id',c.id);params.set('scope','instagram_business_basic,instagram_business_content_publish');params.set('enable_fb_login','0');params.set('force_authentication','1');}
     if(platform==='tiktok'){base='https://www.tiktok.com/v2/auth/authorize/';params.set('client_key',c.id);params.set('scope','user.info.basic,video.publish');}
@@ -38,7 +39,7 @@ export class SocialAccounts {
     return data;
   }
   async callback(platform:SocialPlatform,state:string,browser:string,code:string,error?:string) {
-    const pending=await this.db.prepare('DELETE FROM oauth_pending WHERE state=? AND platform=? AND browser_hash=? AND expires>? RETURNING verifier').bind(state,platform,await digest(browser),Date.now()).first<{verifier:string}>();
+    const pending=await this.db.prepare('DELETE FROM oauth_pending WHERE state=? AND platform=? AND workspace_account_id IS ? AND browser_hash=? AND expires>? RETURNING verifier').bind(state,platform,this.workspaceAccountId,await digest(browser),Date.now()).first<{verifier:string}>();
     if(!pending)throw new AppError(400,'invalid_oauth_state','Connection expired or did not originate in this browser. Try connecting again.');
     if(error)throw new AppError(400,'access_denied','Account connection was not authorized.');
     if(!code)throw new AppError(400,'missing_code','No account authorization code was returned');
@@ -71,13 +72,13 @@ export class SocialAccounts {
     if(!accountId||!name||!tokens.access_token)throw new AppError(409,'account_unavailable','No eligible publishing account was returned');
     const prior=await this.account(platform);const old=prior&&prior.account_id===accountId?await decrypt<Credentials>(prior.credentials,this.env.TOKEN_ENCRYPTION_KEY!):null;
     const credentials={access_token:tokens.access_token,refresh_token:tokens.refresh_token??old?.refresh_token,expires_at:Date.now()+Number(tokens.expires_in??3600)*1000,scope:tokens.scope};
-    await this.db.prepare('INSERT INTO social_accounts (platform,account_id,name,credentials,updated_at) VALUES (?,?,?,?,?) ON CONFLICT (platform) DO UPDATE SET account_id=excluded.account_id,name=excluded.name,credentials=excluded.credentials,updated_at=excluded.updated_at').bind(platform,accountId,name,await encrypt(credentials,this.env.TOKEN_ENCRYPTION_KEY!),new Date().toISOString()).run();
+    await this.db.prepare(`INSERT INTO ${this.table} (platform,account_id,name,credentials,updated_at,workspace_account_id) VALUES (?,?,?,?,?,?) ON CONFLICT ${this.workspaceAccountId?'(platform,workspace_account_id)':'(platform)'} DO UPDATE SET account_id=excluded.account_id,name=excluded.name,credentials=excluded.credentials,updated_at=excluded.updated_at`).bind(platform,accountId,name,await encrypt(credentials,this.env.TOKEN_ENCRYPTION_KEY!),new Date().toISOString(),this.workspaceAccountId).run();
   }
   async token(platform:SocialPlatform) {
     const account=await this.account(platform);if(!account)throw new AppError(409,'account_missing',`Connect your ${platform} account in Platforms`);
     let tokens=await decrypt<Credentials>(account.credentials,this.env.TOKEN_ENCRYPTION_KEY!);
     if(tokens.expires_at>Date.now()+300000)return {account,access:tokens.access_token};
-    const lock=await this.db.prepare('INSERT INTO job_locks (name,locked_until) VALUES (?,?) ON CONFLICT (name) DO UPDATE SET locked_until=excluded.locked_until WHERE job_locks.locked_until<? RETURNING name').bind(`refresh:${platform}`,new Date(Date.now()+60000).toISOString(),new Date().toISOString()).first();
+    const lock=await this.db.prepare('INSERT INTO job_locks (name,locked_until) VALUES (?,?) ON CONFLICT (name) DO UPDATE SET locked_until=excluded.locked_until WHERE job_locks.locked_until<? RETURNING name').bind(`refresh:${platform}:${this.workspaceAccountId}`,new Date(Date.now()+60000).toISOString(),new Date().toISOString()).first();
     if(!lock)throw new AppError(409,'account_refreshing','Account authorization is refreshing. Try again shortly.');
     try {
       const c=this.config(platform);let fresh:any;
@@ -85,20 +86,20 @@ export class SocialAccounts {
       else {
         if(platform==='linkedin'&&!tokens.refresh_token)throw new AppError(409,'reconnect_required','LinkedIn authorization expired. Reconnect LinkedIn.');
         if(!tokens.refresh_token)throw new AppError(409,'reconnect_required','Reconnect this account to renew publishing permission');
-        if(platform==='x'){const c=this.config(platform);const fresh=await this.json('https://api.x.com/2/oauth2/token',{method:'POST',headers:{Authorization:`Basic ${btoa(`${c.id}:${c.secret}`)}`},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:tokens.refresh_token})});tokens={...tokens,access_token:fresh.access_token,refresh_token:fresh.refresh_token??tokens.refresh_token,expires_at:Date.now()+Number(fresh.expires_in)*1000};await this.db.prepare('UPDATE social_accounts SET credentials=? WHERE platform=? AND credentials=?').bind(await encrypt(tokens,this.env.TOKEN_ENCRYPTION_KEY!),platform,account.credentials).run();return {account,access:tokens.access_token};}
+        if(platform==='x'){const c=this.config(platform);const fresh=await this.json('https://api.x.com/2/oauth2/token',{method:'POST',headers:{Authorization:`Basic ${btoa(`${c.id}:${c.secret}`)}`},body:new URLSearchParams({grant_type:'refresh_token',refresh_token:tokens.refresh_token})});tokens={...tokens,access_token:fresh.access_token,refresh_token:fresh.refresh_token??tokens.refresh_token,expires_at:Date.now()+Number(fresh.expires_in)*1000};await this.db.prepare(`UPDATE ${this.table} SET credentials=? WHERE platform=? AND workspace_account_id=? AND credentials=?`).bind(await encrypt(tokens,this.env.TOKEN_ENCRYPTION_KEY!),platform,this.workspaceAccountId,account.credentials).run();return {account,access:tokens.access_token};}
         const body:Record<string,string>=platform==='youtube'||platform==='linkedin'?{client_id:c.id,client_secret:c.secret,grant_type:'refresh_token',refresh_token:tokens.refresh_token}:{client_key:c.id,client_secret:c.secret,grant_type:'refresh_token',refresh_token:tokens.refresh_token};
         fresh=await this.json(platform==='youtube'?'https://oauth2.googleapis.com/token':platform==='linkedin'?'https://www.linkedin.com/oauth/v2/accessToken':'https://open.tiktokapis.com/v2/oauth/token/',{method:'POST',body:new URLSearchParams(body)});
       }
       if(!fresh.access_token)throw new AppError(409,'reconnect_required','Reconnect this account');
       tokens={...tokens,access_token:fresh.access_token,refresh_token:fresh.refresh_token??tokens.refresh_token,expires_at:Date.now()+Number(fresh.expires_in)*1000};
-      const updated=await this.db.prepare('UPDATE social_accounts SET credentials=?,updated_at=? WHERE platform=? AND credentials=? RETURNING platform').bind(await encrypt(tokens,this.env.TOKEN_ENCRYPTION_KEY!),new Date().toISOString(),platform,account.credentials).first();
+      const updated=await this.db.prepare(`UPDATE ${this.table} SET credentials=?,updated_at=? WHERE platform=? AND workspace_account_id=? AND credentials=? RETURNING platform`).bind(await encrypt(tokens,this.env.TOKEN_ENCRYPTION_KEY!),new Date().toISOString(),platform,this.workspaceAccountId,account.credentials).first();
       if(!updated)throw new AppError(409,'connection_changed','The account connection changed. Try again.');
       return {account,access:tokens.access_token};
-    }finally{await this.db.prepare('DELETE FROM job_locks WHERE name=?').bind(`refresh:${platform}`).run();}
+    }finally{await this.db.prepare('DELETE FROM job_locks WHERE name=?').bind(`refresh:${platform}:${this.workspaceAccountId}`).run();}
   }
   async creator() {const {access}=await this.token('tiktok');const info=await this.json('https://open.tiktokapis.com/v2/post/publish/creator_info/query/',{method:'POST',headers:{Authorization:`Bearer ${access}`,'Content-Type':'application/json'},body:'{}'});return info.data;}
   async disconnect(platform:SocialPlatform) {
-    const account=await this.account(platform);await this.db.prepare('DELETE FROM social_accounts WHERE platform=?').bind(platform).run();
+    const account=await this.account(platform);await this.db.prepare(`DELETE FROM ${this.table} WHERE platform=? AND workspace_account_id=?`).bind(platform,this.workspaceAccountId).run();
     let revoked=true;
     if(account){const token=await decrypt<Credentials>(account.credentials,this.env.TOKEN_ENCRYPTION_KEY!);try {
       if(platform==='youtube')await this.json('https://oauth2.googleapis.com/revoke',{method:'POST',body:new URLSearchParams({token:token.refresh_token??token.access_token})});

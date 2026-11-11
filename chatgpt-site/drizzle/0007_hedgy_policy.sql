@@ -1,1 +1,0 @@
-UPDATE accounts SET value=json_set(value,'$.brand.style','Black and white pixelart only; no accent colour','$.brand.mascot','Optional monochrome story character only; no permanent logo','$.brand.policyVersion',2,'$.brand.persistentBranding',json('false'),'$.brand.disclaimer',json('false'),'$.brand.maxVisualObjects',2),updated_at=CURRENT_TIMESTAMP WHERE id='hedgy';

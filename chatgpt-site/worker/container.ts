@@ -60,7 +60,7 @@ export async function createContainer(env: Env): Promise<Container> {
   if (!db) {
     throw new AppError(500, 'database_unavailable', 'The D1 binding DB is not available. Declare it in .openai/hosting.json.');
   }
-  config.secrets.push(...Object.entries(env).filter(([key,value])=>typeof value==='string'&&(/CLIENT_SECRET$/.test(key)||['SESSION_SECRET','TOKEN_ENCRYPTION_KEY','APP_PASSWORD_HASH'].includes(key))).map(([,value])=>String(value)));
+  config.secrets.push(...Object.entries(env).filter(([key,value])=>typeof value==='string'&&(/CLIENT_SECRET$/.test(key)||['SESSION_SECRET','TOKEN_ENCRYPTION_KEY','APP_PASSWORD_HASH','OPENAI_API_KEY','ELEVENLABS_API_KEY'].includes(key))).map(([,value])=>String(value)));
   const redact = createRedactor(config.secrets);
   const logger = createLogger(redact);
   const now = () => new Date();

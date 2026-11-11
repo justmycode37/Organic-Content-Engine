@@ -803,3 +803,30 @@ test('the scheduled MCP writer records its tick and honors the publishing pause'
  assert.ok(JSON.parse((await mcp(instance,'list_generation_requests')).result.content[0].text).length>0);
  await instance.stop();
 });
+
+test('account automation scopes connections, waits for Meta setup and enforces a dedicated machine token',async()=>{
+ const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token,OPENAI_API_KEY:'test-key',ELEVENLABS_API_KEY:'test-audio'},{persist:'account-scope'});
+ try{
+ const a=await s.call('GET','/api/accounts');assert.equal(a.status,200);assert.equal(a.body.accounts[0].id,'hedgy');assert.ok(a.body.accounts[0].connectionStatus.setupRequired.includes('INSTAGRAM_CLIENT_ID'));
+ const conn=await s.call('POST','/api/accounts/hedgy/connect');assert.equal(conn.status,409);assert.equal(conn.body.error.code,'provider_setup_required');
+ assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers:{}})).status,401);
+ const result=await s.call('POST','/api/jobs/accounts/claim',{headers:{authorization:`Bearer ${token}`}});assert.equal(result.status,200);assert.equal(result.body.job,null);
+ const n=await s.db.prepare('SELECT COUNT(*) n FROM account_automation_jobs').first();assert.equal(n.n,0);
+ const next=await s.call('GET','/api/accounts');assert.ok(!next.body.accounts[0].health.issues.includes('Automation worker offline'));
+ await s.db.prepare("INSERT INTO account_social_credentials(platform,workspace_account_id,account_id,name,credentials,updated_at) VALUES('instagram','hedgy','ig1','Hedgy','encrypted','now'),('instagram','second','ig2','Second','encrypted','now')").run();
+ assert.equal((await s.db.prepare("SELECT COUNT(*) n FROM account_social_credentials WHERE platform='instagram'").first()).n,2);
+ }finally{await s.stop()}
+});
+
+test('account worker leases exclusively, persists one finished output and completes idempotently',async()=>{
+ const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token},{persist:'account-leases'});const headers={authorization:`Bearer ${token}`};
+ try{await s.call('GET','/api/accounts');const id=crypto.randomUUID(),date=new Date(Date.now()+3600000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
+ const first=await s.call('POST','/api/jobs/accounts/claim',{headers});assert.equal(first.status,200);const job=first.body.job;assert.equal(job.id,id);assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers})).body.job,null);
+ assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/wrong/heartbeat`,{headers})).status,409);
+ assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/heartbeat`,{headers})).status,200);
+ const bytes=new Uint8Array(256);const response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...headers,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});assert.equal(response.status,200);const {materialId}=await response.json();
+ const completed=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(completed.status,200);
+ const twice=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(twice.status,200);
+ const row=await s.db.prepare('SELECT status,output_material_id FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'completed');assert.equal(row.output_material_id,materialId);
+ }finally{await s.stop()}
+});

@@ -5,9 +5,11 @@ import {AppError} from '../errors.ts';
 export const accountPatch=z.object({name:z.string().trim().min(1).max(80).optional(),postsPerDay:z.number().int().min(1).max(6).optional(),postingTime:z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional(),timezone:z.string().max(80).refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}}).optional(),enabled:z.boolean().optional()}).strict();
 export const accountCreate=z.object({name:z.string().trim().min(1).max(80),platform:z.enum(['instagram','tiktok','youtube','x','linkedin']).default('instagram'),topic:z.string().max(1000).default('')}).strict();
 interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;brand?:unknown}
-export async function listAccounts(db:Db){const rows=await db.prepare('SELECT value FROM accounts ORDER BY created_at,id').all<{value:string}>();return rows.results.map(row=>present(JSON.parse(row.value) as Account));}
+export async function listAccounts(db:Db){
+const seed={id:'hedgy',name:'hedgy',platform:'instagram',topic:'Simple quantitative finance and market explainers with relatable analogies',postsPerDay:1,postingTime:'18:00',timezone:'Europe/Zurich',enabled:true,brand:HEDGY_POLICY};
+await db.prepare('INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(seed.id,JSON.stringify(seed),new Date().toISOString(),new Date().toISOString()).run();const rows=await db.prepare('SELECT value FROM accounts ORDER BY created_at,id').all<{value:string}>();return rows.results.map(row=>present(JSON.parse(row.value) as Account));}
 function present(a:Account){
- const issues=['Connect this account','API generation and publishing worker have not passed account checks'];
+ const issues=['Connect this account'];
  if(!a.enabled)issues.unshift('Automation paused');
  // Convert each local calendar time to UTC, including DST, independently of server timezone.
  const today=new Intl.DateTimeFormat('en-CA',{timeZone:a.timezone,year:'numeric',month:'2-digit',day:'2-digit'}).format(new Date());

@@ -9,10 +9,10 @@ test('Sol coordinates twelve bounded Luna specialists and validates reel',async(
  try{const r=await generateHedgyReel({OPENAI_API_KEY:'test'},'diversification');assert.equal(r.provenance.specialists,12);assert.equal(calls.length,14);assert.equal(calls.filter(x=>x.model==='gpt-6-luna').length,12);assert.ok(peak<=4);assert.ok(calls.every(x=>x.store===false&&x.reasoning.effort===(x.model==='gpt-6-luna'?'low':'medium')));}finally{globalThis.fetch=original}
 });
 import {DatabaseSync} from 'node:sqlite';
-import {readFileSync} from 'node:fs';
+import {readFileSync,readdirSync} from 'node:fs';
 import {listAccounts,addAccount,updateAccount,accountPatch,accountCreate} from '../worker/services/accounts.ts';
 test('account migration seeds Hedgy and settings are isolated',async()=>{
- const sql=new DatabaseSync(':memory:');sql.exec(readFileSync(new URL('../drizzle/0006_accounts.sql',import.meta.url),'utf8'));
+ const sql=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../drizzle/'+name,import.meta.url),'utf8'));
  const db={prepare(q){let args=[];return {bind(...v){args=v;return this},async all(){return {results:sql.prepare(q).all(...args)}},async first(){return sql.prepare(q).get(...args)},async run(){return sql.prepare(q).run(...args)}}}};
  try{let rows=await listAccounts(db);assert.equal(rows[0].id,'hedgy');assert.equal(rows[0].postsPerDay,1);assert.equal(rows[0].health.state,'blocked');const b=await addAccount(db,accountCreate.parse({name:'Second'}));await updateAccount(db,b.id,accountPatch.parse({postsPerDay:3}));rows=await listAccounts(db);assert.equal(rows.find(x=>x.id==='hedgy').postsPerDay,1);assert.equal(rows.find(x=>x.id===b.id).postsPerDay,3);assert.ok(rows.every(a=>a.schedule.every(s=>Date.parse(s.scheduledAt)>Date.now())));assert.equal(accountPatch.safeParse({timezone:'unknown'}).success,false);}finally{sql.close()}
 });

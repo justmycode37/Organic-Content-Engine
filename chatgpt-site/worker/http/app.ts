@@ -1,3 +1,5 @@
+import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime} from '../services/account-automation.ts';
+import {SocialAccounts,platformOf as scopedPlatformOf} from '../services/social.ts';
 import {generateHedgyReel} from '../hedgy-generation.ts';
 import {listAccounts,addAccount,updateAccount,accountCreate,accountPatch} from '../services/accounts.ts';
 import {videoPreflight} from '../services/video-preflight.ts';
@@ -96,7 +98,7 @@ export function createApp(): Hono<AppEnv> {
     if (!/^\/api\/social\/(instagram|tiktok|youtube|x|linkedin)\/callback$/.test(c.req.path) && !c.req.path.startsWith('/api/media/')) assertSameOrigin(c);
     await next();
   });
-  app.use('/api/*', async (c,next)=>{if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/render\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
+  app.use('/api/*', async (c,next)=>{if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/(?:render|accounts)\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: () => {
       throw new AppError(413, 'payload_too_large', 'Request body too large');
@@ -117,9 +119,11 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.get('/api/social/:platform/callback',async c=>{
-    const container=await createContainer(c.env);const access=await resolveAccess(c,container.config,container.settings,new Date().toISOString());assertOwner(access);if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Unlock the workspace and try connecting again');
-    const platform=platformOf(c.req.param('platform'));
-    try{await container.social.callback(platform,c.req.query('state')??'',getCookie(c,'oce_oauth')??'',c.req.query('code')??'',c.req.query('error'));deleteCookie(c,'oce_oauth',{path:'/api/social'});return c.redirect(`/#/platforms?connected=${platform}`);}catch(error){return c.redirect(`/#/platforms?connectionError=${encodeURIComponent(error instanceof AppError?error.message:'Connection failed. Try again.')}`);}
+ const container=await createContainer(c.env);const access=await resolveAccess(c,container.config,container.settings,new Date().toISOString());assertOwner(access);if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Unlock the workspace and try connecting again');
+ const platform=scopedPlatformOf(c.req.param('platform')),state=c.req.query('state')??'';
+ const pending=await container.db.prepare('SELECT workspace_account_id FROM oauth_pending WHERE state=? AND platform=?').bind(state,platform).first<{workspace_account_id:string|null}>();
+ const social=new SocialAccounts(container.db,runtime(c.env),fetch,pending?.workspace_account_id??undefined);
+ try{await social.callback(platform,state,getCookie(c,'oce_oauth')??'',c.req.query('code')??'',c.req.query('error'));deleteCookie(c,'oce_oauth',{path:'/api/social'});return c.redirect('/#/accounts');}catch(error){return c.redirect(`/#/accounts?connectionError=${encodeURIComponent(error instanceof AppError?error.message:'Connection failed')}`);}
   });
 
   app.use('/api/*', async (c, next) => {
@@ -196,6 +200,20 @@ export function createApp(): Hono<AppEnv> {
     return c.json(await failRender(c.get('container'),c.req.param('id'),c.req.param('lease'),input.code,input.message));
   });
 
+  app.use('/api/jobs/accounts/*',async(c,next)=>{await assertRenderCaller(c,{...c.get('container').config,renderWorkerToken:typeof c.env.ACCOUNT_WORKER_TOKEN==='string'?c.env.ACCOUNT_WORKER_TOKEN:null},c.get('access'));await next();});
+  app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
+  app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
+  app.post('/api/jobs/accounts/:id/:lease/heartbeat',async c=>c.json(await heartbeatAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'))));
+  app.put('/api/jobs/accounts/:id/:lease/output',async c=>{
+   const x=c.get('container'),id=c.req.param('id'),lease=c.req.param('lease'),job=await accountLease(x,id,lease),size=Number(c.req.header('content-length'));
+   if(c.req.header('content-type')!=='video/mp4'||!c.req.raw.body||!Number.isSafeInteger(size)||size<100||size>100*1024*1024)throw new AppError(400,'output_invalid','Upload an MP4 below 100 MB');
+   let m=job.output_material_id?await x.materials.get(job.output_material_id):null;
+   if(!m){m=await x.materials.init({name:`reel-${id}.mp4`,mime:'video/mp4',size,kind:'finished'});await x.db.prepare('UPDATE account_automation_jobs SET output_material_id=? WHERE id=? AND lease_id=?').bind(m.id,id,lease).run();}
+   if(!m.uploaded)await x.materials.upload(m.id,c.req.raw.body,size);return c.json({materialId:m.id});
+  });
+  app.post('/api/jobs/accounts/:id/:lease/complete',async c=>{const input=await readBody(c,validator.object({materialId:validator.string().uuid(),spec:validator.unknown(),provenance:validator.unknown()}).strict());return c.json(await completeAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'),input));});
+  app.post('/api/jobs/accounts/:id/:lease/fail',async c=>c.json(await failAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'),await readBody(c,validator.object({code:validator.string().max(80),message:validator.string().max(300)}).strict()))));
+
   // --- Everything below is for the workspace owner only ---
   const api = new Hono<AppEnv>();
   api.use('*', async (c, next) => {
@@ -204,15 +222,9 @@ export function createApp(): Hono<AppEnv> {
     await next();
   });
 
-  api.post('/accounts/:id/generate',async c=>{
-    const db=c.get('container').db,id=c.req.param('id');
-    const row=await db.prepare('SELECT value FROM accounts WHERE id=?').bind(id).first<{value:string}>();
-    if(!row)throw new AppError(404,'not_found','Account not found');
-    const account=JSON.parse(row.value) as {topic:string};
-    const result=await keepAlive(c,generateHedgyReel(c.env,account.topic));
-    return c.json(result);
-  });
-  api.get('/accounts',async c=>c.json({accounts:await listAccounts(c.get('container').db)}));
+  api.post('/accounts/:id/connect',async c=>{const x=c.get('container'),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();if(!row)throw notFound('Account',c.req.param('id'));const account=JSON.parse(row.value);const social=new SocialAccounts(x.db,runtime(c.env),fetch,account.id);const browser=randomHex(32);const url=await social.start(scopedPlatformOf(account.platform),browser);setCookie(c,'oce_oauth',browser,{httpOnly:true,secure:true,sameSite:'Lax',path:'/api/social',maxAge:600});return c.json({url});});
+  api.post('/accounts/:id/generate',async c=>{const x=c.get('container'),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first();if(!row)throw notFound('Account',c.req.param('id'));const at=new Date(Date.now()+3600000).toISOString();const id=crypto.randomUUID();await x.db.prepare('INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,c.req.param('id'),at,new Date().toISOString(),new Date().toISOString()).run();return c.json({id,status:'pending'},202);});
+  api.get('/accounts',async c=>{const x=c.get('container');const accounts=await listAccounts(x.db);const heartbeat=await x.settings.getJob('account_worker');for(const a of accounts){const social=new SocialAccounts(x.db,runtime(c.env),fetch,a.id),platform=scopedPlatformOf(a.platform);const linked=await social.account(platform);const missing=social.config(platform).missing;const issues=[...missing.map(k=>`App setup: ${k}`),...(!linked?['Connect Instagram']:[]),...(!c.env.OPENAI_API_KEY?['Generation key missing']:[]),...(!c.env.ELEVENLABS_API_KEY?['Audio key missing']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[]),...(!a.enabled?['Automation paused']:[])];(a as any).connectionStatus={connected:!!linked,setupRequired:missing};(a as any).health={state:issues.length?'blocked':'running',issues};const runs=await x.db.prepare('SELECT scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();for(const slot of a.schedule){const run=runs.results.find(r=>r.scheduled_at===slot.scheduledAt);slot.status=run?.status??(issues.length?'blocked':'planned');}(a as any).recentRuns=runs.results;if(['failed','needs_attention'].includes(runs.results[0]?.status)){issues.push(runs.results[0].error??'Latest reel needs attention');(a as any).health={state:'blocked',issues};}}return c.json({accounts});});
   api.post('/accounts',async c=>c.json(await addAccount(c.get('container').db,await readBody(c,accountCreate)),201));
   api.patch('/accounts/:id',async c=>c.json(await updateAccount(c.get('container').db,c.req.param('id'),await readBody(c,accountPatch))));
 

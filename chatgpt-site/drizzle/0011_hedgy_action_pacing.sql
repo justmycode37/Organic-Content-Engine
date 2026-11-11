@@ -1,1 +1,0 @@
-UPDATE accounts SET value=json_set(value,'$.brand.policyVersion',6,'$.brand.pacing','Fast 2-4 second shots with meaningful changes every 0.4-0.8 seconds','$.brand.animationSync','Purchases, crashes, put payouts and premium deductions follow spoken word timestamps; no unrelated spinning icons'),updated_at=CURRENT_TIMESTAMP WHERE id='hedgy';
