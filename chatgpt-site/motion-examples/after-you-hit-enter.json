@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "title": "What happens after you hit Enter",
+  "accent": "red",
+  "series": "UNDER THE HOOD",
+  "scenes": [
+    {"type": "title", "duration": 2.4, "kicker": "UNDER THE HOOD", "text": "WHAT HAPPENS AFTER YOU HIT *ENTER*?", "caption": "Your AI never reads a single *word*.", "say": "What actually happens after you hit *enter*?", "hits": [0.85]},
+    {"type": "chat", "duration": 3.0, "transition": "blocks", "model": "AI", "messages": [{"role": "user", "text": "Why is the sky blue?"}, {"role": "ai", "text": "Air scatters *blue light* the most."}], "caption": "You ask. It answers *instantly*.", "say": "You ask a question. The answer shows up *instantly*.", "hits": [1.5]},
+    {"type": "kinetic", "duration": 1.6, "transition": "flash", "words": ["BUT", "*HOW?*"], "say": "But *how?*", "hits": [0.8]},
+    {"type": "tokens", "duration": 3.4, "transition": "glitch", "text": "Why is the sky *blue*?", "caption": "First your text gets *chopped* into tokens.", "say": "First, your text gets *chopped* into tokens.", "hits": [1.2]},
+    {"type": "flow", "duration": 3.4, "transition": "wipe", "nodes": [{"label": "TOKENS"}, {"label": "NUMBERS"}, {"label": "MODEL", "accent": true}], "caption": "Tokens become *numbers* the model can use.", "say": "Every token becomes a *number* the model can work with.", "hits": [2.0]},
+    {"type": "grid", "duration": 3.0, "transition": "shutter", "rows": 5, "cols": 5, "pattern": "attention", "rowLabels": ["WHY", "IS", "THE", "SKY", "BLUE"], "colLabels": ["WHY", "IS", "THE", "SKY", "BLUE"], "highlight": [[3, 4], [4, 3]], "caption": "Attention links the words that *matter*.", "say": "Then attention works out which words *matter* to each other.", "hits": [1.8]},
+    {"type": "tokens", "duration": 3.6, "transition": "zoom", "text": "The sky is", "predict": [{"token": "blue", "p": 0.82}, {"token": "clear", "p": 0.11}, {"token": "falling", "p": 0.02}], "caption": "Then it bets on the *next token*.", "say": "And the model places a bet on the *next token*.", "hits": [2.6]},
+    {"type": "code", "duration": 3.2, "transition": "blocks", "filename": "generate.py", "code": "while not done:\n    probs = model(tokens)\n    nxt = sample(probs)\n    tokens.append(nxt)", "highlight": [4], "caption": "One token. Add it. *Repeat*.", "say": "It picks one. Adds it. And *repeats*.", "hits": [2.0]},
+    {"type": "list", "duration": 3.0, "transition": "wipe", "style": "number", "items": ["CHOP", "COUNT", "*PREDICT*"], "caption": "Three steps, on *loop*.", "say": "Chop. Count. *Predict*. Over and over."},
+    {"type": "kinetic", "duration": 2.0, "transition": "flash", "words": ["NO MAGIC", "JUST", "*MATH*"], "say": "No magic. Just *math*.", "hits": [1.35]},
+    {"type": "outro", "duration": 2.6, "transition": "blocks", "cta": "FOLLOW FOR THE NEXT *PATCH*", "handle": "patchnotes", "say": "Follow for the next *patch*."}
+  ]
+}

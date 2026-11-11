@@ -12,3 +12,4 @@
 !.dev.vars.example
 *.pem
 .DS_Store
+/.motion-cache/

@@ -3,7 +3,8 @@
 ## Active integration
 
 `format-research.md` instructs idea generation; `content-drafting.md` instructs
-post drafting; `video-production.md` instructs hosted video requests (shot
+post drafting; `animation-reels.md` instructs code-animated Reel production;
+`video-production.md` instructs hosted video requests (shot
 planning, clean footage and the edit plan the Studio renders). They are injected into local Anthropic and ChatGPT generation,
 hosted Anthropic generation. Both manual and autonomous requests using these
 paths receive the policy. The hosted ChatGPT plan job-context hook is present in

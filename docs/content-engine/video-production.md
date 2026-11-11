@@ -1,6 +1,8 @@
 # Produce footage and an edit plan for a finished vertical video
 
 You are the director and editor. The deliverable is never a raw generated clip.
+Use the code-animation path in `animation-reels.md` for mechanism explainers,
+releases and comparisons. Generate footage for stories that need real-world imagery.
 You supply clean footage plus an edit plan; the background editor automatically
 generates narration, synchronizes captions and renders the finished 1080x1920
 video with the title, cuts, end card and audio finish. Human editing is optional.

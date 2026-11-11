@@ -1,0 +1,4 @@
+{"version":1,"accent":"red","series":"UNDER THE HOOD","scenes":[
+{"type":"title","duration":2,"text":"WHAT HAPPENS AFTER YOU HIT *ENTER*?","kicker":"UNDER THE HOOD","caption":"Your prompt never reaches the model as *words*."},
+{"type":"code","duration":3,"transition":"blocks","filename":"tokenize.py","code":"tokens = tokenizer.encode(prompt)\nprint(len(tokens))","highlight":[1],"caption":"First it gets *chopped up*."},
+{"type":"outro","duration":2,"transition":"flash","cta":"FOLLOW FOR THE NEXT *PATCH*","handle":"patchnotes"}]}
