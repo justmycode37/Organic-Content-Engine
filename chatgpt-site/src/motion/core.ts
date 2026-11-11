@@ -150,6 +150,9 @@ export interface Frame {
 }
 
 /** A moment in a scene that should be HEARD. The audio renderer places a matching sound exactly here. */
+/** Every sound a scene or transition can ask for. The audio renderer maps each kind to a designed sound. */
+export const CUE_KINDS = ['pop', 'tick', 'type', 'rise', 'shimmer', 'impact', 'swish', 'whoosh', 'whip', 'coin', 'coins', 'cash', 'thud', 'crack', 'shatter', 'click', 'clack', 'servo', 'boing', 'sparkle', 'drop', 'bass', 'glass', 'paper', 'stamp', 'alarm', 'heartbeat', 'zap', 'rumble', 'snap', 'beep', 'step', 'land', 'squeak', 'build', 'reverse', 'tape', 'ding'] as const;
+export type CueKind = (typeof CUE_KINDS)[number];
 export interface Cue {
   /** Seconds since the scene started. */
   t: number;
@@ -158,8 +161,12 @@ export interface Cue {
    * rise: build-up before a reveal (`len` seconds, ends at t + len). shimmer: the reveal / payoff sparkle.
    * impact: the heavy landing. swish: something flies past or slides in.
    */
-  kind: 'pop' | 'tick' | 'type' | 'rise' | 'shimmer' | 'impact' | 'swish';
+  kind: CueKind;
   len?: number;
+  /** Stereo position -1 (left) .. 1 (right). Derive from the on-screen x of the thing making the sound. */
+  pan?: number;
+  /** Relative loudness multiplier, default 1. */
+  gain?: number;
   /** 0..1 position in a sequence: later pops are pitched higher so a build climbs. */
   step?: number;
 }
@@ -235,14 +242,16 @@ export interface ObjectProps { model: ModelName; label?: string; note?: string; 
 export interface OutroProps { cta: string; handle?: string; sub?: string }
 
 export interface HedgyProps { beat:'risk'|'drop'|'hedge'|'offset'|'cost'|'lesson'; headline:string; label?:string; secondary?:string; mascot?:boolean; action?:'buy'|'crash'|'contract'|'expiry'|'payout'|'net'|'upside'|'premium'|'story'; story?:'phone'|'worry'|'put'|'cushion'|'gain'|'backup'; sync?:{word:string;kind:string}[]; events?:{at:number;kind:string}[] }
+/** A choreographed shot from the shot library (src/motion/shots). `shot` names it; `params` are shot-specific. */
+export interface ShotProps { shot: string; params?: Record<string, unknown>; mascot?: boolean; sync?: { word: string; kind: string }[]; events?: { at: number; kind: string }[] }
 export interface SceneProps {
-  hedgy: HedgyProps;
+  hedgy: HedgyProps; shot: ShotProps;
   title: TitleProps; code: CodeProps; diff: DiffProps; terminal: TerminalProps; flow: FlowProps; stat: StatProps;
   bars: BarsProps; compare: CompareProps; list: ListProps; tokens: TokensProps; chat: ChatProps; layers: LayersProps;
   grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; object: ObjectProps; outro: OutroProps;
 }
 export type SceneType = keyof SceneProps;
-export const SCENE_TYPES = ['hedgy', 'title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
+export const SCENE_TYPES = ['hedgy', 'shot', 'title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */

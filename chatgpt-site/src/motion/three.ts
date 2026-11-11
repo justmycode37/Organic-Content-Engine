@@ -9,7 +9,16 @@ export type Vec3 = [number, number, number];
 /** Triangle soup. `p` = xyz per vertex, `t` = three vertex indices per triangle, `m` = material index per triangle. */
 export interface Mesh { p: number[]; t: number[]; m: number[] }
 /** `tone` 0..1 is the grey albedo (default 0.85). `accent` faces are rainbow. `unlit` ignores the light (screens, glows). */
-export interface Material { tone?: number; accent?: boolean; unlit?: boolean }
+export type RampName = 'mono' | 'bone' | 'steel' | 'ink' | 'chrome' | 'glass' | 'brown' | 'red' | 'green' | 'paper';
+export interface Material {
+  tone?: number; accent?: boolean; unlit?: boolean;
+  /** Named colour ramp (or explicit dark->light hex ramp). Default 'mono'. Colour ramps are semantic only (brown = Hedgy/wood, red/green = losses/gains). */
+  ramp?: RampName | string[];
+  /** 0..1 self-illumination (screens, glows, sparks). */
+  emissive?: number;
+  /** 0..1 specular glint strength (metal, glass, coins). */
+  spec?: number;
+}
 
 // ---------------------------------------------------------------- mesh building
 
