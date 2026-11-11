@@ -6,6 +6,7 @@ import { frameTheme } from './pix.ts';
 import { drawChrome } from './chrome.ts';
 import { drawBackground } from './fx/background.ts';
 import { applyCamera, cameraFocus, drawImpact } from './fx/camera.ts';
+import { applyGlobalGrade } from './fx/post.ts';
 import { compositeTransition, TRANSITION_DURATIONS } from './fx/transitions.ts';
 import { SCENES } from './scenes/index.ts';
 
@@ -80,21 +81,45 @@ function drawFloorReflection(ctx: Ctx, source: Surface['canvas'], time: number) 
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
-  ctx.fillStyle = 'rgba(255,255,255,0.22)';
-  ctx.fillRect(0, 1291, W, 2);
+  ctx.fillStyle = 'rgba(255,255,255,0.28)';
+  ctx.fillRect(0, 1290, W, 3);
+  const sweepX = Math.round(((time * 210) % (W + 240)) - 120);
+  ctx.fillStyle = 'rgba(255,255,255,0.12)';
+  ctx.fillRect(sweepX, 1292, 104, 5);
+  ctx.fillStyle = 'rgba(255,255,255,0.045)';
+  ctx.fillRect(sweepX - 28, 1292, 160, 11);
+  ctx.globalAlpha *= 0.29;
+  ctx.drawImage(rippled.canvas, 0, 0, width, height, 0, 1300, W, 432);
+
+  // A dim, offset continuation of the set sits below the caption band. The
+  // moving crop suggests depth while leaving the existing caption treatment clear.
+  ctx.save();
+  ctx.beginPath(); ctx.rect(0, 1650, W, H - 1650); ctx.clip();
   ctx.globalAlpha *= 0.22;
-  ctx.drawImage(rippled.canvas, 0, 0, width, height, 0, 1320, W, 432);
+  const parallaxX = Math.round(Math.sin(time * 0.55) * 12);
+  ctx.drawImage(source, 0, 1030, W, 260, parallaxX, 1650, W, 270);
   ctx.restore();
+  ctx.restore();
+}
+
+function extendSmallCaptionGaps(captions: ActiveCaption[]): ActiveCaption[] {
+  const sorted = captions.sort((a, b) => a.start - b.start);
+  for (let index = 0; index < sorted.length - 1; index++) {
+    const current = sorted[index]!, next = sorted[index + 1]!;
+    const gap = next.start - current.end;
+    if (gap > 0 && gap < 0.25) current.end = next.start;
+  }
+  return sorted;
 }
 
 /** Per-scene captions laid on the reel timeline; explicit `spec.captions` win when present. */
 export function reelCaptions(spec: ReelSpec, placed: PlacedScene[] = placeScenes(spec)): ActiveCaption[] {
-  if (spec.captions?.length) return spec.captions.map(c => ({ text: c.text, start: c.start, end: c.end, ...(c.words ? { wordTimings: c.words } : {}) })).sort((a, b) => a.start - b.start);
-  return placed.flatMap(scene => {
+  if (spec.captions?.length) return extendSmallCaptionGaps(spec.captions.map(c => ({ text: c.text, start: c.start, end: c.end, ...(c.words ? { wordTimings: c.words } : {}) })));
+  return extendSmallCaptionGaps(placed.flatMap(scene => {
     const lines = (Array.isArray(scene.spec.caption) ? scene.spec.caption : scene.spec.caption ? [scene.spec.caption] : []).filter(line => line.trim());
     const span = (scene.end - scene.start) / Math.max(1, lines.length);
     return lines.map((text, index) => ({ text, start: scene.start + index * span, end: scene.start + (index + 1) * span }));
-  });
+  }));
 }
 
 function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: number, theme: Theme, hedgy: boolean) {
@@ -179,6 +204,7 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   } else {
     renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy);
   }
+  if (hedgy) applyGlobalGrade(sceneCtx, { x: 0, y: 0, w: W, h: 1290, cell: 6, t: time, seed: 1701, grainStrength: 2.5, vignetteStrength: 0.12 });
   if (composition) {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(composition.canvas, 0, 0, W, H);

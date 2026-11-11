@@ -23,6 +23,8 @@ export {SFX} from './audio/sfx-design.mjs';
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const CACHE=join(ROOT,'.motion-cache');
 const API='https://api.elevenlabs.io';
+let sfxGenerationsThisRender=0,musicGenerationsThisRender=0;
+const MAX_SFX_GENERATIONS=20;
 const LEAD=Number(process.env.MOTION_LEAD)||0.12;   // silence before the voice in each scene, so a cut never clips a word
 const TAIL=Number(process.env.MOTION_TAIL)||0.32;   // breath after the last word before the next cut
 
@@ -103,6 +105,8 @@ async function effect(name,key,variant=0,requestedSeconds=undefined){
  if(design.source==='eleven'){
   const rawId=hash({prompt,seconds:design.promptSeconds}),raw=join(CACHE,`sfx-${name}-${rawId}.mp3`);
   if(!(await exists(raw))){
+   if(sfxGenerationsThisRender>=MAX_SFX_GENERATIONS)throw new Error(`SFX generation cap reached (${MAX_SFX_GENERATIONS}); use cached assets or reduce the Foley set`);
+   sfxGenerationsThisRender++;
    const response=await eleven('/v1/sound-generation?output_format=mp3_44100_128',{text:prompt,duration_seconds:design.promptSeconds,prompt_influence:0.7},key);
    await writeFile(raw,Buffer.from(await response.arrayBuffer()));
   }
@@ -118,6 +122,8 @@ async function music(mood,seconds,key){
  const prompt=MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+1.5)/5)*5));
  const file=join(CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!(await exists(file))){
+  if(musicGenerationsThisRender>=1)throw new Error('Music generation cap reached (1); use the cached music asset');
+  musicGenerationsThisRender++;
   const response=await eleven('/v1/music?output_format=mp3_44100_128',{prompt,music_length_ms:length*1000,force_instrumental:true},key);
   await writeFile(file,Buffer.from(await response.arrayBuffer()));
  }
@@ -151,7 +157,8 @@ function sceneCues(scene,duration){
 const CUE_PRIORITY={secondary:1,transition:2,story:3};
 const TRANSIENT_CUES=new Set(['click','tick','snap','clack','coin','pop','impact','thud','stamp','crack','zap','beep','step','land','drop']);
 const cueLevel=cue=>(SFX[cue.sfx]?.gain??1)*(cue.gain??1);
-const cuePriority=cue=>CUE_PRIORITY[cue._class]??0;
+const cueIsPrimary=cue=>cue._protected===true||cue.priority===true||cue.priority==='primary'||cue.priority==='sync'||Number(cue.priority)>=3||Boolean(cue.sync)||Number(cue.gain)>=1.2;
+const cuePriority=cue=>cueIsPrimary(cue)?4:CUE_PRIORITY[cue._class]??0;
 const cueDuration=cue=>Math.max(0.02,Number(cue.length)||SFX[cue.sfx]?.seconds||0.2);
 const cueStrengthOrder=(a,b)=>cuePriority(b)-cuePriority(a)||cueLevel(b)-cueLevel(a)||a.at-b.at;
 
@@ -174,6 +181,9 @@ function governCues(cues,duration,placed){
  for(const cue of kept){
   const prior=[...collapsed].reverse().find(item=>item.sfx===cue.sfx&&cue.at-item.at<0.08);
   if(!prior){collapsed.push(cue);continue;}
+  if(cueIsPrimary(cue)&&cueIsPrimary(prior)){collapsed.push(cue);continue;}
+  if(cueIsPrimary(prior))continue;
+  if(cueIsPrimary(cue)){collapsed.splice(collapsed.indexOf(prior),1,cue);continue;}
   if(cueStrengthOrder(cue,prior)<0){collapsed.splice(collapsed.indexOf(prior),1,cue);}
  }
  kept=collapsed;
@@ -187,14 +197,14 @@ function governCues(cues,duration,placed){
   if(!firstBeat.length)continue;
   const hit=firstBeat.sort((a,b)=>cueLevel(b)-cueLevel(a))[0];
   // Keep the louder one; on a tie, the synced story hit wins.
-  if(cueLevel(hit)>=cueLevel(transition))muted.add(transition);
-  else muted.add(hit);
+  if(cueIsPrimary(hit)||cueLevel(hit)>=cueLevel(transition))muted.add(transition);
+  else if(!cueIsPrimary(transition))muted.add(hit);
  }
  kept=kept.filter(cue=>!muted.has(cue));
 
  // Short secondary accents inside 120 ms of a stronger cue read as transient stacking.
  kept=kept.filter(cue=>{
-  if(cue._class!=='secondary'||!TRANSIENT_CUES.has(cue.sfx))return true;
+  if(cueIsPrimary(cue)||cue._class!=='secondary'||!TRANSIENT_CUES.has(cue.sfx))return true;
   return !kept.some(other=>other!==cue&&Math.abs(other.at-cue.at)<0.12&&cueLevel(other)>cueLevel(cue));
  });
 
@@ -205,6 +215,8 @@ function governCues(cues,duration,placed){
   const active=accepted.filter(item=>item.at+cueDuration(item)>cue.at);
   if(active.length<3){accepted.push(cue);continue;}
   const selected=[...active,cue].sort(cueStrengthOrder).slice(0,3);
+  const protectedActive=[...active,cue].filter(cueIsPrimary);
+  for(const item of protectedActive)if(!selected.includes(item))selected.push(item);
   for(const item of active)if(!selected.includes(item))accepted.splice(accepted.indexOf(item),1);
   if(selected.includes(cue))accepted.push(cue);
  }
@@ -212,11 +224,52 @@ function governCues(cues,duration,placed){
 
  // Limit the overall average to about 2.5 SFX cues per second.
  const densityLimit=Math.max(1,Math.floor(duration*2.5));
- if(kept.length>densityLimit)kept=kept.sort(cueStrengthOrder).slice(0,densityLimit).sort((a,b)=>a.at-b.at);
+ if(kept.length>densityLimit){
+  const protectedCues=kept.filter(cueIsPrimary),ordinary=kept.filter(cue=>!cueIsPrimary).sort(cueStrengthOrder);
+  kept=[...protectedCues,...ordinary.slice(0,Math.max(0,densityLimit-protectedCues.length))].sort((a,b)=>a.at-b.at);
+ }
 
- const stats={before:original.length,after:kept.length,maxOverlap:maxCueOverlap(kept),densityPerSecond:duration?kept.length/duration:0};
- const clean=kept.map(cue=>{const {_class,_sceneIndex,_localAt,...result}=cue;return result;});
+ const protectedBefore=original.filter(cueIsPrimary),protectedAfter=protectedBefore.filter(cue=>kept.includes(cue));
+ if(protectedAfter.length!==protectedBefore.length)throw new Error(`Audio governor dropped a primary cue (${protectedAfter.length}/${protectedBefore.length} retained)`);
+ const stats={before:original.length,after:kept.length,primaryBefore:protectedBefore.length,primaryAfter:protectedAfter.length,maxOverlap:maxCueOverlap(kept),densityPerSecond:duration?kept.length/duration:0};
+ const clean=kept.map(cue=>{const {_class,_sceneIndex,_localAt,_protected,...result}=cue;return result;});
  return {cues:clean,stats};
+}
+
+/**
+ * Derive music lifts from narration-synced event names so future reels get the same arc without
+ * per-reel timestamps. Name events announce/reunion, jump/surge, and loop/squeeze (or use matching
+ * shot names); an event's resolved time always wins over the shot-name fallback.
+ */
+export function deriveMusicAutomation(placed){
+ const marks=placed.flatMap(scene=>(scene.spec.events??[]).map(event=>({at:scene.start+event.at,kind:String(event.kind).toLowerCase(),shot:String(scene.spec.shot??'').toLowerCase()})));
+ const find=(pattern,shotPattern)=>marks.find(mark=>pattern.test(mark.kind)&&(!shotPattern||shotPattern.test(mark.shot)))??marks.find(mark=>pattern.test(mark.kind));
+ const fallback=(pattern,offset)=>{const scene=[...placed].reverse().find(item=>pattern.test(String(item.spec.shot??'').toLowerCase()));return scene?{at:scene.start+Math.min(offset,(scene.end-scene.start)*0.6),kind:'shot-fallback',shot:scene.spec.shot}:null;};
+ const announcement=find(/announce|reunion|reveal|launch|headline/);
+ const jump=find(/jump|surge|spike|breakout|price.?up|loss/);
+ const pressure=find(/loop|squeeze|press|crush/,/squeez|press|crush/)??find(/loop|squeeze|press|crush/)??fallback(/squeez|press|crush/,0.65);
+ return {
+  announcement:announcement??fallback(/announce|reunion|reveal/,0.55),
+  jump:jump??fallback(/price|market|ride/,0.5),
+  pressure,
+ };
+}
+
+function steppedVolumeExpression(points,base){
+ if(!points.length)return String(base);
+ let expression=String(points.at(-1).level);
+ for(let i=points.length-1;i>=0;i--){
+  const point=points[i],previous=i===0?base:points[i-1].level,ramp=Math.max(0.04,point.ramp??0.45),end=point.at+ramp;
+  expression=`if(lt(t,${point.at.toFixed(3)}),${previous.toFixed(5)},if(lt(t,${end.toFixed(3)}),${previous.toFixed(5)}+(${(point.level-previous).toFixed(5)})*(t-${point.at.toFixed(3)})/${ramp.toFixed(3)},${expression}))`;
+ }
+ return expression;
+}
+
+function dropDuckExpression(cues){
+ const points=cues.filter(cue=>cue.sfx==='drop').map(cue=>({start:Math.max(0,cue.at),end:Math.max(0,cue.at)+Math.max(0.28,Number(cue.length)||SFX.drop.seconds)+0.08}));
+ if(!points.length)return null;
+ const windows=points.map(({start,end})=>`between(t,${start.toFixed(3)},${end.toFixed(3)})`).join('+');
+ return `if(${windows},0.251189,1)`;
 }
 
 /** Stretches scenes to their narration, moves hits with them, and lists every sound cue on the timeline. */
@@ -251,12 +304,26 @@ export function arrange(spec,spoken,defs=sceneDefs){
   if(own){
    for(const cue of own){
     if(!(cue.t>=0)||cue.t>=length||!SFX[cue.kind])continue;
-    const mix={...(cue.pan===undefined?{}:{pan:cue.pan}),...(cue.gain===undefined?{}:{gain:cue.gain}),...(cue.step===undefined?{}:{step:cue.step})};
+    const priority=cue.priority??(Boolean(cue.sync)||Number(cue.gain)>=1.2?'primary':undefined);
+    const mix={...(cue.pan===undefined?{}:{pan:cue.pan}),...(cue.gain===undefined?{}:{gain:cue.gain}),...(cue.step===undefined?{}:{step:cue.step}),...(priority===undefined?{}:{priority}),...(cue.sync===undefined?{}:{sync:cue.sync})};
     if(cue.kind==='rise'){const len=Math.min(8,Math.max(0.2,cue.len??0.5),length-cue.t);cues.push({sfx:'rise',at:Math.max(0,scene.start+cue.t+(cue.len??len)-len),length:len,fadeIn:len*0.2,...mix});}
     else if(cue.kind==='type')cues.push({sfx:'type',at:scene.start+cue.t,length:Math.min(8,Math.max(0.2,cue.len??0.6),length-cue.t),...mix});
     else if(cue.kind==='pop')cues.push({sfx:'pop',at:scene.start+cue.t,semitones:SCALE[Math.round(Math.min(1,Math.max(0,cue.step??0))*(SCALE.length-1))],...mix});
     else if(cue.kind==='tick')cues.push({sfx:'tick',at:scene.start+cue.t,semitones:Math.round((cue.step??0)*7),...mix});
-    else cues.push({sfx:cue.kind,at:scene.start+cue.t,...(cue.len?{length:cue.len}:{}),...mix});
+    else {
+     const event=scene.spec.events?.find(item=>Math.abs(item.at-cue.t)<0.08);
+     const eventKind=String(event?.kind??'').toLowerCase(),shot=scene.spec.shot;
+     const squeezeHit=shot==='squeezerocket'&&cue.kind==='impact'&&Math.abs(cue.t-(scene.spec.events?.find(item=>item.kind.toLowerCase()==='squeeze')?.at??length*0.43))<0.06;
+     let kind=squeezeHit?'servo':cue.kind;
+     if(!squeezeHit&&shot==='vaultlock'&&eventKind==='money'&&cue.kind==='paper')kind='cash';
+     if(!squeezeHit&&shot==='vaultlock'&&eventKind==='collateral'&&cue.kind==='impact')kind='clack';
+     if(!squeezeHit&&shot==='buybackhandoff'&&eventKind==='slap'&&cue.kind==='impact')kind='cash';
+     if(!squeezeHit&&shot==='announcement'&&eventKind==='reunion'&&cue.kind==='impact')kind='rumble';
+     if(!squeezeHit&&shot==='minimarket'&&eventKind==='higher'&&cue.kind==='impact')kind='cash';
+     cues.push({sfx:kind,at:scene.start+cue.t,...(cue.len?{length:cue.len}:{}),...mix,...(squeezeHit?{gain:Math.max(2.8,Number(cue.gain)||1),priority:'primary',pressJaw:true}:{})});
+     const placedCue=cues.at(-1);
+     if(shot==='announcement'&&eventKind==='reunion'&&kind==='rumble')placedCue.gain=Math.min(Number(placedCue.gain)||1,0.7);
+    }
    }
   }else{
    const bed=SCENE_BED[scene.spec.type];
@@ -265,24 +332,48 @@ export function arrange(spec,spoken,defs=sceneDefs){
    if(scene.spec.type==='kinetic')scene.spec.words.forEach((_word,beat,all)=>{if(beat>0)cues.push({sfx:'pop',at:scene.start+beat*length/all.length,semitones:SCALE[beat]??0});});
    if(scene.spec.type==='outro')cues.push({sfx:'shimmer',at:scene.start+0.25});
   }
+  if(scene.spec.shot==='borrowedasset'){
+   const sells=scene.spec.events?.find(event=>event.kind.toLowerCase()==='sells')?.at??length*0.5;
+   const at=Math.min(length-0.02,sells+0.06);
+   cues.push({sfx:'stamp',at:scene.start+at,length:0.42,gain:1.24,pan:0.48,priority:'primary',_class:'story',_sceneIndex:index,_localAt:at});
+  }
+  if(scene.spec.shot==='crowdrush'){
+   const rush=scene.spec.events?.find(event=>event.kind.toLowerCase()==='rush')?.at??length*0.26;
+   cues.push({sfx:'rumble',at:scene.start+rush,length:0.9,gain:1.3,pan:0,priority:'primary',_class:'story',_sceneIndex:index,_localAt:rush});
+  }
   for(const cue of cues.slice(ownStart))if(cue.sfx){cue._class=cue.sfx==='drop'?'story':'secondary';cue._sceneIndex=index;cue._localAt=cue.at-scene.start;}
   if(scene.spec.shot==='squeezerocket'){
    const squeeze=scene.spec.events?.find(event=>event.kind.toLowerCase()==='squeeze')?.at??length*0.76;
    const loop=scene.spec.events?.find(event=>event.kind.toLowerCase()==='loop')?.at??length*0.34;
-   const dropAt=Math.max(0,squeeze-0.3),localCues=cues.slice(ownStart);
+   const localCues=cues.slice(ownStart),suctionAt=Math.max(0,squeeze-0.44),suctionLen=Math.min(0.4,Math.max(0.08,squeeze-suctionAt-0.04));
    const arrival=localCues.find(cue=>cue.sfx==='whoosh');
    if(arrival){arrival.at=scene.start+Math.min(length-0.05,0.28);arrival.length=0.32;arrival.gain=Math.max(0.66,arrival.gain??0);arrival._class='secondary';arrival._localAt=arrival.at-scene.start;}
    else cues.push({sfx:'whoosh',at:scene.start+Math.min(length-0.05,0.28),length:0.32,gain:0.66,pan:-0.22,_class:'secondary',_sceneIndex:index,_localAt:Math.min(length-0.05,0.28)});
-   const dropCue=localCues.find(cue=>cue.sfx==='drop')??localCues.filter(cue=>cue.sfx==='bass').sort((a,b)=>Math.abs((a.at-scene.start)-dropAt)-Math.abs((b.at-scene.start)-dropAt))[0];
-   if(dropCue&&(dropCue.sfx==='drop'||Math.abs((dropCue.at-scene.start)-dropAt)<=0.08)){
-    dropCue.sfx='drop';dropCue.at=scene.start+dropAt;dropCue.length=0.5;dropCue.gain=Math.max(1,dropCue.gain??0);dropCue._class='story';dropCue._localAt=dropAt;
-   }else cues.push({sfx:'drop',at:scene.start+dropAt,length:0.5,gain:1,_class:'story',_sceneIndex:index,_localAt:dropAt});
-   const span=Math.max(0.12,squeeze-loop),servoTimes=[0.2,0.5,0.8].map(fraction=>loop+span*fraction);
-   const servos=localCues.filter(cue=>cue.sfx==='servo');
-   for(const [n,at] of servoTimes.entries())if(servos.length<3&&!servos.some(cue=>Math.abs(cue.at-(scene.start+at))<0.08)){
-    const servo={sfx:'servo',at:scene.start+at,length:0.28,gain:0.7,pan:(n-1)*0.34,_class:'story',_sceneIndex:index,_localAt:at};
-    cues.push(servo);servos.push(servo);
+   // Filtered air and a falling sub pull into 40 ms of silence; the drop cue also drives music ducking.
+   const suctionAir={sfx:'whoosh',at:scene.start+suctionAt,length:suctionLen,gain:1.05,pan:0,highpass:520,lowpass:2200,_class:'story',_sceneIndex:index,_localAt:suctionAt,priority:'primary'};
+   const suctionSub=localCues.find(cue=>cue.sfx==='bass'||cue.sfx==='drop');
+   if(suctionSub){suctionSub.sfx='drop';suctionSub.at=scene.start+suctionAt;suctionSub.length=suctionLen;suctionSub.gain=1.12;suctionSub.lowpass=132;suctionSub._class='story';suctionSub.priority='primary';suctionSub._localAt=suctionAt;}
+   else cues.push({sfx:'drop',at:scene.start+suctionAt,length:suctionLen,gain:1.12,pan:0,lowpass:132,_class:'story',_sceneIndex:index,_localAt:suctionAt,priority:'primary'});
+   cues.push(suctionAir);
+   // At the jaw strike: a generated physical steel actuator, a sub impact and a ticket-paper burst.
+   const hitAt=scene.start+squeeze;
+   const jaw=localCues.find(cue=>cue.sfx==='servo'&&Math.abs(cue.at-hitAt)<0.05)??localCues.find(cue=>cue.pressJaw);
+   if(jaw){jaw.at=hitAt;jaw.length=0.62;jaw.gain=Math.max(2.8,jaw.gain??0);jaw.priority='primary';jaw._class='story';jaw._localAt=squeeze;}
+   else cues.push({sfx:'servo',at:hitAt,length:0.62,gain:2.8,pan:0,_class:'story',_sceneIndex:index,_localAt:squeeze,priority:'primary',pressJaw:true});
+   // The last preload actuator may overlap the vacuum, but it must be silent for the final 40 ms.
+   const gapAt=hitAt-0.04;
+   for(const cue of localCues){
+    if(cue===jaw||cue.pressJaw||cue.at>=hitAt)continue;
+    const end=cue.at+cueDuration(cue);
+    if(end>gapAt)cue.length=Math.max(0.02,gapAt-cue.at);
    }
+   cues.push(
+    {sfx:'bass',at:hitAt,length:0.48,gain:2.75,pan:0,lowpass:138,_class:'story',_sceneIndex:index,_localAt:squeeze,priority:'primary'},
+    {sfx:'paper',at:hitAt+0.004,length:0.44,gain:2.4,pan:0,highpass:180,_class:'story',_sceneIndex:index,_localAt:squeeze+0.004,priority:'primary'},
+   );
+   // The loop/build sync event remains pinned even when the texture governor is under load.
+   const loopCue=localCues.find(cue=>cue.sfx==='build'&&Math.abs((cue.at-scene.start)-loop)<0.08);
+   if(loopCue){loopCue.at=scene.start+loop;loopCue.priority='primary';loopCue._class='story';loopCue._localAt=loop;}
   }
  });
  // Promote one strongest effect at each narration event, plus a scene's first cue when it lands on frame one.
@@ -290,23 +381,24 @@ export function arrange(spec,spoken,defs=sceneDefs){
   for(const event of scene.spec.events??[]){
    const matches=cues.filter(cue=>cue.sfx&&cue._sceneIndex===index&&cue._localAt!==undefined&&Math.abs(cue._localAt-event.at)<=0.04);
    const primary=matches.sort((a,b)=>cueLevel(b)-cueLevel(a))[0];
-   if(primary)primary._class='story';
+   if(primary){primary._class='story';primary.priority='primary';primary._protected=true;}
   }
   const first=cues.filter(cue=>cue.sfx&&cue._sceneIndex===index&&cue._localAt!==undefined&&cue._localAt>=-0.001&&cue._localAt<=0.04&&cue._class==='secondary').sort((a,b)=>cueLevel(b)-cueLevel(a))[0];
   if(first)first._class='story';
   if(scene.spec.shot==='squeezerocket')for(const cue of cues){
    if(cue._sceneIndex!==index)continue;
-   if(cue.sfx==='servo')cue._class='story';
+   if(cue.sfx==='servo'&&!cue.pressJaw)cue._class='secondary';
    if(cue.sfx==='build')cue._class='secondary';
   }
  });
- // A warm two-note button begins 0.9 s before the reel ends and decays with a 0.5 s tail.
+ // A warm two-note button begins 0.9 s before the reel ends and uses a 460 ms natural ring.
  const reelEnd=placed.at(-1)?.end??0;
- if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.5,gain:2.9,pan:0,step:0.68,ending:true,_class:'story'});
+ if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:1.995262,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
+ const musicAutomation=deriveMusicAutomation(placed);
  const governed=governCues(cues,reelEnd,placed),voiceCues=cues.filter(cue=>!cue.sfx);
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
  if(captions.length)timed.captions=captions;
- return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats};
+ return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats,musicAutomation};
 }
 
 function run(binary,args){
@@ -332,7 +424,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  for(const scene of parsed.spec.scenes)spoken.push(scene.say?await speak(stripMarkup(scene.say),voice,key):null);
  // Scene modules are loaded lazily: they are browser drawing code, but their cue lists are plain maths.
  const defs=await import('../src/motion/scenes/index.ts').then(module=>module.SCENES,()=>null);
- const {spec,cues,duration,cueStats}=arrange(parsed.spec,spoken,defs);
+ const {spec,cues,duration,cueStats,musicAutomation}=arrange(parsed.spec,spoken,defs);
  const unmapped=CUE_KINDS.filter(kind=>!SFX[kind]);
  if(unmapped.length)throw new Error(`Missing sound designs for CueKind: ${unmapped.join(', ')}`);
  const mood=process.env.MOTION_MUSIC?.trim()||parsed.spec.music||'drive';
@@ -349,10 +441,11 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  }
  const bed=mood==='none'||mood==='off'?null:await music(mood,duration,key);
  if(parsed.spec.title==='The ticket that took off'){
-  // Cache both authored prompt variants for the five upgraded story-foley kinds.
-  for(const [kind,design] of Object.entries(SFX))if(design.prompts?.length){
+  // Warm both takes of every requested physical story Foley; the set is capped below at 16 prompts.
+  const storyFoley=['paper','snap','clack','cash','rumble','impact','stamp','servo'];
+  for(const kind of storyFoley){const design=SFX[kind];if(design?.prompts?.length){
    for(let variant=0;variant<design.prompts.length;variant++)await effect(kind,key,variant,design.seconds);
-  }
+  }}
  }
 
  const work=join(CACHE,`render-${hash({spec,cues,mood})}`);
@@ -379,7 +472,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    const tail=length?Math.min(design?.tail??0.08,length*0.95):0;
    const trim=length?`atrim=0:${length.toFixed(3)},apad=whole_dur=${length.toFixed(3)},atrim=0:${length.toFixed(3)},${cue.fadeIn?`afade=t=in:st=0:d=${Math.min(cue.fadeIn,length/2).toFixed(3)},`:''}afade=t=out:st=${Math.max(0,length-tail).toFixed(3)}:d=${tail.toFixed(3)},`:'';
    const room=design?.room?'aecho=0.72:0.26:38|67:0.09|0.055,':'';
-   const filtering=cue.file?'':`highpass=f=28,lowpass=f=9200,${room}stereotools=balance_out=${pan.toFixed(3)},`;
+   const filtering=cue.file?'':`highpass=f=${Math.max(28,Number(cue.highpass)||28)},lowpass=f=${Math.max(Number(cue.highpass)||28,Math.min(18000,Number(cue.lowpass)||9200))},${room}stereotools=balance_out=${pan.toFixed(3)},`;
    const ms=Math.round(cue.at*1000);
    filters.push(`[${index}:a]aresample=48000,aformat=channel_layouts=stereo,${pitch}${trim}${filtering}volume=${gain.toFixed(3)},adelay=${ms}:all=1[a${index}]`);
    (cue.file?voice:fx).push(`[a${index}]`);
@@ -392,9 +485,23 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   const buses=[];
   if(bed){
    inputs.push('-i',bed);
-   const drops=cues.filter(cue=>cue.sfx==='drop').map(cue=>[Math.max(0,cue.at+0.05),Math.min(duration,cue.at+0.3)]).filter(([start,end])=>end>start);
-   const musicCut=drops.length?`volume='if(${drops.map(([start,end])=>`between(t,${start.toFixed(3)},${end.toFixed(3)})`).join('+')},0.251189,1)':eval=frame,`:'';
-   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCut}volume=0.4,afade=t=out:st=${Math.max(0,duration-0.82).toFixed(3)}:d=0.82,extrastereo=m=1.07,${pad}[bed]`);
+   const musicCut=dropDuckExpression(cues),automationPoints=[
+    ...(musicAutomation.announcement?[{at:musicAutomation.announcement.at,level:0.2,ramp:0.45}]:[]),
+    ...(musicAutomation.jump?[{at:musicAutomation.jump.at,level:0.4,ramp:0.38}]:[]),
+    ...(musicAutomation.pressure?[{at:Math.max(0,musicAutomation.pressure.at-1.8),level:0.68,ramp:1.8}]:[]),
+   ].sort((a,b)=>a.at-b.at);
+   const airExpression=steppedVolumeExpression(automationPoints.map(point=>({...point,level:Math.max(0.025,point.level)})),0.025);
+   const percussionExpression=steppedVolumeExpression(automationPoints.map((point,index)=>({...point,level:[0.12,0.34,0.72][Math.min(index,2)]})),0);
+   const pressureGain=musicAutomation.pressure?`if(between(t,${Math.max(0,musicAutomation.pressure.at-0.1).toFixed(3)},${Math.min(duration,musicAutomation.pressure.at+0.3).toFixed(3)}),1.584893,1)`:'1';
+   const musicCutFilter=musicCut?`volume='${musicCut}':eval=frame,`:'';
+   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=0.4,afade=t=out:st=${Math.max(0,duration-0.82).toFixed(3)}:d=0.82,extrastereo=m=1.07,${pad}[musicSource]`);
+   // The low band stays grounded; rising high and transient bands open the filter and add percussion
+   // at reveal/jump events. The final event supplies a short +4 dB pressure window.
+   filters.push('[musicSource]asplit=3[musicBodySource][musicAirSource][musicPercSource]');
+   filters.push('[musicBodySource]lowpass=f=3200[musicBody]');
+   filters.push(`[musicAirSource]highpass=f=1950,lowpass=f=11500,volume='${airExpression}':eval=frame[musicAir]`);
+   filters.push(`[musicPercSource]highpass=f=3600,acompressor=threshold=0.025:ratio=7:attack=1:release=65,volume='${percussionExpression}':eval=frame[musicPerc]`);
+   filters.push(`[musicBody][musicAir][musicPerc]amix=inputs=3:normalize=0:dropout_transition=0,volume='${pressureGain}':eval=frame,${pad}[bed]`);
    filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[bed][keyMusic]sidechaincompress=threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2[ducked]','[fx][keyFx]sidechaincompress=threshold=0.12:ratio=1.7:attack=5:release=110:makeup=1[fxduck]');
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]','[ducked]asplit=2[musicMix][musicStem]');buses.push('[fxMix]','[sayMix]','[musicMix]');}
    else buses.push('[fxduck]','[say]','[ducked]');
@@ -403,12 +510,13 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]');buses.push('[fxMix]','[sayMix]');}
    else buses.push('[fxduck]','[say]');
   }
-  filters.push(`${buses.join('')}amix=inputs=${buses.length}:normalize=0:dropout_transition=0,${pad},acompressor=threshold=0.42:ratio=2:attack=4:release=100:makeup=1,alimiter=limit=0.891:attack=5:release=80:level=disabled,loudnorm=I=-14:TP=-1.1:LRA=8[out]`);
+  filters.push(`${buses.join('')}amix=inputs=${buses.length}:normalize=0:dropout_transition=0,${pad},acompressor=threshold=0.42:ratio=2:attack=4:release=100:makeup=1,alimiter=limit=0.891:attack=5:release=80:level=disabled,loudnorm=I=-14:TP=-1.0:LRA=8[out]`);
   await writeFile(graph,filters.join(';\n'));
   const mixArgs=['-hide_banner','-loglevel','error','-y',...inputs,'-filter_complex_script',graph,'-map','[out]','-c:a','aac','-b:a','192k','-ar','48000',mix];
   if(exportStems)mixArgs.push('-map','[voiceStem]','-map','[fxStem]',...(bed?['-map','[musicStem]']:[]),'-c:a','pcm_s16le','-ar','48000','-f','matroska',stems);
   await run('ffmpeg',mixArgs);
   await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',mix,'-map','0:v','-map','1:a:0','-c:v','copy','-c:a','copy','-t',duration.toFixed(3),'-movflags','+faststart',outPath]);
  }finally{await rm(silent,{force:true});await rm(mix,{force:true});await rm(graph,{force:true});}
- console.log(`Wrote ${outPath} (${duration.toFixed(1)} s, ${spoken.filter(Boolean).length} narrated scenes, ${cueStats.after} SFX cues, max overlap ${cueStats.maxOverlap}, ${cueStats.densityPerSecond.toFixed(2)} cues/s, music: ${bed?mood:'none'}). Timed spec: ${timedSpec}${exportStems?`, stems: ${stems}`:''}`);
+ const automationSummary=Object.entries(musicAutomation).filter(([,mark])=>mark).map(([name,mark])=>`${name} ${mark.at.toFixed(2)}s`).join(', ')||'none';
+ console.log(`Wrote ${outPath} (${duration.toFixed(1)} s, ${spoken.filter(Boolean).length} narrated scenes, ${cueStats.after} SFX cues, primary ${cueStats.primaryAfter}/${cueStats.primaryBefore} retained, max overlap ${cueStats.maxOverlap}, ${cueStats.densityPerSecond.toFixed(2)} cues/s, music: ${bed?mood:'none'}; lifts: ${automationSummary}; SFX generations ${sfxGenerationsThisRender}/${MAX_SFX_GENERATIONS}, music generations ${musicGenerationsThisRender}/1). Timed spec: ${timedSpec}${exportStems?`, stems: ${stems}`:''}`);
 }

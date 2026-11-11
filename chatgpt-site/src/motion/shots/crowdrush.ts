@@ -6,12 +6,20 @@ import { drawTicket2D } from '../sets/ticket.ts';
 import type { ShotDef } from './index.ts';
 
 const CELL = 4;
+const SHUTTER_DURATION = .18;
 const snap = (n: number) => Math.round(n / CELL) * CELL;
 const numberParam = (value: unknown, fallback: number) => Number.isFinite(Number(value)) ? Number(value) : fallback;
 
 function eventAt(props: ShotProps, kind: string, dur: number, fallback: number) {
   const event = props.events?.find(item => item.kind.toLowerCase() === kind.toLowerCase());
   return clamp(event && Number.isFinite(event.at) ? event.at : dur * fallback, 0, dur);
+}
+
+function windowCloseTimes(dur: number, rushAt: number) {
+  const start = clamp(Math.max(rushAt + .045, dur * .28), 0, Math.max(0, dur - .15));
+  const completionEnd = Math.max(start, Math.min(dur - .15, Math.max(start + .3, dur * .84)));
+  const end = Math.max(start, completionEnd - SHUTTER_DURATION);
+  return { start, end };
 }
 
 function polygon(ctx: Frame['ctx'], points: Array<[number, number]>, fill: string) {
@@ -126,7 +134,7 @@ function fanLimb(ctx: Frame['ctx'], x: number, y: number, length: number, angle:
 
 function drawFan(ctx: Frame['ctx'], fan: Fan, time: number, surge: number) {
   const { x: homeX, y: homeY, scale, variant, phase, speed, delay, lean } = fan;
-  const run = ease.outCubic(clamp((surge - delay) / .78));
+  const run = ease.outCubic(clamp((surge - delay) / .58));
   const sway = Math.sin(time * (variant % 2 ? 12 : 9) + phase);
   const x = homeX + speed * run + sway * (2 + scale);
   const y = homeY - run * (18 + scale * 9) + Math.sin(time * 8 + phase) * (2 + scale);
@@ -174,7 +182,7 @@ function crowdLayers(seed: number): { far: Fan[]; middle: Fan[]; near: Fan[] } {
       scale: .78 + hash(i, seed + 1) * .38,
       variant: Math.floor(hash(i, seed + 2) * 4),
       phase: hash(i, seed + 3) * Math.PI * 2,
-      speed: 22 + hash(i, seed + 4) * 42,
+      speed: 36 + hash(i, seed + 4) * 64,
       delay: hash(i, seed + 5) * .22,
       lean: (hash(i, seed + 6) - .5) * .2,
     });
@@ -186,7 +194,7 @@ function crowdLayers(seed: number): { far: Fan[]; middle: Fan[]; near: Fan[] } {
       scale: 1.42 + hash(i, seed + 11) * .62,
       variant: Math.floor(hash(i, seed + 12) * 4),
       phase: hash(i, seed + 13) * Math.PI * 2,
-      speed: 84 + hash(i, seed + 14) * 76,
+      speed: 110 + hash(i, seed + 14) * 100,
       delay: hash(i, seed + 15) * .25,
       lean: -.06 - hash(i, seed + 16) * .16,
     });
@@ -198,7 +206,7 @@ function crowdLayers(seed: number): { far: Fan[]; middle: Fan[]; near: Fan[] } {
       scale: 2.25 + hash(i, seed + 21) * .5,
       variant: Math.floor(hash(i, seed + 22) * 4),
       phase: hash(i, seed + 23) * Math.PI * 2,
-      speed: 112 + hash(i, seed + 24) * 62,
+      speed: 140 + hash(i, seed + 24) * 90,
       delay: hash(i, seed + 25) * .1,
       lean: -.13,
     });
@@ -206,14 +214,15 @@ function crowdLayers(seed: number): { far: Fan[]; middle: Fan[]; near: Fan[] } {
   return { far, middle, near };
 }
 
-function drawTicketWindows(frame: Frame, props: ShotProps, t: number, rushAt: number, lastAt: number) {
+function drawTicketWindows(frame: Frame, props: ShotProps, t: number, rushAt: number, lastAt: number, dur: number) {
   const { ctx, theme } = frame;
   const count = Math.round(clamp(numberParam(props.params?.windowsCount ?? props.params?.windows, 5), 4, 7));
-  const supply = Math.round(clamp(numberParam(props.params?.supplyLeft, 1), 1, Math.min(3, count)));
+  const supply = Math.round(clamp(numberParam(props.params?.supplyLeft, count), 1, count));
   const width = 96, gap = 28, total = count * width + (count - 1) * gap;
   const left = snap(540 - total / 2), y = 258, h = 162;
   const firstOpen = count - supply;
   const lastCenter = left + (count - 1) * (width + gap) + width / 2;
+  const { start: closeStart, end: closeEnd } = windowCloseTimes(dur, rushAt);
 
   ctx.fillStyle = '#0D0E11';
   ctx.fillRect(132, 116, 816, 111);
@@ -226,9 +235,8 @@ function drawTicketWindows(frame: Frame, props: ShotProps, t: number, rushAt: nu
 
   for (let i = 0; i < count; i++) {
     const x = left + i * (width + gap), active = i >= firstOpen, isLast = i === count - 1;
-    const closesAt = active ? (isLast ? lastAt : rushAt + .12 + (i - firstOpen) * .035) : -1;
-    const shutterStart = isLast ? closesAt - .06 : closesAt;
-    const close = closesAt < 0 ? 1 : ease.outCubic(clamp((t - shutterStart) / (isLast ? .12 : .18)));
+    const closesAt = closeStart + (i / Math.max(1, count - 1)) * (closeEnd - closeStart);
+    const close = ease.outCubic(clamp((t - closesAt) / SHUTTER_DURATION));
     ctx.fillStyle = '#090A0D';
     ctx.fillRect(x - 9, y - 9, width + 18, h + 22);
     ctx.fillStyle = '#7D8188';
@@ -243,7 +251,7 @@ function drawTicketWindows(frame: Frame, props: ShotProps, t: number, rushAt: nu
     ctx.fillStyle = '#14161A';
     ctx.fillRect(x + 8, y + 43, width - 16, 94);
 
-    if (active && (isLast ? t < lastAt - .08 : t < closesAt)) {
+    if (active && (isLast ? t < lastAt : t < closesAt + SHUTTER_DURATION)) {
       ctx.fillStyle = '#C1C4C9';
       ctx.fillRect(x + 5, y + h - 12, width - 10, 9);
       drawTicket2D(ctx, x + width / 2, y + 99, 68, { rot: (i % 2 ? -.045 : .045) });
@@ -253,21 +261,16 @@ function drawTicketWindows(frame: Frame, props: ShotProps, t: number, rushAt: nu
       ctx.fillRect(x + 18, y + 87, width - 36, 6);
     }
 
-    if (closesAt >= 0) {
-      ctx.save();
-      ctx.beginPath(); ctx.rect(x + 4, y, width - 8, h); ctx.clip();
-      const shutterY = y - h + Math.round((h + 4) * close);
-      ctx.fillStyle = close > .5 ? '#777B82' : '#B8BBC1';
-      ctx.fillRect(x + 4, shutterY, width - 8, h);
-      ctx.fillStyle = '#E1E3E6';
-      ctx.fillRect(x + 4, shutterY, width - 8, 8);
-      ctx.fillStyle = '#5D6067';
-      ctx.fillRect(x + 4, shutterY + 12, width - 8, 8);
-      ctx.restore();
-    } else {
-      ctx.fillStyle = '#45484F';
-      ctx.fillRect(x + 4, y + 16, width - 8, h - 32);
-    }
+    ctx.save();
+    ctx.beginPath(); ctx.rect(x + 4, y, width - 8, h); ctx.clip();
+    const shutterY = y - h + Math.round((h + 4) * close);
+    ctx.fillStyle = close > .5 ? '#777B82' : '#B8BBC1';
+    ctx.fillRect(x + 4, shutterY, width - 8, h);
+    ctx.fillStyle = '#E1E3E6';
+    ctx.fillRect(x + 4, shutterY, width - 8, 8);
+    ctx.fillStyle = '#5D6067';
+    ctx.fillRect(x + 4, shutterY + 12, width - 8, 8);
+    ctx.restore();
     ctx.fillStyle = '#C2C5CA';
     ctx.fillRect(x - 8, y + h + 14, width + 16, 7);
   }
@@ -300,44 +303,62 @@ function drawHand(ctx: Frame['ctx'], x: number, y: number, scale: number, angle:
   ctx.restore();
 }
 
-function drawLastTicketDeparture(ctx: Frame['ctx'], time: number, lastAt: number, centerX: number, ticketY: number) {
-  const flightAt = lastAt - .08;
-  const age = time - flightAt;
-  if (age < 0 || age > .72) return;
-  const p = ease.outCubic(clamp(age / .64));
-  const x = centerX + 260 * p;
-  const y = ticketY + 600 * p - Math.sin(p * Math.PI) * 62;
-  const alpha = 1 - ease.outCubic(clamp((age - .49) / .23));
+function drawLastTicketDeparture(ctx: Frame['ctx'], time: number, lastAt: number, dur: number, centerX: number, ticketY: number) {
+  const age = time - lastAt;
+  if (age < 0) return;
+  const p = ease.outCubic(clamp(age / Math.max(.2, dur - lastAt)));
+  const start = { x: centerX, y: ticketY }, control = { x: 356, y: 680 }, end = { x: 214, y: 704 };
+  const pointAt = (u: number) => {
+    const inv = 1 - u;
+    return {
+      x: inv * inv * start.x + 2 * inv * u * control.x + u * u * end.x,
+      y: inv * inv * start.y + 2 * inv * u * control.y + u * u * end.y,
+    };
+  };
+  const head = pointAt(p);
   ctx.save();
-  // As the ticket clears the final window, its perforation becomes the first red price trace.
-  ctx.strokeStyle = '#68201D';
-  ctx.lineWidth = 16;
-  ctx.beginPath(); ctx.moveTo(snap(centerX), snap(ticketY)); ctx.lineTo(snap(x), snap(y)); ctx.stroke();
-  ctx.strokeStyle = '#B73532';
-  ctx.lineWidth = 8;
-  ctx.beginPath(); ctx.moveTo(snap(centerX), snap(ticketY)); ctx.lineTo(snap(x), snap(y)); ctx.stroke();
-  ctx.globalAlpha *= alpha;
-  drawTicket2D(ctx, snap(x), snap(y), 68 - p * 12, { rot: .08 + p * .34 });
-  // Perforated edge flecks trail the ticket toward the next shot.
+  // The flight curve ends on shot 8's first price-line point, then the leftward push carries it away.
+  const steps = Math.max(1, Math.ceil(p * 32));
+  for (const [color, width] of [['#471715', 24], ['#AA302A', 14], ['#F34A40', 6]] as const) {
+    ctx.strokeStyle = color;
+    ctx.lineWidth = width;
+    ctx.beginPath();
+    for (let i = 0; i <= steps; i++) {
+      const q = pointAt(p * i / steps);
+      if (i === 0) ctx.moveTo(snap(q.x), snap(q.y));
+      else ctx.lineTo(snap(q.x), snap(q.y));
+    }
+    ctx.stroke();
+  }
+  const scale = 68 + 152 * ease.outExpo(p / .35);
+  const angle = .08 - .26 * p;
+  drawTicket2D(ctx, snap(head.x), snap(head.y), scale, { rot: angle });
+  // Perforation flecks trail back along the same curve as the ticket.
   ctx.fillStyle = '#D9DCE0';
   for (let i = 0; i < 4; i++) {
-    const trail = p * 180 + i * 19;
-    ctx.fillRect(snap(x - trail), snap(y - 12 - i * 7), 8, 8);
+    const trail = pointAt(Math.max(0, p - (i + 1) * .035));
+    ctx.fillRect(snap(trail.x), snap(trail.y - 10 - i * 4), 8, 8);
   }
   ctx.restore();
 }
 
 function drawSurgeHands(ctx: Frame['ctx'], t: number, rushAt: number, dur: number, transitionTime: number) {
-  const opening = ease.outCubic(clamp((transitionTime + .15) / .36));
-  // A palm sweeps in from the announcement side and carries the 6→7 whip across the lens.
-  if (transitionTime < .23) drawHand(ctx, -220 + opening * 720, 880 - opening * 60, 1.8, -.3 + opening * .12, .98);
-  const rush = ease.outCubic(clamp((t - rushAt + .06) / .38));
-  if (rush > 0 && t < dur - .12) drawHand(ctx, -230 + rush * 380, 930 - rush * 84, 1.92, -.48 + rush * .1, .96);
+  // Match the outgoing palm from shot 6, then clear it before the crowd fills the frame.
+  const transitionAlpha = 1 - ease.outCubic(clamp(transitionTime / .16));
+  if (transitionTime >= -.15 && transitionTime < .16)
+    drawHand(ctx, 545, 1030, 1.18, -.3, transitionAlpha);
+
+  const age = t - rushAt;
+  if (age >= 0 && age < .32) {
+    const rush = ease.outCubic(clamp(age / .25));
+    const alpha = 1 - ease.outCubic(clamp((age - .2) / .12));
+    drawHand(ctx, -220 + rush * 370, 960 - rush * 85, 1.18, -.48 + rush * .15, alpha);
+  }
 }
 
 export const crowdRushShot: ShotDef = {
   name: 'crowdrush',
-  describe: 'Fans surge toward the final ticket window from three balcony depths; the last ticket flies out as its shutter slams. Params: crowdSize, windowsCount, supplyLeft.',
+  describe: 'Fans surge through a run of ticket windows; the last ticket tears left and its red flight path becomes the price line. Params: crowdSize, windowsCount, supplyLeft.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, theme, seed } = frame;
     const dur = Math.max(.1, frame.dur), t = clamp(frame.t, 0, dur);
@@ -362,26 +383,26 @@ export const crowdRushShot: ShotDef = {
     rig.apply(ctx, t);
     const surge = t - rushAt;
     for (const fan of crowd.far) drawFan(ctx, fan, t, surge);
-    const windows = drawTicketWindows(frame, props, t, rushAt, lastAt);
+    const windows = drawTicketWindows(frame, props, t, rushAt, lastAt, dur);
     for (const fan of crowd.middle) drawFan(ctx, fan, t, surge);
     for (const fan of crowd.near) drawFan(ctx, fan, t, surge);
 
     // A short floor apron leaves a clean silhouette window around Hedgy's feet.
     ctx.fillStyle = '#24262B';
-    ctx.fillRect(722, 1198, 267, 14);
+    ctx.fillRect(670, 1198, 267, 14);
     ctx.fillStyle = '#9DA1A8';
-    ctx.fillRect(722, 1198, 267, 5);
+    ctx.fillRect(670, 1198, 267, 5);
     ctx.fillStyle = '#0B0C0F';
-    ctx.fillRect(722, 1212, 267, 24);
+    ctx.fillRect(670, 1212, 267, 24);
     ctx.fillStyle = '#7C8087';
-    ctx.fillRect(754, 1236, 203, 8);
+    ctx.fillRect(702, 1236, 203, 8);
     ctx.fillStyle = '#111317';
-    ctx.beginPath(); ctx.ellipse(855, 1190, 102, 20, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(800, 1190, 102, 20, 0, 0, Math.PI * 2); ctx.fill();
 
     const squeezed = t >= rushAt + .08;
     const shocked = t >= lastAt - .08;
     drawHedgy(ctx, {
-      x: 850, y: 1195, scale: 2.9,
+      x: 800, y: 1195, scale: 2.9,
       t: Math.max(0, t - (shocked ? lastAt - .1 : squeezed ? rushAt : 0)),
       pose: shocked ? 'shock' : squeezed ? 'sweat' : 'think',
       facing: -1, look: 'up',
@@ -389,28 +410,26 @@ export const crowdRushShot: ShotDef = {
       squash: squeezed ? .82 : 1,
       prop: 'none',
     });
-    drawLastTicketDeparture(ctx, t, lastAt, windows.lastCenter, windows.ticketY);
+    drawLastTicketDeparture(ctx, t, lastAt, dur, windows.lastCenter, windows.ticketY);
     ctx.restore();
 
     // These lens-close hands sit in front of the fans but stop short of Hedgy's clear stage.
     drawSurgeHands(ctx, t, rushAt, dur, frame.t);
 
-    // Final 7→8 match: the last ticket is carried out through the right edge.
-    const exitProgress = ease.outCubic(clamp((t - lastAt - .3) / .48));
-    if (t > lastAt + .3) {
-      ctx.fillStyle = '#E5E7EA';
-      for (let i = 0; i < 3; i++) {
-        ctx.fillRect(snap(890 + exitProgress * 148 + i * 18), snap(520 + i * 28 - exitProgress * 56), 8, 8);
-      }
-    }
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const d = Math.max(.1, dur), rushAt = eventAt(props, 'rush', d, .26), lastAt = eventAt(props, 'last', d, .48);
+    const count = Math.round(clamp(numberParam(props.params?.windowsCount ?? props.params?.windows, 5), 4, 7));
+    const { start: closeStart, end: closeEnd } = windowCloseTimes(d, rushAt);
+    const closeAt = (index: number) => closeStart + (index / Math.max(1, count - 1)) * (closeEnd - closeStart);
     const cues: Cue[] = [
-      { t: rushAt, kind: 'step', pan: -.38, gain: .72 },
-      { t: Math.min(d, rushAt + .15), kind: 'step', pan: .12, gain: .8 },
-      { t: lastAt, kind: 'snap', pan: .62, gain: .92 },
+      { t: rushAt, kind: 'step', pan: -.38, gain: 1.35 },
+      { t: Math.min(d, rushAt + .14), kind: 'step', pan: .12, gain: .72 },
+      { t: Math.min(d, closeAt(0) + SHUTTER_DURATION), kind: 'clack', pan: -.4, gain: .62 },
+      { t: Math.min(d, closeAt(Math.floor((count - 1) / 2)) + SHUTTER_DURATION), kind: 'clack', pan: 0, gain: .62 },
+      { t: Math.min(d, closeAt(count - 1) + SHUTTER_DURATION), kind: 'clack', pan: .4, gain: .76 },
+      { t: lastAt, kind: 'paper', pan: .62, gain: 1.48 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t <= d);
   },

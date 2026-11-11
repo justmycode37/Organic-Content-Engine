@@ -173,6 +173,38 @@ export function applyFilmGrain(ctx: Ctx, options: PostOptions & { t?: number; se
   writePixels(ctx, buffer);
 }
 
+/** One-pass subtle grain and edge falloff for the HEDGY reel grade. */
+export function applyGlobalGrade(ctx: Ctx, options: PostOptions & { t?: number; seed?: number; grainStrength?: number; vignetteStrength?: number } = {}) {
+  const buffer = readPixels(ctx, options, 'post-global-grade');
+  if (!buffer) return;
+  const { cols, rows, image } = buffer, data = image.data;
+  const grainStrength = Math.max(0, Math.min(12, options.grainStrength ?? 2.5));
+  const vignetteStrength = clamp(options.vignetteStrength ?? 0.12);
+  const shadowFloor = 26;
+  const frame = Math.floor(finiteTime(options.t ?? 0) * 30), seed = options.seed ?? 1;
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const index = (y * cols + x) * 4;
+    if (data[index + 3] === 0) continue;
+    const nx = (x + 0.5 - cols / 2) / Math.max(1, cols * 0.5);
+    const ny = (y + 0.5 - rows / 2) / Math.max(1, rows * 0.5);
+    const edge = clamp((nx * nx * 0.57 + ny * ny * 0.7 - 0.18) * vignetteStrength * 1.5);
+    const noise = (hash(x * 193 + y * 997 + frame * 17, seed) - 0.5) * 2;
+    const threshold = bayer(x + frame, y - frame);
+    const delta = noise > threshold - 0.5 ? grainStrength * noise : -grainStrength * Math.abs(noise) * 0.35;
+    const factor = bayer(x, y) < edge ? 1 - edge * 0.52 : 1;
+    let red = Math.max(0, Math.min(255, data[index]! * factor + delta));
+    let green = Math.max(0, Math.min(255, data[index + 1]! * factor + delta));
+    let blue = Math.max(0, Math.min(255, data[index + 2]! * factor + delta));
+    const luma = red * 0.299 + green * 0.587 + blue * 0.114;
+    if (luma < shadowFloor) {
+      const lift = shadowFloor - luma;
+      red += lift; green += lift; blue += lift;
+    }
+    data[index] = red; data[index + 1] = green; data[index + 2] = blue;
+  }
+  writePixels(ctx, buffer);
+}
+
 /** Animated square letterbox bars that close, hold, then open over the chosen interval. */
 export function applyLetterbox(ctx: Ctx, options: PostOptions & { t: number; start?: number; duration?: number; hold?: number; maxHeight?: number } ) {
   const t = finiteTime(options.t), start = finiteTime(options.start ?? 0), duration = Math.max(.01, options.duration ?? .24);

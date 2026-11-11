@@ -38,7 +38,8 @@ function drawArena(ctx: Frame['ctx'], t: number, reunionAt: number, count: numbe
     ctx.fillStyle = '#09090B'; ctx.fillRect(540 - half + 10, y + 38, half * 2 - 20, 20);
     for (let seat = 0; seat < 16 + tier * 3; seat++) {
       const x = 540 - half + 24 + seat * (2 * half - 48) / (15 + tier * 3);
-      const flash = t >= reunionAt + tier * .095;
+      // Start at the stage-side rail and chase the light up toward the roof.
+      const flash = t >= reunionAt + (count - 1 - tier) * .095;
       const lit = flash && (seat + tier) % 3 !== 1;
       ctx.fillStyle = lit ? '#DADAE0' : (seat + tier) % 2 ? '#3C3C42' : '#55555B';
       ctx.fillRect(Math.round(x / CELL) * CELL, y - 21, CELL * 3, CELL * 2);
@@ -173,8 +174,8 @@ function drawMarquee(ctx: Frame['ctx'], t: number, announcesAt: number, reunionA
   ctx.restore();
 }
 
-function drawCurtains(ctx: Frame['ctx'], open: number, t: number, announceAt: number) {
-  const shiver = Math.sin((t - announceAt) * 42) * (1 - open) * 5;
+function drawCurtains(ctx: Frame['ctx'], open: number, t: number, curtainStart: number) {
+  const shiver = Math.sin((t - curtainStart) * 42) * (1 - open) * 5;
   const gapL = Math.round(540 - open * 516 + shiver);
   const gapR = Math.round(540 + open * 516 - shiver);
   ctx.fillStyle = '#1A1A1E'; ctx.fillRect(-12, -8, gapL + 12, 1300);
@@ -213,6 +214,41 @@ function drawCurtains(ctx: Frame['ctx'], open: number, t: number, announceAt: nu
   ctx.restore();
 }
 
+function drawTransitionPalm(ctx: Frame['ctx'], x: number, y: number, scale: number, angle: number) {
+  ctx.save();
+  ctx.translate(Math.round(x / CELL) * CELL, Math.round(y / CELL) * CELL);
+  ctx.rotate(angle);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#17191E';
+  ctx.strokeStyle = '#090A0C';
+  ctx.lineWidth = 9;
+  ctx.lineJoin = 'miter';
+  ctx.beginPath();
+  ctx.moveTo(-36, 126); ctx.lineTo(-20, 73); ctx.lineTo(-34, 10); ctx.lineTo(-17, -43);
+  ctx.lineTo(2, -39); ctx.lineTo(13, 26); ctx.lineTo(25, -76); ctx.lineTo(47, -75);
+  ctx.lineTo(54, 23); ctx.lineTo(70, -55); ctx.lineTo(91, -48); ctx.lineTo(82, 35);
+  ctx.lineTo(103, 6); ctx.lineTo(122, 20); ctx.lineTo(101, 87); ctx.lineTo(77, 147);
+  ctx.closePath(); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#BFC2C7';
+  ctx.fillRect(-27, 71, 71, 13);
+  ctx.fillRect(-10, 3, 10, 42);
+  ctx.fillRect(32, -54, 10, 67);
+  ctx.fillRect(73, -31, 10, 54);
+  ctx.fillStyle = '#747880';
+  ctx.fillRect(-37, 128, 75, 15);
+  ctx.restore();
+}
+
+function drawOutgoingPalm(ctx: Frame['ctx'], t: number, dur: number) {
+  // Finish at the same scale and anchor used by the incoming crowd hand during the overlap.
+  const start = Math.max(0, dur - .34), travel = .19;
+  if (t < start) return;
+  const p = ease.outCubic(clamp((t - start) / travel));
+  const x = 720 + (545 - 720) * p;
+  const y = 1210 + (1030 - 1210) * p;
+  drawTransitionPalm(ctx, x, y, 1.18, -.3);
+}
+
 export const announcementShot: ShotDef = {
   name: 'announcement',
   describe: 'The venue curtains snap open on announces; a REUNION marquee hits with a shock pop as seven balcony tiers and three spotlights ignite on reunion.',
@@ -223,15 +259,18 @@ export const announcementShot: ShotDef = {
     const word = textParam(props.params?.posterWord);
     const announcesAt = eventTime(props, 'announces', dur, dur * .32);
     const reunionAt = eventTime(props, 'reunion', dur, dur * .54);
-    const open = ease.outExpo((t - announcesAt) / .18);
+    const curtainStart = clamp(announcesAt - dur * .276, 0, dur);
+    const curtainSpan = Math.max(.12, dur * .2);
+    const open = ease.outCubic((t - curtainStart) / curtainSpan);
     const rig = createCameraRig({
       width: W, height: 1920, seed: seed + 41, handheld: 1.6,
       keyframes: [
         { t: 0, x: 0, y: 8, zoom: 1.005, rot: 0, ease: 'linear' },
         { t: announcesAt, x: -4, y: 0, zoom: 1.02, rot: 0, ease: 'out' },
-        { t: reunionAt, x: 8, y: -34, zoom: 1.045, rot: -.003, ease: 'inOut' },
-        { t: dur, x: -12, y: -90, zoom: 1.075, rot: .006, ease: 'inOut' },
-      ], hits: [announcesAt, reunionAt], punch: .022, shake: 4.4,
+        { t: reunionAt, x: 0, y: -16, zoom: 1.12, rot: -.003, ease: 'inOut' },
+        { t: Math.min(dur, reunionAt + .18), x: -4, y: -22, zoom: 1.08, rot: .002, ease: 'out' },
+        { t: dur, x: -12, y: -44, zoom: 1.085, rot: .006, ease: 'inOut' },
+      ], hits: [announcesAt, reunionAt], punch: .04, shake: 6,
     });
     const camera = rig.poseAt(t);
     drawEnv(ctx, { type: 'stage', t, theme, seed, width: W, height: H, camera: { x: camera.x, y: camera.y, zoom: camera.zoom, rot: camera.rot, yaw: camera.rot * 1.2, pitch: .23 } });
@@ -242,17 +281,17 @@ export const announcementShot: ShotDef = {
     drawArena(ctx, t, reunionAt, lightCount);
     drawSpotlights(ctx, t, reunionAt);
     drawMarquee(ctx, t, announcesAt, reunionAt, word, seed + 3);
-    drawCurtains(ctx, open, t, announcesAt);
+    drawCurtains(ctx, open, t, curtainStart);
 
     // Hedgy starts low in the front balcony, then pops upright in a clear shock pose.
     const pop = ease.outBack(clamp((t - reunionAt) / .17));
-    const feet = 1212 - pop * 78;
+    const feet = 1190 - pop * 44;
     const pose = t < reunionAt ? 'peek' : 'shock';
     const poseT = Math.max(0, t - reunionAt);
     ctx.fillStyle = '#08080A'; ctx.fillRect(104, 1218, 310, 20);
     ctx.fillStyle = '#B8B8BD'; ctx.fillRect(104, 1212, 310, CELL);
     drawHedgy(ctx, {
-      x: 252, y: feet, scale: 4.1, t: poseT || Math.max(0, t - announcesAt),
+      x: 252, y: feet, scale: 4.1, t: pose === 'shock' ? poseT : Math.max(0, t - announcesAt),
       pose, facing: 1, look: 'up', expression: pose === 'shock' ? 'shocked' : 'worried', prop: 'none',
     });
 
@@ -265,14 +304,16 @@ export const announcementShot: ShotDef = {
 
     // Pixel bloom is confined to the sign and beam landing zone for a clean, bright hit.
     if (t >= reunionAt) applyPixelBloom(ctx, { x: 112, y: 276, w: 856, h: 650, threshold: 186, radius: 2, strength: .5, cell: 8 });
+    drawOutgoingPalm(ctx, t, dur);
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const announcesAt = eventTime(props, 'announces', dur, dur * .32);
     const reunionAt = eventTime(props, 'reunion', dur, dur * .54);
+    const curtainStart = clamp(announcesAt - dur * .276, 0, dur);
     const cues: Cue[] = [
-      { t: Number(announcesAt.toFixed(3)), kind: 'servo', pan: 0, gain: .78 },
-      { t: Number(reunionAt.toFixed(3)), kind: 'impact', pan: 0, gain: .92 },
-      { t: Number(Math.min(dur, reunionAt + .19).toFixed(3)), kind: 'shimmer', pan: .12, gain: .46, len: .22 },
+      { t: Number(curtainStart.toFixed(3)), kind: 'swish', pan: 0, gain: .76 },
+      { t: Number(reunionAt.toFixed(3)), kind: 'impact', pan: 0, gain: 1.42 },
+      { t: Number(Math.min(dur, reunionAt + .19).toFixed(3)), kind: 'shimmer', pan: .12, gain: .62, len: .22 },
     ];
     return cues.filter(cue => cue.t <= dur);
   },

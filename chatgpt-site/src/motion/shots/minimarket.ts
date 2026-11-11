@@ -37,22 +37,39 @@ function polygon(ctx: Frame['ctx'], color: string, points: readonly [number, num
   ctx.fill();
 }
 
-function drawBuyer(ctx: Frame['ctx'], x: number, y: number, s: number, phase: number, t: number, reach = 0) {
-  const bob = snap(Math.sin(t * 7 + phase) * 5);
-  const lean = reach * 20;
-  const cx = snap(x - lean), cy = snap(y + bob);
-  rect(ctx, '#121619', cx - s * 0.28, cy - s * 1.5, s * 0.56, s * 0.5);
-  rect(ctx, '#8A9296', cx - s * 0.2, cy - s * 1.42, s * 0.4, s * 0.25);
-  rect(ctx, '#32393D', cx - s * 0.39, cy - s, s * 0.78, s * 0.82);
-  rect(ctx, '#71797E', cx - s * 0.45, cy - s * 0.92, s * 0.9, s * 0.12);
-  rect(ctx, '#171C1F', cx - s * 0.48, cy - s * 0.2, s * 0.96, s * 0.2);
-  // Staggered forearms press toward the scarce rack as demand builds.
-  const armY = cy - s * (0.63 + reach * 0.1);
-  rect(ctx, '#242B2F', cx + s * 0.12, armY, s * 0.72, s * 0.16);
-  rect(ctx, '#AAB0B3', cx + s * (0.72 + reach * 0.18), armY - s * 0.08, s * 0.2, s * 0.24);
+function drawBuyer(ctx: Frame['ctx'], x: number, y: number, s: number, phase: number, t: number, reach = 0, facing: 1 | -1 = x < 540 ? 1 : -1) {
+  const bob = snap(Math.sin(t * 7 + phase) * Math.max(2, s * 0.035));
+  const cx = snap(x), cy = snap(y + bob), f = facing;
+  // Stepped head, collar, and shoulders give the queue readable human silhouettes.
+  rect(ctx, '#111619', cx - s * 0.25, cy - s * 1.56, s * 0.5, s * 0.43);
+  rect(ctx, '#111619', cx - s * 0.31, cy - s * 1.42, s * 0.62, s * 0.25);
+  rect(ctx, '#C2C8CA', cx - s * 0.17, cy - s * 1.49, s * 0.34, s * 0.22);
+  rect(ctx, '#737C81', cx - s * 0.23, cy - s * 1.16, s * 0.46, s * 0.13);
+  polygon(ctx, '#171C1F', [[cx - s * 0.43, cy - s], [cx - s * 0.22, cy - s * 1.08], [cx + s * 0.23, cy - s * 1.08], [cx + s * 0.44, cy - s * 0.94], [cx + s * 0.37, cy - s * 0.22], [cx - s * 0.36, cy - s * 0.22]]);
+  polygon(ctx, '#454E53', [[cx - s * 0.34, cy - s * 0.97], [cx - s * 0.18, cy - s], [cx + s * 0.18, cy - s], [cx + s * 0.34, cy - s * 0.91], [cx + s * 0.29, cy - s * 0.28], [cx - s * 0.29, cy - s * 0.28]]);
+  rect(ctx, '#AAB1B4', cx - s * 0.06, cy - s * 0.96, s * 0.12, s * 0.48);
+  // Two separated legs and feet keep the bodies planted in the crowd.
+  rect(ctx, '#181D20', cx - s * 0.3, cy - s * 0.26, s * 0.24, s * 0.23);
+  rect(ctx, '#181D20', cx + s * 0.07, cy - s * 0.26, s * 0.24, s * 0.23);
+  rect(ctx, '#A4ABAE', cx - s * 0.34, cy - s * 0.06, s * 0.32, s * 0.07);
+  rect(ctx, '#A4ABAE', cx + s * 0.04, cy - s * 0.06, s * 0.32, s * 0.07);
+
+  // Bent forearms end in bright hands; near buyers reach toward the rack in distinct poses.
+  for (const side of [-1, 1] as const) {
+    const shoulder: [number, number] = [cx + side * s * 0.3, cy - s * 0.85];
+    const reachX = reach * s * 0.72;
+    const elbow: [number, number] = [cx + side * s * 0.52 + f * reachX * 0.36, cy - s * (0.62 + reach * 0.13)];
+    const hand: [number, number] = [cx + side * s * 0.66 + f * reachX, cy - s * (0.42 + reach * 0.2)];
+    line(ctx, [shoulder, elbow], '#101518', Math.max(8, s * 0.2));
+    line(ctx, [shoulder, elbow], '#737C81', Math.max(4, s * 0.13));
+    line(ctx, [elbow, hand], '#171C1F', Math.max(8, s * 0.18));
+    line(ctx, [elbow, hand], '#AAB1B4', Math.max(4, s * 0.1));
+    rect(ctx, '#C7CCCE', hand[0] - s * 0.07, hand[1] - s * 0.1, s * 0.16, s * 0.18);
+    rect(ctx, '#E0E3E4', hand[0] + f * s * 0.08, hand[1] - s * 0.16, s * 0.07, s * 0.17);
+  }
 }
 
-function drawHall(ctx: Frame['ctx'], t: number, pull: number) {
+function drawHall(ctx: Frame['ctx'], t: number, pull: number, queueAt: number) {
   rect(ctx, '#252A2E', 0, 0, W, H);
   // The rear volume stays full-frame while a second architectural layer scales away to reveal its size.
   const z = 1.14 - pull * 0.36;
@@ -124,12 +141,17 @@ function drawHall(ctx: Frame['ctx'], t: number, pull: number) {
   for (let i = 0; i < 7; i++) {
     const xL = 36 + i * 68 + Math.sin(t * 2 + i) * 8;
     const xR = 1044 - i * 68 + Math.sin(t * 2.3 + i) * 8;
-    drawBuyer(ctx, xL, 1008 + (i % 3) * 45, 44 + (i % 2) * 10, i * 0.8, t, pull * 0.24);
-    drawBuyer(ctx, xR, 1004 + (i % 3) * 46, 42 + (i % 2) * 12, i * 1.1 + 3, t, pull * 0.24);
+    drawBuyer(ctx, xL, 1008 + (i % 3) * 45, 54 + (i % 2) * 12, i * 0.8, t, pull * 0.3, 1);
+    drawBuyer(ctx, xR, 1004 + (i % 3) * 46, 52 + (i % 2) * 13, i * 1.1 + 3, t, pull * 0.3, -1);
   }
   for (let i = 0; i < 5; i++) {
-    const x = 432 + i * 58 + Math.sin(t * 2.5 + i * 0.8) * 8;
-    drawBuyer(ctx, x, 1006 + (i % 2) * 38, 42 + (i % 3) * 5, i * 1.3 + 8, t, pull * 0.34);
+    const x = 360 + i * 86 + Math.sin(t * 2.5 + i * 0.8) * 8;
+    drawBuyer(ctx, x, 900 + (i % 2) * 34, 74 + (i % 3) * 6, i * 1.3 + 8, t, pull * 0.52, x < 540 ? 1 : -1);
+  }
+  // One newcomer slides into the foreground queue at the first beat.
+  if (t >= queueAt - 0.04) {
+    const p = ease.outCubic(progress(t, queueAt, 0.32));
+    drawBuyer(ctx, 1190 - 282 * p, 900, 84, 2.4, t, 0.15 + p * 0.58, -1);
   }
   // Lower-edge rail and a close passerby supply another moving parallax layer.
   const passX = (t * 184 + 720) % 1320 - 120;
@@ -149,7 +171,7 @@ function drawToken(ctx: Frame['ctx'], x: number, y: number, size: number, bright
   rect(ctx, '#21272A', x - s * 0.1, y - s * 0.08, s * 0.2, s * 0.16);
 }
 
-function drawRack(ctx: Frame['ctx'], t: number, demandAt: number, supply: number, asset: string, seed: number) {
+function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: number, demandAt: number, supply: number, asset: string) {
   const x = 338, y = 422, w = 482, h = 318;
   rect(ctx, '#101518', x - 24, y - 24, w + 48, h + 50);
   rect(ctx, '#A5ACAF', x - 12, y - 12, w + 24, h + 24);
@@ -170,6 +192,7 @@ function drawRack(ctx: Frame['ctx'], t: number, demandAt: number, supply: number
   const count = Math.max(3, Math.min(8, Math.floor(supply)));
   const slotGap = Math.min(82, (w - 96) / count);
   const startX = x + w / 2 - slotGap * (count - 1) / 2;
+  const entrySlot = Math.min(1, count - 1), entryX = startX + entrySlot * slotGap;
   const soldSlot = count - 1;
   for (let i = 0; i < count; i++) {
     const tx = startX + i * slotGap;
@@ -179,22 +202,29 @@ function drawRack(ctx: Frame['ctx'], t: number, demandAt: number, supply: number
     if (i === soldSlot && t >= demandAt) {
       rect(ctx, '#242A2E', tx - 23, y + 132, 46, 54);
       rect(ctx, '#565E63', tx - 18, y + 138, 36, 42);
-    } else drawTicket2D(ctx, tx, y + 168, 70, { rot: i % 2 ? 0.018 : -0.018 });
+    } else if (i !== entrySlot || transitionT >= 0.24) drawTicket2D(ctx, tx, y + 168, 70, { rot: i % 2 ? 0.018 : -0.018 });
   }
-  // The removed ticket descends from its empty slot into the new buyer's reach.
-  if (t >= demandAt && t < demandAt + 0.36) {
-    const p = ease.outCubic(progress(t, demandAt, 0.36));
+  // Carry the handoff ticket up through the push cut and seat it in the rack.
+  if (transitionT < 0.24) {
+    const p = ease.outCubic(progress(transitionT, -0.2, 0.44));
+    const entryXNow = 520 + (entryX - 520) * p;
+    const entryYNow = 1310 + ((y + 168) - 1310) * p;
+    drawTicket2D(ctx, entryXNow, entryYNow, 86 - 16 * p, { rot: -0.13 * (1 - p) });
+  }
+  // On “demand” one ticket lifts clear of its slot before traveling into the waiting buyer's hand.
+  if (t >= demandAt && t < demandAt + 0.55) {
+    const p = progress(t, demandAt, 0.55);
     const fromX = startX + soldSlot * slotGap;
-    const toX = 802;
-    ctx.save(); ctx.globalAlpha *= Math.max(0.25, 1 - p * 0.28);
-    drawTicket2D(ctx, fromX + (toX - fromX) * p, y + 170 + 164 * p, 70 - 8 * p, { rot: -0.04 - p * 0.16 });
+    const toX = 846;
+    const ticketX = fromX + (toX - fromX) * p;
+    const ticketY = y + 168 + 220 * p - 270 * Math.sin(Math.PI * p);
+    ctx.save(); ctx.globalAlpha *= Math.max(0.55, 1 - p * 0.2);
+    drawTicket2D(ctx, ticketX, ticketY, 90 - 12 * p, { rot: -0.04 - p * 0.13 });
     ctx.restore();
-    // A short row of clipped paper flecks stays attached to the ticket's path.
-    if (p < 0.75) {
-      const px = fromX + (toX - fromX) * p;
-      rect(ctx, '#D7DADB', px - 38, y + 174 + 164 * p, 8, 4);
-      rect(ctx, '#8C9498', px + 36, y + 182 + 164 * p, 8, 4);
-    }
+    rect(ctx, '#F1F3F2', ticketX - 50, ticketY + 20, 12, 4);
+    rect(ctx, '#BFC6C9', ticketX + 42, ticketY - 16, 8, 4);
+  } else if (t >= demandAt + 0.55) {
+    drawTicket2D(ctx, 846, y + h + 70, 78, { rot: -0.17 });
   }
   // Lower lip and vanishing floor line carry the buyer queue into the hall.
   rect(ctx, '#A5ACAF', x - 96, y + h + 24, w + 192, 16);
@@ -203,11 +233,27 @@ function drawRack(ctx: Frame['ctx'], t: number, demandAt: number, supply: number
   drawToken(ctx, x + 110, y + h + 14, 44);
   drawToken(ctx, x + 188, y + h + 14, 44);
   drawToken(ctx, x + 266, y + h + 14, 44);
-  const joinP = ease.outExpo(progress(t, demandAt, 0.31));
+  const joinP = ease.outExpo(progress(t, queueAt, 0.31));
   const joinX = 1004 - 208 * joinP;
   const joinY = y + h + 14 - Math.sin(joinP * Math.PI) * 18;
-  if (t >= demandAt - 0.04) drawToken(ctx, joinX, joinY, 58, true);
-  void seed;
+  if (t >= queueAt - 0.04) drawToken(ctx, joinX, joinY, 58, true);
+}
+
+function drawCrowdHands(ctx: Frame['ctx'], t: number, queueAt: number) {
+  const press = 0.35 + 0.65 * ease.outCubic(progress(t, queueAt, 0.55));
+  const arms: [number, number][][] = [
+    [[34, 1090], [124, 980], [224, 886], [326, 790 + 10 * (1 - press)]],
+    [[1044, 1078], [954, 966], [876, 872], [802, 790 + 12 * (1 - press)]],
+  ];
+  for (const [index, points] of arms.entries()) {
+    line(ctx, points, '#111619', 54);
+    line(ctx, points, index ? '#727B80' : '#858D91', 36);
+    line(ctx, points, '#C0C6C8', 8);
+    const [hx, hy] = points[points.length - 1]!;
+    rect(ctx, '#D2D6D7', hx - 22, hy - 16, 40, 30);
+    rect(ctx, '#EFF1F0', hx + (index ? -30 : 10), hy - 20, 30, 8);
+    rect(ctx, '#8A9296', hx + (index ? -22 : 4), hy + 8, 22, 8);
+  }
 }
 
 function applyPull(ctx: Frame['ctx'], zoom: number, x: number, y: number) {
@@ -216,28 +262,45 @@ function applyPull(ctx: Frame['ctx'], zoom: number, x: number, y: number) {
   ctx.translate(-W / 2, -720);
 }
 
+function drawPartialPath(ctx: Frame['ctx'], points: readonly [number, number][], amount: number, color: string, width: number) {
+  if (points.length < 2 || amount <= 0) return;
+  const scaled = clamp(amount) * (points.length - 1), last = Math.floor(scaled), partial = scaled - last;
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'square'; ctx.lineJoin = 'miter'; ctx.beginPath();
+  ctx.moveTo(snap(points[0]![0]), snap(points[0]![1]));
+  for (let i = 1; i <= Math.min(last, points.length - 1); i++) ctx.lineTo(snap(points[i]![0]), snap(points[i]![1]));
+  if (last < points.length - 1 && partial > 0) {
+    const a = points[last]!, b = points[last + 1]!;
+    ctx.lineTo(snap(a[0] + (b[0] - a[0]) * partial), snap(a[1] + (b[1] - a[1]) * partial));
+  }
+  ctx.stroke();
+}
+
 function drawPricePath(ctx: Frame['ctx'], anchor: [number, number], t: number, higherAt: number) {
   const [x, y] = anchor;
-  const base: [number, number][] = [[x - 64, y + 104], [x - 26, y + 86], [x + 4, y + 80], [x + 38, y + 66]];
+  const base: [number, number][] = [[x - 8, y + 124], [x - 40, y + 102], [x - 78, y + 78], [x - 104, y + 48]];
   line(ctx, base, '#762321', 12);
   line(ctx, base.slice(-3), '#C44A42', 6);
-  const jump = ease.outExpo(progress(t, higherAt, 0.10));
-  const stepX = x + 38, stepY = y + 66;
+  const jump = ease.outExpo(progress(t, higherAt, 0.12));
+  const stepX = x - 104, stepY = y + 48;
   const raisedY = stepY - 228 * jump;
-  line(ctx, [[stepX, stepY], [stepX, raisedY], [stepX + 38, raisedY]], '#9D2F2A', 14);
-  line(ctx, [[stepX, stepY], [stepX, raisedY], [stepX + 38, raisedY]], '#E75E54', 6);
-  const climb = ease.outCubic(progress(t, higherAt + 0.12, 0.55));
+  if (jump > 0.002) {
+    const jumpPts: [number, number][] = [[stepX, stepY], [stepX, raisedY], [stepX + 32 * jump, raisedY]];
+    line(ctx, jumpPts, '#9D2F2A', 14); line(ctx, jumpPts, '#E75E54', 6);
+  }
+  const climb = ease.outCubic(progress(t, higherAt + 0.14, 0.56));
   const climbPts: [number, number][] = [
-    [stepX + 38, raisedY],
-    [stepX + 82, raisedY - 210 * climb],
-    [stepX + 120, raisedY - 380 * climb],
-    [stepX + 148, raisedY - 640 * climb],
-    [stepX + 180, raisedY - 940 * climb],
+    [stepX + 32, raisedY], [stepX + 4, raisedY - 180], [stepX - 42, raisedY - 360],
+    [stepX - 94, raisedY - 580], [stepX - 146, raisedY - 820], [stepX - 198, raisedY - 1080],
   ];
-  line(ctx, climbPts, '#9D2F2A', 14);
-  line(ctx, climbPts, '#E75E54', 6);
-  const head = climbPts[climbPts.length - 1]!;
-  rect(ctx, '#FF8B80', head[0] - 6, head[1] - 6, 16, 16);
+  drawPartialPath(ctx, climbPts, climb, '#9D2F2A', 14);
+  drawPartialPath(ctx, climbPts, climb, '#E75E54', 6);
+  const full = (climbPts.length - 1) * climb, segment = Math.min(Math.floor(full), climbPts.length - 2), part = full - segment;
+  const a = climbPts[segment]!, b = climbPts[segment + 1]!;
+  const head = [a[0] + (b[0] - a[0]) * part, a[1] + (b[1] - a[1]) * part] as const;
+  if (jump > 0.002 || climb > 0.002) {
+    rect(ctx, '#FF8B80', head[0] - 6, head[1] - 6, 16, 16);
+    rect(ctx, '#FFF1EF', head[0] - 2, head[1] - 2, 8, 8);
+  }
 }
 
 export const miniMarketShot: ShotDef = {
@@ -245,47 +308,46 @@ export const miniMarketShot: ShotDef = {
   describe: 'The camera pulls back from Hedgy holding his buyback ticket to reveal a dwindling rack in a huge buyer-filled hall. On “demand” one ticket leaves and a buyer token joins; on “higher” the red price path jumps and climbs out of frame.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, seed } = frame;
-    const dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
+    const dur = Math.max(0.01, frame.dur), transitionT = frame.t, t = clamp(frame.t, 0, dur);
     const demandAt = eventTime(props, 'demand', 0.372, dur);
     const higherAt = eventTime(props, 'higher', 0.742, dur);
+    const queueAt = Math.min(0.4, dur * 0.15);
     const supply = Math.max(3, Math.min(8, Math.floor(Number(props.params?.supplyCount ?? 5) || 5)));
     const asset = String(props.params?.asset ?? 'TICKET').slice(0, 24);
-    const pull = ease.outCubic(t / dur);
+    const pull = ease.outCubic(progress(t, 0, dur * 0.6));
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 42, handheld: 1.25,
+      width: W, height: H, seed: seed + 42, handheld: 1.1, hits: [demandAt, higherAt], punch: 0.012, shake: 5,
       keyframes: [
-        { t: 0, x: 0, y: 4, zoom: 1.36, rot: 0 },
-        { t: demandAt, x: -8, y: 2, zoom: 0.93, rot: 0.003 },
-        { t: higherAt, x: 10, y: -10, zoom: 0.66, rot: -0.004 },
-        { t: dur, x: 4, y: -22, zoom: 0.46, rot: 0.002 },
+        { t: 0, x: 0, y: 0, zoom: 1.12, rot: 0 },
+        { t: Math.min(dur * 0.6, demandAt + 0.58), x: -4, y: 0, zoom: 0.80, rot: 0.002 },
+        { t: higherAt, x: 0, y: 24, zoom: 0.80, rot: -0.002 },
+        { t: dur, x: 0, y: 180, zoom: 0.78, rot: 0.002 },
       ],
     });
     const pose = rig.poseAt(t);
     ctx.imageSmoothingEnabled = false;
-    drawHall(ctx, t, pull);
+    drawHall(ctx, t, pull, queueAt);
 
     ctx.save(); applyPull(ctx, pose.zoom, pose.x, pose.y);
     // Small inventory remains a bright focal island against the giant architecture.
-    drawRack(ctx, t, demandAt, supply, asset, seed + 19);
+    drawRack(ctx, t, transitionT, queueAt, demandAt, supply, asset);
+    drawCrowdHands(ctx, t, queueAt);
     const hedgyPose = t < demandAt ? 'carry' : t < higherAt ? 'sweat' : 'shock';
     drawHedgy(ctx, {
-      x: 298, y: 1108, scale: 6.3, t: Math.max(0, t - demandAt),
+      x: 298, y: 1020, scale: 6.3, t: Math.max(0, t - demandAt),
       pose: hedgyPose, facing: 1,
       expression: t < demandAt ? 'determined' : t < higherAt ? 'worried' : 'shocked',
       look: t < demandAt ? 'forward' : 'up',
     });
     // The handoff ticket from shot 11 stays in Hedgy's raised paw as the lens retreats.
-    const heldX = 389 + Math.sin(t * 4) * 3;
-    drawTicket2D(ctx, heldX, 815, 126, { rot: -0.04 + Math.sin(t * 3) * 0.012 });
-    rect(ctx, '#3E281B', heldX - 38, 818, 30, 22);
-    rect(ctx, '#8A5E3D', heldX - 34, 818, 22, 16);
-    rect(ctx, '#D4A66F', heldX - 26, 818, 10, 6);
+    const heldX = 560 + Math.sin(t * 4) * 3;
+    line(ctx, [[440, 930], [492, 874], [heldX - 42, 826]], '#3E281B', 30);
+    line(ctx, [[444, 924], [496, 870], [heldX - 46, 824]], '#8A5E3D', 18);
+    rect(ctx, '#D4A66F', heldX - 52, 812, 42, 28);
+    rect(ctx, '#E2B982', heldX - 34, 808, 22, 12);
+    drawTicket2D(ctx, heldX, 820, 126, { rot: -0.04 + Math.sin(t * 3) * 0.012 });
+    drawPricePath(ctx, [842, 514], t, higherAt);
     ctx.restore();
-
-    // The price path is screen-facing and physically anchored to the rack's right edge.
-    const anchorX = W / 2 + pose.x + (842 - W / 2) * pose.zoom;
-    const anchorY = 720 + pose.y + (514 - 720) * pose.zoom;
-    drawPricePath(ctx, [snap(anchorX), snap(anchorY)], t, higherAt);
 
     // A last near-camera rail sweeps upward, giving the next whip-up a moving edge to catch.
     const railY = 1212 - pull * 88;
@@ -301,9 +363,11 @@ export const miniMarketShot: ShotDef = {
   cues(props: ShotProps, dur: number): Cue[] {
     const demandAt = eventTime(props, 'demand', 0.372, dur);
     const higherAt = eventTime(props, 'higher', 0.742, dur);
+    const queueAt = Math.min(0.4, dur * 0.15);
     const cues: Cue[] = [
-      { t: demandAt, kind: 'coin', gain: 0.7, pan: 0.26 },
-      { t: higherAt, kind: 'tick', gain: 0.78, pan: 0.43 },
+      { t: queueAt + 0.22, kind: 'step', gain: 0.62, pan: 0.78 },
+      { t: demandAt, kind: 'paper', gain: 1.4, pan: 0.3 },
+      { t: higherAt, kind: 'impact', gain: 1.45, pan: 0.02 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t <= dur);
   },

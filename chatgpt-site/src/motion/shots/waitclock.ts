@@ -1,4 +1,4 @@
-import { clamp, ease, type Cue, type Frame, type ShotProps } from '../core.ts';
+import { clamp, ease, lerp, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { drawTrail } from '../fx/particles.ts';
@@ -106,48 +106,54 @@ function drawVenue(ctx: Frame['ctx'], t: number, cameraX: number) {
 }
 
 function drawClock(ctx: Frame['ctx'], t: number, dur: number, speed: number) {
-  // This is the shared centre of the incoming iris and the outgoing vault wheel.
-  const cx = 640, cy = 1000, rx = 184, ry = 202;
-  ellipseFill(ctx, cx + 14, cy + 18, rx + 7, ry + 7, '#060608');
-  ellipseFill(ctx, cx, cy, rx + 5, ry + 5, '#626269');
-  ellipseFill(ctx, cx, cy, rx - 8, ry - 8, '#17171B');
-  ellipseRing(ctx, cx, cy, rx, ry, '#E1E1E4', CELL * 3);
-  ellipseRing(ctx, cx, cy, rx - 20, ry - 22, '#77777D', CELL * 2, 4);
-  ellipseRing(ctx, cx, cy, rx - 38, ry - 40, '#303035', CELL * 2, 9);
+  // The clock face takes the vault wheel's centre and radius for a clean iris match.
+  const cx = 540, cy = 645, scale = 1.342, r = 202;
+  ctx.save(); ctx.translate(cx, cy); ctx.scale(scale, scale);
+  ellipseFill(ctx, 14, 18, r + 7, r + 7, '#060608');
+  ellipseFill(ctx, 0, 0, r + 5, r + 5, '#626269');
+  ellipseFill(ctx, 0, 0, r - 8, r - 8, '#17171B');
+  ellipseRing(ctx, 0, 0, r, r, '#E1E1E4', CELL * 3);
+  ellipseRing(ctx, 0, 0, r - 20, r - 22, '#77777D', CELL * 2, 4);
+  ellipseRing(ctx, 0, 0, r - 38, r - 40, '#303035', CELL * 2, 9);
 
   // Twelve long markers are large enough to read while the clock stays fully in frame.
   for (let mark = 0; mark < 12; mark++) {
     const a = -Math.PI / 2 + mark * Math.PI / 6;
     const inner = mark % 3 === 0 ? 151 : 160, outer = 176;
-    pixelLine(ctx, cx + Math.cos(a) * inner, cy + Math.sin(a) * inner * 1.04,
-      cx + Math.cos(a) * outer, cy + Math.sin(a) * outer * 1.04, mark % 3 === 0 ? '#F1F1F3' : '#8B8B91', mark % 3 === 0 ? 10 : 6);
+    pixelLine(ctx, Math.cos(a) * inner, Math.sin(a) * inner,
+      Math.cos(a) * outer, Math.sin(a) * outer, mark % 3 === 0 ? '#F1F1F3' : '#8B8B91', mark % 3 === 0 ? 10 : 6);
   }
-  pixelText(ctx, '12', cx, cy - 132, 2, { color: '#D5D5D9', align: 'center' });
-  pixelText(ctx, '6', cx, cy + 113, 2, { color: '#D5D5D9', align: 'center' });
-  pixelText(ctx, '3', cx + 126, cy - 9, 2, { color: '#A5A5AB', align: 'center' });
-  pixelText(ctx, '9', cx - 126, cy - 9, 2, { color: '#A5A5AB', align: 'center' });
+  pixelText(ctx, '12', 0, -132, 2, { color: '#D5D5D9', align: 'center' });
+  pixelText(ctx, '6', 0, 113, 2, { color: '#D5D5D9', align: 'center' });
+  pixelText(ctx, '3', 126, -9, 2, { color: '#A5A5AB', align: 'center' });
+  pixelText(ctx, '9', -126, -9, 2, { color: '#A5A5AB', align: 'center' });
 
-  // The long hand sweeps several decisive turns and lands on the spotlight at the next cut.
-  // Sweep into noon as the upward push begins; the incoming house spot carries the eye on.
-  const pushStart = Math.max(0, dur - .21);
-  const minute = -Math.PI / 2 + (t - pushStart) * speed * 2.8;
-  const hour = -Math.PI / 2 + (t - dur) * speed * 1.55 + .78;
-  pixelLine(ctx, cx, cy, cx + Math.cos(hour) * 102, cy + Math.sin(hour) * 112, '#BDBDC2', 14);
-  pixelLine(ctx, cx, cy, cx + Math.cos(minute) * 167, cy + Math.sin(minute) * 179, '#F4F4F5', 10);
-  pixelLine(ctx, cx + Math.cos(minute) * 158, cy + Math.sin(minute) * 169,
-    cx + Math.cos(minute) * 183, cy + Math.sin(minute) * 194, '#8D8D93', 6);
-  ellipseFill(ctx, cx - 8, cy - 8, 19, 20, '#D7D7DB');
-  ellipseFill(ctx, cx - 4, cy - 4, 9, 10, '#39393F');
+  // The long hand sweeps through the dial, then reaches the incoming right-hand spotlight.
+  const pushStart = Math.max(0, dur - .34);
+  const turn = ease.outCubic((t - pushStart) / Math.max(.12, dur - pushStart));
+  const minuteBase = -Math.PI / 2 + t * speed * 2.8;
+  const spotAngle = Math.atan2(-381, 220);
+  const spotAngleNear = spotAngle + Math.round((minuteBase - spotAngle) / (Math.PI * 2)) * Math.PI * 2;
+  const minute = lerp(minuteBase, spotAngleNear, turn);
+  const minuteLength = 179 + (328 - 179) * turn;
+  const hour = -Math.PI / 2 + t * speed * .7 + .78;
+  pixelLine(ctx, 0, 0, Math.cos(hour) * 102, Math.sin(hour) * 112, '#BDBDC2', 14);
+  pixelLine(ctx, 0, 0, Math.cos(minute) * minuteLength, Math.sin(minute) * minuteLength, '#F4F4F5', 10);
+  pixelLine(ctx, Math.cos(minute) * (minuteLength - 9), Math.sin(minute) * (minuteLength - 9),
+    Math.cos(minute) * (minuteLength + 12), Math.sin(minute) * (minuteLength + 12), '#8D8D93', 6);
+  ellipseFill(ctx, -8, -8, 19, 20, '#D7D7DB');
+  ellipseFill(ctx, -4, -4, 9, 10, '#39393F');
+  ctx.restore();
 }
 
 function drawPriceTrace(ctx: Frame['ctx'], t: number, dur: number, fadeAt: number, seed: number) {
-  const settle = ease.outCubic(t / Math.max(.35, dur * .7));
-  const fade = ease.outCubic((t - fadeAt) / Math.max(.2, dur * .28));
-  const fadeSink = ease.outCubic((t - fadeAt) / Math.max(.25, dur * .31));
+  const settle = ease.outCubic(t / Math.max(.35, dur)) * 24;
+  const sink = ease.outCubic((t - fadeAt) / Math.max(.2, Math.min(.34, dur * .2)));
+  const fade = ease.outCubic((t - (fadeAt + .16)) / Math.max(.28, Math.min(.5, dur * .29)));
   const points = Array.from({ length: 21 }, (_, i) => {
     const u = i / 20;
     const wobble = Math.sin(u * 19 + seed * .013) * 5 + Math.sin(u * 41 + 1.2) * 2;
-    return { x: 36 + u * 1008, y: 560 + u * 126 + settle * (u * 52) + fadeSink * 170 + wobble, alpha: .88 * (1 - fade) };
+    return { x: 36 + u * 1008, y: 560 + u * 126 + settle * u + sink * 260 + wobble, alpha: .86 * (1 - fade * .72) };
   });
   drawTrail(ctx, points, { color: '#9A9AA0', width: CELL * 2 });
   if (fade < .9) {
@@ -157,29 +163,39 @@ function drawPriceTrace(ctx: Frame['ctx'], t: number, dur: number, fadeAt: numbe
   }
 }
 
-function drawWristStub(ctx: Frame['ctx'], t: number, tap: number, check: number) {
-  const sway = Math.sin(t * 5.6) * 8 + check * 10;
+function drawWristStub(ctx: Frame['ctx'], t: number, check: number) {
+  const sway = Math.sin(t * 5.6) * 5 + check * 16;
+  // The ticket stays clipped to the wrist on a short, taut tether as Hedgy checks its stub.
   drawTrail(ctx, [
-    { x: 314, y: 766, alpha: .9 }, { x: 351 + sway, y: 851, alpha: .84 },
-    { x: 408 + sway, y: 900, alpha: .7 }, { x: 468 + sway, y: 906, alpha: .62 },
+    { x: 382, y: 928, alpha: .94 }, { x: 402 + sway * .35, y: 916, alpha: .9 },
+    { x: 470 + sway, y: 900, alpha: .78 },
   ], { color: '#B3B3B8', width: CELL * 2 });
-  drawTicket2D(ctx, snap(458 + sway), snap(902 - tap * 5), 74, { rot: .08 + Math.sin(t * 3) * .035 + check * .2, tear: .32 });
-  ctx.fillStyle = '#222227'; ctx.fillRect(314, 761, 28, 10);
-  ctx.fillStyle = '#D3D3D7'; ctx.fillRect(324, 757, CELL * 2, CELL);
+  drawTicket2D(ctx, snap(500 + sway), snap(894 - check * 10), 94, { rot: .08 + Math.sin(t * 3) * .025 + check * .18, tear: .32 });
+  ctx.fillStyle = '#222227'; ctx.fillRect(372, 923, 20, 8);
+  ctx.fillStyle = '#D3D3D7'; ctx.fillRect(380, 920, CELL * 2, CELL);
 }
 
 function drawTap(ctx: Frame['ctx'], x: number, y: number, tap: number) {
   if (tap <= 0) return;
-  const lift = Math.round((1 - tap) * 7 / CELL) * CELL;
-  ctx.fillStyle = '#77777D'; ctx.fillRect(x - 68, y + 3, 138, CELL);
-  ctx.fillStyle = '#E5E5E8';
-  ctx.fillRect(x + 30, y - lift, 10, CELL);
-  ctx.fillRect(x + 44, y - lift - 8, 8, CELL);
-  if (tap > .42) ctx.fillRect(x + 56, y - lift - 16, 8, CELL);
-  ctx.fillStyle = '#BEBEC3'; ctx.fillRect(x + 16, y + 14, 10, CELL);
-  ctx.fillStyle = '#E8E8EB';
-  ctx.fillRect(x + 18, y + 26, Math.round((14 + tap * 22) / CELL) * CELL, CELL);
-  ctx.fillRect(x + 8, y + 38, Math.round((9 + tap * 14) / CELL) * CELL, CELL);
+  const footX = x + 8 * 3.612, footY = y + 4;
+  const spread = 30 + (1 - tap) * 34;
+  ellipseRing(ctx, footX, footY + 2, spread, 8 + (1 - tap) * 5, '#E1E1E4', CELL, Math.round((1 - tap) * 5));
+  pixelLine(ctx, footX - 20, footY - 16, footX - 12, footY - 8, '#F1F1F3', CELL);
+  pixelLine(ctx, footX + 20, footY - 16, footX + 12, footY - 8, '#F1F1F3', CELL);
+  ctx.fillStyle = '#F1F1F3';
+  ctx.fillRect(snap(footX - 16), snap(footY - 14 - (1 - tap) * 8), CELL, CELL * 2);
+  ctx.fillRect(snap(footX + 16), snap(footY - 14 - (1 - tap) * 8), CELL, CELL * 2);
+}
+
+function drawSpotlightTarget(ctx: Frame['ctx'], t: number, dur: number) {
+  const reveal = ease.outCubic((t - (dur - .34)) / .34);
+  if (reveal <= 0) return;
+  ctx.save(); ctx.globalAlpha *= reveal;
+  ctx.fillStyle = '#4B4B51'; ctx.fillRect(728, 250, 64, 18);
+  ctx.fillStyle = '#DADAE0'; ctx.fillRect(736, 252, 48, 8);
+  ctx.fillStyle = '#FFFFFF'; ctx.fillRect(752, 244, 20, 8);
+  ctx.fillStyle = '#77777D'; ctx.fillRect(734, 270, 52, CELL);
+  ctx.restore();
 }
 
 function drawForegroundTickets(ctx: Frame['ctx'], t: number, dur: number) {
@@ -198,15 +214,16 @@ export const waitclockShot: ShotDef = {
     const speed = numberParam(props.params?.clockSpeed, 1.35, .2, 5);
     const waitAt = eventTime(props, 'waits', dur, dur * .22);
     const fadeAt = eventTime(props, 'fade', dur, dur * .66);
-    const tapAge = t >= waitAt ? (t - waitAt) % .48 : 1;
-    const tap = clamp(1 - tapAge / .13);
-    const check = t >= waitAt ? clamp(1 - Math.abs(tapAge - .22) / .12) : 0;
+    const checkAt = Math.min(dur, dur * .548);
+    const tapAge = t - waitAt;
+    const tap = clamp(1 - Math.abs(tapAge) / .075);
+    const check = ease.outBack((t - checkAt + .04) / .12) * (1 - ease.outCubic((t - checkAt - .12) / .2));
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 17, handheld: 1.7,
       keyframes: [
-        { t: 0, x: -14, y: 4, zoom: 1.005, rot: -.004, ease: 'linear' },
-        { t: dur * .5, x: 2, y: -14, zoom: 1.028, rot: .008, ease: 'inOut' },
-        { t: dur, x: 17, y: -40, zoom: 1.058, rot: -.016, ease: 'inOut' },
+        { t: 0, x: -10, y: 4, zoom: 1.005, rot: -.01, ease: 'linear' },
+        { t: dur * .46, x: 6, y: -26, zoom: 1.038, rot: .018, ease: 'inOut' },
+        { t: dur, x: 24, y: -86, zoom: 1.095, rot: .064, ease: 'inOut' },
       ], hits: [waitAt, fadeAt], punch: .009, shake: 1.8,
     });
     const camera = rig.poseAt(t);
@@ -214,14 +231,15 @@ export const waitclockShot: ShotDef = {
     ctx.imageSmoothingEnabled = false;
     rig.apply(ctx, t);
     drawVenue(ctx, t, camera.x);
-    drawPriceTrace(ctx, t, dur, fadeAt, seed);
-    drawWristStub(ctx, t, tap, check);
     drawClock(ctx, t, dur, speed);
+    drawPriceTrace(ctx, t, dur, fadeAt, seed);
+    drawWristStub(ctx, t, check);
 
-    const baseline = 812 + tap * 16;
-    ellipseFill(ctx, 264, baseline + 5, 110, 9, '#08080A');
-    drawHedgy(ctx, { x: 270, y: baseline, scale: 2.58, t: t - waitAt, pose: 'think', facing: 1, look: 'up', expression: 'worried', prop: 'none' });
-    drawTap(ctx, 270, baseline, tap);
+    const baseline = 1000 + tap * 8;
+    ellipseFill(ctx, 330, baseline + 5, 110, 9, '#08080A');
+    drawHedgy(ctx, { x: 330, y: baseline, scale: 3.612, t: Math.max(0, t - waitAt), pose: 'think', facing: 1, look: check > .12 ? 'down' : 'up', expression: 'worried', prop: 'none', squash: 1 + tap * .12 });
+    drawTap(ctx, 330, baseline, tap);
+    drawSpotlightTarget(ctx, t, dur);
 
     // Close rail and ticket scraps cross the foreground while the camera pushes in.
     ctx.fillStyle = '#08080A'; ctx.fillRect(-24, 1232, 1128, 58);
@@ -231,11 +249,14 @@ export const waitclockShot: ShotDef = {
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
+    const safeDur = Math.max(0, dur);
     const waitAt = eventTime(props, 'waits', dur, dur * .22);
     const fadeAt = eventTime(props, 'fade', dur, dur * .66);
+    const checkAt = Math.min(safeDur, safeDur * .548);
     return [
-      { t: Number(waitAt.toFixed(3)), kind: 'step', pan: -.35, gain: .5 },
-      { t: Number(fadeAt.toFixed(3)), kind: 'drop', pan: .42, gain: .52 },
+      { t: Number(waitAt.toFixed(3)), kind: 'step', pan: -.35, gain: .78 },
+      { t: Number(checkAt.toFixed(3)), kind: 'paper', pan: -.06, gain: .62 },
+      { t: Number(fadeAt.toFixed(3)), kind: 'drop', pan: .42, gain: .84 },
     ];
   },
 };

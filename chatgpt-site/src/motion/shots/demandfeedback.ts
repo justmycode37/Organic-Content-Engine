@@ -21,9 +21,10 @@ function eventAt(props: ShotProps, kind: string, fallback: number, dur: number) 
   return clamp(event?.at ?? fallback, 0, Math.max(0, dur));
 }
 
-function buyTimes(props: ShotProps, dur: number) {
-  const start = eventAt(props, 'buying', dur * 0.55, dur);
-  return [0, 1, 2].map(i => clamp(start + i * 0.25, 0, dur));
+function buyTimes(dur: number) {
+  const first = Math.min(0.8, dur * 0.3);
+  const spacing = Math.min(0.5, dur * 0.1875);
+  return [0, 1, 2].map(beat => clamp(first + beat * spacing, 0, dur));
 }
 
 function drawBackdrop(ctx: Frame['ctx'], t: number, seed: number) {
@@ -182,10 +183,10 @@ function drawButton(ctx: Frame['ctx'], x: number, y: number, t: number, hitAt: n
   void index;
 }
 
-function drawBooth(ctx: Frame['ctx'], booth: Booth, index: number, t: number, scareAt: number, buyAt: number, seed: number, activeIndex: number) {
+function drawBooth(ctx: Frame['ctx'], booth: Booth, index: number, t: number, reactionAt: number, buyAt: number, seed: number, activeIndex: number) {
   const { x, y, w, h, facing } = booth;
-  const local = clamp((t - buyAt) / 0.32), hitStart = scareAt + index * 0.045;
-  const recoil = t < hitStart ? 0 : 0.15 + 0.85 * ease.outBack(clamp((t - hitStart) / 0.21));
+  const local = clamp((t - buyAt) / 0.32);
+  const recoil = t < reactionAt ? 0 : 0.15 + 0.85 * ease.outBack(clamp((t - reactionAt) / 0.21));
   const innerX = x + 14, innerY = y + 14, innerW = w - 28, innerH = h - 28;
   ctx.fillStyle = '#080A0C'; ctx.fillRect(x, y, w, h);
   ctx.fillStyle = index === 1 ? '#C0C5C8' : '#A8AFB4'; ctx.fillRect(x + 4, y + 4, w - 8, 8); ctx.fillRect(x + 4, y + 4, 8, h - 8);
@@ -212,32 +213,69 @@ function drawBooth(ctx: Frame['ctx'], booth: Booth, index: number, t: number, sc
   }
 }
 
+function drawTowerLoop(ctx: Frame['ctx'], t: number, finalBuyAt: number) {
+  const open = ease.outCubic(clamp((t - finalBuyAt) / 0.3));
+  // The rising rail enters a lit steel loop at the top centre, then continues through the tower.
+  ctx.fillStyle = '#080A0C'; ctx.fillRect(396, -244, 248, 540);
+  ctx.fillStyle = '#525B62'; ctx.fillRect(396, -244, 28, 540); ctx.fillRect(616, -244, 28, 540);
+  ctx.fillStyle = '#B6BEC2'; ctx.fillRect(400, -244, 8, 540); ctx.fillRect(620, -244, 8, 540);
+  ctx.fillStyle = '#343C42'; ctx.fillRect(424, -232, 192, 18); ctx.fillRect(424, 274, 192, 18);
+  ctx.fillStyle = '#7C858B'; ctx.fillRect(424, -232, 192, 6); ctx.fillRect(424, 274, 192, 6);
+  // Square nested rims read as a mechanical loop instead of a floating graphic.
+  ctx.fillStyle = '#1B2126'; ctx.fillRect(446, -122, 148, 270);
+  ctx.fillStyle = '#929BA1'; ctx.fillRect(446, -122, 148, 18); ctx.fillRect(446, 130, 148, 18);
+  ctx.fillRect(446, -122, 18, 270); ctx.fillRect(576, -122, 18, 270);
+  ctx.fillStyle = '#D0D5D7'; ctx.fillRect(464, -104, 6, 234); ctx.fillRect(570, -104, 6, 234);
+  ctx.fillStyle = '#080A0C'; ctx.fillRect(474, -88, 92, 202);
+  // Two shutters retract after the last BUY hit, leaving the red path a clear exit.
+  const shutter = 24 * open;
+  ctx.fillStyle = '#69737A'; ctx.fillRect(474 - shutter, -40, Math.max(8, 20 - shutter * 0.45), 108);
+  ctx.fillRect(566 + shutter - Math.max(8, 20 - shutter * 0.45), -40, Math.max(8, 20 - shutter * 0.45), 108);
+  ctx.fillStyle = '#D8DDDF';
+  for (let i = 0; i < 5; i++) {
+    const y = -194 + i * 92;
+    ctx.fillRect(434, y, 8, 8); ctx.fillRect(598, y, 8, 8);
+  }
+  ctx.fillStyle = '#AEB7BB'; ctx.fillRect(486, 152, 68, 8);
+}
+
+function lerp(a: number, b: number, t: number) { return a + (b - a) * clamp(t); }
+
 export const demandFeedbackShot: ShotDef = {
   name: 'demandfeedback',
-  describe: 'Three short sellers recoil as the red price rail rockets past, then cover in three timed BUY beats. Hedgy runs the foreground catwalk.',
+  describe: 'The red price tip hits calm sellers, then three staggered BUY slams ratchet it up a steel tower loop. The camera follows the climb while Hedgy stays on the right catwalk.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, seed } = frame, dur = Math.max(0.25, frame.dur), t = clamp(frame.t, 0, dur);
-    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(props, dur), coverAt = covers[0]!;
+    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(dur);
+    const impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.115), 0, dur);
+    const reactions = [impactAt, covers[0]! + 0.16, covers[1]! + 0.16];
     const path: Point[] = [
-      { x: 518, y: 1240 }, { x: 518, y: 1102 }, { x: 456, y: 1046 }, { x: 454, y: 950 },
-      { x: 544, y: 902 }, { x: 624, y: 842 }, { x: 624, y: 732 }, { x: 542, y: 680 },
-      { x: 458, y: 626 }, { x: 458, y: 496 }, { x: 548, y: 442 }, { x: 626, y: 390 },
-      { x: 626, y: 280 }, { x: 548, y: 224 }, { x: 520, y: 54 },
+      { x: 518, y: 1240 }, { x: 518, y: 1102 }, { x: 456, y: 1046 }, { x: 300, y: 950 },
+      { x: 406, y: 902 }, { x: 548, y: 842 }, { x: 624, y: 780 }, { x: 714, y: 770 },
+      { x: 800, y: 738 }, { x: 704, y: 560 }, { x: 570, y: 500 }, { x: 430, y: 500 },
+      { x: 300, y: 486 }, { x: 410, y: 300 }, { x: 500, y: 220 }, { x: 520, y: 130 },
+      { x: 520, y: 40 }, { x: 520, y: -180 }, { x: 520, y: -460 }, { x: 520, y: -800 },
     ];
     const anchors = [3, 8, 12];
     const raised = path.map((point, pointIndex) => {
       let lift = 0;
-      for (let i = 0; i < covers.length; i++) if (pointIndex > anchors[i]!) lift += ease.outCubic(clamp((t - covers[i]!) / 0.15)) * 32;
+      for (let i = 0; i < covers.length; i++) if (pointIndex > anchors[i]!) lift += ease.outCubic(clamp((t - covers[i]!) / 0.12)) * 48;
       return { x: point.x, y: point.y - lift };
     });
-    const lineProgress = clamp((t - scareAt + 0.12) / 0.66);
+    const fractions = anchors.map(anchor => anchor / (path.length - 1));
+    let lineProgress = lerp(0, fractions[0]!, ease.outCubic(clamp((t - scareAt) / Math.max(0.08, impactAt - scareAt))));
+    if (t >= covers[0]!) lineProgress = lerp(fractions[0]!, fractions[1]!, ease.outCubic(clamp((t - covers[0]!) / 0.27)));
+    if (t >= covers[1]!) lineProgress = lerp(fractions[1]!, fractions[2]!, ease.outCubic(clamp((t - covers[1]!) / 0.27)));
+    if (t >= covers[2]!) lineProgress = lerp(fractions[2]!, 1, ease.outCubic(clamp((t - covers[2]!) / 0.55)));
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 121, handheld: 0.9, hits: [scareAt, ...covers], punch: 0.018, shake: 13,
+      width: W, height: H, seed: seed + 121, handheld: 0.75, hits: [impactAt, ...covers], punch: 0.02, shake: 12,
       keyframes: [
-        { t: 0, x: -10, y: 14, zoom: 1.015, rot: -0.004 },
-        { t: dur * 0.3, x: 22, y: -8, zoom: 1.045, rot: 0.006 },
-        { t: dur * 0.66, x: -18, y: -26, zoom: 1.085, rot: -0.006 },
-        { t: dur, x: 16, y: -42, zoom: 1.11, rot: 0.004 },
+        { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
+        { t: impactAt, x: 0, y: 10, zoom: 1.015, rot: 0.002 },
+        { t: covers[0]!, x: 0, y: 22, zoom: 1.025, rot: -0.002 },
+        { t: covers[1]!, x: 0, y: 72, zoom: 1.04, rot: 0.002 },
+        { t: covers[2]!, x: 0, y: 128, zoom: 1.05, rot: -0.002 },
+        { t: dur, x: 0, y: 160, zoom: 1.055, rot: 0.001 },
       ],
       whip: [{ at: scareAt, direction: 'up', duration: 0.24, amount: 0.1 }],
     });
@@ -247,7 +285,10 @@ export const demandFeedbackShot: ShotDef = {
     ctx.save(); rig.apply(ctx, t);
     drawSpeedLines(ctx, t, { center: { x: 540, y: 620 }, count: 38, reach: 700, start: 0, duration: 0.72, mode: 'linear', direction: 1, color: '#929BA1', seed: seed + 67, strength: 0.3, cell: 6 });
 
-    // Permanent shadow rail establishes the full vertical track; the bright head races up it on “scaring”.
+    drawTowerLoop(ctx, t, covers[2]!);
+    // Sellers hold their ground until the moving red tip reaches their window.
+    BOOTHS.forEach((booth, i) => drawBooth(ctx, booth, i, t, reactions[i]!, covers[i]!, seed + i * 17, i));
+    // The tip reaches the first booth, pauses, then extends one physical segment after each BUY slam.
     drawTrack(ctx, raised, 1, '#40484E', 1);
     drawTrack(ctx, raised, lineProgress, RED, 1);
     anchors.forEach((anchor, index) => {
@@ -258,17 +299,13 @@ export const demandFeedbackShot: ShotDef = {
     });
 
     covers.forEach((at, i) => {
-      const p = raised[anchors[i]!]!, active = clamp((t - at) / 0.34);
+      const p = raised[anchors[i]!]!;
       if (t >= at && t < at + 0.48) {
         ctx.fillStyle = RED; ctx.fillRect(p.x - 26, p.y - 29, 52, 12);
         ctx.fillStyle = '#FFB0AA'; ctx.fillRect(p.x - 9, p.y - 36, 18, 6);
       }
       drawBurst(ctx, t, { x: p.x, y: p.y, seed: seed + 280 + i * 19, count: 12, kind: 'shard', start: at, life: 0.62, speed: 180 + i * 22, gravity: 260, drag: 0.4, floor: 1240, size: 1, color: '#D7DBDE', cell: 4 });
-      void active;
     });
-
-    // Booths are ordered along the climb and each seller is a different pixel silhouette.
-    BOOTHS.forEach((booth, i) => drawBooth(ctx, booth, i, t, scareAt, covers[i]!, seed + i * 17, i));
 
     // Close rails and ticket stubs move faster than the booth layer for clear foreground parallax.
     const catwalkY = 1076;
@@ -284,15 +321,16 @@ export const demandFeedbackShot: ShotDef = {
       const x = (i * 438 + Math.floor(t * (245 + i * 18))) % 1220 - 70;
       drawTicket2D(ctx, x, 1142 + i * 30, 82 + i * 8, { rot: -0.1 + Math.sin(t * 5 + i) * 0.06 });
     }
-    const hedgyX = 760 + 150 * ease.outCubic(clamp(t / dur)) + 14 * Math.sin(t * 6);
-    drawHedgy(ctx, { x: hedgyX, y: 1188, scale: 5.4, t, pose: 'run', facing: 1, look: t < scareAt + 0.12 ? 'forward' : 'up', expression: t < scareAt + 0.12 ? 'determined' : 'shocked' });
+    const hedgyX = 800 + 8 * Math.sin(t * 5);
+    drawHedgy(ctx, { x: hedgyX, y: 1060, scale: 4.6, t, pose: 'run', facing: 1, look: t < impactAt ? 'forward' : 'up', expression: t < impactAt ? 'determined' : 'shocked' });
     ctx.restore(); ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(props, dur);
+    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.115), 0, dur), covers = buyTimes(dur);
     const cues: Cue[] = [
-      { t: scareAt, kind: 'whoosh', gain: 0.72, pan: 0.05, len: 0.2 },
-      ...covers.map((t, i) => ({ t, kind: 'clack' as const, pan: [-0.56, 0.42, -0.44][i]!, gain: 0.66 + i * 0.12, step: i / 2 })),
+      { t: scareAt, kind: 'whoosh', gain: 0.68, pan: 0.02, len: 0.2 },
+      { t: impactAt, kind: 'thud', gain: 1.24, pan: -0.18 },
+      ...covers.map((t, i) => ({ t, kind: 'clack' as const, pan: [-0.56, 0.42, -0.44][i]!, gain: 1.3 + i * 0.1, step: i / 2 })),
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t < dur);
   },

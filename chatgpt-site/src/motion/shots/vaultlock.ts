@@ -2,6 +2,7 @@ import { clamp, lerp, type Cue, type Ctx, type Frame, type ShotProps } from '../
 import { drawHedgy } from '../actor/hedgy.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
+import { drawTicket2D } from '../sets/ticket.ts';
 import type { ShotDef } from './index.ts';
 
 const W = 1080;
@@ -101,7 +102,7 @@ function drawCashBundle(ctx: Ctx, x: number, y: number, scale: number, angle: nu
   ctx.fillStyle = '#F0F2F3'; ctx.fillRect(-47, -27, 30, 30);
   ctx.fillStyle = '#78838A'; ctx.fillRect(-41, -21, 18, 18);
   ctx.fillStyle = '#5A646A'; ctx.fillRect(18, -24, 32, 5); ctx.fillRect(18, -12, 26, 5); ctx.fillRect(18, 0, 32, 5);
-  pixelText(ctx, '$100', 33, -20, 2, { color: '#F3F4F5', align: 'center' });
+  pixelText(ctx, '$', 33, -20, 2, { color: '#F3F4F5', align: 'center' });
   ctx.restore();
 }
 
@@ -231,14 +232,14 @@ export const vaultLockShot: ShotDef = {
     const label = typeof p.label === 'string' ? p.label : 'COLLATERAL';
     const moneyAt = eventTime(props, 'money', dur, 0.46);
     const collateralAt = eventTime(props, 'collateral', dur, 0.64);
-    const span = Math.max(0.24, collateralAt - moneyAt - 0.06);
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 47, handheld: 1.4,
       keyframes: [
-        { t: 0, x: -22, y: 12, zoom: 0.985, rot: -0.008 },
-        { t: Math.max(0.08, moneyAt), x: -4, y: -3, zoom: 1.005, rot: 0.002 },
-        { t: collateralAt, x: 28, y: -32, zoom: 1.052, rot: 0.008 },
-        { t: dur, x: -18, y: -66, zoom: 1.092, rot: -0.003 },
+        { t: 0, x: -18, y: 18, zoom: 0.99, rot: -0.014 },
+        { t: Math.max(0.08, moneyAt - 0.12), x: 8, y: 4, zoom: 1.025, rot: -0.008 },
+        { t: Math.min(dur, moneyAt + 0.22), x: 26, y: -30, zoom: 1.082, rot: 0.016 },
+        { t: Math.max(moneyAt + 0.3, collateralAt - 0.08), x: -12, y: -18, zoom: 1.12, rot: 0.034 },
+        { t: dur, x: 12, y: -58, zoom: 1.1, rot: 0.02 },
       ],
       hits: [collateralAt], punch: 0.034, shake: 5.2,
     });
@@ -258,14 +259,16 @@ export const vaultLockShot: ShotDef = {
 
     // Three readable paper bundles travel from the sale receipt into the chamber.
     const cash = [
-      { start: [948, 435] as Point, end: [644, 480] as Point, delay: 0, angle: -0.14, size: 0.82 },
-      { start: [1002, 527] as Point, end: [568, 622] as Point, delay: 0.075, angle: 0.08, size: 0.96 },
-      { start: [936, 630] as Point, end: [432, 774] as Point, delay: 0.15, angle: -0.1, size: 0.9 },
+      { start: [948, 435] as Point, end: [540, 554] as Point, delay: 0, angle: -0.14, size: 1.15 },
+      { start: [1002, 527] as Point, end: [556, 646] as Point, delay: 0.075, angle: 0.08, size: 1.34 },
+      { start: [936, 630] as Point, end: [540, 742] as Point, delay: 0.15, angle: -0.1, size: 1.26 },
     ];
     cash.forEach((bundle, index) => {
-      // Begin the paper sweep during “sale” so the cash is visibly crossing the glass on “money”.
-      const q = clamp((t - moneyAt + 0.18 - bundle.delay) / Math.max(0.12, span - bundle.delay));
-      const eased = 1 - (1 - q) ** 3;
+      // The larger banknote stacks leave the upper-right slot before “money” and settle together inside the vault.
+      const cashStart = Math.max(0, moneyAt - 0.65);
+      const cashSpan = Math.max(0.5, Math.min(0.82, moneyAt + 0.1 - cashStart));
+      const q = clamp((t - cashStart - bundle.delay) / Math.max(0.12, cashSpan - bundle.delay));
+      const eased = q * q * (3 - 2 * q);
       const x = lerp(bundle.start[0], bundle.end[0], eased);
       const y = lerp(bundle.start[1], bundle.end[1], eased) - Math.sin(Math.PI * q) * 48;
       drawCashBundle(ctx, x, y, bundle.size, bundle.angle + Math.sin(t * 3 + index) * 0.025, index);
@@ -286,12 +289,20 @@ export const vaultLockShot: ShotDef = {
       pose: t < moneyAt ? 'think' : 'push', facing: 1,
       look: 'forward', expression: t < collateralAt ? 'worried' : 'shocked',
     });
-    // Paw-to-wheel camera arc: a narrow reflected line sweeps from his reach into the inset.
+    // The concert ticket remains on Hedgy’s tether outside the glass while the cash enters the chamber.
+    const ticketX = 490 + Math.sin(t * 2.4) * 3;
+    const ticketY = 1042 + Math.sin(t * 3.2) * 4;
+    const reach = clamp((t - moneyAt + 0.08) / 0.16);
+    const paw: Point = [lerp(354, 409, reach), lerp(1061, 1076, reach)];
+    line(ctx, paw, [ticketX - 30, ticketY - 5], '#D8DEE1', 4, 0.92);
+    drawTicket2D(ctx, ticketX, ticketY, 82, { rot: -0.16 + Math.sin(t * 2) * 0.025, tear: 0.12 });
+
+    // Paw-to-cash-to-wheel glint keeps the camera arc legible while the real camera pushes through the same path.
     const arc = clamp((t - moneyAt + 0.05) / Math.max(0.28, collateralAt - moneyAt));
     if (arc > 0) {
       const q = 1 - (1 - arc) ** 3;
-      const x = lerp(412, 540, q), y = lerp(1010, 645, q);
-      line(ctx, [412, 1010], [x, y], '#D2D9DD', 5, 0.24);
+      const x = lerp(paw[0], 540, q), y = lerp(paw[1], 645, q);
+      line(ctx, paw, [x, y], '#D2D9DD', 5, 0.24);
       ctx.fillStyle = '#EFF2F3'; ctx.fillRect(snap(x - 4), snap(y - 4), 8, 8);
     }
     // Nearby glass mullions slide past lens and keep the final frames in motion.
@@ -304,8 +315,8 @@ export const vaultLockShot: ShotDef = {
     const moneyAt = eventTime(props, 'money', safeDur, 0.46);
     const collateralAt = eventTime(props, 'collateral', safeDur, 0.64);
     const cues: Cue[] = [
-      { t: moneyAt, kind: 'paper', pan: 0.54, gain: 0.68 },
-      { t: collateralAt, kind: 'clack', pan: 0.02, gain: 0.96 },
+      { t: moneyAt, kind: 'paper', pan: 0.54, gain: 1.32 },
+      { t: collateralAt, kind: 'impact', pan: 0.02, gain: 1.42 },
     ];
     return cues.filter(cue => cue.t <= safeDur).sort((a, b) => a.t - b.t);
   },

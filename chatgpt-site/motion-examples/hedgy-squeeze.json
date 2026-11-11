@@ -63,6 +63,7 @@
     }
    ],
    "transition": "whip",
+   "transitionAt": [884, 288],
    "transitionDir": "down"
   },
   {
@@ -80,7 +81,8 @@
      "kind": "collateral"
     }
    ],
-   "transition": "zoomthrough"
+   "transition": "zoomthrough",
+   "transitionAt": [540, 645]
   },
   {
    "type": "shot",
@@ -98,7 +100,7 @@
     }
    ],
    "transition": "iris",
-   "transitionAt": [640, 1000]
+   "transitionAt": [540, 645]
   },
   {
    "type": "shot",

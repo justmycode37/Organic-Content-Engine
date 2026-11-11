@@ -1,4 +1,4 @@
-import { clamp, lerp, type Cue, type Frame, type ShotProps } from '../core.ts';
+import { clamp, ease, lerp, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawBurst } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
@@ -17,7 +17,7 @@ function eventTime(props: ShotProps, kind: string, dur: number, fallback: number
 }
 
 type Point = readonly [number, number];
-type Step = { x: number; y: number; w: number; d: number; h: number; price: string };
+type Step = { x: number; y: number; w: number; d: number; h: number };
 
 function polygon(ctx: Frame['ctx'], points: readonly Point[], fill: string, stroke?: string, lineWidth = 4) {
   ctx.beginPath();
@@ -112,19 +112,6 @@ function drawStep(ctx: Frame['ctx'], step: Step, index: number, t: number) {
   ctx.fillRect(glintX, snap(y + 5), 18, 4);
 }
 
-function drawStepPrices(ctx: Frame['ctx'], steps: readonly Step[]) {
-  for (const step of steps) {
-    const skew = Math.max(8, Math.round(step.d * 0.18));
-    const w = Math.min(112, Math.max(88, step.w * 0.34));
-    const h = 36;
-    const x = step.x - step.w * 0.25;
-    const y = step.y + step.d + skew + step.h * 0.55;
-    ctx.fillStyle = '#111518'; ctx.fillRect(snap(x - w / 2), snap(y - h / 2), w, h);
-    ctx.fillStyle = '#D5DCE0'; ctx.fillRect(snap(x - w / 2), snap(y - h / 2), w, 4);
-    pixelText(ctx, '$' + step.price, x, y - 12, 3, { color: '#F1F3F4', align: 'center' });
-  }
-}
-
 function drawPixelRing(ctx: Frame['ctx'], cx: number, cy: number, radius: number, color: string, step = 8) {
   const count = Math.max(16, Math.round((Math.PI * 2 * radius) / step));
   ctx.fillStyle = color;
@@ -155,7 +142,7 @@ function drawTrace(ctx: Frame['ctx'], points: readonly Point[], progress: number
 }
 
 function drawPlate(ctx: Frame['ctx'], x: number, y: number, reveal: number) {
-  const w = 276, h = 74;
+  const w = 236, h = 66;
   ctx.fillStyle = '#090C0E'; ctx.fillRect(x - w / 2 - 8, y - h / 2 - 8, w + 16, h + 16);
   ctx.fillStyle = '#282F34'; ctx.fillRect(x - w / 2, y - h / 2, w, h);
   ctx.fillStyle = '#D8DEE1'; ctx.fillRect(x - w / 2, y - h / 2, w, 8);
@@ -168,89 +155,103 @@ function drawPlate(ctx: Frame['ctx'], x: number, y: number, reveal: number) {
 
 export const priceStairShot: ShotDef = {
   name: 'pricestair',
-  describe: 'A high sale receipt overlooks a descending, perspective price stair; a grey trace falls through the prices and a ghost ticket lands on the lowest step as the full CHEAPER plate lights.',
+  describe: 'A crane tracks a perforated ticket mark down a clear high-to-low stair; a ghost ticket lands on the lowest step with the CHEAPER plate as Hedgy points into the path. No price amounts.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, seed } = frame;
     const dur = Math.max(0.05, frame.dur);
     const t = clamp(frame.t, 0, dur);
     const fallAt = eventTime(props, 'fall', dur, 0.33);
     const cheaperAt = eventTime(props, 'cheaper', dur, 0.74);
-    const rig = createCameraRig({
-      width: W, height: H, seed: seed + 17, handheld: 1.5,
-      keyframes: [
-        { t: 0, x: 0, y: 6, zoom: 1, rot: 0 },
-        { t: dur * 0.48, x: -12, y: -12, zoom: 1.018, rot: -0.003 },
-        { t: dur, x: 18, y: -38, zoom: 1.045, rot: 0.004 },
-      ],
-      hits: [fallAt, cheaperAt], punch: 0.016, shake: 2.4,
-    });
-    const steps: Step[] = Array.from({ length: 6 }, (_, i) => ({
-      x: 250 + i * 58,
-      y: 322 + i * 60,
-      w: 520 - i * 65,
-      d: 100 - i * 10,
-      h: 44 - i * 4,
-      price: ['120', '96', '72', '48', '24', '8'][i]!,
-    }));
-    const trace: Point[] = [[690, 396], [566, 354], [456, 350], [358, 406], [410, 468], [466, 529], [510, 585], [540, 625]];
+    const steps: Step[] = [
+      { x: 720, y: 318, w: 250, d: 54, h: 34 },
+      { x: 684, y: 402, w: 310, d: 62, h: 36 },
+      { x: 648, y: 490, w: 370, d: 70, h: 38 },
+      { x: 612, y: 582, w: 430, d: 78, h: 40 },
+      { x: 576, y: 678, w: 490, d: 86, h: 42 },
+      { x: 540, y: 778, w: 530, d: 92, h: 44 },
+    ];
     const landing = steps.at(-1)!;
     const focusX = landing.x;
-    const focusY = landing.y + landing.d * 0.54;
-    const flightStart = cheaperAt - Math.min(0.42, dur * 0.2);
+    const focusY = landing.y + landing.d * 0.5;
+    const finalZoom = 1.05;
+    const finalCameraY = -(focusY - H / 2) * finalZoom;
+    const rig = createCameraRig({
+      width: W, height: H, seed: seed + 17, handheld: 0.9,
+      keyframes: [
+        { t: 0, x: 0, y: 42, zoom: .99, rot: 0 },
+        { t: fallAt, x: 0, y: 34, zoom: 1, rot: 0, ease: 'inOut' },
+        { t: fallAt + (cheaperAt - fallAt) * .56, x: 12, y: -52, zoom: 1.018, rot: -.002, ease: 'inOut' },
+        { t: cheaperAt, x: 0, y: finalCameraY, zoom: finalZoom, rot: .002, ease: 'out' },
+        { t: dur, x: 0, y: finalCameraY, zoom: finalZoom, rot: 0, ease: 'inOut' },
+      ],
+      hits: [fallAt, cheaperAt], punch: 0.018, shake: 2.2,
+    });
+    const trace: Point[] = [
+      [884, 270], [826, 314], [750, 330], [730, 382], [718, 402], [700, 454],
+      [684, 490], [666, 542], [648, 582], [630, 634], [612, 678], [594, 730],
+      [576, 778], [540, 824],
+    ];
+    const flightStart = cheaperAt - Math.min(0.5, dur * 0.24);
     const flight = clamp((t - flightStart) / Math.max(0.12, cheaperAt - flightStart));
     const flightEase = 1 - (1 - flight) ** 3;
-    const landX = focusX + 40;
-    const landY = landing.y + 8;
-    const ghostX = lerp(834, landX, flightEase);
-    const ghostY = lerp(444, landY, flightEase) - Math.sin(Math.PI * flight) * 112;
+    const landX = focusX;
+    const landY = focusY;
+    const ghostX = lerp(824, landX, flightEase);
+    const ghostY = lerp(330, landY, flightEase) - Math.sin(Math.PI * flight) * 94;
+    const landingSkew = Math.max(8, Math.round(landing.d * 0.18));
+    const plateX = landing.x - 96;
+    const plateTargetY = landing.y + landing.d + landingSkew + landing.h * .52;
+    const plateProgress = clamp((t - (cheaperAt - .1)) / .1);
+    const plateY = lerp(plateTargetY + 92, plateTargetY, ease.outBack(plateProgress));
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     rig.apply(ctx, t);
     drawBackground(ctx, t);
+    // The shared ticket carries the lender perforation into the first falling mark.
+    ctx.save();
+    ctx.globalAlpha = 0.98;
+    const receiptBob = Math.round(Math.sin(t * 2.1) * 4);
+    const receiptRot = 0.055 + Math.sin(t * 1.15) * 0.012;
+    drawTicket2D(ctx, 824, 288 + receiptBob, 320, { rot: receiptRot });
+    ctx.save();
+    ctx.translate(824, 288 + receiptBob); ctx.rotate(receiptRot);
+    ctx.fillStyle = '#E4E7E9'; ctx.fillRect(-146, -8, 132, 42);
+    pixelText(ctx, 'SALE', -80, -3, 4, { color: '#15191C', align: 'center' });
+    ctx.restore();
+    ctx.restore();
     for (let i = 0; i < steps.length; i++) drawStep(ctx, steps[i]!, i, t);
-    drawStepPrices(ctx, steps);
 
-    // The final shelf edge is an inset steel ring, held on the same centre as shot 4's vault wheel.
+    // The lowest-step ring resolves to the exact vault-wheel centre at the next cut.
     drawPixelRing(ctx, focusX, focusY, 38, '#D2D9DD', 8);
     drawPixelRing(ctx, focusX, focusY, 26, '#59656C', 8);
     drawPixelRing(ctx, focusX, focusY, 8, '#E8ECEE', 8);
-    drawTrace(ctx, trace, clamp((t - fallAt + 0.028) / Math.min(0.42, dur * 0.2)));
+    drawTrace(ctx, trace, clamp((t - fallAt) / Math.min(0.58, dur * 0.24)));
 
     if (t >= flightStart) {
       ctx.save();
       ctx.globalAlpha = lerp(0.56, 0.94, flight);
       const settled = clamp((t - cheaperAt) / 0.22);
-      const bob = settled > 0 ? Math.sin(t * 8) * (1 - settled) * 4 : 0;
-      drawTicket2D(ctx, ghostX, ghostY - bob, lerp(146, 118, flightEase), { rot: lerp(-0.28, -0.035, flightEase), dark: true });
+      const bob = settled > 0 ? Math.sin(t * 8) * (1 - settled) * 3 : 0;
+      drawTicket2D(ctx, ghostX, ghostY - bob, lerp(152, 124, flightEase), { rot: lerp(-0.28, -0.035, flightEase), dark: true });
       ctx.restore();
     }
     if (t >= cheaperAt && t < cheaperAt + 0.72) {
       drawBurst(ctx, t, { center: { x: landX, y: landY + 14 }, seed: seed + 93, count: 12, kind: 'dust', start: cheaperAt, life: 0.62, speed: 72, gravity: 142, drag: 0.4, size: 2, color: '#CFD5D8' });
     }
 
-    drawPlate(ctx, 280, 850, clamp((t - cheaperAt + 0.18) / 0.18));
-    // Keep the original, higher sale receipt large and close to lens for the full shot.
     ctx.save();
-    ctx.globalAlpha = 0.98;
-    const receiptBob = Math.round(Math.sin(t * 2.1) * 4);
-    const receiptRot = 0.055 + Math.sin(t * 1.15) * 0.012;
-    drawTicket2D(ctx, 814, 330 + receiptBob, 340, { rot: receiptRot });
-    ctx.save();
-    ctx.translate(814, 330 + receiptBob); ctx.rotate(receiptRot);
-    ctx.fillStyle = '#E4E7E9'; ctx.fillRect(-146, -8, 132, 42);
-    pixelText(ctx, '$120', -80, -4, 4, { color: '#15191C', align: 'center' });
-    pixelText(ctx, 'SALE', -80, 23, 2, { color: '#343B40', align: 'center' });
-    ctx.restore();
+    ctx.globalAlpha *= plateProgress;
+    drawPlate(ctx, plateX, plateY, plateProgress);
     ctx.restore();
 
     // Hedgy changes from a calculating think to a clear point down the price path.
     const pointing = t >= fallAt;
     drawHedgy(ctx, {
-      x: 842, y: 1170, scale: 5.3,
+      x: 732, y: 1124, scale: 5.7,
       t: pointing ? Math.max(0, t - fallAt + 0.2) : t,
       pose: pointing ? 'point' : 'think', facing: -1,
-      look: pointing ? 'down' : 'down', expression: pointing ? 'determined' : 'worried',
+      look: 'down', expression: pointing ? 'determined' : 'worried',
     });
     ctx.restore();
   },
@@ -259,10 +260,10 @@ export const priceStairShot: ShotDef = {
     const fallAt = eventTime(props, 'fall', safeDur, 0.33);
     const cheaperAt = eventTime(props, 'cheaper', safeDur, 0.74);
     const cues: Cue[] = [
-      { t: fallAt, kind: 'thud', pan: -0.18, gain: 0.62 },
-      { t: clamp(fallAt + 0.2, 0, safeDur), kind: 'tick', pan: -0.05, gain: 0.3, step: 0.35 },
-      { t: clamp(fallAt + 0.39, 0, safeDur), kind: 'tick', pan: 0.12, gain: 0.34, step: 0.7 },
-      { t: cheaperAt, kind: 'click', pan: 0.04, gain: 0.66 },
+      { t: fallAt, kind: 'paper', pan: 0.32, gain: 1.2, len: 0.18 },
+      { t: clamp(fallAt + 0.19, 0, safeDur), kind: 'step', pan: 0.14, gain: 0.58, step: 0.35 },
+      { t: clamp(fallAt + 0.4, 0, safeDur), kind: 'step', pan: -0.06, gain: 0.62, step: 0.7 },
+      { t: cheaperAt, kind: 'land', pan: -0.04, gain: 1.45, len: 0.2 },
     ];
     return cues.filter(cue => cue.t <= safeDur).sort((a, b) => a.t - b.t);
   },

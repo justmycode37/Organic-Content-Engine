@@ -3,8 +3,8 @@ import { drawHedgy } from '../actor/hedgy.ts';
 import { drawBurst, drawImpactStar, drawShockwave, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { applyImpactFrame } from '../fx/post.ts';
-import { pixelText } from '../prim.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
+import { drawHeroTicketBackground, drawHeroTicketBody, drawHeroTicketFrame, drawHeroTicketStamp, HERO_TICKET_FRAME } from '../sets/heroticket.ts';
 import { box, merge, place, render3d } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
@@ -113,11 +113,11 @@ function drawLoop(ctx: Frame['ctx'], points: Point[], progress: number, front: b
   ctx.strokeStyle = '#F3AAA4'; ctx.lineWidth = 4; ctx.stroke();
 }
 
-function drawPress(ctx: Frame['ctx'], t: number, squeezeAt: number) {
-  const slam = ease.outCubic(clamp((t - (squeezeAt - 0.12)) / 0.14));
-  const release = ease.outCubic(clamp((t - (squeezeAt + 0.035)) / 0.48));
-  const close = slam * (1 - release * 0.83);
-  const topY = Math.round(204 + close * 300), bottomY = Math.round(1000 - close * 276);
+function drawPress(ctx: Frame['ctx'], t: number, impactAt: number) {
+  const slam = ease.outCubic(clamp((t - (impactAt - 0.15)) / 0.11));
+  const release = ease.outCubic(clamp((t - (impactAt + 0.13)) / 0.42));
+  const close = slam * (1 - release);
+  const topY = Math.round(204 + close * 308), bottomY = Math.round(1000 - close * 304);
   // Two independent hydraulic carriages and their piston rods make the cause of the crush clear.
   ctx.fillStyle = '#151A1E'; ctx.fillRect(94, 154, 92, 926); ctx.fillRect(894, 154, 92, 926);
   ctx.fillStyle = '#7A8389'; ctx.fillRect(94, 154, 10, 926); ctx.fillRect(976, 154, 10, 926);
@@ -149,23 +149,6 @@ function drawPressFront(ctx: Frame['ctx'], topY: number, bottomY: number) {
   ctx.fillStyle = '#929BA1'; ctx.fillRect(150, bottomY - 14, 780, 5);
 }
 
-function drawStampedTicket(ctx: Frame['ctx'], x: number, y: number, width: number, rotation: number, stamp: string, reveal: number) {
-  if (reveal <= 0 || width <= 0) return;
-  ctx.save(); ctx.globalAlpha *= clamp(reveal);
-  ctx.translate(x, y); ctx.rotate(rotation);
-  drawTicket2D(ctx, 0, 0, width);
-  const size = Math.max(3, Math.min(8, Math.round(width / 150)));
-  const stampX = -width * 0.16, stampY = width * 0.13 / 2.4;
-  const stampW = width * 0.64, stampH = Math.max(32, size * 12);
-  ctx.fillStyle = '#1A1D20'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY - stampH / 2), Math.round(stampW), stampH);
-  ctx.fillStyle = '#8E312E'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY - stampH / 2), Math.round(stampW), 5);
-  ctx.fillStyle = '#6F2927'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY + stampH / 2 - 5), Math.round(stampW), 5);
-  pixelText(ctx, stamp, stampX, stampY - size * 3.5, size, {
-    color: '#F1F2F3', align: 'center', reveal: 1, mode: 'type',
-  });
-  ctx.restore();
-}
-
 export const squeezeRocketShot: ShotDef = {
   name: 'squeezerocket',
   describe: 'A red ticket chain rises into a loop around the tower, gets crushed by a hydraulic press, then its stamped ticket rockets through the lens to match the opening.',
@@ -174,102 +157,113 @@ export const squeezeRocketShot: ShotDef = {
     const loopAt = eventAt(props, 'loop', dur * 0.22, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.43, dur);
     const turns = numParam(props, 'loopTurns', 1, 0.8, 2.2);
     const stamp = strParam(props, 'stampWord', strParam(props, 'terminalLabel', 'SHORT SQUEEZE')).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 18) || 'SHORT SQUEEZE';
-    const rushAt = Math.min(dur - 0.18, Math.max(2.2, squeezeAt + 0.88));
+    const terminalAt = Math.max(0, dur - 1 / 30);
+    if (t >= dur - 0.04) {
+      drawHeroTicketFrame(ctx);
+      return;
+    }
+    const rushAt = Math.max(squeezeAt + 0.6, dur - 0.5);
     const impactAt = Math.round(squeezeAt * 30) / 30;
+    const rushProgress = clamp((t - rushAt) / Math.max(0.08, terminalAt - rushAt));
+    const sceneAlpha = 1 - ease.inOutCubic(rushProgress);
     const beforeLoop = 0.04 + 0.96 * clamp(t / Math.max(0.1, loopAt));
     const progress = t < loopAt ? beforeLoop : 1;
     const rise = Math.max(0, t - loopAt) * 92;
-    const points = Array.from({ length: 181 }, (_, i) => helixPoint(i / 180, turns, t, rise));
+    const points = Array.from({ length: 129 }, (_, i) => helixPoint(i / 128, turns, t, rise));
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 901, handheld: 0, hits: [squeezeAt], punch: 0.028, shake: 27,
       keyframes: [
         { t: 0, x: -26, y: 24, zoom: 1.015, rot: -0.01 },
         { t: loopAt, x: 22, y: -16, zoom: 1.065, rot: 0.014 },
         { t: squeezeAt - 0.05, x: -14, y: 20, zoom: 1.11, rot: -0.016 },
-        { t: rushAt, x: -8, y: 12, zoom: 0.99, rot: 0.004 },
-        // Same camera transform as borrowedasset at t=0, for a true ticket match on the final frame.
-        { t: Math.max(rushAt + 0.05, dur - 1 / 30), x: 0, y: 8, zoom: 1.055, rot: -0.004 },
+        { t: rushAt, x: 0, y: 0, zoom: 1, rot: 0, ease: 'out' },
+        { t: terminalAt, x: 0, y: 0, zoom: 1, rot: 0 },
       ],
       whip: [{ at: squeezeAt + 0.08, direction: 'up', duration: 0.32, amount: 0.075 }],
     });
 
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.imageSmoothingEnabled = false;
-    drawVenue(ctx, t, seed + 19);
+    drawHeroTicketBackground(ctx);
     ctx.save(); rig.apply(ctx, t);
-    const lastFrame = Math.max(rushAt + 0.05, dur - 1 / 30);
-    const rushProgress = clamp((t - rushAt) / Math.max(0.1, lastFrame - rushAt));
-    const pressAlpha = 1 - ease.outCubic(clamp((t - rushAt + 0.1) / 0.28));
-    const rushFade = ease.outCubic(rushProgress);
-    drawSpeedLines(ctx, t, { center: { x: 540, y: 636 }, count: 40, reach: 730, start: loopAt, duration: Math.max(0.35, squeezeAt - loopAt + 0.5), color: '#9DA5AA', seed: seed + 65, strength: 0.32, cell: 6 });
-    if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 650 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
+    if (sceneAlpha > 0.015) {
+      ctx.save(); ctx.globalAlpha *= sceneAlpha;
+      drawVenue(ctx, t, seed + 19);
+      drawSpeedLines(ctx, t, { center: { x: 540, y: 636 }, count: 40, reach: 730, start: loopAt, duration: Math.max(0.35, squeezeAt - loopAt + 0.5), color: '#9DA5AA', seed: seed + 65, strength: 0.32, cell: 6 });
 
-    // A tall voxel tower anchors the rising loop; the far rail passes behind it.
-    drawLoop(ctx, points, progress, false, 20, '#C92F2B');
-    render3d(ctx, theme, {
-      x: 198, y: 22, w: 684, h: 1078, zoom: 126,
-      position: [Math.sin(t * 0.54) * 1.9, 4.2 + Math.sin(t * 0.43) * 0.28, -14],
-      target: [0, 4.7, 0], fov: 43, light: [-0.48, 0.78, -0.36], ambient: 0.5, rim: 0.44, cell: 5, outline: true,
-      fog: { near: 14, far: 27 },
-    }, [
-      { mesh: TOWER, materials: TOWER_MATERIALS, pos: [0, 0, 0], rot: [0, t * 0.018, 0] },
-      { mesh: BLOCK, materials: BLOCK_MATERIALS, instances: BLOCKS },
-    ]);
-    drawLoop(ctx, points, progress, true, 25, RED);
+      // The red helix carries individual tickets around the tower as it closes into a loop.
+      drawLoop(ctx, points, progress, false, 20, '#C92F2B');
+      render3d(ctx, theme, {
+        x: 198, y: 22, w: 684, h: 1078, zoom: 126,
+        position: [Math.sin(t * 0.54) * 1.9, 4.2 + Math.sin(t * 0.43) * 0.28, -14],
+        target: [0, 4.7, 0], fov: 43, light: [-0.48, 0.78, -0.36], ambient: 0.5, rim: 0.44, cell: 5, outline: true,
+        fog: { near: 14, far: 27 },
+      }, [
+        { mesh: TOWER, materials: TOWER_MATERIALS, pos: [0, 0, 0], rot: [0, t * 0.018, 0] },
+        { mesh: BLOCK, materials: BLOCK_MATERIALS, instances: BLOCKS },
+      ]);
+      drawLoop(ctx, points, progress, true, 25, RED);
 
-    // Tickets are perforated links in a single moving chain, not decorative confetti.
-    const chainAlpha = 1 - clamp((t - squeezeAt + 0.025) / 0.2);
-    if (chainAlpha > 0) {
-      ctx.save(); ctx.globalAlpha *= chainAlpha;
-      const chainCount = 10, offset = (t * 0.22) % 1;
-      for (let i = 0; i < chainCount; i++) {
-        const u = (i / chainCount + offset) % 1;
-        if (u > progress) continue;
-        const p = points[Math.min(points.length - 1, Math.floor(u * (points.length - 1)))]!;
-        const next = points[Math.min(points.length - 1, Math.floor(Math.min(1, u + 0.006) * (points.length - 1)))]!;
-        const front = p.z < 0, size = front ? 74 : 48;
-        drawTicket2D(ctx, p.x, p.y, size, { rot: Math.atan2(next.y - p.y, next.x - p.x) * 0.24 + (front ? 0 : 0.1) });
+      const chainAlpha = 1 - clamp((t - impactAt + 0.025) / 0.2);
+      if (chainAlpha > 0) {
+        ctx.save(); ctx.globalAlpha *= chainAlpha;
+        const chainCount = 10, offset = (t * 0.22) % 1;
+        for (let i = 0; i < chainCount; i++) {
+          const u = (i / chainCount + offset) % 1;
+          if (u > progress) continue;
+          const index = Math.min(points.length - 1, Math.floor(u * (points.length - 1)));
+          const p = points[index]!, next = points[Math.min(points.length - 1, index + 1)]!;
+          const front = p.z < 0, size = front ? 74 : 48;
+          drawTicket2D(ctx, p.x, p.y, size, { rot: Math.atan2(next.y - p.y, next.x - p.x) * 0.24 + (front ? 0 : 0.1) });
+        }
+        ctx.restore();
+      }
+
+      // Hydraulic jaws have a 150 ms anticipation, a held impact, and a clear release.
+      const press = drawPress(ctx, t, impactAt);
+      drawLoop(ctx, points, progress, true, 12, '#B92E2A');
+
+      // Ledge and Hedgy remain present through the hit, then recoil, land, curl and point.
+      ctx.fillStyle = '#0B0E10'; ctx.fillRect(286, 1118, 514, 172);
+      ctx.fillStyle = '#D0D4D7'; ctx.fillRect(286, 1118, 514, 12);
+      ctx.fillStyle = '#353D43'; ctx.fillRect(306, 1142, 474, 12); ctx.fillRect(326, 1200, 14, 90); ctx.fillRect(746, 1200, 14, 90);
+      for (let bolt = 0; bolt < 8; bolt++) { ctx.fillStyle = '#E7E9EA'; ctx.fillRect(306 + bolt * 68, 1122, 10, 8); }
+      const reaction = t - impactAt, hedgyX = 838 - 298 * ease.outCubic(clamp(t / 1.28));
+      const hedgyY = reaction >= 0 && reaction < 0.12 ? 1070 : 1118;
+      if (reaction < 0) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t, pose: 'run', facing: -1, look: 'up', expression: 'determined' });
+      else if (reaction < 0.12) drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6.15, t: reaction, pose: 'jump', facing: -1, look: 'up', expression: 'shocked' });
+      else if (reaction < 0.42) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.12, pose: 'fall', facing: -1, look: 'up', expression: 'shocked' });
+      else if (reaction < 0.76) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.42, pose: 'curl', facing: -1, look: 'up', expression: 'shocked' });
+      else drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.76, pose: 'point', facing: -1, look: 'up', expression: 'determined' });
+
+      const emerge = ease.outBack(clamp((t - impactAt + 0.02) / 0.25));
+      const ticketWidth = 280 + 210 * ease.outCubic(clamp((t - (impactAt + 0.12)) / Math.max(0.15, rushAt - impactAt - 0.12)));
+      const pressAlpha = 1 - ease.outCubic(clamp((t - (rushAt - 0.02)) / 0.16));
+      drawImpactStar(ctx, t, { x: 540, y: 646, size: 128, start: impactAt - 0.025, duration: 0.15, color: '#F2F3F4', seed: seed + 79, cell: 4 });
+      drawBurst(ctx, t, { x: 540, y: 648, seed: seed + 91, count: 38, kind: 'confetti', start: impactAt, life: 1.22, speed: 410, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
+      drawShockwave(ctx, t, { x: 540, y: 648, start: impactAt, duration: 0.48, radius: 16, maxRadius: 500, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
+      if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 650 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
+      if (rushProgress <= 0) {
+        drawHeroTicketBody(ctx, { x: 540, y: 648, width: ticketWidth, rotation: -0.1, opacity: emerge });
+        drawHeroTicketStamp(ctx, { x: 540, y: 648, width: ticketWidth, rotation: -0.1, stamp, opacity: emerge });
+        if (pressAlpha > 0.01) drawPressFront(ctx, press.topY, press.bottomY);
       }
       ctx.restore();
     }
+    ctx.restore();
 
-    // The press enters with the set, its jaws slam shut at “squeeze,” then lift away from the ticket.
-    let pressTop = 220, pressBottom = 980;
-    if (pressAlpha > 0.01) {
-      ctx.save(); ctx.globalAlpha *= pressAlpha;
-      const press = drawPress(ctx, t, squeezeAt);
-      drawLoop(ctx, points, progress, true, 12, '#B92E2A');
-      ctx.restore();
-      pressTop = press.topY; pressBottom = press.bottomY;
+    if (rushProgress > 0) {
+      const scaleP = ease.inOutCubic(rushProgress);
+      const x = HERO_TICKET_FRAME.x;
+      const y = 648 + (HERO_TICKET_FRAME.y - 648) * scaleP;
+      const width = 490 + (HERO_TICKET_FRAME.width - 490) * scaleP;
+      const rotation = -0.1 + (HERO_TICKET_FRAME.rotation + 0.1) * scaleP;
+      const revealBorrowed = ease.inOutCubic(clamp((rushProgress - 0.72) / 0.28));
+      drawHeroTicketBody(ctx, { x, y, width, rotation });
+      drawHeroTicketStamp(ctx, { x, y, width, rotation, stamp, opacity: 1 - revealBorrowed });
+      drawHeroTicketStamp(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp, opacity: revealBorrowed });
     }
 
-    // Compress the chain into one stamped ticket, hold it in motion, then accelerate it into the lens.
-    const emerge = ease.outBack(clamp((t - squeezeAt + 0.02) / 0.25));
-    const ticketStartW = 270 + 360 * ease.outCubic(clamp((t - (squeezeAt + 0.12)) / Math.max(0.15, rushAt - squeezeAt - 0.12)));
-    const rushW = 630 + (1317 - 630) * rushProgress * rushProgress;
-    const ticketW = t < rushAt ? ticketStartW : rushW;
-    const ticketY = t >= lastFrame ? 881 : 658 + 223 * rushFade;
-    const ticketRot = t >= lastFrame ? -0.0373 : -0.11 + 0.0727 * rushFade + Math.sin(t * 8) * (1 - rushFade) * 0.018;
-
-    // Near ledge and Hedgy stay behind the lens ticket as it sweeps forward.
-    ctx.fillStyle = '#0B0E10'; ctx.fillRect(286, 1118, 514, 172);
-    ctx.fillStyle = '#D0D4D7'; ctx.fillRect(286, 1118, 514, 12);
-    ctx.fillStyle = '#353D43'; ctx.fillRect(306, 1142, 474, 12); ctx.fillRect(326, 1200, 14, 90); ctx.fillRect(746, 1200, 14, 90);
-    for (let bolt = 0; bolt < 8; bolt++) { ctx.fillStyle = '#E7E9EA'; ctx.fillRect(306 + bolt * 68, 1122, 10, 8); }
-    const fallStart = squeezeAt - 0.34, landAt = squeezeAt + 0.23, elapsed = t - landAt;
-    const hedgyX = 838 - 258 * ease.outCubic(clamp(t / 1.52));
-    if (t < fallStart) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t, pose: 'run', facing: -1, look: 'up', expression: 'determined' });
-    else if (t < landAt) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: Math.max(0, (t - fallStart) * 1.35), pose: 'fall', facing: -1, look: 'up', expression: 'shocked' });
-    else if (elapsed < 0.28) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: Math.max(0, 0.72 - elapsed * 2.4), pose: 'curl', facing: -1, look: 'up', expression: 'shocked' });
-    else drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: elapsed - 0.28, pose: 'point', facing: -1, look: 'up', expression: 'determined' });
-
-    drawStampedTicket(ctx, 540, ticketY, ticketW, ticketRot, stamp, emerge);
-    if (t > squeezeAt && t < rushAt + 0.12) drawPressFront(ctx, pressTop, pressBottom);
-
-    drawImpactStar(ctx, t, { x: 540, y: 646, size: 128, start: squeezeAt - 0.025, duration: 0.15, color: '#F2F3F4', seed: seed + 79, cell: 4 });
-    drawBurst(ctx, t, { x: 540, y: 648, seed: seed + 91, count: 38, kind: 'shard', start: squeezeAt, life: 1.22, speed: 410, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
-    drawShockwave(ctx, t, { x: 540, y: 648, start: squeezeAt, duration: 0.48, radius: 16, maxRadius: 500, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
-
-    ctx.restore(); ctx.restore();
+    ctx.restore();
     // Quantize the post hit to an actual 30 fps frame so the impact treatment never misses the event.
     applyImpactFrame(ctx, { x: 0, y: 0, w: W, h: H, cell: 8, t, at: impactAt, fps: 30, seed: seed + 119, threshold: 126 });
     const flash = Math.max(0, 1 - Math.abs(t - impactAt) / 0.038) * 0.14;
@@ -279,12 +273,14 @@ export const squeezeRocketShot: ShotDef = {
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const loopAt = eventAt(props, 'loop', dur * 0.22, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.43, dur);
-    const rushAt = Math.min(dur - 0.18, Math.max(2.2, squeezeAt + 0.88));
+    const rushAt = Math.max(squeezeAt + 0.6, dur - 0.5);
+    const suctionAt = Math.max(0, squeezeAt - 0.35);
     const cues: Cue[] = [
       { t: 0, kind: 'whoosh', gain: 0.66, pan: -0.22 },
-      { t: loopAt, kind: 'build', len: Math.max(0.12, squeezeAt - loopAt), gain: 0.72, pan: 0 },
-      { t: Math.max(0, squeezeAt - 0.3), kind: 'bass', gain: 0.84, pan: 0 },
-      { t: squeezeAt, kind: 'impact', gain: 1, pan: 0 },
+      { t: loopAt, kind: 'build', len: 0.31, gain: 0.96, pan: 0 },
+      { t: suctionAt, kind: 'whoosh', len: 0.31, gain: 1.05, pan: 0 },
+      { t: squeezeAt - 0.21, kind: 'servo', len: 0.19, gain: 1.05, pan: 0 },
+      { t: squeezeAt, kind: 'impact', gain: 1.8, pan: 0 },
       { t: rushAt, kind: 'rise', len: Math.max(0.12, dur - rushAt), gain: 0.72, pan: 0.08 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t < dur);

@@ -79,37 +79,37 @@ function drawKioskWall(ctx: Frame['ctx'], t: number) {
   rect(ctx, '#858D92', 0, 808, W, 8);
 }
 
-function drawClerk(ctx: Frame['ctx'], t: number, slapAt: number) {
+function drawClerk(ctx: Frame['ctx'], t: number, moneyAt: number) {
   // A narrow clerk silhouette and a cuffed arm stay on the far side of the counter.
   polygon(ctx, '#151A1D', [[1012, 354], [1080, 372], [1080, 748], [1044, 764], [1008, 604]]);
   polygon(ctx, '#4A5257', [[1030, 374], [1072, 390], [1072, 560], [1032, 580]]);
   rect(ctx, '#AEB5B8', 1036, 386, 36, 8);
-  const reach = ease.outCubic(clamp((t - slapAt + 0.1) / 0.3));
+  const reach = ease.outCubic(clamp((t - moneyAt + 0.06) / 0.26));
   const handX = 790 + reach * 12;
-  stroke(ctx, [[1078, 486], [1026, 548], [956, 616], [handX + 30, 710]], '#171C1F', 58);
-  stroke(ctx, [[1076, 478], [1024, 540], [954, 608], [handX + 30, 702]], '#747D82', 40);
-  stroke(ctx, [[1072, 476], [1020, 538], [950, 606], [handX + 30, 700]], '#B5BBBD', 6);
-  rect(ctx, '#242A2E', handX + 2, 690, 22, 46);
+  stroke(ctx, [[1078, 486], [1026, 548], [956, 616], [handX + 30, 902]], '#171C1F', 58);
+  stroke(ctx, [[1076, 478], [1024, 540], [954, 608], [handX + 30, 894]], '#747D82', 40);
+  stroke(ctx, [[1072, 476], [1020, 538], [950, 606], [handX + 30, 894]], '#B5BBBD', 6);
+  rect(ctx, '#242A2E', handX + 2, 878, 22, 46);
   // One deliberate wrist movement follows the money, then holds as the ticket is pushed.
-  const settle = clamp((t - slapAt) / 0.2);
+  const settle = clamp((t - moneyAt) / 0.2);
   if (settle < 1) {
-    rect(ctx, '#DFE2E2', handX + 8, 722 + (1 - settle) * 12, 20, 8);
+    rect(ctx, '#DFE2E2', handX + 8, 908 + (1 - settle) * 12, 20, 8);
   }
 }
 
-function drawClerkPaw(ctx: Frame['ctx'], t: number, slapAt: number) {
-  const reach = ease.outCubic(clamp((t - slapAt + 0.1) / 0.3));
+function drawClerkPaw(ctx: Frame['ctx'], t: number, moneyAt: number) {
+  const reach = ease.outCubic(clamp((t - moneyAt + 0.06) / 0.26));
   const x = 780 + reach * 12;
-  // The paw sits clearly above the counter surface, with fingers reaching toward Hedgy's ticket.
-  rect(ctx, '#252B2F', x - 20, 684, 104, 52);
-  rect(ctx, '#D4D8D9', x - 12, 688, 88, 40);
-  rect(ctx, '#F1F2EF', x - 4, 684, 48, 10);
-  rect(ctx, '#929A9F', x + 62, 692, 16, 24);
-  rect(ctx, '#EFF1EF', x - 34, 694, 36, 12);
-  rect(ctx, '#D6DADB', x - 40, 708, 42, 12);
-  rect(ctx, '#EFF1EF', x - 30, 722, 34, 10);
-  rect(ctx, '#AAB2B5', x + 12, 716, 24, 14);
-  for (let i = 0; i < 3; i++) rect(ctx, '#8D969A', x + 2 + i * 18, 718, 8, 4);
+  // Palm and fingers land at the requested counter height beside the returning ticket.
+  rect(ctx, '#252B2F', x - 20, 868, 104, 52);
+  rect(ctx, '#D4D8D9', x - 12, 872, 88, 40);
+  rect(ctx, '#F1F2EF', x - 4, 868, 48, 10);
+  rect(ctx, '#929A9F', x + 62, 876, 16, 24);
+  rect(ctx, '#EFF1EF', x - 34, 878, 36, 12);
+  rect(ctx, '#D6DADB', x - 40, 892, 42, 12);
+  rect(ctx, '#EFF1EF', x - 30, 906, 34, 10);
+  rect(ctx, '#AAB2B5', x + 12, 900, 24, 14);
+  for (let i = 0; i < 3; i++) rect(ctx, '#8D969A', x + 2 + i * 18, 902, 8, 4);
 }
 
 function drawCounter(ctx: Frame['ctx']) {
@@ -127,11 +127,32 @@ function drawCounter(ctx: Frame['ctx']) {
   rect(ctx, '#9AA1A4', 0, 1252, W, 8);
 }
 
-function drawCash(ctx: Frame['ctx'], t: number, slapAt: number) {
-  const drop = ease.outCubic(clamp((t - (slapAt - 0.12)) / 0.12));
-  const impactAge = t - slapAt;
+function drawHandoffSlot(ctx: Frame['ctx'], t: number, slide: number) {
+  // This steel aperture inherits the kiosk slot's position through the zoomthrough cut.
+  const pulse = t < 0.18 ? 1 - t / 0.18 : 0;
+  const x = 560, y = 850;
+  rect(ctx, '#090B0D', x - 156, y - 70, 312, 140);
+  rect(ctx, '#7A8388', x - 148, y - 62, 296, 124);
+  rect(ctx, '#B7BEC1', x - 142, y - 56, 284, 12);
+  rect(ctx, '#252B2F', x - 132, y - 42, 264, 82);
+  rect(ctx, '#060809', x - 118, y - 30, 236, 60);
+  rect(ctx, '#DCE0E1', x - 102, y - 20, 204, 8);
+  rect(ctx, '#90999E', x - 88, y + 20, 176, 6);
+  if (pulse > 0 && slide < 0.08) {
+    ctx.save(); ctx.globalAlpha *= pulse;
+    rect(ctx, '#FFFFFF', x - 84, y - 8, 168, 8);
+    ctx.restore();
+  }
+  for (const [dx, dy] of [[-132, -46], [120, -46], [-132, 38], [120, 38]] as const) {
+    rect(ctx, '#D9DEDF', x + dx, y + dy, 12, 12);
+  }
+}
+
+function drawCash(ctx: Frame['ctx'], t: number, moneyAt: number) {
+  const drop = ease.outCubic(clamp((t - (moneyAt - 0.11)) / 0.11));
+  const impactAge = t - moneyAt;
   const bounce = impactAge < 0 ? 0 : Math.sin(Math.max(0, impactAge) * 30) * 12 * Math.exp(-Math.max(0, impactAge) * 14);
-  const y = 590 + drop * 179 - (impactAge < 0 ? 0 : 0) + bounce;
+  const y = 590 + drop * 179 + bounce;
   // A two-note bundle drops from the clerk's side and lands with a square, readable slap.
   rect(ctx, '#252A2E', 580, y + 17, 154, 18);
   rect(ctx, '#7C8489', 570, y + 4, 160, 18);
@@ -148,23 +169,55 @@ function drawCash(ctx: Frame['ctx'], t: number, slapAt: number) {
   }
 }
 
-function drawTether(ctx: Frame['ctx'], t: number, nowAt: number) {
-  const snapAge = t - nowAt;
-  const taut = ease.outCubic(clamp((snapAge + 0.03) / 0.12));
-  const slack = 54 * (1 - taut);
-  const wrist: [number, number] = [382, 808], rackClip: [number, number] = [912, 486];
-  const pts: [number, number][] = [wrist, [442, 680 + slack], [650, 582 + slack * 0.42], [822, 520], rackClip];
+function pointOnPath(points: readonly [number, number][], progress: number): [number, number] {
+  const lengths: number[] = [];
+  let total = 0;
+  for (let i = 1; i < points.length; i++) {
+    const a = points[i - 1]!, b = points[i]!;
+    const length = Math.hypot(b[0] - a[0], b[1] - a[1]);
+    lengths.push(length); total += length;
+  }
+  let remaining = total * clamp(progress);
+  for (let i = 0; i < lengths.length; i++) {
+    const length = lengths[i]!, a = points[i]!, b = points[i + 1]!;
+    if (remaining <= length || i === lengths.length - 1) {
+      const p = length > 0 ? clamp(remaining / length) : 0;
+      return [a[0] + (b[0] - a[0]) * p, a[1] + (b[1] - a[1]) * p];
+    }
+    remaining -= length;
+  }
+  const last = points.at(-1)!;
+  return [last[0], last[1]];
+}
+
+function drawTether(ctx: Frame['ctx'], t: number, clipAt: number, ticketX: number, ticketY: number, hedgyX: number, hedgyY: number, ticketW: number) {
+  const clipAge = t - clipAt;
+  const clipped = ease.outCubic(clamp((clipAge + 0.025) / 0.14));
+  const wrist: [number, number] = [hedgyX + 12 * 5.5, hedgyY - 24 * 5.5];
+  const rackClip: [number, number] = [912, 486];
+  const ticketEdge: [number, number] = [ticketX + ticketW * 0.18, ticketY];
+  // The cord bows beneath Hedgy's eyes, touches the ticket perforation, then reaches the rack.
+  const pts: [number, number][] = [
+    wrist,
+    [470, 964],
+    [ticketX - 38, 964],
+    ticketEdge,
+    [ticketX + ticketW * 0.78, ticketY + 84],
+    [770, 920],
+    [842, 700],
+    [rackClip[0] - 20 * (1 - clipped), rackClip[1] + 20 * (1 - clipped)],
+    rackClip,
+  ];
   stroke(ctx, pts, '#20262A', 12);
-  stroke(ctx, pts, snapAge >= -0.025 && snapAge < 0.12 ? '#F1F3F2' : '#9AA2A6', snapAge >= -0.025 && snapAge < 0.12 ? 8 : 4);
-  // The only white flare is attached to the moving tether and races toward its rack clip.
-  if (snapAge >= 0 && snapAge < 0.15) {
-    const p = ease.outCubic(clamp(snapAge / 0.15));
-    const x = wrist[0] + (rackClip[0] - wrist[0]) * p;
-    const y = wrist[1] + (rackClip[1] - wrist[1]) * p - Math.sin(Math.PI * p) * 106 * (1 - taut * 0.35);
+  stroke(ctx, pts, clipped > 0.55 ? '#AEB6BA' : '#963834', clipped > 0.55 ? 4 : 5);
+  // The white flare follows the routed tether as the lender clip snaps shut on “now”.
+  if (clipAge >= 0 && clipAge < 0.19) {
+    const p = ease.outCubic(clamp(clipAge / 0.19));
+    const [x, y] = pointOnPath(pts, p);
     rect(ctx, '#FFFFFF', x - 14, y - 6, 28, 12);
     rect(ctx, '#FFFFFF', x - 6, y - 14, 12, 28);
   }
-  if (snapAge > -0.03 && snapAge < 0.17) {
+  if (clipAge >= -0.025 && clipAge < 0.18) {
     rect(ctx, '#F4F5F3', 896, 470, 32, 28);
     rect(ctx, '#42494D', 906, 478, 12, 12);
     rect(ctx, '#FFFFFF', 902, 466, 20, 8);
@@ -181,18 +234,24 @@ export const buybackHandoffShot: ShotDef = {
     const { ctx, seed } = frame;
     const dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
     const backAt = eventTime(props, 'back', 0.335, dur), nowAt = eventTime(props, 'now', 0.495, dur);
-    const slapAt = clamp(backAt - Math.min(0.22, dur * 0.17), 0, dur);
-    const slide = ease.outCubic(clamp((t - backAt) / Math.max(0.12, Math.min(0.2, dur * 0.16))));
+    const moneyAt = Math.min(0.15, dur * 0.14);
+    const clipAt = clamp(nowAt + Math.min(0.206, dur * 0.158), 0, dur);
+    const slideEnd = Math.min(dur, Math.max(backAt + 0.09, 0.5));
+    const slide = ease.outCubic(clamp((t - backAt) / Math.max(0.06, slideEnd - backAt)));
+    const ticketX = 800 - 240 * slide;
+    const ticketY = 850 - 4 * slide + Math.sin(slide * Math.PI) * 3;
+    const ticketW = 120;
+    const hedgyX = 350, hedgyY = 1050;
     const pose = createCameraRig({
-      width: W, height: H, seed: seed + 117, handheld: 1.35,
+      width: W, height: H, seed: seed + 117, handheld: 0.9,
       keyframes: [
-        { t: 0, x: 0, y: 6, zoom: 1.015, rot: 0 },
-        { t: slapAt, x: -8, y: -4, zoom: 1.035, rot: -0.003 },
-        { t: backAt, x: 12, y: -14, zoom: 1.075, rot: 0.004 },
-        { t: nowAt, x: 22, y: -10, zoom: 1.085, rot: -0.004 },
-        { t: dur, x: 42, y: -24, zoom: 1.12, rot: 0.002 },
+        { t: 0, x: -8, y: 5, zoom: 1.015, rot: -0.014 },
+        { t: moneyAt, x: -2, y: -4, zoom: 1.03, rot: -0.024, ease: 'inOut' },
+        { t: backAt, x: 8, y: -10, zoom: 1.045, rot: 0.002, ease: 'inOut' },
+        { t: clipAt, x: 20, y: -8, zoom: 1.06, rot: 0.02, ease: 'inOut' },
+        { t: dur, x: 34, y: -18, zoom: 1.075, rot: 0.026, ease: 'inOut' },
       ],
-      hits: [slapAt, nowAt], punch: 0.012, shake: 5,
+      hits: [moneyAt, backAt, clipAt], punch: 0.01, shake: 3,
     }).poseAt(t);
 
     ctx.imageSmoothingEnabled = false;
@@ -208,31 +267,30 @@ export const buybackHandoffShot: ShotDef = {
     ctx.scale(pose.zoom, pose.zoom);
     ctx.translate(-W / 2, -H / 2);
     drawKioskWall(ctx, t);
-    drawTether(ctx, t, nowAt);
-    drawClerk(ctx, t, slapAt);
     drawCounter(ctx);
-    drawClerkPaw(ctx, t, slapAt);
+    drawHandoffSlot(ctx, t, slide);
+    drawClerk(ctx, t, moneyAt);
+    drawTether(ctx, t, clipAt, ticketX, ticketY, hedgyX, hedgyY, ticketW);
+    drawClerkPaw(ctx, t, moneyAt);
 
-    const hedgyPose = t < backAt - 0.02 ? 'push' : 'carry';
+    const hedgyPose = t < backAt - 0.02 ? 'push' : 'point';
     drawHedgy(ctx, {
-      x: 286, y: 1068, scale: 6.1, t: Math.max(0, t - backAt),
+      x: hedgyX, y: hedgyY, scale: 5.5, t: Math.max(0, t - backAt),
       pose: hedgyPose, facing: 1,
-      expression: t < backAt ? 'worried' : t < nowAt ? 'determined' : 'shocked',
-      look: t < backAt ? 'forward' : t < nowAt ? 'down' : 'up',
+      expression: t < backAt ? 'worried' : t < clipAt ? 'determined' : 'shocked',
+      look: t < backAt ? 'forward' : 'down',
     });
 
-    drawCash(ctx, t, slapAt);
-    // Ticket starts directly under the clerk's paw and slides over the counter into Hedgy's reach.
-    const ticketX = 798 - 368 * slide;
-    const ticketY = 795 - 20 * slide + Math.sin(slide * Math.PI) * 8;
-    const ticketRot = -0.02 - 0.03 * slide + Math.sin(t * 15) * 0.008 * (1 - slide);
-    drawTicket2D(ctx, ticketX, ticketY, 244, { rot: ticketRot });
+    drawCash(ctx, t, moneyAt);
+    // The shared ticket travels from the clerk's hand into the matching lender-slot aperture.
+    const ticketRot = -0.02 - 0.025 * slide + Math.sin(t * 15) * 0.008 * (1 - slide);
+    drawTicket2D(ctx, ticketX, ticketY, ticketW, { rot: ticketRot });
     if (slide > 0.85) {
       const grip = ease.outCubic(clamp((slide - 0.85) / 0.15));
-      const pawX = ticketX - 108 + grip * 8;
-      rect(ctx, '#3E281B', pawX, ticketY + 22, 44, 28);
-      rect(ctx, '#8A5E3D', pawX + 4, ticketY + 22, 36, 20);
-      rect(ctx, '#D4A66F', pawX + 14, ticketY + 22, 14, 8);
+      const pawX = ticketX - 55 + grip * 5;
+      rect(ctx, '#3E281B', pawX, ticketY + 10, 30, 17);
+      rect(ctx, '#8A5E3D', pawX + 4, ticketY + 10, 22, 12);
+      rect(ctx, '#D4A66F', pawX + 12, ticketY + 10, 10, 6);
     }
     // The camera keeps creeping into the counter's chrome on the final frames.
     const rail = (t * 32) % 192;
@@ -245,11 +303,12 @@ export const buybackHandoffShot: ShotDef = {
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const backAt = eventTime(props, 'back', 0.335, dur), nowAt = eventTime(props, 'now', 0.495, dur);
-    const slapAt = clamp(backAt - Math.min(0.22, dur * 0.17), 0, dur);
+    const moneyAt = Math.min(0.15, dur * 0.14);
+    const clipAt = clamp(nowAt + Math.min(0.206, dur * 0.158), 0, dur);
     const cues: Cue[] = [
-      { t: slapAt, kind: 'impact', gain: 0.9, pan: 0.22 },
-      { t: backAt, kind: 'paper', gain: 0.78, pan: -0.12, len: 0.28 },
-      { t: nowAt, kind: 'snap', gain: 0.72, pan: 0.48 },
+      { t: moneyAt, kind: 'cash', gain: 1.28, pan: 0.22 },
+      { t: backAt, kind: 'paper', gain: 1.24, pan: -0.12, len: 0.16 },
+      { t: clipAt, kind: 'snap', gain: 1.32, pan: 0.48 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t <= dur);
   },

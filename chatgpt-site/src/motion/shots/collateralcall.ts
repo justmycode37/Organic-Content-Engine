@@ -5,22 +5,19 @@ import { drawEnv } from '../env/index.ts';
 import { drawBurst } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
-import { drawTicket2D, TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
-import { box, cylinder, merge, place, render3d, sphere, type Mesh, type Object3D } from '../three.ts';
+import { drawTicket2D } from '../sets/ticket.ts';
+import { box, cylinder, place, render3d, sphere, type Object3D } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
-const SCALE = ASSETS['balance-scale']({ detail: 0.92 });
+const SCALE = ASSETS['balance-scale']({ detail: 0.48 });
 const CASH = ASSETS['banknote-bundle']({ count: 4 });
-const TICKET = ticketMesh();
-const TICKET_SCALE = 0.46;
-const PRICE_TRACE: Mesh = merge(
-  place(box(0.24, 0.07, 0.035, 0), { pos: [-0.55, -0.25, 0.1], rot: [0, 0, 0.03] }),
-  place(box(0.26, 0.07, 0.035, 0), { pos: [-0.32, -0.17, 0.1], rot: [0, 0, 0.22] }),
-  place(box(0.25, 0.07, 0.035, 0), { pos: [-0.09, -0.09, 0.1], rot: [0, 0, -0.14] }),
-  place(box(0.27, 0.07, 0.035, 0), { pos: [0.15, 0.01, 0.1], rot: [0, 0, 0.34] }),
-  place(box(0.27, 0.07, 0.035, 0), { pos: [0.39, 0.13, 0.1], rot: [0, 0, -0.08] }),
-);
-const RED_MATERIAL = [{ ramp: 'red' as const, tone: 1, emissive: 0.88, unlit: true }];
+const SCALE_PARTS = ['weighted-base', 'pedestal', 'central-pivot', 'top-finial']
+  .map(name => SCALE.parts.find(candidate => candidate.name === name)!);
+const SCALE_BEAM = box(2.45, 0.12, 0.18, 1);
+const SCALE_BALL = sphere(0.11, 14, 8, 2);
+const SCALE_CHAIN = cylinder(0.025, 0.62, 8, 2);
+const SCALE_PAN = cylinder(0.56, 0.1, 28, 1, 1, 0.38);
+const SCALE_TRAY = box(0.34, 0.19, 0.28, 0);
 const GRID = 4;
 
 const eventAt = (props: ShotProps, kind: string, fallback: number, dur: number) => {
@@ -36,13 +33,12 @@ function scaleObjects(sink: number): Object3D[] {
   const unit = 1.42, angle = -0.31 * sink, pivotY = 0.45, centerX = 0.48, depth = -1.15;
   const at = (x: number, y: number, z = depth): [number, number, number] => [centerX + x * unit, y * unit, z * unit];
   const objects: Object3D[] = [];
-  for (const name of ['weighted-base', 'pedestal', 'central-pivot', 'top-finial']) {
-    const part = SCALE.parts.find(candidate => candidate.name === name)!;
+  for (const part of SCALE_PARTS) {
     objects.push({ mesh: part.mesh, pos: at(part.pos?.[0] ?? 0, part.pos?.[1] ?? 0), rot: part.rot, scale: unit, materials: SCALE.materials });
   }
-  objects.push({ mesh: box(2.45, 0.12, 0.18, 1), pos: at(0, pivotY), rot: [0, 0, angle], scale: unit, materials: SCALE.materials });
-  objects.push({ mesh: sphere(0.11, 14, 8, 2), pos: at(-1.12 * Math.cos(angle), pivotY - 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
-  objects.push({ mesh: sphere(0.11, 14, 8, 2), pos: at(1.12 * Math.cos(angle), pivotY + 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
+  objects.push({ mesh: SCALE_BEAM, pos: at(0, pivotY), rot: [0, 0, angle], scale: unit, materials: SCALE.materials });
+  objects.push({ mesh: SCALE_BALL, pos: at(-1.12 * Math.cos(angle), pivotY - 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
+  objects.push({ mesh: SCALE_BALL, pos: at(1.12 * Math.cos(angle), pivotY + 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
   for (const side of [-1, 1] as const) {
     const endY = pivotY + side * 1.02 * Math.sin(angle);
     const sideSink = side > 0 ? sink * 0.73 : -sink * 0.16;
@@ -50,15 +46,12 @@ function scaleObjects(sink: number): Object3D[] {
     const chainY = endY - chainLength / 2;
     const panY = endY - chainLength - 0.06 + sideSink;
     const endX = side * 1.02 * Math.cos(angle);
-    for (const z of [-0.2, 0.2]) objects.push({ mesh: cylinder(0.025, 0.62, 8, 2), pos: at(endX, chainY, depth + z), scale: [unit, unit * chainLength / 0.62, unit], materials: SCALE.materials });
-    objects.push({ mesh: cylinder(0.56, 0.1, 28, 1, 1, 0.38), pos: at(endX, panY, depth), scale: unit, materials: SCALE.materials });
+    for (const z of [-0.2, 0.2]) objects.push({ mesh: SCALE_CHAIN, pos: at(endX, chainY, depth + z), scale: [unit, unit * chainLength / 0.62, unit], materials: SCALE.materials });
+    objects.push({ mesh: SCALE_PAN, pos: at(endX, panY, depth), scale: unit, materials: SCALE.materials });
     if (side < 0) {
       objects.push({ mesh: CASH.mesh, pos: at(endX, panY + 0.19, depth - 0.04), scale: 0.26 * unit, materials: CASH.materials });
     } else {
-      const ticketPos = at(endX, panY + 0.15, depth - 0.08);
-      objects.push({ mesh: TICKET, pos: ticketPos, scale: TICKET_SCALE, materials: TICKET_MATERIALS });
-      objects.push({ mesh: PRICE_TRACE, pos: ticketPos, scale: TICKET_SCALE, materials: RED_MATERIAL });
-      objects.push({ mesh: box(0.34, 0.19, 0.28, 0), pos: at(endX - 0.18, panY + 0.14, depth + 0.18), scale: unit, materials: [{ ramp: 'steel', tone: 0.84, spec: 0.65 }] });
+      objects.push({ mesh: SCALE_TRAY, pos: at(endX - 0.18, panY + 0.14, depth + 0.18), scale: unit, materials: [{ ramp: 'steel', tone: 0.84, spec: 0.65 }] });
     }
   }
   return objects;
@@ -112,9 +105,9 @@ function drawDrawer(ctx: Frame['ctx'], t: number, collateralAt: number) {
   const thrust = easeOut(progress(t, collateralAt - 0.04, collateralAt + 0.23));
   const recoil = Math.exp(-Math.max(0, t - collateralAt - 0.23) * 6);
   const kick = t < collateralAt + 0.24 ? Math.sin(progress(t, collateralAt, collateralAt + 0.24) * Math.PI) * 14 : 0;
-  const x = 516 - 330 * thrust - 24 * recoil + kick;
-  const y = 972 + 78 * thrust + kick * 0.35;
-  const w = 434 + 72 * thrust, h = 94 + 18 * thrust;
+  const x = 500 - 260 * thrust - 24 * recoil + kick;
+  const y = 914 + 92 * thrust + kick * 0.35;
+  const w = 434 + 168 * thrust, h = 104 + 42 * thrust;
   ctx.fillStyle = '#080A0B'; ctx.fillRect(snap(x - 18), snap(y + 8), snap(w + 22), snap(h + 10));
   ctx.fillStyle = '#6F787D'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), 10);
   ctx.fillStyle = '#4A5257'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), snap(h));
@@ -159,12 +152,15 @@ function drawClosingDrawer(ctx: Frame['ctx'], close: number) {
 }
 
 function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
-  const x = 790 + Math.round(Math.sin(t * 1.4) * 4), y = 690 + Math.round(sink * 105);
-  drawTicket2D(ctx, x, y, 136, { rot: -0.035 + sink * 0.012 });
-  // One continuous red obligation line is pinned to the ticket's perforated edge.
+  // The perforation sits over the right pan's center, so the incoming red pixel lands
+  // on the obligation and rides down with it when the broker demands more collateral.
+  const ticketX = 696 + Math.round(Math.sin(t * 1.4) * 2), y = 642 + Math.round(sink * 96);
+  drawTicket2D(ctx, ticketX, y, 128, { rot: -0.025 + sink * 0.01 });
+  const anchorX = ticketX + 22, anchorY = y;
   const points: Array<[number, number]> = [
-    [x + 44, y + 8], [x + 60, y + 8], [x + 72, y], [x + 84, y + 4],
-    [x + 96, y - 9], [x + 108, y - 5], [x + 126, y - 20], [x + 150, y - 20],
+    [anchorX, anchorY], [anchorX - 14, anchorY - 4], [anchorX - 28, anchorY - 14],
+    [anchorX - 46, anchorY - 10], [anchorX - 62, anchorY - 25],
+    [anchorX - 82, anchorY - 20], [anchorX - 104, anchorY - 38],
   ];
   ctx.fillStyle = '#B73532';
   for (let segment = 0; segment < points.length - 1; segment++) {
@@ -175,6 +171,32 @@ function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
       ctx.fillRect(snap(x0 + (x1 - x0) * u), snap(y0 + (y1 - y0) * u), GRID, GRID);
     }
   }
+  ctx.fillStyle = '#F34A40';
+  ctx.fillRect(snap(anchorX - 4), snap(anchorY - 4), GRID, GRID);
+}
+
+function drawEmptyPouch(ctx: Frame['ctx'], x: number, y: number, reveal: number) {
+  if (reveal <= 0.01) return;
+  const lift = Math.round((1 - easeOut(reveal)) * 34 / GRID) * GRID;
+  const tilt = (1 - easeOut(reveal)) * -0.16;
+  ctx.save();
+  ctx.translate(snap(x), snap(y - lift)); ctx.rotate(tilt);
+  ctx.globalAlpha *= Math.min(1, reveal * 2.4);
+  // Soft, tapered cloth body with the pale lining turned outward and an empty mouth.
+  ctx.fillStyle = '#111416';
+  ctx.beginPath(); ctx.moveTo(-32, -20); ctx.lineTo(-24, -28); ctx.lineTo(-12, -24); ctx.lineTo(16, -24);
+  ctx.lineTo(28, -28); ctx.lineTo(36, -20); ctx.lineTo(28, 20); ctx.lineTo(20, 32);
+  ctx.lineTo(-20, 32); ctx.lineTo(-28, 20); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#8D969A';
+  ctx.fillRect(-28, -16, 16, 40); ctx.fillRect(-12, -20, 28, 48); ctx.fillRect(16, -16, 12, 40);
+  ctx.fillStyle = '#D0D5D7'; ctx.fillRect(-24, -24, 40, 8); ctx.fillRect(-20, 24, 40, 8);
+  ctx.fillStyle = '#202427';
+  ctx.beginPath(); ctx.moveTo(-20, -12); ctx.lineTo(20, -12); ctx.lineTo(14, 0); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#B5BDC0'; ctx.fillRect(-24, 0, 8, 20); ctx.fillRect(16, 0, 8, 20);
+  ctx.strokeStyle = '#D0D5D7'; ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(-28, -20); ctx.lineTo(-40, -32); ctx.moveTo(28, -20); ctx.lineTo(40, -32); ctx.stroke();
+  ctx.fillStyle = '#E4E7E8'; ctx.fillRect(-8, 8, 16, 4);
+  ctx.restore();
 }
 
 function drawWarning(ctx: Frame['ctx'], t: number, collateralAt: number) {
@@ -197,7 +219,7 @@ export const collateralCallShot: ShotDef = {
     const { ctx, theme, seed } = frame, dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
     const demandsAt = eventAt(props, 'demands', dur * 0.31, dur);
     const collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
-    const sinkHit = easeOut(progress(t, demandsAt - 0.08, demandsAt + 0.28));
+    const sinkHit = easeOut(progress(t, demandsAt - 0.22, demandsAt + 0.04));
     const sinkSettle = t > demandsAt + 0.28 ? 0.1 * Math.sin((t - demandsAt - 0.28) * 18) * Math.exp(-(t - demandsAt - 0.28) * 4.5) : 0;
     const sink = clamp(sinkHit + sinkSettle, 0, 1.14);
     const unfold = progress(t, 0.015, Math.min(dur * 0.22, 0.36));
@@ -218,25 +240,27 @@ export const collateralCallShot: ShotDef = {
     ctx.save(); rig.apply(ctx, t);
     drawWall(ctx, theme, t, unfold);
     render3d(ctx, theme, {
-      x: -84, y: 178, w: 1032, h: 778, zoom: 112, yaw: camera.yaw + 0.12, pitch: 0.34 + camera.pitch * 0.24,
+      x: 7, y: 235, w: 850, h: 660, zoom: 112, yaw: camera.yaw + 0.12, pitch: 0.34 + camera.pitch * 0.24,
       distance: Math.max(4.5, camera.distance - 0.28), target: [camera.target[0], camera.target[1] + 0.17, camera.target[2]], cell: 4,
       outline: true, light: [-0.5, 0.78, -0.46], ambient: 0.44, rim: 0.54,
-      ground: { y: -2.2, shadow: 0.54, grid: false }, fog: { near: 7, far: 15, color: '#16191B' },
+      fog: { near: 7, far: 15, color: '#16191B' },
     }, scaleObjects(sink));
     drawTicketTrace(ctx, t, sink);
     drawCounterBase(ctx, t, pose.x);
     drawWarning(ctx, t, collateralAt);
+    drawDrawer(ctx, t, collateralAt);
     const recoil = easeOut(progress(t, collateralAt + 0.01, collateralAt + 0.22));
+    const pouchReveal = progress(t, collateralAt + 0.03, collateralAt + 0.22);
     drawHedgy(ctx, {
-      x: 240 - 32 * recoil, y: 1160, scale: 5.15, t: Math.max(0, t - demandsAt),
-      pose: t < demandsAt ? 'sweat' : t < collateralAt + 0.08 ? 'shock' : 'sweat', facing: 1,
-      look: 'up', expression: t < demandsAt ? 'worried' : 'shocked',
+      x: 300 - 20 * recoil, y: 1080, scale: 4.35, t: Math.max(0, t - demandsAt),
+      pose: t < demandsAt ? 'sweat' : t < collateralAt + 0.08 ? 'shock' : 'wave-off', facing: 1,
+      look: 'up', expression: t < demandsAt ? 'worried' : 'shocked', prop: 'none',
     });
+    drawEmptyPouch(ctx, 432 - 12 * recoil, 960 + 8 * recoil, pouchReveal);
     const alarmDustStart = collateralAt + 0.13;
     if (t >= demandsAt && t < demandsAt + 0.38) {
       drawBurst(ctx, t, { x: 950, y: 846 + sink * 55, seed: seed + 119, count: 8, kind: 'dust', start: demandsAt, life: 0.36, speed: 48, gravity: 24, drag: 1.3, size: 2, color: '#C7CDD0' });
     }
-    drawDrawer(ctx, t, collateralAt);
     drawClosingDrawer(ctx, endClose);
     if (t >= alarmDustStart && t < collateralAt + 0.56) {
       const p = pulsesAt(t, collateralAt);
@@ -251,9 +275,9 @@ export const collateralCallShot: ShotDef = {
   cues(props: ShotProps, dur: number): Cue[] {
     const demandsAt = eventAt(props, 'demands', dur * 0.31, dur), collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
     return ([
-      { t: demandsAt, kind: 'thud', pan: 0.56, gain: 0.58 },
-      { t: collateralAt, kind: 'clack', pan: -0.18, gain: 0.84 },
-      { t: collateralAt + 0.18, kind: 'alarm', pan: -0.12, gain: 0.34, len: 0.2 },
+      { t: demandsAt, kind: 'thud', pan: 0.32, gain: 1.28 },
+      { t: collateralAt, kind: 'clack', pan: -0.12, gain: 1.42 },
+      { t: collateralAt + 0.18, kind: 'alarm', pan: -0.12, gain: 0.62, len: 0.2 },
     ] satisfies Cue[]).filter(cue => cue.t >= 0 && cue.t <= dur);
   },
 };

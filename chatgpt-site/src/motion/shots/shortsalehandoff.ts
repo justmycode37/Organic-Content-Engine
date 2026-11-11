@@ -124,20 +124,20 @@ function drawCash(ctx: Frame['ctx'], x: number, y: number, p: number, t: number)
 
 function drawReturnStub(ctx: Frame['ctx'], x: number, y: number, width: number, t: number, progress: number, pinned: number) {
   if (progress <= 0) return;
-  const w = width, h = 104, rot = -.06 + Math.sin(t * 7) * .025 * (1 - pinned);
+  const w = width, h = 62, rot = -.06 + Math.sin(t * 7) * .025 * (1 - pinned);
   ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot);
   ctx.fillStyle = '#08090B'; ctx.fillRect(-w / 2 - 7, -h / 2 - 7, w + 14, h + 14);
   ctx.fillStyle = '#E7E8EA'; ctx.fillRect(-w / 2, -h / 2, w, h);
-  ctx.fillStyle = '#676A70'; ctx.fillRect(-w / 2 + 9, -h / 2 + 9, w - 18, 9);
-  ctx.fillStyle = '#1A1C20'; ctx.fillRect(-w / 2 + 12, -h / 2 + 25, w - 24, 62);
-  pixelText(ctx, 'RETURN 1', 0, -h / 2 + 42, 4, { color: '#FFFFFF', align: 'center' });
+  ctx.fillStyle = '#676A70'; ctx.fillRect(-w / 2 + 7, -h / 2 + 6, w - 14, 6);
+  ctx.fillStyle = '#1A1C20'; ctx.fillRect(-w / 2 + 7, -h / 2 + 16, w - 14, 38);
+  pixelText(ctx, 'RETURN 1', 0, -h / 2 + 27, 2, { color: '#FFFFFF', align: 'center' });
   ctx.fillStyle = '#C5C7CB';
-  for (let i = 0; i < 7; i++) ctx.fillRect(w / 2 - 39 + i * 5, -h * .33, 3, h * .66);
-  ctx.fillStyle = '#0C0D0F'; ctx.fillRect(w / 2 - 24, h / 2 - 16, 44, 30);
-  ctx.fillStyle = '#D3D5D8'; ctx.fillRect(w / 2 - 19, h / 2 - 10, 34, 19);
+  for (let i = 0; i < 6; i++) ctx.fillRect(w / 2 - 30 + i * 4, -h * .33, 2, h * .66);
+  ctx.fillStyle = '#0C0D0F'; ctx.fillRect(w / 2 - 22, h / 2 - 11, 34, 19);
+  ctx.fillStyle = '#D3D5D8'; ctx.fillRect(w / 2 - 18, h / 2 - 7, 26, 11);
   if (pinned > .05) {
-    ctx.fillStyle = '#27292D'; ctx.fillRect(w / 2 - 20, h / 2 - 7, 34, 8);
-    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(w / 2 - 8, h / 2 - 18, 8, 34);
+    ctx.fillStyle = '#27292D'; ctx.fillRect(w / 2 - 18, h / 2 - 5, 27, 6);
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(w / 2 - 7, h / 2 - 12, 6, 25);
   }
   ctx.restore();
 }
@@ -151,33 +151,40 @@ export const shortSaleHandoffShot: ShotDef = {
     const sells = eventAt(props, ['sells', 'sell', 'sale'], .46, dur);
     const owes = eventAt(props, ['owes', 'owe', 'return'], .61, dur);
     const portalT = ease.outCubic(clamp(activeT / .25));
-    const handoffStart = borrows - .18;
+    const handoffStart = Math.max(0, borrows - .38);
     const beforeLoan = activeT < handoffStart;
-    const handoff = ease.outCubic(clamp((activeT - handoffStart) / .36));
+    const handoff = ease.outCubic(clamp((activeT - handoffStart) / .44));
     const saleOpen = ease.outCubic(clamp((activeT - sells + .13) / .19));
-    const cashP = ease.outCubic(clamp((activeT - sells) / .36));
-    const stubP = ease.outCubic(clamp((activeT - (owes - .22)) / .22));
-    const pinned = ease.outBack(clamp((activeT - (owes - .11)) / .11));
+    const cashP = ease.outCubic(clamp((activeT - sells) / .42));
+    const stubP = ease.outCubic(clamp((activeT - (owes - .32)) / .32));
+    const pinned = ease.outBack(clamp((activeT - (owes - .035)) / .09));
     const tetherPulse = .68 + .32 * (0.5 + .5 * Math.sin((activeT - owes) * 15));
 
+    const borrowToSale = Math.max(.08, sells - borrows);
+    const saleToOwes = Math.max(.08, owes - sells);
+    const afterBorrow = borrows + Math.min(.1, borrowToSale * .22);
+    const beforeSale = sells - Math.min(.08, borrowToSale * .18);
+    const afterSale = sells + Math.min(.1, saleToOwes * .18);
+    const beforeOwes = Math.max(afterSale + .04, owes - Math.min(.12, saleToOwes * .25));
+
     const rig = createCameraRig({
-      width: W, height: H, seed: frame.seed + 203, handheld: 1.45, punch: .05, shake: 7,
+      width: W, height: H, seed: frame.seed + 203, handheld: 1.1, punch: .045, shake: 4,
       hits: [borrows, sells, owes],
       keyframes: [
-        { t: 0, x: 0, y: 18, zoom: .96, rot: -.002 },
-        { t: .26, x: 14, y: 8, zoom: 1.015, rot: .002, ease: 'out' },
-        { t: borrows - .12, x: 46, y: -22, zoom: 1.045, rot: 0, ease: 'inOut' },
-        { t: borrows + .12, x: 172, y: -48, zoom: 1.12, rot: -.004, ease: 'out' },
-        { t: sells - .12, x: -62, y: -16, zoom: 1.08, rot: .003, ease: 'inOut' },
-        { t: sells + .16, x: -130, y: -58, zoom: 1.14, rot: -.003, ease: 'out' },
-        { t: owes - .08, x: 74, y: -100, zoom: 1.15, rot: .002, ease: 'inOut' },
-        { t: owes + .24, x: 50, y: -146, zoom: 1.19, rot: -.003, ease: 'out' },
-        { t: dur - .28, x: 12, y: -88, zoom: 1.16, rot: .002, ease: 'inOut' },
-        { t: dur + .2, x: -12, y: -66, zoom: 1.15, rot: 0, ease: 'out' },
+        { t: 0, x: 22, y: 4, zoom: .99, rot: -.001 },
+        { t: Math.max(.02, borrows - .14), x: 42, y: -5, zoom: 1.01, rot: 0, ease: 'inOut' },
+        { t: afterBorrow, x: 112, y: -12, zoom: 1.035, rot: -.002, ease: 'out' },
+        { t: Math.max(afterBorrow + .035, beforeSale), x: -180, y: -16, zoom: 1.045, rot: .002, ease: 'inOut' },
+        { t: afterSale, x: -188, y: -18, zoom: 1.05, rot: -.002, ease: 'out' },
+        { t: beforeOwes, x: 14, y: -22, zoom: 1.05, rot: .002, ease: 'inOut' },
+        { t: owes + .14, x: 18, y: -18, zoom: 1.05, rot: -.001, ease: 'out' },
+        { t: Math.max(owes + .15, dur - .22), x: 8, y: -12, zoom: 1.045, rot: .001, ease: 'inOut' },
+        { t: dur + .2, x: 8, y: -12, zoom: 1.045, rot: 0, ease: 'out' },
       ],
       whip: [
-        { at: borrows, direction: 'left', duration: .18, amount: .06 },
-        { at: sells, direction: 'right', duration: .16, amount: .07 },
+        { at: borrows, direction: 'left', duration: .14, amount: .035 },
+        { at: sells, direction: 'left', duration: .16, amount: .055 },
+        { at: owes, direction: 'right', duration: .14, amount: .04 },
       ],
     });
     ctx.save(); ctx.imageSmoothingEnabled = false; ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); rig.apply(ctx, t);
@@ -205,20 +212,21 @@ export const shortSaleHandoffShot: ShotDef = {
       ctx.fillStyle = i % 2 ? '#4A4D52' : '#999CA2'; ctx.fillRect(saleX - 118 + i * 23, saleY + 129, 4, 32);
     }
 
-    const wristX = 656 + Math.sin(t * 2.2) * 4, wristY = 1025 + Math.sin(t * 5.2) * 3;
-    const stubX = mix(saleX + 68, 522, stubP), stubY = mix(saleY + 12, 970, stubP);
-    const loanTicketX = lenderX + 22 + handoff * 115;
-    const loanTicketY = lenderY - 8 + handoff * 236;
-    const saleT = clamp((activeT - handoffStart) / Math.max(.12, sells - handoffStart));
+    const wristX = 520 + Math.sin(t * 2.2) * 2, wristY = 1040 + Math.sin(t * 5.2) * 2;
+    const stubX = mix(saleX + 68, wristX, stubP), stubY = mix(saleY + 12, wristY, stubP);
+    const pawTicketX = 518, pawTicketY = 1110;
+    const loanTicketX = mix(lenderX + 22, pawTicketX, handoff);
+    const loanTicketY = mix(lenderY - 8, pawTicketY, handoff);
+    const saleTravel = ease.inOutCubic(clamp((activeT - afterBorrow) / Math.max(.1, beforeSale - afterBorrow)));
     let ticketX: number, ticketY: number, ticketRot: number, ticketSize: number;
     if (beforeLoan) {
       ticketX = lenderX + 4 + Math.sin(t * 6) * 2; ticketY = lenderY - 9; ticketRot = -.02; ticketSize = 252;
+    } else if (activeT < afterBorrow) {
+      ticketX = loanTicketX; ticketY = loanTicketY; ticketRot = mix(-.02, -.055, handoff); ticketSize = 252;
     } else if (activeT < sells) {
-      const q = ease.inOutCubic(saleT);
-      const first = clamp(q / .37), second = clamp((q - .37) / .63);
-      ticketX = q < .37 ? mix(lenderX + 8, 350, ease.outCubic(first)) : mix(350, saleX - 8, ease.inOutCubic(second));
-      ticketY = q < .37 ? mix(lenderY - 8, 920, ease.outCubic(first)) : mix(920, saleY - 6, ease.inOutCubic(second));
-      ticketRot = mix(-.025, -.11, q) + Math.sin(t * 13) * .018; ticketSize = mix(252, 286, q);
+      ticketX = mix(pawTicketX, saleX - 8, saleTravel);
+      ticketY = mix(pawTicketY, saleY - 6, saleTravel);
+      ticketRot = mix(-.055, -.11, saleTravel) + Math.sin(t * 13) * .012; ticketSize = mix(252, 280, saleTravel);
     } else {
       const feed = ease.inOutCubic(clamp((activeT - sells) / .16));
       ticketX = mix(saleX - 8, saleX + 20, feed); ticketY = mix(saleY - 6, saleY + 6, feed);
@@ -257,13 +265,13 @@ export const shortSaleHandoffShot: ShotDef = {
       ctx.restore();
     }
 
-    const hedgyX = 520 + Math.sin(t * 1.6) * 6, hedgyY = 1210 + Math.sin(t * 5.3) * 2;
+    const hedgyX = 690 + Math.sin(t * 1.6) * 3, hedgyY = 1175 + Math.sin(t * 5.3) * 2;
     const heroPose = activeT < handoffStart ? 'think' : activeT < handoffStart + .35 ? 'jump' : activeT < sells - .04 ? 'carry' : activeT < sells + .18 ? 'push' : activeT < owes - .05 ? 'carry' : 'shock';
     const facing: 1 | -1 = activeT < sells - .08 ? -1 : 1;
     const expression = activeT < borrows ? 'worried' : activeT < sells ? 'determined' : activeT < owes ? 'smug' : 'shocked';
     ctx.fillStyle = '#0B0C0E'; ctx.fillRect(hedgyX - 206, hedgyY + 6, 412, 18);
     ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 151, hedgyY + 10, 302, 7);
-    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: heroPose, facing,
+    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: heroPose, facing,
       look: activeT < borrows ? 'up' : activeT < owes ? 'forward' : 'down', expression });
 
     if (!beforeLoan && activeT < sells + .17) {
@@ -281,20 +289,20 @@ export const shortSaleHandoffShot: ShotDef = {
     }
     if (!beforeLoan && activeT < borrows + .12) {
       // The near paw crosses the tether clip, completing the lender-to-Hedgy handoff.
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: heroPose,
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: heroPose,
         facing, look: activeT < borrows ? 'up' : 'forward', expression });
     }
     // The payout exits its own drawer and reaches Hedgy's open paw on the sale beat.
     const cashX = mix(saleX + 22, 590, cashP), cashY = mix(saleY + 164, 917, cashP);
     drawCash(ctx, cashX, cashY, cashP, t);
     if (activeT >= sells + .18 && activeT < owes - .05) {
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: 'carry',
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: 'carry',
         facing: 1, look: 'forward', expression: 'smug' });
     }
 
     // The perforated RETURN 1 half travels back from the sale slot and pins to Hedgy's wrist on “owes”.
     if (activeT >= owes - .22) {
-      drawReturnStub(ctx, stubX, stubY, 270, t, stubP, pinned);
+      drawReturnStub(ctx, stubX, stubY, 162, t, stubP, pinned);
       if (pinned > .5) {
         ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wristX - 8, wristY - 12, 8, 30);
         ctx.fillStyle = '#4F5258'; ctx.fillRect(wristX, wristY - 12, 9, 30);
@@ -324,9 +332,9 @@ export const shortSaleHandoffShot: ShotDef = {
     const sells = eventAt(props, ['sells', 'sell', 'sale'], .46, dur);
     const owes = eventAt(props, ['owes', 'owe', 'return'], .61, dur);
     const cues: Cue[] = [
-      { t: borrows, kind: 'paper', gain: .72, pan: -.38, len: .11 },
-      { t: sells, kind: 'cash', gain: .78, pan: .38, len: .16 },
-      { t: owes, kind: 'snap', gain: .76, pan: .12 },
+      { t: borrows, kind: 'paper', gain: 1.2, pan: -.38, len: .12 },
+      { t: sells, kind: 'paper', gain: 1.5, pan: .4, len: .16 },
+      { t: owes, kind: 'clack', gain: 1.3, pan: -.12, len: .11 },
     ];
     return cues.filter(cue => Number.isFinite(cue.t) && cue.t <= dur);
   },

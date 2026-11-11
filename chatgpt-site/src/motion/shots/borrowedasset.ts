@@ -2,10 +2,9 @@ import { clamp, ease, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawEnv } from '../env/index.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { drawBurst, drawImpactStar, drawSpeedLines } from '../fx/particles.ts';
-import { pixelText } from '../prim.ts';
-import { drawTicket2D, TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
-import { box, cylinder, merge, place, render3d, type Material, type Mesh } from '../three.ts';
+import { drawBurst, drawImpactStar } from '../fx/particles.ts';
+import { drawHeroTicket, drawHeroTicketBackground, drawHeroTicketFrame, HERO_TICKET_FRAME } from '../sets/heroticket.ts';
+import { box, merge, place, render3d, type Material } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
 const W = 1080, H = 1290;
@@ -16,29 +15,12 @@ const MATERIALS: Material[] = [
   { ramp: 'ink', tone: .72 },
   { ramp: 'paper', tone: .96 },
 ];
-const SHARE_MESH = merge(
-  box(1.8, 1, .07, 3),
-  place(box(1.15, .18, .025, 2), { pos: [0, .22, -.05] }),
-);
-const COIN_MESH = cylinder(.73, .16, 12, 1, 1);
 const RAIL_MESH = merge(
   place(box(1.8, .24, .78, 0, [0, 0, 1, 0, 0, 0]), { pos: [0, .8, 0] }),
   place(box(1.55, 1.9, .65, 0, [0, 0, 1, 0, 0, 0]), { pos: [0, -.18, 0] }),
   place(box(1.22, .2, .06, 2), { pos: [0, -.52, -.36] }),
 );
 
-type AssetKind = 'ticket' | 'share' | 'coin' | 'banknote';
-function assetKind(value: unknown): AssetKind {
-  const name = String(value ?? 'ticket').toLowerCase();
-  if (['share', 'shares', 'stock', 'certificate'].includes(name)) return 'share';
-  if (['coin', 'token', 'deposit'].includes(name)) return 'coin';
-  if (['banknote', 'cash', 'bill'].includes(name)) return 'banknote';
-  return 'ticket';
-}
-function assetMesh(kind: AssetKind): Mesh {
-  return kind === 'ticket' ? ticketMesh() : kind === 'coin' ? COIN_MESH : kind === 'share' ? SHARE_MESH : box(1.8, .86, .06, 3);
-}
-function assetMaterials(kind: AssetKind): Material[] { return kind === 'ticket' ? TICKET_MATERIALS : MATERIALS; }
 function paramText(params: Record<string, unknown>, key: string, fallback: string): string {
   const value = params[key];
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -48,7 +30,6 @@ function eventAt(props: ShotProps, names: string[], fallback: number, dur: numbe
   const found = props.events?.find(event => key.includes(String(event.kind).toLowerCase()));
   return clamp(found?.at ?? fallback * dur, 0, dur);
 }
-function interpolate(a: number, b: number, p: number) { return a + (b - a) * ease.outCubic(clamp(p)); }
 function mix(a: number, b: number, p: number) { return a + (b - a) * clamp(p); }
 function polygon(ctx: Frame['ctx'], points: [number, number][], fill: string, stroke?: string, width = 4) {
   ctx.beginPath(); ctx.moveTo(points[0]![0], points[0]![1]);
@@ -183,40 +164,6 @@ function drawLenderDock(ctx: Frame['ctx'], x: number, y: number, t: number) {
   ctx.fillStyle = '#4B4E54'; ctx.fillRect(left + 46, top + 314, 126, 9);
 }
 
-function drawGenericAsset(ctx: Frame['ctx'], kind: AssetKind, x: number, y: number, w: number, rot: number, tear: number) {
-  if (kind === 'ticket') { drawTicket2D(ctx, x, y, w, { rot, tear }); return; }
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot);
-  const h = kind === 'coin' ? w * .39 : kind === 'share' ? w * .55 : w * .48;
-  if (kind === 'coin') {
-    ctx.fillStyle = ink;
-    ctx.beginPath(); ctx.moveTo(-w * .45, -h * .34); ctx.lineTo(-w * .22, -h * .5); ctx.lineTo(w * .26, -h * .48); ctx.lineTo(w * .46, -h * .23);
-    ctx.lineTo(w * .46, h * .26); ctx.lineTo(w * .2, h * .46); ctx.lineTo(-w * .28, h * .42); ctx.lineTo(-w * .45, h * .18); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#8E9196'; ctx.fillRect(-w * .42, -h * .3, w * .82, h * .63);
-    ctx.strokeStyle = '#D9DADD'; ctx.lineWidth = 5; ctx.strokeRect(-w * .34, -h * .24, w * .66, h * .48);
-    ctx.fillStyle = '#4A4D52'; ctx.fillRect(-w * .035, -h * .2, w * .07, h * .4);
-  } else {
-    ctx.fillStyle = ink; ctx.fillRect(-w * .5, -h * .5, w, h);
-    ctx.fillStyle = kind === 'share' ? paper : '#E0DBD2'; ctx.fillRect(-w * .47, -h * .46, w * .94, h * .9);
-    ctx.strokeStyle = '#70737A'; ctx.lineWidth = 4; ctx.strokeRect(-w * .43, -h * .4, w * .86, h * .78);
-    ctx.fillStyle = '#25272B'; ctx.fillRect(-w * .36, -h * .29, w * .72, h * .12);
-    ctx.fillStyle = '#6F7278'; ctx.fillRect(-w * .36, h * .02, w * .48, 6); ctx.fillRect(-w * .36, h * .15, w * .34, 5);
-    if (kind === 'share') {
-      ctx.strokeStyle = '#4A4D52'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(-w * .14, h * .18); ctx.lineTo(0, h * .02); ctx.lineTo(w * .1, h * .12); ctx.lineTo(w * .3, -h * .04); ctx.stroke();
-    }
-  }
-  ctx.restore();
-}
-
-function stampAsset(ctx: Frame['ctx'], kind: AssetKind, x: number, y: number, w: number, rot: number, progress: number) {
-  if (progress <= 0) return;
-  const scale = .86 + Math.min(1, progress * 9) * .14;
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot); ctx.scale(scale, scale);
-  const labelW = Math.min(204, w * (kind === 'ticket' ? .56 : .62)), labelH = 38, cx = kind === 'ticket' ? -w * .16 : 0, cy = 0;
-  ctx.fillStyle = '#17181B'; ctx.fillRect(Math.round((cx - labelW / 2) / 4) * 4, Math.round((cy - labelH / 2) / 4) * 4, Math.round(labelW / 4) * 4, labelH);
-  pixelText(ctx, 'BORROWED', cx, cy - 14, 2, { color: paper, align: 'center', mode: 'type', reveal: Math.min(1, progress * 7) });
-  ctx.restore();
-}
-
 function eventPosition(props: ShotProps, dur: number) {
   return {
     sells: eventAt(props, ['sells', 'sell', 'sale'], .16, dur),
@@ -224,50 +171,43 @@ function eventPosition(props: ShotProps, dur: number) {
   };
 }
 
-function drawStamp(ctx: Frame['ctx'], x: number, y: number, w: number, rot: number, progress: number) {
-  if (progress <= 0) return;
-  const reveal = clamp(progress);
-  const stampW = Math.min(222, w * .72), stampH = 52;
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot - .025);
-  ctx.fillStyle = '#111214'; ctx.fillRect(-stampW / 2, -stampH / 2, stampW, stampH);
-  ctx.strokeStyle = '#F4F4F4'; ctx.lineWidth = 3; ctx.strokeRect(-stampW / 2 + 4, -stampH / 2 + 4, stampW - 8, stampH - 8);
-  pixelText(ctx, 'BORROWED', 0, -17, 3, { color: '#FFFFFF', align: 'center', mode: 'type', reveal });
-  ctx.restore();
-}
-
 export const borrowedAssetShot: ShotDef = {
   name: 'borrowedasset',
-  describe: 'Hook: a giant asset rockets out of depth into a noir venue lobby; Hedgy snatches it from a chrome lender dock and sells it through a hatch with the tether intact. Params: asset (ticket default; share, coin, banknote), lenderDock, obligationTether, heroAction, cameraEntry, depthLayers.',
+  describe: 'Hook: the stamped ticket dives from the lens to Hedgy’s paw, then travels to the sale hatch on a taut lender tether. Params: lenderDock, obligationTether, depthLayers.',
   render(frame: Frame, props: ShotProps) {
-    const dur = Math.max(.1, frame.dur), t = Math.max(0, frame.t), activeT = clamp(t, 0, dur), p = props.params ?? {}, kind = assetKind(p.asset);
+    const dur = Math.max(.1, frame.dur), t = Math.max(0, frame.t), activeT = clamp(t, 0, dur), p = props.params ?? {};
     const { sells, his } = eventPosition(props, dur);
     const dock = paramText(p, 'lenderDock', 'chrome');
     const dockSide = dock.toLowerCase();
     const tether = paramText(p, 'obligationTether', 'fine steel wire');
-    const cameraEntry = paramText(p, 'cameraEntry', 'whip-dive');
     const depthLayers = Math.max(3, Math.min(7, Math.floor(Number(p.depthLayers ?? 6) || 6)));
     const ctx = frame.ctx;
+    if (activeT <= 1e-8) {
+      drawHeroTicketFrame(ctx);
+      return;
+    }
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip();
     const sellFlash = Math.max(0, 1 - Math.abs(activeT - sells) / .07);
     const borrowedHit = Math.max(0, 1 - Math.abs(activeT - his) / .07);
-    const rig = createCameraRig({ width: W, height: H, seed: frame.seed + 101, handheld: 1.25, punch: .045, shake: 7,
+    const intro = ease.outCubic(clamp(activeT / .18));
+    const rig = createCameraRig({ width: W, height: H, seed: frame.seed + 101, handheld: .55, punch: .04, shake: 5,
       hits: [sells, his],
       keyframes: [
-        { t: 0, x: 0, y: 8, zoom: 1.055, rot: -.004 },
-        { t: .15, x: 26, y: -8, zoom: 1.025, rot: .003, ease: 'out' },
-        { t: sells, x: -32, y: 4, zoom: 1.075, rot: -.004, ease: 'inOut' },
-        { t: his - .22, x: -12, y: -18, zoom: 1.08, rot: .003, ease: 'inOut' },
-        { t: dur - .28, x: 8, y: -12, zoom: 1.1, rot: -.002, ease: 'inOut' },
-        { t: dur + .2, x: 14, y: -6, zoom: 1.1, rot: 0, ease: 'out' },
+        { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
+        { t: .42, x: 10, y: -10, zoom: 1.035, rot: .004, ease: 'inOut' },
+        { t: .92, x: -18, y: 12, zoom: 1.065, rot: -.008, ease: 'inOut' },
+        { t: 1.56, x: 12, y: -8, zoom: 1.08, rot: .005, ease: 'inOut' },
+        { t: dur, x: -8, y: -4, zoom: 1.07, rot: 0, ease: 'inOut' },
       ],
-      whip: cameraEntry === 'whip-dive' ? [{ at: .12, direction: 'down', duration: .19, amount: .12 }] : [],
     });
+    drawHeroTicketBackground(ctx);
     rig.apply(ctx, t);
+    ctx.save(); ctx.globalAlpha *= intro;
     drawLobby(frame, t, depthLayers);
 
-    // The chrome lender dock sits in a recessed balcony bay. Mesh landmarks stay stable across variants.
+    // The lender dock and sale hatch frame a full-height ticket exchange.
     const dockAnchor = dockSide.includes('right') ? 324 : dockSide.includes('left') ? 188 : 252;
     const dockX = dockAnchor + Math.sin(t * .25) * 6, dockY = 730;
     render3d(ctx, frame.theme, {
@@ -276,9 +216,7 @@ export const borrowedAssetShot: ShotDef = {
       ambient: .42, rim: .5, light: [-.55, .78, -.35], fog: { near: 8, far: 18 },
     }, [{ mesh: RAIL_MESH, materials: MATERIALS, rot: [0, t * .04, 0] }]);
     drawLenderDock(ctx, dockX, dockY, t);
-    // A second small 3D pass makes the borrowed hero prop continuous with the shared ticket model.
 
-    // Sale hatch: a deep mouth in a heavy shutter. The hatch is open for the flip.
     const hatchY = 790, hatchX = 786, hatchW = 420, hatchH = 216;
     const open = ease.outCubic(clamp((activeT - sells + .11) / .18));
     ctx.fillStyle = '#191B1F'; ctx.fillRect(hatchX - hatchW / 2 - 28, hatchY - hatchH / 2 - 38, hatchW + 56, hatchH + 76);
@@ -292,67 +230,44 @@ export const borrowedAssetShot: ShotDef = {
     ctx.fillStyle = '#B9BBC0'; ctx.fillRect(hatchX - hatchW / 2 + 18, Math.round(shutterY / 4) * 4, hatchW - 36, 24);
     ctx.fillStyle = '#70737A'; for (let i = 0; i < 14; i++) ctx.fillRect(hatchX - hatchW / 2 + 32 + i * 25, Math.round(shutterY / 4) * 4 + 5, 4, 15);
 
-    // The lens ticket keeps growing, then clears to reveal the same ticket at the lender dock.
-    const passP = clamp(activeT / .17), passX = 540 + 1580 * passP, passY = 762 - 220 * passP;
-    const passW = 1340 + 560 * ease.outCubic(clamp(passP * 2.2));
-    const passRot = -.035 - passP * .075;
+    const pawX = 534, pawY = 695, pawWidth = 310, pawRotation = .025;
+    const intoPaw = ease.outCubic(clamp(activeT / .5));
+    const toHatch = ease.inOutCubic(clamp((activeT - .5) / 1.0));
+    const startX = mix(HERO_TICKET_FRAME.x, pawX, intoPaw), startY = mix(HERO_TICKET_FRAME.y, pawY, intoPaw);
+    const startWidth = mix(HERO_TICKET_FRAME.width, pawWidth, intoPaw), startRotation = mix(HERO_TICKET_FRAME.rotation, pawRotation, intoPaw);
+    const x = mix(startX, hatchX - 30, toHatch), y = mix(startY, hatchY, toHatch);
+    const width = mix(startWidth, 344, toHatch), rotation = mix(startRotation, -.11, toHatch) + Math.sin(activeT * 9) * .008;
 
-    // Ticket path: it breaks from the dock into Hedgy's paw, then snaps through the sale mouth.
-    const pickup = ease.outCubic(clamp((activeT - .12) / .12));
-    const handX = 474, handY = 824;
-    let x = mix(dockX + 28, handX, pickup), y = mix(dockY - 18, handY, pickup), w = mix(250, 304, pickup);
-    let rot = mix(-.02, .045, pickup);
-    const saleP = ease.inOutCubic(clamp((activeT - .24) / Math.max(.06, sells - .24)));
-    x = mix(x, hatchX - 10, saleP); y = mix(y, hatchY, saleP); w = mix(w, 344, saleP);
-    rot = mix(rot, -.12 + Math.sin(activeT * 11) * .025, saleP);
-    if (activeT >= sells) {
-      const settle = ease.outCubic(clamp((activeT - sells) / .2));
-      x = mix(hatchX - 10, hatchX - 18, settle);
-      y = mix(hatchY, hatchY + 5, settle);
-      w = mix(344, 326, settle);
-      rot = mix(rot, -.015, settle);
-    }
-    const portalP = ease.inOutCubic(clamp((activeT - (dur - .28)) / .28));
-    const heroW = mix(w, 1740, portalP), heroX = mix(x, 510, portalP), heroY = mix(y, 820, portalP);
-    const heroRot = mix(rot, -.01, portalP);
-
-    // Hedgy reaches from the lower lobby; the sale hatch stays clear of his face.
-    const hedgyX = 470 + Math.sin(t * 1.2) * 4, hedgyY = 1152 + Math.sin(t * 5.5) * 2;
-    const pose = activeT < .12 ? 'jump' : activeT < sells - .05 ? 'carry' : activeT < sells + .16 ? 'push' : activeT < his ? 'carry' : 'shock';
+    // Hedgy reaches at the left rail, then leans into the one-way sale hatch.
+    const hedgyX = 470 + Math.sin(t * 1.2) * 3, hedgyY = 1030 + Math.sin(t * 4.2) * 1.5, hedgyScale = 6.4;
+    const pose = activeT < .5 ? 'carry' : activeT < 1.5 ? 'push' : activeT < his ? 'carry' : 'shock';
     const expression = activeT < sells ? 'determined' : activeT < his ? 'smug' : 'shocked';
-    ctx.fillStyle = '#0C0D0F'; ctx.fillRect(hedgyX - 194, hedgyY + 7, 388, 16);
-    ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 142, hedgyY + 10, 284, 7);
-    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.3, t: Math.max(0, activeT - .12), pose, facing: 1,
-      look: activeT < his ? 'forward' : 'down', expression });
+    ctx.fillStyle = '#0C0D0F'; ctx.fillRect(hedgyX - 174, hedgyY + 7, 348, 14);
+    ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 130, hedgyY + 10, 260, 6);
+    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose, facing: 1, look: activeT < his ? 'forward' : 'down', expression });
 
-    // Silver tether stays fixed to the lender dock as the ticket crosses the hatch.
+    // A straight silver line stays under tension from the lender slot to the ticket stub.
     const tetherColor = tether.toLowerCase().includes('paper') ? '#D0D1D3' : '#E4E6E8';
-    const attachX = heroX - heroW * .47, attachY = heroY + Math.sin(t * 7) * 4;
-    const glow = .22 + .15 * (0.5 + 0.5 * Math.sin((activeT - his) * 13));
-    ctx.save(); ctx.globalAlpha *= glow; ctx.strokeStyle = '#F2F3F4'; ctx.lineWidth = 14; ctx.beginPath();
-    ctx.moveTo(dockX + 34, dockY - 25); ctx.bezierCurveTo(dockX + 140, dockY + 68, attachX - 110, attachY - 104, attachX, attachY); ctx.stroke(); ctx.restore();
+    const attachX = x - width * .47, attachY = y + Math.sin(t * 7) * 2;
+    const lineStartX = dockX + 34, lineStartY = dockY - 25;
+    ctx.save(); ctx.globalAlpha *= .22; ctx.strokeStyle = '#F2F3F4'; ctx.lineWidth = 14; ctx.beginPath();
+    ctx.moveTo(lineStartX, lineStartY); ctx.lineTo(attachX, attachY); ctx.stroke(); ctx.restore();
     ctx.strokeStyle = tetherColor; ctx.lineWidth = 4; ctx.beginPath();
-    ctx.moveTo(dockX + 34, dockY - 25); ctx.bezierCurveTo(dockX + 140, dockY + 68, attachX - 110, attachY - 104, attachX, attachY); ctx.stroke();
+    ctx.moveTo(lineStartX, lineStartY); ctx.lineTo(attachX, attachY); ctx.stroke();
     ctx.fillStyle = '#F2F3F4'; ctx.fillRect(dockX + 28, dockY - 31, 12, 12);
-    drawGenericAsset(ctx, kind, heroX, heroY, heroW, heroRot, activeT > sells ? clamp((activeT - sells) / .1) : 0);
-    const stampStart = Math.max(sells + .72, his - .42);
-    drawStamp(ctx, heroX - heroW * .15, heroY - 4, heroW, heroRot, clamp((activeT - stampStart) / .34));
-    if (activeT >= .12 && activeT < sells + .01) {
-      // Put the reaching paw in front of the paper for one readable grab moment.
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.3, t: Math.max(0, activeT - .12), pose, facing: 1,
-        look: activeT < his ? 'forward' : 'down', expression });
-    }
+    ctx.restore();
 
-    // The opening ticket crosses the lens on entry; its matching perforation grows into the exit portal.
-    if (activeT < .17) {
-      drawGenericAsset(ctx, kind, passX, passY, passW, passRot, 0);
-      drawSpeedLines(ctx, activeT, { center: { x: 540, y: 668 }, count: 25, reach: 620, start: 0, duration: .17,
-        color: '#D1D3D6', seed: frame.seed + 14, strength: .65 });
+    drawHeroTicket(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp });
+    if (activeT >= .12 && activeT < .58) {
+      // Re-drawing the actor on top puts his paw over the ticket edge during the catch.
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose: 'carry', facing: 1, look: 'forward', expression: 'determined' });
     }
+    const hitX = mix(HERO_TICKET_FRAME.x, pawX, ease.outCubic(clamp(sells / .5)));
+    const hitY = mix(HERO_TICKET_FRAME.y, pawY, ease.outCubic(clamp(sells / .5)));
     drawBurst(ctx, activeT, { center: { x: hatchX, y: hatchY }, seed: frame.seed + 42, count: 14, kind: 'shard',
-      start: sells, life: .45, speed: 174, gravity: 470, drag: .48, floor: 1190, bounce: .08, spin: 3.4, size: 2, color: '#D8D9DB' });
-    drawImpactStar(ctx, activeT, { x: hatchX, y: hatchY, size: 66, start: sells, duration: .1, color: '#F4F4F5', seed: frame.seed + 12 });
-    if (sellFlash > 0) { ctx.fillStyle = '#F1F1F2'; ctx.globalAlpha = sellFlash * .09; ctx.fillRect(0, 0, W, H); ctx.globalAlpha = 1; }
+      start: Math.max(sells, 1.42), life: .45, speed: 174, gravity: 470, drag: .48, floor: 1190, bounce: .08, spin: 3.4, size: 2, color: '#D8D9DB' });
+    drawImpactStar(ctx, activeT, { x: hitX, y: hitY, size: 66, start: sells, duration: .1, color: '#F4F4F5', seed: frame.seed + 12 });
+    if (sellFlash > 0) { ctx.save(); ctx.fillStyle = '#F1F1F2'; ctx.globalAlpha *= sellFlash * .09; ctx.fillRect(0, 0, W, H); ctx.restore(); }
     if (borrowedHit > 0) {
       ctx.strokeStyle = '#F2F3F5'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(dockX + 30, dockY - 25); ctx.lineTo(dockX + 64, dockY - 61); ctx.lineTo(dockX + 99, dockY - 22); ctx.stroke();
     }
@@ -361,9 +276,12 @@ export const borrowedAssetShot: ShotDef = {
   cues(props: ShotProps, dur: number): Cue[] {
     const { sells, his } = eventPosition(props, dur);
     const cues: Cue[] = [
-      { t: 0, kind: 'whip', gain: .7, pan: 0, len: .16 },
-      { t: sells, kind: 'impact', gain: 1, pan: .48 },
-      { t: his, kind: 'snap', gain: .78, pan: -.15 },
+      { t: 0, kind: 'bass', gain: .78, pan: 0, len: .18 },
+      { t: .15, kind: 'paper', gain: .72, pan: -.12, len: .16 },
+      { t: sells, kind: 'paper', gain: 1.5, pan: .48 },
+      { t: sells + .035, kind: 'coin', gain: .66, pan: .5 },
+      { t: Math.max(0, his - .035), kind: 'clack', gain: .68, pan: -.15 },
+      { t: his, kind: 'snap', gain: 1.5, pan: -.15 },
     ];
     return cues.filter(cue => cue.t <= dur && Number.isFinite(cue.t));
   },

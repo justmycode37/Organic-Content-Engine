@@ -47,8 +47,18 @@ function drawTransformed(ctx: Ctx, image: ImageLayer, focus: [number, number], s
 }
 
 function drawMotionLayer(ctx: Ctx, image: ImageLayer, x: number, y: number, height: number, scale: number, alpha = 1) {
-  if (scale === 1) { drawLayer(ctx, image, x, y, alpha); return; }
-  drawTransformed(ctx, image, [W / 2, height / 2], scale, scale, x, y, alpha);
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.imageSmoothingEnabled = false;
+  if (scale === 1) {
+    ctx.drawImage(image, 0, 0, W, height, stepped(x), stepped(y), W, height);
+  } else {
+    ctx.translate(stepped(W / 2 + x), stepped(height / 2 + y));
+    ctx.scale(scale, scale);
+    ctx.translate(-W / 2, -height / 2);
+    ctx.drawImage(image, 0, 0, W, height, 0, 0, W, height);
+  }
+  ctx.restore();
 }
 
 /** A small scale pulse lets the moving planes pass their landing point, then settle. */
@@ -112,11 +122,14 @@ function drawPush(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress
   const parallax = stepped(20 * Math.sin(Math.PI * p), 4);
   const echoStrength = 0.14 * Math.sin(Math.PI * p);
   const punch = landingPunch(progress);
+  // The incoming scene is a safety fill beneath the two moving planes. Their
+  // capped travel meets edge-to-edge, so this only appears at a raster seam.
+  drawLayer(ctx, incoming);
   if (echoes) {
     for (let i = echoes; i >= 1; i--) {
-      const trail = i * 0.055;
-      drawMotionLayer(ctx, outgoing, -dx * (p + trail), -dy * (p + trail) - parallax * 0.45, height, punch, echoStrength / i);
-      drawMotionLayer(ctx, incoming, dx * (1 - p + trail), dy * (1 - p + trail) + parallax * 0.45, height, punch, echoStrength / i);
+      const trail = clamp(p - i * 0.045);
+      drawMotionLayer(ctx, outgoing, -dx * trail, -dy * trail - parallax * 0.45, height, punch, echoStrength / i);
+      drawMotionLayer(ctx, incoming, dx * (1 - trail), dy * (1 - trail) + parallax * 0.45, height, punch, echoStrength / i);
     }
   }
   // Offset near and far scene planes by a few pixel cells to hold depth as the cut moves.
@@ -134,12 +147,14 @@ function drawPush(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress
 
 function drawWhip(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, direction: TransitionDirection, height: number) {
   const [vx, vy] = entryVector(direction), p = easeInOut(progress);
-  const distanceX = W * 1.12, distanceY = height * 1.12;
+  const distanceX = W, distanceY = height;
   const echoStrength = 0.14 * Math.sin(Math.PI * p);
   const punch = landingPunch(progress);
+  // Keep the whole aperture opaque if a stepped edge ever rounds unevenly.
+  drawLayer(ctx, incoming);
   // Two stepped echoes turn the fast pan into a crisp, directional smear.
   for (let i = 2; i >= 1; i--) {
-    const lag = i * 0.07;
+    const lag = i * 0.045;
     const trailP = clamp(p - lag);
     drawMotionLayer(ctx, outgoing, -vx * distanceX * trailP, -vy * distanceY * trailP, height, punch, echoStrength / i);
     drawMotionLayer(ctx, incoming, vx * distanceX * (1 - trailP), vy * distanceY * (1 - trailP), height, punch, echoStrength / i);

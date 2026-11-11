@@ -4,6 +4,7 @@ import { drawEnv } from '../env/index.ts';
 import { drawBurst, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
+import { drawTicket2D } from '../sets/ticket.ts';
 import type { ShotDef } from './index.ts';
 
 const GRID = 4;
@@ -143,10 +144,15 @@ function drawKiosk(ctx: Frame['ctx'], theme: Frame['theme'], t: number, centerX:
   ctx.restore();
 }
 
-function drawPouch(ctx: Frame['ctx'], x: number, y: number, t: number, payAt: number) {
-  const flip = easeOut(progress(t, payAt, payAt + 0.23));
-  const snapShut = t >= payAt && t < payAt + 0.18 ? Math.sin(progress(t, payAt, payAt + 0.18) * Math.PI) * 0.12 : 0;
-  ctx.save(); ctx.translate(snap(x), snap(y)); ctx.rotate(-0.32 + flip * 0.86 + snapShut);
+function drawPouch(ctx: Frame['ctx'], x: number, y: number, t: number, recoilAt: number, payAt: number) {
+  const flip = easeOut(progress(t, recoilAt, recoilAt + 0.23));
+  const recoilAge = t - recoilAt;
+  const recoil = recoilAge < 0 ? 0 : Math.sin(Math.min(recoilAge, 0.2) / 0.2 * Math.PI) * Math.exp(-recoilAge * 2.6);
+  const paySnap = t >= payAt && t < payAt + 0.14 ? Math.sin(progress(t, payAt, payAt + 0.14) * Math.PI) * 0.14 : 0;
+  ctx.save();
+  ctx.translate(snap(x - recoil * 14), snap(y + recoil * 18));
+  ctx.rotate(-0.32 + flip * 0.86 + recoil * 0.2 + paySnap);
+  ctx.scale(1 + recoil * 0.06, 1 - recoil * 0.08);
   // Slumped fabric body, a gathered rim and one hollow mouth make it read as a pouch in silhouette.
   const cloth = flip < 0.48 ? '#626B70' : '#D3D8DA';
   const seam = flip < 0.48 ? '#A9B1B5' : '#6E777C';
@@ -210,21 +216,40 @@ function drawPayPuff(ctx: Frame['ctx'], x: number, y: number, t: number, payAt: 
 }
 
 function drawDrawerPass(ctx: Frame['ctx'], rawT: number) {
-  // The incoming shutter is the back of shot 9's drawer, sliding past the lens into shot 10.
-  if (rawT >= 0) return;
-  const retract = easeOut(progress(rawT, -0.185, -0.012));
+  // The content side owns the lens at the cut, then rides left as shot 10's kiosk is revealed.
+  if (rawT > 0.21) return;
+  const p = progress(rawT, 0, 0.21);
+  const retract = p < 0.5 ? 2 * p * p : 1 - ((-2 * p + 2) ** 2) / 2;
   ctx.save(); ctx.translate(-Math.round(retract * 1180 / GRID) * GRID, 0);
   ctx.fillStyle = '#090B0D'; ctx.fillRect(0, 0, 1080, 1290);
-  ctx.fillStyle = '#363D42'; ctx.fillRect(0, 0, 1080, 1280);
-  ctx.fillStyle = '#60696E'; ctx.fillRect(0, 0, 1080, 22);
-  ctx.fillStyle = '#15191B'; ctx.fillRect(20, 34, 1040, 1220);
-  for (let i = 0; i < 18; i++) {
-    const y = 54 + i * 68;
-    ctx.fillStyle = i % 2 ? '#252A2E' : '#2E3438'; ctx.fillRect(38, y, 1004, 8);
-    ctx.fillStyle = '#737C81'; ctx.fillRect(38, y + 8, 1004, 4);
+  ctx.fillStyle = '#202529'; ctx.fillRect(0, 0, 1080, 1280);
+  ctx.fillStyle = '#B9C0C3'; ctx.fillRect(0, 0, 1080, 18);
+  ctx.fillStyle = '#535C61'; ctx.fillRect(0, 18, 1080, 20);
+  ctx.fillStyle = '#090B0D'; ctx.fillRect(20, 42, 1040, 1200);
+  ctx.fillStyle = '#717A7F'; ctx.fillRect(36, 58, 1008, 8);
+  ctx.fillStyle = '#343B3F'; ctx.fillRect(48, 74, 984, 1132);
+  ctx.fillStyle = '#171B1E'; ctx.fillRect(68, 94, 944, 1088);
+  // Bright inner rails and a recessed tray make the drawer's carrying side unmistakable.
+  ctx.fillStyle = '#AEB6BA'; ctx.fillRect(68, 94, 944, 12); ctx.fillRect(68, 1170, 944, 12);
+  ctx.fillStyle = '#424A4F'; ctx.fillRect(104, 148, 872, 18); ctx.fillRect(104, 1100, 872, 18);
+  ctx.fillStyle = '#0A0C0E'; ctx.fillRect(146, 204, 788, 778);
+  ctx.fillStyle = '#515A5F'; ctx.fillRect(166, 224, 748, 738);
+  ctx.fillStyle = '#202529'; ctx.fillRect(184, 242, 712, 702);
+  // The pouch lies inside-out in the tray: the empty lining is visible as the lens clears.
+  ctx.fillStyle = '#08090A'; ctx.fillRect(386, 554, 308, 288);
+  ctx.fillStyle = '#C9CFD2'; ctx.fillRect(410, 572, 260, 242);
+  ctx.fillStyle = '#727B80'; ctx.fillRect(430, 592, 220, 14);
+  ctx.fillStyle = '#08090A'; ctx.fillRect(438, 614, 204, 116);
+  ctx.fillStyle = '#D5DADD'; ctx.fillRect(454, 744, 172, 10);
+  ctx.fillStyle = '#535C61'; ctx.fillRect(472, 770, 136, 8);
+  // Recessed side channels echo the drawer rails from the outgoing collateral shot.
+  for (let i = 0; i < 8; i++) {
+    const y = 198 + i * 116;
+    ctx.fillStyle = i % 2 ? '#2A3034' : '#32393D'; ctx.fillRect(88, y, 52, 12); ctx.fillRect(940, y, 52, 12);
+    ctx.fillStyle = '#858E93'; ctx.fillRect(88, y + 12, 52, 4); ctx.fillRect(940, y + 12, 52, 4);
   }
-  ctx.fillStyle = '#C3C9CC'; ctx.fillRect(0, 1250, 1080, 12);
-  ctx.fillStyle = '#0A0C0D'; ctx.fillRect(0, 1266, 1080, 24);
+  ctx.fillStyle = '#D1D6D8'; ctx.fillRect(0, 1240, 1080, 16);
+  ctx.fillStyle = '#080A0B'; ctx.fillRect(0, 1256, 1080, 34);
   ctx.restore();
 }
 
@@ -234,35 +259,62 @@ export const forcedBuybackShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx, theme, seed } = frame, dur = Math.max(0.01, frame.dur), rawT = frame.t, t = clamp(rawT, 0, dur);
     const payAt = eventAt(props, 'pay', dur * 0.225, dur), buyAt = eventAt(props, 'buy', dur * 0.62, dur);
-    const runU = progress(t, buyAt, dur);
-    const run = 0.2 * runU + 0.8 * easeOut(runU);
+    // Event offsets preserve the requested beats when narration stretches this compact shot.
+    const recoilAt = clamp(payAt - Math.min(0.258, dur * 0.149), 0, dur);
+    const runStart = clamp(buyAt - Math.min(0.643, dur * 0.371), 0, dur);
+    const runEnd = clamp(runStart + Math.min(0.8, dur * 0.462), runStart + 0.01, dur);
+    const runU = progress(t, runStart, runEnd);
+    const run = easeOut(runU);
     const runDistance = 620 * run;
     const destination = label(props.params?.destinationLabel, 'BUY', 10);
+    const kioskU = easeOut(progress(t, runStart, dur));
+    const kioskScale = 0.72 + kioskU * 2.06;
+    const kioskX = 840 - 300 * kioskU, kioskY = 440 + 44 * kioskU;
     const rig = createCameraRig({
-      width: 1080, height: 1290, seed: seed + 271, handheld: 1.7,
+      width: 1080, height: 1290, seed: seed + 271, handheld: 0.75,
       keyframes: [
-        { t: 0, x: -4, y: 5, zoom: 1, rot: 0 },
-        { t: payAt, x: -8, y: 1, zoom: 1.025, rot: 0, ease: 'inOut' },
-        { t: buyAt, x: -12, y: -2, zoom: 1.045, rot: 0, ease: 'inOut' },
-        { t: dur, x: -226, y: -20, zoom: 1.18, rot: -0.004, ease: 'linear' },
-      ], hits: [payAt, buyAt], punch: 0.018, shake: 6,
-      whip: [{ at: buyAt, direction: 'left', duration: 0.22, amount: 0.15 }],
+        { t: 0, x: 58, y: 4, zoom: 1, rot: 0 },
+        { t: recoilAt, x: 54, y: 0, zoom: 1.018, rot: -0.002, ease: 'inOut' },
+        { t: runStart, x: 50, y: -2, zoom: 1.025, rot: 0.002, ease: 'inOut' },
+        { t: buyAt, x: -20, y: -8, zoom: 1.05, rot: -0.003, ease: 'inOut' },
+        { t: dur, x: -92, y: -16, zoom: 1.075, rot: 0, ease: 'linear' },
+      ], hits: [payAt, buyAt], punch: 0.012, shake: 4,
     });
     const pose = rig.poseAt(t);
+    // The outgoing zoomthrough expands around the handoff slot. Carry Hedgy into
+    // that portal and counter-scale him so the transition never crops his shape.
+    const transitionStart = Math.max(0, dur - 0.26);
+    const transitionProgress = progress(rawT, transitionStart, dur + 0.26);
+    const transitionEase = transitionProgress < 0.5
+      ? 2 * transitionProgress * transitionProgress
+      : 1 - ((-2 * transitionProgress + 2) ** 2) / 2;
+    const portalZoom = 1 + 1.62 * transitionEase;
+    const exitBlend = easeOut(progress(rawT, runEnd, transitionStart));
+    const outerRig = createCameraRig({
+      width: 1080, height: 1290, seed, handheld: 1.8,
+      keyframes: [
+        { t: -0.42, x: -18, y: 7, zoom: 0.992, rot: -0.002 },
+        { t: 0, x: -8, y: 4, zoom: 1, rot: 0 },
+        { t: dur, x: 8, y: -4, zoom: 1.018, rot: 0.002, ease: 'inOut' },
+        { t: dur + 0.42, x: 18, y: -7, zoom: 1.026, rot: 0.003 },
+      ],
+      hits: [0], punch: 0.024, shake: 4,
+      dollyZoom: { start: 0, end: Math.max(0.1, dur), amount: 0.22 },
+    }).poseAt(rawT);
     ctx.imageSmoothingEnabled = false;
     drawEnv(ctx, { type: 'exchange', t, theme, seed: seed + 8, width: 1080, height: 1290, camera: { x: pose.x * 0.32, y: pose.y * 0.24, zoom: pose.zoom, rot: pose.rot } });
     ctx.save(); rig.apply(ctx, t);
     drawVenue(ctx, theme, t, runDistance);
     drawRunway(ctx, theme, t, runDistance);
-    if (t >= buyAt) {
+    if (t >= runStart) {
       drawSpeedLines(ctx, t, {
         x: 0, y: 0, width: 1080, height: 1290, mode: 'linear', direction: -1,
-        count: 66, start: buyAt, duration: Math.max(0.22, dur - buyAt), seed: seed + 91,
-        color: '#A7AFB3', strength: 0.7,
+        count: 66, start: runStart, duration: Math.max(0.22, dur - runStart), seed: seed + 91,
+        color: '#A7AFB3', strength: 0.62,
       });
       drawSpeedLines(ctx, t, {
         width: 1080, height: 1290, center: { x: 814, y: 635 }, mode: 'radial', direction: -1,
-        count: 38, start: buyAt + 0.06, duration: Math.max(0.2, dur - buyAt - 0.04), seed: seed + 171,
+        count: 38, start: buyAt + 0.02, duration: Math.max(0.2, dur - buyAt - 0.02), seed: seed + 171,
         color: '#7C858A', strength: 0.48, reach: 790,
       });
       // Broken silver streaks skim separate depth planes around, never across, Hedgy's face.
@@ -272,25 +324,29 @@ export const forcedBuybackShot: ShotDef = {
         ctx.fillStyle = i % 2 ? '#7F888D' : '#D5DADD'; ctx.fillRect(x, y, 38 + (i % 3) * 18, 4);
       }
     }
-    const kioskScale = 1 + 2.18 * run;
-    drawKiosk(ctx, theme, t, 840, 560, kioskScale, destination);
+    drawKiosk(ctx, theme, t, kioskX, kioskY, kioskScale, destination);
 
-    const actorX = 312 + 510 * run, actorY = 1174 - run * 26;
-    const actorT = Math.max(0, t - buyAt);
-    const actorPose = t >= buyAt ? 'run' : t > payAt + 0.17 ? 'shock' : 'sweat';
+    const pathX = 200 + 550 * run, pathY = 1138 - run * 28;
+    const actorScale = 5.35 * (1 - exitBlend + exitBlend / portalZoom);
+    const targetBodyX = 540 + ((-outerRig.x / outerRig.zoom) - pose.x) / pose.zoom;
+    const targetBodyY = 645 + ((-outerRig.y / outerRig.zoom) - pose.y) / pose.zoom;
+    const actorX = pathX * (1 - exitBlend) + (targetBodyX - 1.5 * actorScale) * exitBlend;
+    const actorY = pathY * (1 - exitBlend) + (targetBodyY + 25 * actorScale) * exitBlend;
+    const actorT = Math.max(0, t - runStart);
+    const actorPose = t >= runStart ? 'run' : t > payAt ? 'shock' : 'sweat';
     drawHedgy(ctx, {
-      x: actorX, y: actorY, scale: 7.15, t: t >= buyAt ? actorT : Math.max(0, t - payAt),
-      pose: actorPose, facing: 1, look: t >= buyAt ? 'forward' : 'down',
-      expression: t >= buyAt ? 'determined' : t > payAt ? 'shocked' : 'worried',
+      x: actorX, y: actorY, scale: actorScale, t: t >= runStart ? actorT : Math.max(0, t - payAt),
+      pose: actorPose, facing: 1, look: t >= runStart ? 'forward' : 'down',
+      expression: t >= runStart ? 'determined' : t > payAt ? 'shocked' : 'worried',
     });
-    const pouchX = actorX + 122, pouchY = actorY - 94;
-    if (t < buyAt) drawPouch(ctx, pouchX, pouchY, t, payAt);
+    const pouchX = actorX + 91, pouchY = actorY - 84;
+    if (t < runStart) drawPouch(ctx, pouchX, pouchY, t, recoilAt, payAt);
     if (t >= payAt && t < payAt + 0.44) {
       drawBurst(ctx, t, { x: pouchX, y: pouchY - 10, seed: seed + 33, count: 24, kind: 'dust', start: payAt, life: 0.43, speed: 126, spread: Math.PI * 1.15, gravity: 54, drag: 1.42, size: 3, color: '#C5CBCF' });
       drawPayPuff(ctx, pouchX, pouchY - 16, t, payAt);
     }
     drawMoth(ctx, pouchX, pouchY - 14, t, payAt);
-    if (t >= buyAt) {
+    if (t >= runStart) {
       const step = Math.sin(actorT * (Math.PI * 2 / 0.44));
       if (step > 0.66) {
         ctx.fillStyle = '#D4D9DB'; ctx.fillRect(snap(actorX - 24), snap(actorY - 4), 32, 4);
@@ -301,15 +357,36 @@ export const forcedBuybackShot: ShotDef = {
         ctx.fillStyle = i % 2 ? '#70797E' : '#B9C0C3'; ctx.fillRect(x, y, 12 + (5 - i) * 4, 4);
       }
     }
+    // The BUY cue kicks one shared ticket out of the enlarged kiosk slot toward Hedgy's paw.
+    const eject = easeOut(progress(t, buyAt, dur));
+    if (t >= buyAt) {
+      const slotX = kioskX, slotY = kioskY + 130 * kioskScale;
+      const pawX = actorX + 80 * actorScale / 5.35, pawY = actorY - 63 * actorScale / 5.35;
+      const ticketX = slotX + (pawX - slotX) * eject;
+      const ticketY = slotY + (pawY - slotY) * eject - Math.sin(Math.PI * eject) * 82;
+      const ticketSize = 132 - 24 * eject;
+      line(ctx, slotX, slotY, ticketX - ticketSize * 0.38, ticketY, '#A33330', 4);
+      drawTicket2D(ctx, ticketX, ticketY, ticketSize, { rot: -0.08 + 0.28 * eject });
+      if (t < buyAt + 0.12) {
+        const flash = 1 - progress(t, buyAt, buyAt + 0.12);
+        ctx.save(); ctx.globalAlpha *= flash;
+        ctx.fillStyle = '#F0F2F3'; ctx.fillRect(snap(slotX - 48), snap(slotY - 8), 96, 8);
+        ctx.restore();
+      }
+    }
     ctx.restore();
     drawDrawerPass(ctx, rawT);
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const payAt = eventAt(props, 'pay', dur * 0.225, dur), buyAt = eventAt(props, 'buy', dur * 0.62, dur);
+    const recoilAt = clamp(payAt - Math.min(0.258, dur * 0.149), 0, dur);
+    const runStart = clamp(buyAt - Math.min(0.643, dur * 0.371), 0, dur);
     return ([
-      { t: payAt, kind: 'paper', pan: -0.12, gain: 0.62 },
-      { t: buyAt, kind: 'bass', pan: 0.12, gain: 0.78 },
-      { t: buyAt + 0.06, kind: 'whoosh', pan: 0.18, gain: 0.72, len: Math.min(0.48, dur - buyAt) },
+      { t: recoilAt, kind: 'paper', pan: -0.12, gain: 0.68 },
+      { t: payAt, kind: 'thud', pan: -0.12, gain: 1.28 },
+      { t: runStart, kind: 'step', pan: 0.12, gain: 0.72 },
+      { t: buyAt, kind: 'impact', pan: 0.12, gain: 1.34 },
+      { t: buyAt + 0.04, kind: 'paper', pan: 0.18, gain: 1.16, len: Math.min(0.38, dur - buyAt) },
     ] satisfies Cue[]).filter(cue => cue.t >= 0 && cue.t <= dur);
   },
 };

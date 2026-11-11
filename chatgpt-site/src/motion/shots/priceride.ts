@@ -23,18 +23,23 @@ function eventAt(props: ShotProps, kind: string, dur: number, fallback: number) 
 }
 
 function pathKeys(dur: number, jumpAt: number, lossesAt: number): KeyPoint[] {
-  const jumpDrift = Math.min(dur, jumpAt + Math.min(.18, Math.max(.08, (lossesAt - jumpAt) * .3)));
-  const lossDrift = Math.min(dur, lossesAt + Math.min(.18, Math.max(.08, (dur - lossesAt) * .22)));
-  return [
-    { t: 0, point: { x: 1040, y: 1018 } },
-    { t: Math.max(.02, jumpAt - .08), point: { x: 954, y: 1004 } },
-    { t: jumpAt, point: { x: 846, y: 830 } },
-    { t: jumpDrift, point: { x: 812, y: 795 } },
-    { t: Math.max(jumpDrift + .01, lossesAt - .08), point: { x: 730, y: 780 } },
-    { t: lossesAt, point: { x: 668, y: 620 } },
-    { t: lossDrift, point: { x: 684, y: 592 } },
-    { t: dur, point: { x: 710, y: 630 } },
+  const handoffAt = Math.max(lossesAt + 0.42, dur - 0.52);
+  const beforeJump = Math.max(0.08, jumpAt - 0.14);
+  const afterJump = Math.min(dur, jumpAt + 0.28);
+  const points: KeyPoint[] = [
+    { t: 0, point: { x: 214, y: 704 } },
+    { t: beforeJump, point: { x: 356, y: 680 } },
+    { t: jumpAt, point: { x: 492, y: 424 } },
+    { t: afterJump, point: { x: 548, y: 368 } },
+    { t: Math.max(afterJump + 0.04, lossesAt - 0.1), point: { x: 660, y: 324 } },
+    { t: lossesAt, point: { x: 728, y: 270 } },
+    { t: Math.min(handoffAt - 0.2, lossesAt + 0.38), point: { x: 812, y: 222 } },
+    { t: handoffAt, point: { x: 892, y: 190 } },
+    { t: dur, point: { x: 892, y: 190 } },
   ];
+  return points.filter((key, index) => index === 0 || key.t > points[index - 1]!.t).map(key => ({
+    t: clamp(key.t, 0, dur), point: key.point,
+  }));
 }
 
 function positionAt(keys: readonly KeyPoint[], time: number): Point {
@@ -60,10 +65,10 @@ function pathToTime(keys: readonly KeyPoint[], time: number): Point[] {
   return points;
 }
 
-function drawBalconyTier(ctx: Frame['ctx'], y: number, layer: number, index: number, seed: number, t: number) {
+function drawBalconyTier(ctx: Frame['ctx'], y: number, layer: number, index: number, seed: number, t: number, panX: number) {
   if (y < -210 || y > 1370) return;
   const inset = layer === 0 ? 150 : layer === 1 ? 70 : 0;
-  const x = inset + Math.round(Math.sin(index * .8 + layer) * (layer === 0 ? 18 : 8));
+  const x = inset + panX + Math.round(Math.sin(index * .8 + layer) * (layer === 0 ? 18 : 8));
   const w = 1080 - inset * 2;
   const face = layer === 0 ? '#24262B' : layer === 1 ? '#303238' : '#41444B';
   const rail = layer === 0 ? '#5C6067' : layer === 1 ? '#777B82' : '#A1A5AB';
@@ -118,7 +123,7 @@ function drawBalconyTier(ctx: Frame['ctx'], y: number, layer: number, index: num
   }
 }
 
-function drawVenue(ctx: Frame['ctx'], time: number, scroll: number, seed: number) {
+function drawVenue(ctx: Frame['ctx'], time: number, scroll: number, scrollX: number, seed: number) {
   ctx.fillStyle = '#181A1F';
   ctx.fillRect(0, 0, 1080, 1290);
   ctx.fillStyle = '#25272D';
@@ -141,9 +146,9 @@ function drawVenue(ctx: Frame['ctx'], time: number, scroll: number, seed: number
   const middleShift = scroll * .62;
   const nearShift = scroll * 1.12;
   for (let i = -2; i < 9; i++) {
-    drawBalconyTier(ctx, snap(i * 238 + farShift), 0, i, seed, time);
-    drawBalconyTier(ctx, snap(-105 + i * 270 + middleShift), 1, i, seed, time);
-    drawBalconyTier(ctx, snap(-265 + i * 355 + nearShift), 2, i, seed, time);
+    drawBalconyTier(ctx, snap(i * 238 + farShift), 0, i, seed, time, -scrollX * .24);
+    drawBalconyTier(ctx, snap(-105 + i * 270 + middleShift), 1, i, seed, time, -scrollX * .56);
+    drawBalconyTier(ctx, snap(-265 + i * 355 + nearShift), 2, i, seed, time, -scrollX);
   }
 
   // Haze and suspended lamps make the upward camera travel legible between balcony passes.
@@ -177,6 +182,7 @@ function drawPixelLine(ctx: Frame['ctx'], a: Point, b: Point, color: string, wid
 function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number, amount: number, seed: number) {
   if (points.length < 2 || amount <= .01) return;
   const first = points[0]!, head = points.at(-1)!;
+  const top = Math.min(...points.map(point => point.y));
   ctx.save();
   ctx.beginPath();
   ctx.moveTo(snap(first.x), snap(first.y));
@@ -187,9 +193,9 @@ function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number
   ctx.clip();
   ctx.globalAlpha *= amount;
   ctx.fillStyle = '#511B18';
-  ctx.fillRect(snap(head.x), snap(Math.min(...points.map(point => point.y))), snap(first.x - head.x), snap(saleY - Math.min(...points.map(point => point.y))));
-  for (let y = snap(Math.min(...points.map(point => point.y))); y < saleY; y += 8) {
-    for (let x = snap(head.x); x < first.x; x += 8) {
+  ctx.fillRect(snap(Math.min(first.x, head.x)), snap(top), snap(Math.abs(head.x - first.x)), snap(saleY - top));
+  for (let y = snap(top); y < saleY; y += 8) {
+    for (let x = snap(Math.min(first.x, head.x)); x < Math.max(first.x, head.x); x += 8) {
       const value = hash((x / 8) * 4099 + y / 8, seed + 201);
       if (value > .43) {
         ctx.fillStyle = value > .86 ? '#D7473D' : value > .67 ? '#9E2B26' : '#68211D';
@@ -200,11 +206,12 @@ function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number
   ctx.restore();
 }
 
-function drawPriceTrack(ctx: Frame['ctx'], points: readonly Point[]) {
+function drawPriceTrack(ctx: Frame['ctx'], points: readonly Point[], headVisible = true) {
   if (!points.length) return;
   for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_DARK, 34, .9);
   for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_MID, 20, 1);
   for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_HOT, 8, 1);
+  if (!headVisible) return;
   const head = points.at(-1)!;
   ctx.fillStyle = RED_DARK;
   ctx.fillRect(snap(head.x - 27), snap(head.y - 27), 54, 54);
@@ -214,31 +221,52 @@ function drawPriceTrack(ctx: Frame['ctx'], points: readonly Point[]) {
   ctx.fillRect(snap(head.x - 5), snap(head.y - 5), 10, 10);
 }
 
-function drawSaleLevel(ctx: Frame['ctx'], saleY: number) {
-  ctx.fillStyle = '#C0C3C8';
-  for (let x = 480; x < 1072; x += 34) ctx.fillRect(x, saleY, 20, 5);
-  ctx.fillStyle = '#777B82';
-  ctx.fillRect(478, saleY + 7, 594, 4);
-  // A small marker is embedded in the foreground balcony beam.
-  ctx.fillStyle = '#25272D';
-  ctx.fillRect(780, saleY - 26, 112, 36);
-  ctx.fillStyle = '#C4C7CC';
-  ctx.fillRect(780, saleY - 26, 112, 5);
-  pixelText(ctx, 'SALE', 836, saleY - 21, 3, { color: '#E1E3E6', align: 'center' });
-  ctx.fillStyle = '#D0D3D8';
-  ctx.fillRect(816, saleY - 5, 28, 20);
-  ctx.fillStyle = '#3D4148';
-  ctx.fillRect(820, saleY - 1, 20, 10);
+function drawPanHandoff(ctx: Frame['ctx'], chartHead: Point, time: number, startAt: number, dur: number) {
+  if (time <= startAt) return;
+  const p = easeOut((time - startAt) / Math.max(0.001, dur - startAt));
+  // In shot 9's incoming camera, the perforation is transformed to this screen point.
+  const pan = { x: 694, y: 650 };
+  const head = { x: chartHead.x + (pan.x - chartHead.x) * p, y: chartHead.y + (pan.y - chartHead.y) * p };
+  drawPixelLine(ctx, chartHead, head, RED_DARK, 22, .96);
+  drawPixelLine(ctx, chartHead, head, RED_MID, 12, 1);
+  drawPixelLine(ctx, chartHead, head, RED_HOT, 4, 1);
+  ctx.fillStyle = RED_DARK; ctx.fillRect(snap(head.x - 12), snap(head.y - 12), 24, 24);
+  ctx.fillStyle = RED_HOT; ctx.fillRect(snap(head.x - 8), snap(head.y - 8), 16, 16);
+  ctx.fillStyle = '#FFD8D4'; ctx.fillRect(snap(head.x - 2), snap(head.y - 2), 4, 4);
 }
 
-function drawTether(ctx: Frame['ctx'], from: Point, to: Point) {
+function drawSaleLevel(ctx: Frame['ctx'], saleY: number, markerX: number) {
+  ctx.fillStyle = '#C0C3C8';
+  for (let x = 112; x < 770; x += 34) ctx.fillRect(x, saleY, 20, 5);
+  ctx.fillStyle = '#777B82';
+  ctx.fillRect(108, saleY + 7, 666, 4);
+  // A small marker is embedded in the foreground balcony beam.
+  ctx.fillStyle = '#25272D';
+  ctx.fillRect(markerX - 56, saleY - 26, 112, 36);
+  ctx.fillStyle = '#C4C7CC';
+  ctx.fillRect(markerX - 56, saleY - 26, 112, 5);
+  pixelText(ctx, 'SALE', markerX, saleY - 21, 3, { color: '#E1E3E6', align: 'center' });
+  ctx.fillStyle = '#D0D3D8';
+  ctx.fillRect(markerX - 20, saleY - 5, 28, 20);
+  ctx.fillStyle = '#3D4148';
+  ctx.fillRect(markerX - 16, saleY - 1, 20, 10);
+}
+
+function drawTether(ctx: Frame['ctx'], from: Point, to: Point, tension: number) {
+  const sag = (1 - tension) * 20;
+  const points = [from, { x: from.x + (to.x - from.x) * 0.34, y: from.y + (to.y - from.y) * 0.34 + sag },
+    { x: from.x + (to.x - from.x) * 0.68, y: from.y + (to.y - from.y) * 0.68 + sag * 0.45 }, to];
   ctx.save();
   ctx.strokeStyle = '#101216';
   ctx.lineWidth = 9;
-  ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(snap(points[0]!.x), snap(points[0]!.y));
+  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
+  ctx.stroke();
   ctx.strokeStyle = '#D6D8DC';
   ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(snap(points[0]!.x), snap(points[0]!.y));
+  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -247,7 +275,7 @@ function drawOpeningTicket(ctx: Frame['ctx'], t: number) {
   if (alpha <= .01) return;
   ctx.save();
   ctx.globalAlpha *= alpha;
-  drawTicket2D(ctx, 1032 - t * 68, 970 - t * 74, 86, { rot: .13 - t * .38 });
+  drawTicket2D(ctx, 30 - t * 86, 700 - t * 22, 86, { rot: -.08 + t * .34, tear: 0.48 });
   ctx.restore();
 }
 
@@ -262,52 +290,55 @@ export const priceRideShot: ShotDef = {
     const keys = pathKeys(dur, jumpAt, lossesAt);
     const points = pathToTime(keys, t);
     const head = points.at(-1)!;
-    const saleY = 1024;
-    const jumpTravel = easeOut((t - jumpAt) / .58);
-    const lossesTravel = easeOut((t - lossesAt) / .62);
-    const scroll = 42 + jumpTravel * 194 + lossesTravel * 206 + (t / dur) * 86;
-    const bandAmount = t < lossesAt ? 0 : .38 + .62 * easeOut((t - lossesAt) / .2);
+    const handoffAt = Math.max(lossesAt + 0.42, dur - 0.52);
+    const saleY = 988, markerX = 600;
+    const jumpTravel = easeOut((t - jumpAt) / .56);
+    const lossesTravel = easeOut((t - lossesAt) / .56);
+    const scroll = jumpTravel * 258 + lossesTravel * 208 + (t / dur) * 64;
+    const scrollX = jumpTravel * 72 + lossesTravel * 92;
+    const bandAmount = t < lossesAt ? 0 : .32 + .68 * easeOut((t - lossesAt) / .26);
 
     const rig = createCameraRig({
       width: 1080, height: 1290, seed: seed + 83, handheld: 1.5,
-      hits: [jumpAt, lossesAt], punch: .016, shake: 6,
+      hits: [jumpAt, lossesAt], punch: .012, shake: 4,
       keyframes: [
-        { t: 0, x: 4, y: 4, zoom: 1.01, rot: 0 },
-        { t: jumpAt, x: -4, y: -10, zoom: 1.025, rot: -.002, ease: 'inOut' },
-        { t: lossesAt, x: -18, y: -24, zoom: 1.045, rot: .002, ease: 'inOut' },
-        { t: dur, x: -32, y: -38, zoom: 1.07, rot: -.003, ease: 'out' },
+        { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
+        { t: jumpAt, x: 4, y: -8, zoom: 1.018, rot: -.001, ease: 'inOut' },
+        { t: lossesAt, x: 9, y: -18, zoom: 1.035, rot: .002, ease: 'inOut' },
+        { t: Math.max(lossesAt + .3, dur - .34), x: 12, y: -12, zoom: 1.025, rot: 0, ease: 'out' },
+        { t: dur, x: 0, y: 0, zoom: 1, rot: 0, ease: 'out' },
       ],
     });
     ctx.imageSmoothingEnabled = false;
     ctx.save();
     ctx.beginPath(); ctx.rect(0, 0, 1080, 1290); ctx.clip();
-    ctx.save();
     rig.apply(ctx, t);
-    drawVenue(ctx, t, scroll, seed);
-    ctx.restore();
+    drawVenue(ctx, t, scroll, scrollX, seed);
 
     // The opening ticket is the final ticket leaving shot 7; its perforation becomes the line's lead.
     drawLossBand(ctx, points, saleY, bandAmount, seed);
-    drawSaleLevel(ctx, saleY);
+    drawSaleLevel(ctx, saleY, markerX);
 
     const shocked = t >= lossesAt;
-    const hedgyX = 842, hedgyY = 1194;
-    const tetherStart = { x: hedgyX - 49, y: hedgyY - 164 };
-    const saleMarker = { x: 840, y: saleY + 3 };
-    drawTether(ctx, tetherStart, saleMarker);
+    const lossPull = easeOut((t - lossesAt) / .24);
+    const hedgyX = 780 - 42 * lossPull, hedgyY = 1080 + 16 * lossPull;
+    const tetherStart = { x: hedgyX - 56, y: hedgyY - 88 };
+    const saleMarker = { x: markerX - 28, y: saleY - 4 };
+    drawTether(ctx, tetherStart, saleMarker, lossPull);
 
     // The grey dashed trace stays attached to Hedgy while the camera chases the rising market.
     drawHedgy(ctx, {
       x: hedgyX, y: hedgyY, scale: 3.65,
       t: Math.max(0, t - (shocked ? lossesAt : jumpAt)),
-      pose: shocked ? 'shock' : t >= jumpAt ? 'fall' : 'think',
+      pose: shocked ? 'shock' : 'think',
       facing: -1, look: 'up',
       expression: shocked ? 'shocked' : 'worried',
       squash: shocked ? .9 : 1,
       prop: 'none',
     });
 
-    drawPriceTrack(ctx, points);
+    drawPriceTrack(ctx, points, t <= handoffAt);
+    drawPanHandoff(ctx, head, t, handoffAt, dur);
     drawOpeningTicket(ctx, t);
     if (t >= jumpAt && t < jumpAt + .38) {
       drawBurst(ctx, t, {
@@ -318,7 +349,13 @@ export const priceRideShot: ShotDef = {
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const d = Math.max(.1, dur), lossesAt = eventAt(props, 'losses', d, .53);
-    return [{ t: lossesAt, kind: 'heartbeat', pan: .16, gain: .84, len: .34 }];
+    const d = Math.max(.1, dur), jumpAt = eventAt(props, 'jump', d, .225), lossesAt = eventAt(props, 'losses', d, .53);
+    const cues: Cue[] = [
+      { t: Math.max(0, jumpAt - 0.1), kind: 'rise', pan: -0.12, gain: 0.72, len: 0.12 },
+      { t: jumpAt, kind: 'servo', pan: -0.1, gain: 1.22, len: 0.22 },
+      { t: lossesAt, kind: 'heartbeat', pan: 0.16, gain: 1.42, len: 0.3 },
+      { t: lossesAt + 0.14, kind: 'heartbeat', pan: 0.16, gain: 0.72, len: 0.16 },
+    ];
+    return cues.filter(cue => cue.t >= 0 && cue.t <= d);
   },
 };

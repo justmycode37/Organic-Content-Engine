@@ -76,6 +76,10 @@
    "type": "shot",
    "duration": 2.566666666666667,
    "transition": "whip",
+   "transitionAt": [
+    884,
+    288
+   ],
    "transitionDir": "down",
    "shot": "pricestair",
    "sync": [
@@ -103,6 +107,10 @@
    "type": "shot",
    "duration": 2.466666666666667,
    "transition": "zoomthrough",
+   "transitionAt": [
+    540,
+    645
+   ],
    "shot": "vaultlock",
    "sync": [
     {
@@ -130,8 +138,8 @@
    "duration": 1.7333333333333334,
    "transition": "iris",
    "transitionAt": [
-    640,
-    1000
+    540,
+    645
    ],
    "shot": "waitclock",
    "sync": [
