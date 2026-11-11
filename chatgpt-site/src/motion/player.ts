@@ -11,12 +11,14 @@ import { SCENES } from './scenes/index.ts';
 
 interface Surface { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx }
 const surfacesBySize = new Map<string, [Surface, Surface]>();
+const compositionSurfacesBySize = new Map<string, Surface>();
+let reflectionSurfaces: [Surface, Surface, Surface] | undefined;
 
-function makeSurface(width: number, height: number): Surface {
+function makeSurface(width: number, height: number, alpha = false): Surface {
   const canvas = typeof OffscreenCanvas !== 'undefined'
     ? new OffscreenCanvas(width, height)
     : Object.assign(document.createElement('canvas'), { width, height });
-  const ctx = canvas.getContext('2d', { alpha: false }) as Ctx | null;
+  const ctx = canvas.getContext('2d', { alpha }) as Ctx | null;
   if (!ctx) throw new Error('Could not create a 2D motion transition surface');
   ctx.imageSmoothingEnabled = false;
   return { canvas, ctx };
@@ -27,6 +29,62 @@ function transitionSurfaces(width = W, height = H) {
   let pair = surfacesBySize.get(key);
   if (!pair) { pair = [makeSurface(width, height), makeSurface(width, height)]; surfacesBySize.set(key, pair); }
   return pair;
+}
+
+function compositionSurface(width = W, height = H) {
+  const key = `${width}x${height}`;
+  let surface = compositionSurfacesBySize.get(key);
+  if (!surface) { surface = makeSurface(width, height); compositionSurfacesBySize.set(key, surface); }
+  return surface;
+}
+
+function getReflectionSurfaces(): [Surface, Surface, Surface] {
+  if (!reflectionSurfaces) {
+    const width = W / 4, height = 108, bayer = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5];
+    const mask = makeSurface(width, height, true), pixels = mask.ctx.createImageData(width, height);
+    for (let y = 0; y < height; y++) {
+      const fade = 1 - y / (height - 1);
+      for (let x = 0; x < width; x++) {
+        const index = (y * width + x) * 4, dither = bayer[(y & 3) * 4 + (x & 3)]! / 15;
+        pixels.data[index] = 255; pixels.data[index + 1] = 255; pixels.data[index + 2] = 255;
+        pixels.data[index + 3] = Math.round(((0.15 + dither * 0.07) / 0.22) * fade * 255);
+      }
+    }
+    mask.ctx.putImageData(pixels, 0, 0);
+    reflectionSurfaces = [makeSurface(width, height, true), makeSurface(width, height, true), mask];
+  }
+  return reflectionSurfaces;
+}
+
+function drawFloorReflection(ctx: Ctx, source: Surface['canvas'], time: number) {
+  const [base, rippled, mask] = getReflectionSurfaces(), width = W / 4, height = 108;
+  const sourceTop = 990, sourceHeight = 300;
+  base.ctx.clearRect(0, 0, width, height);
+  base.ctx.save();
+  base.ctx.translate(0, height);
+  base.ctx.scale(1, -1);
+  base.ctx.imageSmoothingEnabled = false;
+  base.ctx.drawImage(source, 0, sourceTop, W, sourceHeight, 0, 0, width, height);
+  base.ctx.restore();
+
+  rippled.ctx.clearRect(0, 0, width, height);
+  rippled.ctx.imageSmoothingEnabled = false;
+  for (let y = 0; y < height; y += 2) {
+    const bandHeight = Math.min(2, height - y);
+    const offset = Math.round(Math.sin(time * 2.8 + y * 0.11) * 0.7);
+    rippled.ctx.drawImage(base.canvas, 0, y, width, bandHeight, offset, y, width, bandHeight);
+  }
+  rippled.ctx.globalCompositeOperation = 'destination-in';
+  rippled.ctx.drawImage(mask.canvas, 0, 0);
+  rippled.ctx.globalCompositeOperation = 'source-over';
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = 'rgba(255,255,255,0.22)';
+  ctx.fillRect(0, 1291, W, 2);
+  ctx.globalAlpha *= 0.22;
+  ctx.drawImage(rippled.canvas, 0, 0, width, height, 0, 1320, W, 432);
+  ctx.restore();
 }
 
 /** Per-scene captions laid on the reel timeline; explicit `spec.captions` win when present. */
@@ -87,6 +145,19 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   if (!scene) { ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H); ctx.restore(); return; }
   const activeFrame: Frame = { ctx, t: time - scene.start, dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
   const transition = activeTransition(placed, time);
+  const needsReflection = hedgy && (transition
+    ? transition.outgoing.spec.type === 'shot' || transition.incoming.spec.type === 'shot'
+    : scene.spec.type === 'shot');
+  const composition = needsReflection ? compositionSurface() : undefined;
+  const sceneCtx = composition?.ctx ?? ctx;
+  if (composition) {
+    sceneCtx.save();
+    sceneCtx.globalAlpha = 1;
+    sceneCtx.globalCompositeOperation = 'source-over';
+    sceneCtx.fillStyle = theme.bg;
+    sceneCtx.fillRect(0, 0, W, H);
+    sceneCtx.restore();
+  }
   if (transition) {
     const [outgoing, incoming] = transitionSurfaces(W, H);
     const outgoingTheme = frameTheme(outgoing.ctx, spec.mode, hedgy ? 'mono' : spec.accent, time);
@@ -96,17 +167,22 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
     }
     renderSceneLayer(outgoing.ctx, transition.outgoing, spec, time, outgoingTheme, hedgy);
     renderSceneLayer(incoming.ctx, transition.incoming, spec, time, incomingTheme, hedgy);
-    ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(outgoing.canvas, 0, 0, W, H);
+    sceneCtx.imageSmoothingEnabled = false;
+    sceneCtx.drawImage(outgoing.canvas, 0, 0, W, H);
     const isShot = transition.outgoing.spec.type === 'shot' || transition.incoming.spec.type === 'shot';
     const height = isShot ? 1290 : hedgy ? 1260 : H;
-    compositeTransition(ctx, outgoing.canvas, incoming.canvas, transition.name, transition.progress, theme, transition.incoming.index + 1, {
+    compositeTransition(sceneCtx, outgoing.canvas, incoming.canvas, transition.name, transition.progress, theme, transition.incoming.index + 1, {
       focus: cameraFocus(activeFrame, transition.incoming.spec.transitionAt),
       direction: transition.incoming.spec.transitionDir,
       height,
     });
   } else {
-    renderSceneLayer(ctx, scene, spec, time, theme, hedgy);
+    renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy);
+  }
+  if (composition) {
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(composition.canvas, 0, 0, W, H);
+    drawFloorReflection(ctx, composition.canvas, time);
   }
   drawChrome(activeFrame, spec, time, duration);
   const caption = reelCaptions(spec, placed).find(item => time >= item.start && time < item.end);

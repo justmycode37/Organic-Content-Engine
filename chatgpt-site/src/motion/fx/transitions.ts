@@ -46,6 +46,17 @@ function drawTransformed(ctx: Ctx, image: ImageLayer, focus: [number, number], s
   ctx.restore();
 }
 
+function drawMotionLayer(ctx: Ctx, image: ImageLayer, x: number, y: number, height: number, scale: number, alpha = 1) {
+  if (scale === 1) { drawLayer(ctx, image, x, y, alpha); return; }
+  drawTransformed(ctx, image, [W / 2, height / 2], scale, scale, x, y, alpha);
+}
+
+/** A small scale pulse lets the moving planes pass their landing point, then settle. */
+function landingPunch(progress: number) {
+  const settle = clamp((progress - 0.76) / 0.24);
+  return 1 + 0.018 * Math.sin(Math.PI * settle);
+}
+
 function drawCell(ctx: Ctx, image: ImageLayer, x: number, y: number, cell: number) {
   const width = Math.min(cell, W - x), height = Math.min(cell, H - y);
   if (width > 0 && height > 0) ctx.drawImage(image, x, y, width, height, x, y, width, height);
@@ -68,7 +79,8 @@ function drawDither(ctx: Ctx, incoming: ImageLayer, outgoing: ImageLayer, progre
 
 function drawIris(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number], height: number) {
   drawLayer(ctx, outgoing);
-  const radius = Math.hypot(W, height) * 1.04 * Math.pow(clamp(progress), 2.2);
+  const p = easeInOut(progress), settle = clamp((progress - 0.74) / 0.26);
+  const radius = stepped(Math.hypot(W, height) * 1.04 * (p + 0.025 * Math.sin(Math.PI * settle)), CELL);
   const cols = Math.ceil(W / CELL), rows = Math.ceil(height / CELL);
   for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
     const x = col * CELL, y = row * CELL;
@@ -99,16 +111,17 @@ function drawPush(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress
   const dx = vx * W, dy = vy * height;
   const parallax = stepped(20 * Math.sin(Math.PI * p), 4);
   const echoStrength = 0.14 * Math.sin(Math.PI * p);
+  const punch = landingPunch(progress);
   if (echoes) {
     for (let i = echoes; i >= 1; i--) {
       const trail = i * 0.055;
-      drawLayer(ctx, outgoing, -dx * (p + trail), -dy * (p + trail) - parallax * 0.45, echoStrength / i);
-      drawLayer(ctx, incoming, dx * (1 - p + trail), dy * (1 - p + trail) + parallax * 0.45, echoStrength / i);
+      drawMotionLayer(ctx, outgoing, -dx * (p + trail), -dy * (p + trail) - parallax * 0.45, height, punch, echoStrength / i);
+      drawMotionLayer(ctx, incoming, dx * (1 - p + trail), dy * (1 - p + trail) + parallax * 0.45, height, punch, echoStrength / i);
     }
   }
   // Offset near and far scene planes by a few pixel cells to hold depth as the cut moves.
-  drawLayer(ctx, outgoing, -dx * p, -dy * p - parallax * 0.35);
-  drawLayer(ctx, incoming, dx * (1 - p), dy * (1 - p) + parallax * 0.65);
+  drawMotionLayer(ctx, outgoing, -dx * p, -dy * p - parallax * 0.35, height, punch);
+  drawMotionLayer(ctx, incoming, dx * (1 - p), dy * (1 - p) + parallax * 0.65, height, punch);
   if (echoes && progress > 0.06 && progress < 0.94) {
     ctx.fillStyle = '#FFFFFF';
     ctx.globalAlpha *= 0.22;
@@ -123,21 +136,40 @@ function drawWhip(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress
   const [vx, vy] = entryVector(direction), p = easeInOut(progress);
   const distanceX = W * 1.12, distanceY = height * 1.12;
   const echoStrength = 0.14 * Math.sin(Math.PI * p);
+  const punch = landingPunch(progress);
   // Two stepped echoes turn the fast pan into a crisp, directional smear.
   for (let i = 2; i >= 1; i--) {
     const lag = i * 0.07;
     const trailP = clamp(p - lag);
-    drawLayer(ctx, outgoing, -vx * distanceX * trailP, -vy * distanceY * trailP, echoStrength / i);
-    drawLayer(ctx, incoming, vx * distanceX * (1 - trailP), vy * distanceY * (1 - trailP), echoStrength / i);
+    drawMotionLayer(ctx, outgoing, -vx * distanceX * trailP, -vy * distanceY * trailP, height, punch, echoStrength / i);
+    drawMotionLayer(ctx, incoming, vx * distanceX * (1 - trailP), vy * distanceY * (1 - trailP), height, punch, echoStrength / i);
   }
-  drawLayer(ctx, outgoing, -vx * distanceX * p, -vy * distanceY * p);
-  drawLayer(ctx, incoming, vx * distanceX * (1 - p), vy * distanceY * (1 - p));
+  drawMotionLayer(ctx, outgoing, -vx * distanceX * p, -vy * distanceY * p, height, punch);
+  drawMotionLayer(ctx, incoming, vx * distanceX * (1 - p), vy * distanceY * (1 - p), height, punch);
 }
 
 function drawZoom(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number]) {
   const p = easeInOut(progress);
   drawTransformed(ctx, outgoing, focus, 1 + 1.65 * p);
   if (p > 0.01) drawTransformed(ctx, incoming, focus, 0.12 + 0.88 * p);
+}
+
+function drawZoomthrough(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number]) {
+  const p = easeInOut(progress), punch = landingPunch(progress);
+  const outScale = 1 + 1.62 * p;
+  const inScale = Math.min(1.035, 0.18 + 0.82 * p) * punch;
+  // Staggered scale echoes make the portal feel like a fast, stepped camera move.
+  for (let i = 3; i >= 1; i--) {
+    const lag = i * 0.045, trail = Math.max(0, p - lag);
+    const alpha = 0.12 / i * Math.sin(Math.PI * p);
+    drawTransformed(ctx, outgoing, focus, 1 + 1.62 * trail, 1 + 1.62 * trail, 0, 0, alpha);
+    if (p > 0.03) {
+      const scale = Math.max(0.18, 0.18 + 0.82 * trail);
+      drawTransformed(ctx, incoming, focus, scale, scale, 0, 0, alpha);
+    }
+  }
+  drawTransformed(ctx, outgoing, focus, outScale, outScale);
+  if (p > 0.01) drawTransformed(ctx, incoming, focus, inScale, inScale);
 }
 
 function drawShatter(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, seed: number, height: number) {
@@ -188,10 +220,16 @@ function drawColumns(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progr
 
 function drawCube(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number], flip: boolean, theme: Theme) {
   const p = easeInOut(progress), out = p < 0.5, local = out ? p * 2 : (p - 0.5) * 2;
-  const scale = Math.max(0.12, out ? 1 - local * 0.88 : 0.12 + local * 0.88);
+  const minScale = flip ? 0.58 : 0.12;
+  const scale = Math.max(minScale, out ? 1 - local * (1 - minScale) : minScale + local * (1 - minScale));
   const offset = stepped((out ? -1 : 1) * W * 0.18 * Math.sin(local * Math.PI / 2), 4);
   ctx.fillStyle = theme.bg;
   ctx.fillRect(0, 0, W, H);
+  if (flip) {
+    // Keep scene detail behind the turning card so the midpoint never collapses to black.
+    drawLayer(ctx, outgoing, 0, 0, 1 - p);
+    drawLayer(ctx, incoming, 0, 0, p);
+  }
   drawTransformed(ctx, out ? outgoing : incoming, focus, scale, flip ? 1 : 0.98, offset);
   const edge = stepped(focus[0] + offset + (out ? -1 : 1) * (W * scale / 2), 4);
   const depth = stepped((flip ? 8 : 52) * Math.sin(local * Math.PI), 4);
@@ -264,8 +302,10 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
       drawWhip(ctx, outgoing, incoming, p, direction, height);
       break;
     case 'zoom':
-    case 'zoomthrough':
       drawZoom(ctx, outgoing, incoming, p, snappedFocus);
+      break;
+    case 'zoomthrough':
+      drawZoomthrough(ctx, outgoing, incoming, p, snappedFocus);
       break;
     case 'shatter':
       drawShatter(ctx, outgoing, incoming, p, seed, height);
@@ -338,8 +378,19 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
     }
     case 'match': {
       drawLayer(ctx, p < 0.5 ? outgoing : incoming);
-      if (p >= 0.5) drawTransformed(ctx, incoming, snappedFocus, 1 + 0.045 * (1 - easeInOut((p - 0.5) * 2)));
-      if (Math.abs(p - 0.5) <= 0.5 / 30) { ctx.fillStyle = theme.fg; ctx.fillRect(0, 0, W, height); }
+      if (p >= 0.5) {
+        const punch = 1 + 0.035 * (1 - easeInOut((p - 0.5) * 2));
+        drawTransformed(ctx, incoming, snappedFocus, punch);
+        const edgeAlpha = 0.2 * clamp(1 - Math.abs(p - 0.5) / 0.12);
+        if (edgeAlpha > 0) {
+          ctx.save();
+          ctx.globalAlpha *= edgeAlpha;
+          ctx.strokeStyle = theme.fg;
+          ctx.lineWidth = 4;
+          ctx.strokeRect(2, 2, W - 4, height - 4);
+          ctx.restore();
+        }
+      }
       break;
     }
   }
@@ -347,25 +398,25 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
 }
 
 const cueAtCut: Partial<Record<TransitionName, Cue[]>> = {
-  blocks: [{ t: -0.03, kind: 'tick', gain: 0.45 }, { t: 0.02, kind: 'pop', gain: 0.55 }],
+  blocks: [{ t: -0.01, kind: 'tick', gain: 0.55 }],
   wipe: [{ t: -0.1, kind: 'swish', gain: 0.7 }],
-  glitch: [{ t: -0.04, kind: 'tape', gain: 0.55 }, { t: 0.025, kind: 'zap', gain: 0.5 }],
-  zoom: [{ t: -0.2, kind: 'rise', len: 0.24 }, { t: 0, kind: 'whoosh', gain: 0.65 }],
+  glitch: [{ t: -0.02, kind: 'tape', gain: 0.6 }],
+  zoom: [{ t: -0.16, kind: 'rise', len: 0.28, gain: 0.62 }],
   flash: [{ t: 0, kind: 'shimmer', gain: 0.45 }],
-  shutter: [{ t: -0.04, kind: 'servo', gain: 0.45 }, { t: 0, kind: 'click', gain: 0.35 }],
-  push: [{ t: -0.12, kind: 'whoosh', gain: 0.64 }, { t: 0, kind: 'thud', gain: 0.52 }],
-  whip: [{ t: -0.12, kind: 'whip', gain: 0.72 }, { t: 0.025, kind: 'swish', gain: 0.45 }],
-  zoomthrough: [{ t: -0.22, kind: 'rise', len: 0.28, gain: 0.6 }, { t: 0, kind: 'bass', gain: 0.5 }],
-  shatter: [{ t: -0.04, kind: 'crack', gain: 0.55 }, { t: 0, kind: 'shatter', gain: 0.72 }, { t: 0.045, kind: 'glass', gain: 0.4 }],
-  pixelsort: [{ t: -0.08, kind: 'reverse', gain: 0.45 }, { t: 0.01, kind: 'tick', gain: 0.55 }],
-  melt: [{ t: -0.09, kind: 'reverse', gain: 0.42 }, { t: 0, kind: 'drop', gain: 0.52 }],
-  iris: [{ t: -0.16, kind: 'rise', len: 0.2, gain: 0.46 }, { t: 0, kind: 'click', gain: 0.42 }],
-  cube: [{ t: -0.08, kind: 'servo', gain: 0.52 }, { t: 0.02, kind: 'impact', gain: 0.55 }],
-  flip: [{ t: -0.06, kind: 'tape', gain: 0.5 }, { t: 0.02, kind: 'click', gain: 0.4 }],
-  dissolve: [{ t: -0.1, kind: 'reverse', gain: 0.38 }, { t: 0, kind: 'shimmer', gain: 0.38 }],
-  slice: [{ t: -0.08, kind: 'swish', gain: 0.6 }, { t: 0.02, kind: 'clack', gain: 0.42 }],
-  ink: [{ t: -0.18, kind: 'rise', len: 0.2, gain: 0.42 }, { t: 0, kind: 'paper', gain: 0.42 }],
-  match: [{ t: -0.02, kind: 'zap', gain: 0.55 }, { t: 0, kind: 'impact', gain: 0.58 }],
+  shutter: [{ t: -0.02, kind: 'servo', gain: 0.55 }],
+  push: [{ t: -0.12, kind: 'whoosh', gain: 0.7, len: 0.38 }],
+  whip: [{ t: -0.1, kind: 'whip', gain: 0.72, len: 0.22 }],
+  zoomthrough: [{ t: -0.2, kind: 'rise', len: 0.4, gain: 0.65 }],
+  shatter: [{ t: -0.02, kind: 'shatter', gain: 0.72 }],
+  pixelsort: [{ t: -0.04, kind: 'reverse', gain: 0.55 }],
+  melt: [{ t: -0.04, kind: 'drop', gain: 0.58 }],
+  iris: [{ t: -0.12, kind: 'rise', len: 0.3, gain: 0.52 }],
+  cube: [{ t: -0.03, kind: 'servo', gain: 0.6 }],
+  flip: [{ t: -0.03, kind: 'tape', gain: 0.55 }],
+  dissolve: [{ t: -0.05, kind: 'shimmer', gain: 0.45 }],
+  slice: [{ t: -0.04, kind: 'swish', gain: 0.65 }],
+  ink: [{ t: -0.12, kind: 'rise', len: 0.28, gain: 0.5 }],
+  match: [{ t: -0.01, kind: 'impact', len: 0.16, gain: 0.5 }],
 };
 
 /** Cue moments in seconds relative to the cut; pan follows the transition travel direction. */
@@ -379,9 +430,18 @@ export function drawTransition(ctx: Ctx, name: TransitionName, phase: number, th
   if (!Number.isFinite(phase) || name === 'cut') return;
   const cover = phase <= 0 ? clamp(phase + 1) : clamp(1 - phase);
   if (cover <= 0) return;
+  if (name === 'match') {
+    ctx.save();
+    ctx.globalAlpha *= 0.18 * cover;
+    ctx.strokeStyle = theme.fg;
+    ctx.lineWidth = 4;
+    ctx.strokeRect(2, 2, W - 4, H - 4);
+    ctx.restore();
+    return;
+  }
   ctx.save();
   const cols = Math.ceil(W / 20), rows = Math.ceil(H / 20), cell = 20;
-  ctx.fillStyle = name === 'flash' || name === 'match' ? theme.fg : theme.panelAlt;
+  ctx.fillStyle = name === 'flash' ? theme.fg : theme.panelAlt;
   for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
     const order = name === 'iris' || name === 'zoom' || name === 'zoomthrough'
       ? 1 - Math.hypot((x + 0.5) / cols - 0.5, (y + 0.5) / rows - 0.5) + hash(x * 31 + y * 997, seed) * 0.07

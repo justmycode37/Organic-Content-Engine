@@ -11,9 +11,9 @@ export interface ActiveCaption {
 }
 type CaptionWord = Span & { joinPrevious?: boolean; start?: number; end?: number; semantic?: 'gain' | 'loss' };
 
-const MAX_WIDTH = 880;
+const MAX_WIDTH = 960;
 const MIN_SIZE = 22;
-const WORD_SIZES = [64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, MIN_SIZE];
+const WORD_SIZES = [68, 64, 60, 56, 52, 48, 44, 40, 36, 32, 28, 24, MIN_SIZE];
 const GAIN_WORDS = new Set(['gain', 'gains', 'gained', 'up', 'rise', 'rises', 'rose', 'rising', 'surge', 'surges', 'surged', 'grow', 'grows', 'grew', 'growth', 'profit', 'profits', 'profitable', 'higher', 'increase', 'increases', 'increased', 'bull', 'bullish', 'green', 'beat', 'outperform', 'outperformed']);
 const LOSS_WORDS = new Set(['loss', 'losses', 'lost', 'down', 'fall', 'falls', 'fell', 'fallen', 'drop', 'drops', 'dropped', 'crash', 'crashes', 'crashed', 'sell', 'sells', 'sold', 'bear', 'bearish', 'decline', 'declines', 'declined', 'cut', 'cuts', 'negative', 'lower', 'plunge', 'plunges', 'plunged', 'red']);
 const semantic = (word: string): CaptionWord['semantic'] => {
@@ -30,13 +30,14 @@ function splitLongWords(ctx: Frame['ctx'], words: CaptionWord[], size: number): 
   const result: CaptionWord[] = [];
   for (const word of words) {
     if (textWidth(ctx, word.text, size, 900) <= MAX_WIDTH) { result.push(word); continue; }
-    let part = '';
+    let part = '', firstPart = true;
     for (const char of [...word.text]) {
       if (part && textWidth(ctx, part + char, size, 900) > MAX_WIDTH) {
-        result.push({ ...word, text: part }); part = char;
+        result.push({ ...word, text: part, joinPrevious: firstPart ? word.joinPrevious : true });
+        firstPart = false; part = char;
       } else part += char;
     }
-    if (part) result.push({ ...word, text: part, joinPrevious: result.length > 0 });
+    if (part) result.push({ ...word, text: part, joinPrevious: firstPart ? word.joinPrevious : true });
   }
   return result;
 }
@@ -57,7 +58,6 @@ function balancedLines(ctx: Frame['ctx'], words: CaptionWord[], size: number): C
   if (rowWidth(ctx, words, size, 900) <= MAX_WIDTH) return [words];
   let best: { split: number; score: number } | undefined;
   for (let split = 1; split < words.length; split++) {
-    if (words[split]!.joinPrevious) continue;
     const a = words.slice(0, split), b = words.slice(split), wa = rowWidth(ctx, a, size, 900), wb = rowWidth(ctx, b, size, 900);
     if (wa <= MAX_WIDTH && wb <= MAX_WIDTH) {
       const score = Math.abs(wa - wb);
@@ -109,13 +109,16 @@ function wrapLayout(frame: Frame, words: CaptionWord[]) {
     if (balanced && balanced.length <= 2) { size = candidate; lines = balanced; break; }
   }
   if (!lines.length) {
-    size = MIN_SIZE;
-    lines = greedyLines(frame.ctx, splitLongWords(frame.ctx, words, size), size).slice(0, 2);
-    const shown = lines.flat().length;
-    if (shown < words.length && lines.length) {
-      const last = lines.at(-1)!;
-      if (last.length) last[last.length - 1]!.text = `${last.at(-1)!.text.replace(/[.,!?;:]$/, '')}…`;
+    for (let candidate = MIN_SIZE - 1; candidate >= 1; candidate--) {
+      const fitted = splitLongWords(frame.ctx, words, candidate), balanced = balancedLines(frame.ctx, fitted, candidate);
+      if (balanced && balanced.length <= 2) { size = candidate; lines = balanced; break; }
     }
+  }
+  if (!lines.length) {
+    // Pathological copy still stays in two lines and retains every word fragment.
+    size = 1;
+    const fitted = splitLongWords(frame.ctx, words, size), split = Math.ceil(fitted.length / 2);
+    lines = fitted.length > 1 ? [fitted.slice(0, split), fitted.slice(split)] : [fitted];
   }
   return { lines, size };
 }
@@ -137,7 +140,6 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number, 
   const lineHeight = size * 1.13, totalHeight = lines.length * lineHeight;
   const center = (bandTop + bandBottom) / 2, top = center - totalHeight / 2 + lineHeight / 2;
   const exit = clamp((end - time) / 0.09);
-  let globalIndex = 0;
 
   for (let row = 0; row < lines.length; row++) {
     const rowWords = lines[row]!;
@@ -147,30 +149,24 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number, 
     const rowProgress = ease.outExpo(clamp((time - rowStart) / 0.14));
     const baseline = top + row * lineHeight + (1 - rowProgress) * 7;
     for (let col = 0; col < rowWords.length; col++) {
-      const word = rowWords[col]!, index = globalIndex++, width = textWidth(ctx, word.text, size, 900), next = rowWords[col + 1], gap = next && !next.joinPrevious ? textWidth(ctx, ' ', size, 900) : 0;
-      const wordStart = word.start ?? start, wordEnd = Math.max(wordStart + 0.03, word.end ?? end), pop = clamp((time - wordStart) / Math.min(0.17, Math.max(0.085, (wordEnd - wordStart) * 0.55)));
+      const word = rowWords[col]!, width = textWidth(ctx, word.text, size, 900), next = rowWords[col + 1], gap = next && !next.joinPrevious ? textWidth(ctx, ' ', size, 900) : 0;
+      const wordStart = word.start ?? start, wordEnd = Math.max(wordStart + 0.03, word.end ?? end), pop = clamp((time - wordStart) / 0.12);
       const active = time >= wordStart && time < wordEnd;
-      if (pop > 0 && exit > 0 && rowProgress > 0) {
-        const directional = word.accent && word.semantic ? (word.semantic === 'gain' ? '#55D68A' : '#FF5B62') : '#FFFFFF';
-        const emphasized = word.accent || active;
-        const weight = active ? 900 : emphasized ? 850 : 650;
-        const measured = textWidth(ctx, word.text, size, weight), centerX = x + width / 2;
-        const popScale = active ? 0.92 + 0.12 * ease.outBack(pop) : 0.88 + 0.12 * ease.outBack(pop);
-        const scale = popScale * (active ? 1.045 : 1) * (0.98 + exit * 0.02);
+      if (exit > 0 && rowProgress > 0) {
+        const measured = textWidth(ctx, word.text, size, 900), centerX = x + width / 2;
+        const scale = (active ? 0.98 + 0.075 * ease.outBack(pop) : 1) * (0.98 + exit * 0.02);
         const tx = centerX - measured / 2;
-        if (emphasized) {
-          const slabW = measured + 24, slabH = size * 1.36;
+        if (active) {
+          const slabW = measured + 28, slabH = size * 1.38;
           ctx.save(); ctx.translate(centerX, baseline); ctx.scale(scale, scale); ctx.translate(-centerX, -baseline);
-          ctx.fillStyle = '#09090B'; ctx.fillRect(centerX - slabW / 2, baseline - slabH / 2, slabW, slabH);
-          ctx.fillStyle = '#303034'; ctx.fillRect(centerX - slabW / 2, baseline - slabH / 2, slabW, 3);
-          ctx.fillRect(centerX - slabW / 2, baseline + slabH / 2 - 3, slabW, 3);
+          ctx.fillStyle = '#FFFFFF'; ctx.fillRect(centerX - slabW / 2, baseline - slabH / 2, slabW, slabH);
           ctx.restore();
         }
         ctx.save();
-        ctx.globalAlpha *= Math.min(1, pop * 1.55) * exit * rowProgress;
+        ctx.globalAlpha *= (active ? 1 : 0.82) * exit * rowProgress;
         ctx.translate(centerX, baseline); ctx.scale(scale, scale); ctx.translate(-centerX, -baseline);
-        ctx.font = font(size, weight, 'body'); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
-        ctx.fillStyle = active || word.accent ? directional : '#929297';
+        ctx.font = font(size, 900, 'body'); ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+        ctx.fillStyle = active ? '#09090B' : '#FFFFFF';
         ctx.fillText(word.text, tx, baseline);
         ctx.restore();
       }

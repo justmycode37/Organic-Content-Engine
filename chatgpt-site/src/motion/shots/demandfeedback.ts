@@ -1,292 +1,298 @@
 import { clamp, ease, hash, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
-import { drawEnv } from '../env/index.ts';
 import { drawBurst, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
-import { box, instances, render3d } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
 const W = 1080, H = 1290;
-const RED = '#E43A34';
-const INK = '#08090B';
-const PALE = '#E1E3E5';
-const STEEL = '#7A8288';
-const DIM = '#31363B';
-const CITY_BLOCK = box(1.55, 7.6, 1.1, 0, [1, 1, 2, 0, 2, 0]);
-const CITY_MATERIALS = [{ ramp: 'steel' as const, tone: 0.82 }, { ramp: 'mono' as const, tone: 0.44 }, { ramp: 'chrome' as const, tone: 0.54 }];
-const CITY_TRANSFORMS = [
-  { pos: [-4.6, 2.9, 4.8] as [number, number, number], scale: [1.25, 1.16, 1.05] as [number, number, number] },
-  { pos: [4.5, 3.9, 7.4] as [number, number, number], scale: [1.05, 1.55, 1.1] as [number, number, number] },
-  { pos: [-2.8, 4.2, 10.4] as [number, number, number], scale: [0.76, 1.72, 1.0] as [number, number, number] },
-  { pos: [2.8, 2.2, 11.5] as [number, number, number], scale: [0.92, 0.88, 1.1] as [number, number, number] },
+const RED = '#E43A34', INK = '#090B0D', PAPER = '#E4E6E8';
+type Point = { x: number; y: number };
+type Booth = { x: number; y: number; w: number; h: number; facing: 1 | -1 };
+const BOOTHS: Booth[] = [
+  { x: 24, y: 842, w: 432, h: 220, facing: 1 },
+  { x: 624, y: 544, w: 432, h: 220, facing: -1 },
+  { x: 24, y: 246, w: 432, h: 220, facing: 1 },
 ];
 
-const numParam = (props: ShotProps, key: string, fallback: number, lo: number, hi: number) => {
-  const value = Number(props.params?.[key]);
-  return Number.isFinite(value) ? clamp(value, lo, hi) : fallback;
-};
-const strParam = (props: ShotProps, key: string, fallback: string) => String(props.params?.[key] ?? fallback).toLowerCase();
-const listParam = (props: ShotProps, key: string): unknown[] => Array.isArray(props.params?.[key]) ? props.params![key] as unknown[] : [];
 function eventAt(props: ShotProps, kind: string, fallback: number, dur: number) {
-  const found = props.events?.find(event => event.kind.toLowerCase() === kind.toLowerCase());
-  return clamp(found?.at ?? fallback, 0, Math.max(0, dur));
-}
-function buyTimes(props: ShotProps, dur: number, start: number, count: number, repeatGain: number) {
-  const custom = listParam(props, 'buyerWave');
-  if (custom.length) {
-    return Array.from({ length: count }, (_, i) => {
-      const raw = Number(custom[i]);
-      return clamp(Number.isFinite(raw) ? raw : start + (i * 0.12), 0, dur);
-    });
-  }
-  const gap = Math.min(0.15, dur * 0.065);
-  return Array.from({ length: count }, (_, i) => {
-    let delay = 0;
-    for (let j = 0; j < i; j++) delay += gap * Math.max(0.42, 1 - j * repeatGain * 0.48);
-    return clamp(start + delay, 0, dur);
-  });
+  const event = props.events?.find(item => item.kind.toLowerCase() === kind);
+  return clamp(event?.at ?? fallback, 0, Math.max(0, dur));
 }
 
-function drawTowerWindows(ctx: Frame['ctx'], x: number, y: number, w: number, h: number, drift: number, seed: number, t: number) {
-  const floorH = 18, colW = 17;
-  for (let row = 0; row < Math.floor(h / 38); row++) {
-    const yy = y + row * 38 + Math.round(drift * (0.08 + row * 0.015));
-    ctx.fillStyle = row % 3 === 0 ? '#25292E' : '#1C2024';
-    ctx.fillRect(Math.round(x), yy, Math.round(w), floorH);
-    for (let col = 0; col < Math.floor(w / 32); col++) {
-      const id = row * 37 + col * 11;
-      if (hash(id, seed) > 0.57) {
-        ctx.fillStyle = hash(id, Math.floor(t * 2.5) + seed) > 0.55 ? '#ADB2B6' : '#656C72';
-        ctx.fillRect(Math.round(x + 11 + col * 32), yy + 5, colW, 8);
+function buyTimes(props: ShotProps, dur: number) {
+  const start = eventAt(props, 'buying', dur * 0.55, dur);
+  return [0, 1, 2].map(i => clamp(start + i * 0.25, 0, dur));
+}
+
+function drawBackdrop(ctx: Frame['ctx'], t: number, seed: number) {
+  ctx.fillStyle = '#171B1F'; ctx.fillRect(0, 0, W, H);
+  // Deep arena blocks scroll down as the camera climbs the price rail.
+  const drift = (t * 190) % 236;
+  const blocks = [
+    { x: -22, w: 194, shade: '#242A2F' }, { x: 188, w: 118, shade: '#1D2227' },
+    { x: 788, w: 124, shade: '#20262B' }, { x: 912, w: 194, shade: '#262C31' },
+  ];
+  for (const block of blocks) {
+    ctx.fillStyle = block.shade; ctx.fillRect(block.x, 0, block.w, 1190);
+    ctx.fillStyle = '#424A51'; ctx.fillRect(block.x, 0, 7, 1190); ctx.fillRect(block.x + block.w - 8, 0, 8, 1190);
+    for (let row = -1; row < 7; row++) {
+      const y = Math.round(row * 236 + drift - 146);
+      ctx.fillStyle = '#333A40'; ctx.fillRect(block.x + 12, y, block.w - 24, 10);
+      ctx.fillStyle = '#596168'; ctx.fillRect(block.x + 12, y + 10, block.w - 24, 4);
+      for (let col = 0; col < Math.floor((block.w - 30) / 30); col++) {
+        const id = row * 47 + col * 13 + block.x;
+        if (hash(id, seed) > 0.23) {
+          const wx = block.x + 18 + col * 30, wy = y + 28;
+          ctx.fillStyle = hash(id, seed + Math.floor(t * 1.7)) > 0.56 ? '#8A9298' : '#515A61';
+          ctx.fillRect(wx, wy, 17, 34); ctx.fillStyle = '#31383E'; ctx.fillRect(wx + 3, wy + 4, 11, 26);
+        }
       }
     }
-    ctx.fillStyle = '#0E1012';
-    ctx.fillRect(Math.round(x), yy + floorH, Math.round(w), 4);
+  }
+  // Cross-venue bridges and vanishing rails give the narrow vertical climb scale.
+  for (let i = 0; i < 6; i++) {
+    const y = Math.round(((i * 252 + drift * 0.72) % 1480) - 96);
+    ctx.fillStyle = '#333A40'; ctx.fillRect(0, y, W, 12);
+    ctx.fillStyle = '#737C83'; ctx.fillRect(0, y, W, 4);
+    ctx.fillStyle = '#101316'; ctx.fillRect(0, y + 12, W, 8);
+    for (let x = 18; x < W; x += 72) {
+      ctx.fillStyle = (x / 72 + i) % 2 ? '#565F66' : '#3B4248';
+      ctx.fillRect(x, y + 18, 4, 20);
+    }
+  }
+  // Receding window bands stay low contrast behind the red line.
+  for (let y = 0; y < 1120; y += 16) {
+    const row = Math.floor(y / 16);
+    for (let x = (row % 2) * 12; x < W; x += 32) {
+      if (hash(row * 97 + x, seed + 19) > 0.62) {
+        ctx.fillStyle = '#32393F'; ctx.fillRect(x, y, 12, 5);
+      }
+    }
   }
 }
 
-function drawSkyline(ctx: Frame['ctx'], t: number, seed: number, travel: number) {
-  // A brighter grey fog shelf and three independent skyline depths keep the run from becoming a black void.
-  ctx.fillStyle = '#202429';
-  ctx.fillRect(0, 356 + Math.round(travel * 0.07), W, 4);
-  for (let i = 0; i < 10; i++) {
-    const width = 76 + (i % 3) * 24, x = ((i * 151 - Math.round(travel * (0.12 + i % 2 * 0.05))) % (W + 120) + W + 120) % (W + 120) - 60;
-    const height = 170 + hash(i, seed + 32) * 250, base = 660 + Math.round(travel * 0.13);
-    ctx.fillStyle = i % 2 ? '#292E33' : '#20252A';
-    ctx.fillRect(Math.round(x), Math.round(base - height), width, height + 400);
-    ctx.fillStyle = '#515960';
-    ctx.fillRect(Math.round(x), Math.round(base - height), width, 8);
-    drawTowerWindows(ctx, x + 8, base - height + 18, width - 16, height - 20, travel, seed + i * 9, t);
-  }
-  ctx.fillStyle = '#171B1F';
-  ctx.fillRect(0, 930, W, 360);
-}
-
-function drawBooth(ctx: Frame['ctx'], x: number, y: number, w: number, h: number, index: number, t: number, scareAt: number, reactionDelay: number, buyAt: number, coverAt: number, coverEnd: number, active: boolean) {
-  const reaction = clamp((t - scareAt - reactionDelay) / 0.18);
-  const buy = clamp((t - buyAt) / 0.34);
-  const innerX = x + 20, innerY = y + 18, innerW = w - 40, innerH = h - 40;
-  // Double booth casing: bevels, boltheads and a shaded window make each stop feel bolted into the venue.
-  ctx.fillStyle = '#08090B'; ctx.fillRect(x, y, w, h);
-  ctx.fillStyle = index % 2 ? '#858D93' : '#B3B8BC'; ctx.fillRect(x + 4, y + 4, w - 8, 7); ctx.fillRect(x + 4, y + 4, 7, h - 8);
-  ctx.fillStyle = '#33393E'; ctx.fillRect(x + w - 11, y + 8, 7, h - 12); ctx.fillRect(x + 8, y + h - 11, w - 16, 7);
-  ctx.fillStyle = '#171B1F'; ctx.fillRect(innerX, innerY, innerW, innerH);
-  ctx.fillStyle = '#434A50'; ctx.fillRect(innerX + 4, innerY + 4, innerW - 8, 5);
-  ctx.fillStyle = '#101316'; ctx.fillRect(innerX + 12, innerY + 12, innerW - 24, innerH - 24);
-  // Reflected slats in the glass, shifted with the camera.
-  for (let slat = 0; slat < 5; slat++) {
-    const sx = innerX + 18 + ((slat * 59 + Math.round(t * 64 + index * 23)) % Math.max(1, innerW - 42));
-    ctx.fillStyle = slat % 2 ? '#293036' : '#343C42';
-    ctx.fillRect(sx, innerY + 17, 3, innerH - 36);
-  }
-  const hatchX = x + w - 84, hatchY = y + h - 58;
-  ctx.fillStyle = '#060708'; ctx.fillRect(hatchX, hatchY, 66, 38);
-  ctx.fillStyle = '#8C949A'; ctx.fillRect(hatchX, hatchY, 66, 5);
-  ctx.fillStyle = '#3B4248'; ctx.fillRect(hatchX + 8, hatchY + 10, 50, 4);
-  ctx.fillStyle = active && buy > 0.12 ? RED : '#D0D4D7'; ctx.fillRect(hatchX + 8, hatchY + 27, 50, 4);
-  for (let bolt = 0; bolt < 4; bolt++) {
-    ctx.fillStyle = '#E0E2E4';
-    ctx.fillRect(x + 12 + (bolt % 2) * (w - 24), y + 13 + Math.floor(bolt / 2) * (h - 26), 7, 7);
-    ctx.fillStyle = '#272C31'; ctx.fillRect(x + 14 + (bolt % 2) * (w - 24), y + 15 + Math.floor(bolt / 2) * (h - 26), 3, 3);
-  }
-  // Seller is an original voxel/pixel extra, with little glasses/hair variations and expressive recoil.
-  const sellerX = x + Math.round(w * (0.36 + buy * 0.32));
-  const sellerY = y + Math.round(h * 0.72) - Math.round(reaction * 15) - Math.round(Math.sin(t * (buy > 0 ? 18 : 7) + index) * (buy > 0 ? 4 : 2));
-  const scale = index > 4 ? 2.0 : 2.55;
-  drawSeller(ctx, sellerX, sellerY, scale, t, index, reaction, buy);
-  if (buy > 0.72 && buy < 1.35) {
-    drawTicket2D(ctx, hatchX + 28, hatchY + 17, 58, { rot: -0.12 + Math.sin(t * 13 + index) * 0.08 });
-  }
-  // A single live BUY label stays attached to the active slot, never floats in the scene.
-  if (active && t >= coverAt && t <= coverEnd) pixelText(ctx, 'BUY', hatchX + 32, hatchY - 22, 2, { color: PALE, align: 'center', reveal: clamp((t - coverAt) / 0.12), mode: 'type' });
-  ctx.fillStyle = '#14171A'; ctx.fillRect(x + 13, y + h - 20, w - 26, 4);
-}
-
-function drawSeller(ctx: Frame['ctx'], x: number, feetY: number, scale: number, t: number, index: number, reaction: number, buying: number) {
-  ctx.save(); ctx.translate(Math.round(x), Math.round(feetY)); ctx.scale(scale, scale);
-  const lean = Math.round(reaction * 4) - Math.round(buying * 10), bob = Math.round(Math.sin(t * 11 + index) * 1.4);
-  const ink = '#090A0C', coat = index % 2 ? '#777E84' : '#A0A6AB', lit = '#E0E2E4', shade = '#41474D';
-  // feet and coat
-  ctx.fillStyle = ink; ctx.fillRect(-12 + lean, -3 + bob, 10, 4); ctx.fillRect(4 + lean, -3 - bob, 10, 4);
-  ctx.fillStyle = shade; ctx.fillRect(-10 + lean, -27 + bob, 24, 27);
-  ctx.fillStyle = coat; ctx.fillRect(-8 + lean, -26 + bob, 19, 22);
-  ctx.fillStyle = lit; ctx.fillRect(-3 + lean, -25 + bob, 4, 14);
-  ctx.fillStyle = ink; ctx.fillRect(-18 + lean - Math.round(reaction * 8), -24 + bob, 8, 20); ctx.fillRect(13 + lean + Math.round(reaction * 7), -24 + bob, 8, 20);
-  ctx.fillStyle = coat; ctx.fillRect(-17 + lean - Math.round(reaction * 8), -23 + bob, 5, 16); ctx.fillRect(14 + lean + Math.round(reaction * 7), -23 + bob, 5, 16);
-  // hair, ears and face
-  ctx.fillStyle = ink; ctx.fillRect(-11 + lean, -47 + bob, 25, 23);
-  ctx.fillStyle = lit; ctx.fillRect(-9 + lean, -44 + bob, 21, 18);
-  ctx.fillStyle = shade; ctx.fillRect(-9 + lean, -45 + bob, 21, 4);
-  if (index % 3 === 0) { ctx.fillStyle = ink; ctx.fillRect(-12 + lean, -48 + bob, 26, 6); }
-  else if (index % 3 === 1) { ctx.fillStyle = coat; ctx.fillRect(-8 + lean, -51 + bob, 19, 5); }
-  ctx.fillStyle = ink; ctx.fillRect(-5 + lean, -39 + bob, 4, 4); ctx.fillRect(5 + lean, -39 + bob, 4, 4);
-  ctx.fillStyle = reaction > 0.2 ? '#FFFFFF' : '#1B1E21';
-  if (reaction > 0.2) { ctx.fillRect(-5 + lean, -40 + bob, 4, 7); ctx.fillRect(5 + lean, -40 + bob, 4, 7); }
-  else { ctx.fillRect(-5 + lean, -39 + bob, 4, 4); ctx.fillRect(5 + lean, -39 + bob, 4, 4); }
-  ctx.fillStyle = ink; ctx.fillRect(0 + lean, -32 + bob, 4, reaction > 0.55 ? 5 : 2);
-  if (index % 2 === 0) { ctx.fillStyle = '#2B3035'; ctx.fillRect(-8 + lean, -41 + bob, 20, 2); ctx.fillRect(-2 + lean, -41 + bob, 2, 8); }
-  ctx.restore();
-}
-
-type Point = { x: number; y: number };
-function drawTrack(ctx: Frame['ctx'], points: Point[], progress: number, color = RED) {
-  if (points.length < 2 || progress <= 0) return;
-  const full = points.length - 1, exact = clamp(progress) * full, last = Math.floor(exact), partial = exact - last;
-  const draw = (width: number, style: string) => {
-    ctx.beginPath(); ctx.moveTo(points[0]!.x, points[0]!.y);
-    for (let i = 1; i <= Math.min(last, full); i++) ctx.lineTo(points[i]!.x, points[i]!.y);
-    if (last < full && partial > 0) {
-      const a = points[last]!, b = points[last + 1]!;
+function drawTrack(ctx: Frame['ctx'], path: Point[], progress: number, color: string, widthScale = 1) {
+  if (path.length < 2) return;
+  const last = (path.length - 1) * clamp(progress), full = Math.floor(last), partial = last - full;
+  const draw = (width: number, stroke: string) => {
+    ctx.beginPath(); ctx.moveTo(path[0]!.x, path[0]!.y);
+    for (let i = 1; i <= Math.min(full, path.length - 1); i++) ctx.lineTo(path[i]!.x, path[i]!.y);
+    if (full < path.length - 1 && partial > 0) {
+      const a = path[full]!, b = path[full + 1]!;
       ctx.lineTo(Math.round(a.x + (b.x - a.x) * partial), Math.round(a.y + (b.y - a.y) * partial));
     }
-    ctx.strokeStyle = style; ctx.lineWidth = width; ctx.lineJoin = 'bevel'; ctx.lineCap = 'square'; ctx.stroke();
+    ctx.strokeStyle = stroke; ctx.lineWidth = width * widthScale; ctx.lineCap = 'square'; ctx.lineJoin = 'bevel'; ctx.stroke();
   };
-  draw(34, '#252A2F'); draw(24, '#08090B'); draw(11, color);
-  const at = points[Math.min(last, full)]!;
-  ctx.fillStyle = '#F5B0AA'; ctx.fillRect(Math.round(at.x / 6) * 6 - 6, Math.round(at.y / 6) * 6 - 6, 12, 12);
+  draw(44, '#080A0C'); draw(34, '#343B41'); draw(22, color);
+  draw(4, color === RED ? '#FFAAA4' : '#252B30');
+  if (progress > 0 && progress < 1) {
+    const i = Math.min(full, path.length - 1), a = path[i]!, b = path[Math.min(i + 1, path.length - 1)]!;
+    const x = Math.round((a.x + (b.x - a.x) * partial) / 4) * 4, y = Math.round((a.y + (b.y - a.y) * partial) / 4) * 4;
+    ctx.fillStyle = '#F7D5D2'; ctx.fillRect(x - 10, y - 10, 20, 20);
+    ctx.fillStyle = RED; ctx.fillRect(x - 6, y - 6, 12, 12);
+  }
 }
 
-function resolvedPath(props: ShotProps, fallback: Point[]): Point[] {
-  const custom = listParam(props, 'pricePath');
-  if (!custom.length) return fallback;
-  const points = custom.slice(0, 20).map(point => {
-    if (Array.isArray(point)) return { x: clamp(Number(point[0]), -80, 1160), y: clamp(Number(point[1]), 0, 1260) };
-    if (point && typeof point === 'object') {
-      const p = point as Record<string, unknown>;
-      return { x: clamp(Number(p.x), -80, 1160), y: clamp(Number(p.y), 0, 1260) };
-    }
-    return null;
-  }).filter((point): point is Point => point !== null && Number.isFinite(point.x) && Number.isFinite(point.y));
-  return points.length >= 2 ? points : fallback;
+function drawSeller(ctx: Frame['ctx'], x: number, feetY: number, scale: number, index: number, t: number, recoil: number, buying: number, facing: 1 | -1) {
+  ctx.save(); ctx.translate(Math.round(x), Math.round(feetY)); ctx.scale(scale, scale);
+  const colors = [
+    { coat: '#92999F', shade: '#424A51', light: '#E0E3E5', face: '#F0E8D9' },
+    { coat: '#737D84', shade: '#343C42', light: '#C8CDD0', face: '#E3DACC' },
+    { coat: '#A0A6AA', shade: '#4A5157', light: '#ECEDEE', face: '#E8DDC7' },
+  ][index]!;
+  const wobble = Math.round(Math.sin(t * 10 + index * 2) * 1.2);
+  const lunge = ease.outCubic(buying) * 7, away = recoil * 5;
+  ctx.save(); ctx.translate(Math.round(-facing * away + facing * lunge), 0);
+  ctx.rotate(-facing * recoil * 0.15 + facing * buying * 0.035);
+  // Feet and coat silhouette: tall, round, and bearded profiles are deliberately distinct.
+  const bodyW = index === 1 ? 29 : index === 0 ? 20 : 25;
+  ctx.fillStyle = INK; ctx.fillRect(-bodyW / 2 - 4, -5 + wobble, 12, 5); ctx.fillRect(bodyW / 2 - 7, -5 - wobble, 12, 5);
+  ctx.fillStyle = colors.shade;
+  if (index === 0) ctx.fillRect(-12, -38, 24, 35);
+  else if (index === 1) ctx.fillRect(-19, -31, 38, 29);
+  else ctx.fillRect(-16, -35, 32, 33);
+  ctx.fillStyle = colors.coat;
+  if (index === 0) { ctx.fillRect(-9, -36, 18, 32); ctx.fillRect(-13, -9, 26, 7); }
+  else if (index === 1) { ctx.fillRect(-16, -29, 32, 26); ctx.fillRect(-19, -18, 38, 13); }
+  else { ctx.fillRect(-13, -33, 26, 30); ctx.fillRect(-18, -21, 36, 13); }
+  ctx.fillStyle = colors.light;
+  ctx.fillRect(-2, -34, 5, index === 1 ? 19 : 25);
+  if (index === 1) { ctx.fillRect(-8, -15, 7, 5); ctx.fillRect(2, -15, 7, 5); }
+  else { ctx.fillRect(-1, -13, 4, 8); }
+
+  // Arms pivot up in fright, then one reaches across the panel to mash its button.
+  const drawArm = (side: -1 | 1) => {
+    const shoulderX = side * (bodyW / 2 - 2), shoulderY = -28;
+    const isButtonArm = side === facing;
+    let endX = side * (recoil > 0.18 ? 29 : 21), endY = recoil > 0.18 ? -46 : -8;
+    if (buying > 0.02 && isButtonArm) { endX = side * 38; endY = -18 - buying * 12; }
+    const angle = Math.atan2(endY - shoulderY, endX - shoulderX);
+    ctx.save(); ctx.translate(shoulderX, shoulderY); ctx.rotate(angle);
+    ctx.fillStyle = INK; ctx.fillRect(0, -4, 25, 9);
+    ctx.fillStyle = colors.coat; ctx.fillRect(1, -2, 20, 5);
+    ctx.fillStyle = colors.face; ctx.fillRect(20, -4, 8, 8);
+    ctx.restore();
+  };
+  drawArm(-1); drawArm(1);
+
+  // Face, hair and accessories distinguish the short sellers at a glance.
+  ctx.fillStyle = INK; ctx.fillRect(-14, -59, 28, 27);
+  ctx.fillStyle = colors.face; ctx.fillRect(-11, -56, 22, 21);
+  ctx.fillStyle = colors.shade; ctx.fillRect(-11, -58, 22, 5);
+  if (index === 0) {
+    ctx.fillStyle = INK; ctx.fillRect(-18, -64, 36, 6); ctx.fillRect(-11, -73, 23, 11); ctx.fillStyle = colors.coat; ctx.fillRect(-7, -71, 15, 5);
+  } else if (index === 1) {
+    ctx.fillStyle = colors.coat; ctx.fillRect(-12, -64, 22, 5); ctx.fillRect(-8, -68, 14, 5);
+    ctx.fillStyle = INK; ctx.fillRect(-18, -47, 5, 13); ctx.fillRect(13, -47, 5, 13);
+  } else {
+    ctx.fillStyle = INK; ctx.fillRect(-14, -64, 28, 7); ctx.fillRect(-16, -42, 32, 12);
+    ctx.fillStyle = colors.coat; ctx.fillRect(-11, -43, 22, 7); ctx.fillStyle = colors.face; ctx.fillRect(-6, -39, 12, 4);
+  }
+  ctx.fillStyle = recoil > 0.1 ? '#FFFFFF' : INK;
+  ctx.fillRect(-7, -48, 4, recoil > 0.1 ? 7 : 4); ctx.fillRect(4, -48, 4, recoil > 0.1 ? 7 : 4);
+  ctx.fillStyle = INK; ctx.fillRect(-1, -39, 4, recoil > 0.5 ? 6 : 3);
+  if (index === 0) { ctx.fillStyle = '#15181B'; ctx.fillRect(-12, -49, 10, 5); ctx.fillRect(2, -49, 10, 5); ctx.fillRect(-3, -47, 6, 2); }
+  ctx.restore(); ctx.restore();
+}
+
+function drawButton(ctx: Frame['ctx'], x: number, y: number, t: number, hitAt: number, index: number, active: boolean) {
+  const p = clamp((t - hitAt) / 0.18), rebound = clamp((t - hitAt - 0.1) / 0.28);
+  const depressed = ease.outCubic(p) * (1 - ease.outCubic(rebound) * 0.72);
+  const pulse = active ? 1 - clamp((t - hitAt) / 0.5) : 0;
+  const top = Math.round((y + depressed * 10) / 4) * 4;
+  ctx.fillStyle = '#050607'; ctx.fillRect(x - 58, y - 7, 116, 75);
+  ctx.fillStyle = '#A9B0B5'; ctx.fillRect(x - 58, y - 7, 116, 8); ctx.fillRect(x - 58, y - 7, 8, 75);
+  ctx.fillStyle = '#333B41'; ctx.fillRect(x - 48, y + 4, 96, 55);
+  ctx.fillStyle = active ? (pulse > 0.1 ? '#F17770' : RED) : '#7C858B'; ctx.fillRect(x - 42, top, 84, 44);
+  ctx.fillStyle = active ? '#FFB0AA' : '#BBC1C5'; ctx.fillRect(x - 42, top, 84, 6);
+  ctx.fillStyle = '#191C1F'; ctx.fillRect(x - 36, top + 34, 72, 6);
+  pixelText(ctx, 'BUY', x, top + 17, 2, { color: '#F3F4F5', align: 'center', mode: 'type', reveal: 1 });
+  // The receipt slot opens on impact; the same grey ticket punches through in a short upward beat.
+  ctx.fillStyle = '#080A0C'; ctx.fillRect(x - 43, y + 78, 86, 18);
+  ctx.fillStyle = '#8F979D'; ctx.fillRect(x - 43, y + 78, 86, 5);
+  if (p > 0 && p < 1.25) {
+    const q = clamp(p / 0.78);
+    drawTicket2D(ctx, x, y + 91 - ease.outCubic(q) * 66, 88, { rot: -0.08 + q * 0.16 });
+  }
+  if (active && t >= hitAt && t < hitAt + 0.36) {
+    ctx.fillStyle = '#F6C3BF'; ctx.fillRect(x - 62, y + 62, 8, 8); ctx.fillRect(x + 54, y + 62, 8, 8);
+  }
+  void index;
+}
+
+function drawBooth(ctx: Frame['ctx'], booth: Booth, index: number, t: number, scareAt: number, buyAt: number, seed: number, activeIndex: number) {
+  const { x, y, w, h, facing } = booth;
+  const local = clamp((t - buyAt) / 0.32), hitStart = scareAt + index * 0.045;
+  const recoil = t < hitStart ? 0 : 0.15 + 0.85 * ease.outBack(clamp((t - hitStart) / 0.21));
+  const innerX = x + 14, innerY = y + 14, innerW = w - 28, innerH = h - 28;
+  ctx.fillStyle = '#080A0C'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = index === 1 ? '#C0C5C8' : '#A8AFB4'; ctx.fillRect(x + 4, y + 4, w - 8, 8); ctx.fillRect(x + 4, y + 4, 8, h - 8);
+  ctx.fillStyle = '#343C42'; ctx.fillRect(x + w - 12, y + 8, 8, h - 12); ctx.fillRect(x + 8, y + h - 12, w - 16, 8);
+  ctx.fillStyle = '#191E22'; ctx.fillRect(innerX, innerY, innerW, innerH);
+  ctx.fillStyle = '#3D464D'; ctx.fillRect(innerX + 8, innerY + 8, innerW - 16, 6);
+  ctx.fillStyle = '#101417'; ctx.fillRect(innerX + 18, innerY + 18, innerW - 36, innerH - 54);
+  // Luminous glass ribs sweep past with the moving camera.
+  for (let rib = 0; rib < 6; rib++) {
+    const rx = innerX + 24 + ((rib * 57 + Math.floor(t * 66 + index * 19)) % (innerW - 52));
+    ctx.fillStyle = rib % 2 ? '#384149' : '#56616A'; ctx.fillRect(rx, innerY + 20, 4, innerH - 78);
+  }
+  const sellerX = facing > 0 ? x + 250 : x + 182;
+  drawSeller(ctx, sellerX, y + h - 25, 2.55, index, t, recoil, local, facing);
+  const buttonX = facing > 0 ? x + 350 : x + 82, buttonY = y + h - 103;
+  drawButton(ctx, buttonX, buttonY, t, buyAt, index, activeIndex === index && t >= buyAt);
+  // Distinct silhouette badges are etched into the booth glass, without competing with the faces.
+  ctx.fillStyle = '#252C31'; ctx.fillRect(x + 20, y + h - 20, w - 40, 4);
+  ctx.fillStyle = '#8B9399'; ctx.fillRect(x + 20, y + h - 20, 64 + index * 26, 4);
+  for (let bolt = 0; bolt < 6; bolt++) {
+    const bx = x + 20 + bolt * 76;
+    ctx.fillStyle = hash(bolt + index * 7, seed) > 0.5 ? '#D7DBDE' : '#555E65';
+    ctx.fillRect(bx, y + 16, 8, 8);
+  }
 }
 
 export const demandFeedbackShot: ShotDef = {
   name: 'demandfeedback',
-  describe: 'Camera races up a red price track through layered short-seller booths; params: buyerWave (buyback times), pricePath (screen points), cascadeCount, sellerReactions, repeatGain, loopDirection.',
+  describe: 'Three short sellers recoil as the red price rail rockets past, then cover in three timed BUY beats. Hedgy runs the foreground catwalk.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme, seed } = frame;
-    const dur = Math.max(0.25, frame.dur);
-    const t = clamp(frame.t, 0, dur);
-    const scareAt = eventAt(props, 'scare', dur * 0.39, dur);
-    const coverAt = eventAt(props, 'covering', dur * 0.65, dur);
-    const repeatGain = numParam(props, 'repeatGain', 0.22, 0.08, 0.38);
-    const count = Math.floor(numParam(props, 'cascadeCount', 5, 3, 7));
-    const covers = buyTimes(props, dur, coverAt, count, repeatGain);
-    const coverEnd = Math.min(dur, (covers.at(-1) ?? coverAt) + 0.3);
-    const direction = strParam(props, 'loopDirection', 'up');
-    const travelSign = direction === 'down' || direction === 'left' || direction === 'reverse' ? -1 : 1;
-    const reactions = listParam(props, 'sellerReactions');
-    const reactionDelay = (i: number) => {
-      const raw = reactions[i];
-      const value = raw && typeof raw === 'object' ? Number((raw as Record<string, unknown>).delay ?? (raw as Record<string, unknown>).at) : Number(raw);
-      return Number.isFinite(value) ? clamp(value, 0, 0.48) : i * 0.035;
-    };
-    const travel = travelSign * (360 * clamp(t / dur) + 30 * Math.sin(t * 2.2));
-    const scareHit = Math.max(0, scareAt);
+    const { ctx, seed } = frame, dur = Math.max(0.25, frame.dur), t = clamp(frame.t, 0, dur);
+    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(props, dur), coverAt = covers[0]!;
+    const path: Point[] = [
+      { x: 518, y: 1240 }, { x: 518, y: 1102 }, { x: 456, y: 1046 }, { x: 454, y: 950 },
+      { x: 544, y: 902 }, { x: 624, y: 842 }, { x: 624, y: 732 }, { x: 542, y: 680 },
+      { x: 458, y: 626 }, { x: 458, y: 496 }, { x: 548, y: 442 }, { x: 626, y: 390 },
+      { x: 626, y: 280 }, { x: 548, y: 224 }, { x: 520, y: 54 },
+    ];
+    const anchors = [3, 8, 12];
+    const raised = path.map((point, pointIndex) => {
+      let lift = 0;
+      for (let i = 0; i < covers.length; i++) if (pointIndex > anchors[i]!) lift += ease.outCubic(clamp((t - covers[i]!) / 0.15)) * 32;
+      return { x: point.x, y: point.y - lift };
+    });
+    const lineProgress = clamp((t - scareAt + 0.12) / 0.66);
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 121, handheld: 2.2,
+      width: W, height: H, seed: seed + 121, handheld: 0.9, hits: [scareAt, ...covers], punch: 0.018, shake: 13,
       keyframes: [
-        { t: 0, x: -12, y: 18, zoom: 1.02, rot: -0.006 },
-        { t: dur * 0.32, x: -32, y: -18, zoom: 1.06, rot: 0.004 },
-        { t: dur * 0.68, x: 18, y: -32, zoom: 1.09, rot: -0.008 },
-        { t: dur, x: 36, y: -52, zoom: 1.12, rot: 0.006 },
+        { t: 0, x: -10, y: 14, zoom: 1.015, rot: -0.004 },
+        { t: dur * 0.3, x: 22, y: -8, zoom: 1.045, rot: 0.006 },
+        { t: dur * 0.66, x: -18, y: -26, zoom: 1.085, rot: -0.006 },
+        { t: dur, x: 16, y: -42, zoom: 1.11, rot: 0.004 },
       ],
-      hits: [scareAt, ...covers], punch: 0.014, shake: 17,
-      whip: [{ at: scareHit, direction: direction === 'left' || direction === 'right' ? direction : 'up', duration: 0.24, amount: 0.12 }],
+      whip: [{ at: scareAt, direction: 'up', duration: 0.24, amount: 0.1 }],
     });
 
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.imageSmoothingEnabled = false;
-    drawEnv(ctx, { type: 'city', t, camera: { x: -travel * 0.18, y: travel * 0.13, zoom: 1.05, yaw: Math.sin(t * 0.7) * 0.04, pitch: 0.025 }, theme: { ...theme, bg: '#121417' }, seed: seed + 31, width: W, height: H });
-    drawSkyline(ctx, t, seed + 43, travel);
-    const z = 12 - clamp(t / dur) * 1.45, cityView = { x: 0, y: 0, w: W, h: H, zoom: 210, fov: 52, position: [Math.sin(t * 0.48) * 1.6, 2.5 + clamp(t / dur) * 0.65, -z] as [number, number, number], target: [0, 2.6, 4] as [number, number, number], light: [-0.45, 0.76, -0.42] as [number, number, number], ambient: 0.46, rim: 0.38, cell: 6, outline: true, fog: { near: 12, far: 24 } };
-    render3d(ctx, theme, cityView, [instances(CITY_BLOCK, CITY_TRANSFORMS, { materials: CITY_MATERIALS })]);
-
+    drawBackdrop(ctx, t, seed + 43);
     ctx.save(); rig.apply(ctx, t);
-    drawSpeedLines(ctx, t, { x: 0, y: 0, width: W, height: H, count: 42, start: 0, duration: dur * 1.1, mode: 'linear', direction: 1, color: '#9AA1A7', seed: seed + 67, strength: 0.38, cell: 6 });
-    const defaultPath = [
-      { x: 455, y: 1210 }, { x: 486, y: 1068 }, { x: 580, y: 1015 }, { x: 522, y: 886 },
-      { x: 625, y: 826 }, { x: 570, y: 704 }, { x: 674, y: 645 }, { x: 627, y: 508 },
-      { x: 736, y: 446 }, { x: 700, y: 308 }, { x: 812, y: 238 }, { x: 866, y: 88 },
-    ];
-    const path = resolvedPath(props, defaultPath);
-    const ratchetAnchors = covers.map((_at, i) => Math.min(path.length - 1, Math.max(0, Math.floor((i + 5) / (count + 4) * (path.length - 1)))));
-    const ratchetedPath = path.map((point, pointIndex) => {
-      const rise = covers.reduce((sum, at, i) => pointIndex > ratchetAnchors[i] ? sum + ease.outCubic(clamp((t - at) / 0.22)) * 24 : sum, 0);
-      return { x: point.x, y: point.y - rise };
+    drawSpeedLines(ctx, t, { center: { x: 540, y: 620 }, count: 38, reach: 700, start: 0, duration: 0.72, mode: 'linear', direction: 1, color: '#929BA1', seed: seed + 67, strength: 0.3, cell: 6 });
+
+    // Permanent shadow rail establishes the full vertical track; the bright head races up it on “scaring”.
+    drawTrack(ctx, raised, 1, '#40484E', 1);
+    drawTrack(ctx, raised, lineProgress, RED, 1);
+    anchors.forEach((anchor, index) => {
+      const p = raised[anchor]!;
+      ctx.fillStyle = '#101316'; ctx.fillRect(p.x - 25, p.y - 8, 50, 16);
+      ctx.fillStyle = index < covers.filter(at => at <= t).length ? RED : '#5B646B';
+      ctx.fillRect(p.x - 18, p.y - 4, 36, 8);
     });
-    drawTrack(ctx, ratchetedPath, 0.4 + 0.6 * clamp(t / dur));
-    // Booth stacks slide past camera on alternating sides; their changing depth and size sell the vertical ride.
-    const shift = clamp(t / dur) * 350;
-    const booths = Array.from({ length: 7 }, (_, i) => {
-      const y = 86 + i * 218 - shift;
-      if (y < -205 || y > 1300) return null;
-      const side = i % 2 === 0 ? 0 : 1, w = 376 - (i > 4 ? 30 : 0), h = 184 - (i > 4 ? 16 : 0);
-      const x = side ? 664 - (i > 4 ? 0 : 0) : 34;
-      return { i, x, y: Math.round(y / 4) * 4, w, h };
-    }).filter((booth): booth is { i: number; x: number; y: number; w: number; h: number } => booth !== null);
-    booths.forEach(({ i, x, y, w, h }) => {
-      const nextBuyer = covers.findIndex(at => at > t);
-      const activeIndex = nextBuyer < 0 ? covers.length - 1 : Math.max(0, nextBuyer - 1);
-      drawBooth(ctx, x, y, w, h, i, t, scareAt, reactionDelay(i), covers[i] ?? coverAt, coverAt, coverEnd, activeIndex === i || (t < coverAt && i === 1));
-    });
-    // Purchases kick the price rail in a visible ratchet and send the same paper ticket past lens.
+
     covers.forEach((at, i) => {
-      const p = clamp((t - at) / 0.22), near = ratchetedPath[ratchetAnchors[i]!]!;
-      const bumpY = near.y - i * 22 - ease.outBack(p) * 25;
-      if (p > 0 && p < 1) {
-        ctx.fillStyle = RED; ctx.fillRect(Math.round(near.x / 6) * 6 - 12, Math.round(bumpY / 6) * 6 - 6, 30, 12);
-        ctx.fillStyle = '#F7AAA4'; ctx.fillRect(Math.round(near.x / 6) * 6 + 12, Math.round(bumpY / 6) * 6 - 6, 6, 12);
+      const p = raised[anchors[i]!]!, active = clamp((t - at) / 0.34);
+      if (t >= at && t < at + 0.48) {
+        ctx.fillStyle = RED; ctx.fillRect(p.x - 26, p.y - 29, 52, 12);
+        ctx.fillStyle = '#FFB0AA'; ctx.fillRect(p.x - 9, p.y - 36, 18, 6);
       }
-      drawBurst(ctx, t, { x: near.x, y: near.y, seed: seed + 300 + i * 7, count: 14, kind: 'shard', start: at, life: 0.9, speed: 210, gravity: 260, drag: 0.36, floor: 1218, bounce: 0.18, size: 1, color: '#D8D6D1', cell: 4 });
-      if (t >= at && t < at + 0.7) drawTicket2D(ctx, near.x + Math.sin((t - at) * 8) * 24, near.y - 35 - (t - at) * 84, 72, { rot: -0.3 + (t - at) * 0.75 });
+      drawBurst(ctx, t, { x: p.x, y: p.y, seed: seed + 280 + i * 19, count: 12, kind: 'shard', start: at, life: 0.62, speed: 180 + i * 22, gravity: 260, drag: 0.4, floor: 1240, size: 1, color: '#D7DBDE', cell: 4 });
+      void active;
     });
-    // Catwalk rails cross close to lens while Hedgy runs and keeps checking the cascade behind him.
-    ctx.fillStyle = '#090A0C'; ctx.fillRect(0, 1052, W, 238);
-    ctx.fillStyle = '#A0A6AB'; ctx.fillRect(0, 1052, W, 10); ctx.fillRect(0, 1078, W, 5);
-    ctx.fillStyle = '#41484E'; ctx.fillRect(0, 1184, W, 12); ctx.fillRect(0, 1240, W, 8);
-    for (let bolt = 0; bolt < 12; bolt++) { ctx.fillStyle = bolt % 2 ? '#E4E6E7' : '#555D63'; ctx.fillRect((bolt * 102 + Math.floor(t * 180)) % W, 1062, 8, 8); }
-    ctx.fillStyle = '#242A2F'; ctx.fillRect(0, 1090, W, 4); ctx.fillRect(0, 1210, W, 5);
-    const hedgyX = 260 + 520 * ease.outCubic(clamp(t / dur)) + 22 * Math.sin(t * 5.8);
-    drawHedgy(ctx, { x: hedgyX, y: 1180, scale: 5.4, t: Math.max(0, t), pose: 'run', facing: 1, look: t < scareAt ? 'forward' : 'camera', expression: t < scareAt ? 'determined' : 'shocked' });
-    for (let i = 0; i < 5; i++) {
-      const px = (i * 263 + Math.floor(t * (270 + i * 23))) % 1160 - 40;
-      drawTicket2D(ctx, px, 1140 - i * 18, 88 + (i % 2) * 20, { rot: -0.13 + Math.sin(t * 4 + i) * 0.06 });
+
+    // Booths are ordered along the climb and each seller is a different pixel silhouette.
+    BOOTHS.forEach((booth, i) => drawBooth(ctx, booth, i, t, scareAt, covers[i]!, seed + i * 17, i));
+
+    // Close rails and ticket stubs move faster than the booth layer for clear foreground parallax.
+    const catwalkY = 1076;
+    ctx.fillStyle = '#090B0D'; ctx.fillRect(0, catwalkY, W, 214);
+    ctx.fillStyle = '#B7BEC3'; ctx.fillRect(0, catwalkY, W, 10);
+    ctx.fillStyle = '#424A50'; ctx.fillRect(0, catwalkY + 26, W, 8); ctx.fillRect(0, catwalkY + 138, W, 12);
+    ctx.fillStyle = '#1E2429'; ctx.fillRect(0, catwalkY + 48, W, 5); ctx.fillRect(0, catwalkY + 174, W, 5);
+    for (let bolt = 0; bolt < 15; bolt++) {
+      const bx = (bolt * 79 + Math.floor(t * 240)) % W;
+      ctx.fillStyle = bolt % 3 ? '#727B82' : '#D4D8DB'; ctx.fillRect(bx, catwalkY + 5, 9, 8);
     }
+    for (let i = 0; i < 3; i++) {
+      const x = (i * 438 + Math.floor(t * (245 + i * 18))) % 1220 - 70;
+      drawTicket2D(ctx, x, 1142 + i * 30, 82 + i * 8, { rot: -0.1 + Math.sin(t * 5 + i) * 0.06 });
+    }
+    const hedgyX = 760 + 150 * ease.outCubic(clamp(t / dur)) + 14 * Math.sin(t * 6);
+    drawHedgy(ctx, { x: hedgyX, y: 1188, scale: 5.4, t, pose: 'run', facing: 1, look: t < scareAt + 0.12 ? 'forward' : 'up', expression: t < scareAt + 0.12 ? 'determined' : 'shocked' });
     ctx.restore(); ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const scareAt = eventAt(props, 'scare', dur * 0.39, dur), coverAt = eventAt(props, 'covering', dur * 0.65, dur);
-    const repeatGain = numParam(props, 'repeatGain', 0.22, 0.08, 0.38);
-    const count = Math.floor(numParam(props, 'cascadeCount', 5, 3, 7)), wave = buyTimes(props, dur, coverAt, count, repeatGain);
-    const coverEnd = wave.at(-1) ?? coverAt;
+    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(props, dur);
     const cues: Cue[] = [
-      { t: 0, kind: 'whoosh', gain: 0.62, pan: -0.2 },
-      { t: scareAt, kind: 'alarm', gain: 0.7, pan: 0.12 },
-      { t: scareAt + 0.04, kind: 'pop', gain: 0.42, pan: -0.25 },
-      ...wave.map((t, i) => ({ t, kind: 'clack' as const, pan: -0.55 + i * (1.1 / Math.max(1, count - 1)), gain: 0.62 + i * repeatGain, step: i / Math.max(1, count - 1) })),
-      { t: coverEnd, kind: 'build', gain: 0.58, len: Math.max(0.12, dur - coverEnd) },
+      { t: scareAt, kind: 'whoosh', gain: 0.72, pan: 0.05, len: 0.2 },
+      ...covers.map((t, i) => ({ t, kind: 'clack' as const, pan: [-0.56, 0.42, -0.44][i]!, gain: 0.66 + i * 0.12, step: i / 2 })),
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t < dur);
   },

@@ -1,23 +1,21 @@
 import { clamp, ease, type Cue, type Frame, type ShotProps } from '../core.ts';
-import { drawEnv } from '../env/index.ts';
+import { drawHedgy } from '../actor/hedgy.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { drawBurst, drawSpeedLines } from '../fx/particles.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
 import { pixelText } from '../prim.ts';
 import type { ShotDef } from './index.ts';
 
-const W = 1080, H = 1290;
-const snap = (n: number) => Math.round(n / 4) * 4;
-
-function eventTime(props: ShotProps, kind: string, fallback: number, dur: number) {
+const W = 1080, H = 1290, GRID = 4;
+const snap = (n: number) => Math.round(n / GRID) * GRID;
+const progress = (t: number, start: number, span: number) => clamp((t - start) / Math.max(0.001, span));
+const eventTime = (props: ShotProps, kind: string, fallback: number, dur: number) => {
   const event = props.events?.find(item => item.kind.toLowerCase() === kind);
   return clamp(event?.at ?? dur * fallback, 0, dur);
-}
-
-function rect(ctx: Frame['ctx'], color: string, x: number, y: number, w: number, h: number) {
+};
+const rect = (ctx: Frame['ctx'], color: string, x: number, y: number, w: number, h: number) => {
   ctx.fillStyle = color;
-  ctx.fillRect(snap(x), snap(y), snap(w), snap(h));
-}
+  ctx.fillRect(snap(x), snap(y), Math.max(GRID, snap(w)), Math.max(GRID, snap(h)));
+};
 
 function line(ctx: Frame['ctx'], points: readonly [number, number][], color: string, width = 8) {
   ctx.strokeStyle = color;
@@ -39,205 +37,273 @@ function polygon(ctx: Frame['ctx'], color: string, points: readonly [number, num
   ctx.fill();
 }
 
-function drawHall(ctx: Frame['ctx'], time: number) {
-  // Huge roof ribs, balcony tiers and a distant entrance make the market feel toy-sized.
-  rect(ctx, '#15171A', 0, 0, W, 1290);
-  polygon(ctx, '#25292D', [[0, 0], [540, 344], [540, 424], [0, 180]]);
-  polygon(ctx, '#25292D', [[1080, 0], [540, 344], [540, 424], [1080, 180]]);
-  for (let i = 0; i < 6; i++) {
-    const yy = 210 + i * 118;
-    const inX = i * 48;
-    line(ctx, [[0, yy], [226 + inX, yy + 38], [432 + inX * 0.3, yy + 72]], i % 2 ? '#565C61' : '#73797E', 8);
-    line(ctx, [[1080, yy], [854 - inX, yy + 38], [648 - inX * 0.3, yy + 72]], i % 2 ? '#565C61' : '#73797E', 8);
-    rect(ctx, '#303438', 0, yy + 42, Math.max(80, 332 - inX), 20);
-    rect(ctx, '#303438', 748 + inX, yy + 42, Math.max(80, 332 - inX), 20);
-    rect(ctx, '#8A9094', 0, yy + 62, Math.max(72, 324 - inX), 8);
-    rect(ctx, '#8A9094', 756 + inX, yy + 62, Math.max(72, 324 - inX), 8);
-    for (let seat = 0; seat < 16; seat++) {
-      const x = 14 + seat * (17 + i);
-      rect(ctx, seat % 3 ? '#41464A' : '#747A7E', x, yy + 12 + (seat % 2) * 8, 10, 12);
-      rect(ctx, seat % 2 ? '#35393D' : '#646A6F', 1060 - x, yy + 12 + (seat % 2) * 8, 10, 12);
-    }
+function drawBuyer(ctx: Frame['ctx'], x: number, y: number, s: number, phase: number, t: number, reach = 0) {
+  const bob = snap(Math.sin(t * 7 + phase) * 5);
+  const lean = reach * 20;
+  const cx = snap(x - lean), cy = snap(y + bob);
+  rect(ctx, '#121619', cx - s * 0.28, cy - s * 1.5, s * 0.56, s * 0.5);
+  rect(ctx, '#8A9296', cx - s * 0.2, cy - s * 1.42, s * 0.4, s * 0.25);
+  rect(ctx, '#32393D', cx - s * 0.39, cy - s, s * 0.78, s * 0.82);
+  rect(ctx, '#71797E', cx - s * 0.45, cy - s * 0.92, s * 0.9, s * 0.12);
+  rect(ctx, '#171C1F', cx - s * 0.48, cy - s * 0.2, s * 0.96, s * 0.2);
+  // Staggered forearms press toward the scarce rack as demand builds.
+  const armY = cy - s * (0.63 + reach * 0.1);
+  rect(ctx, '#242B2F', cx + s * 0.12, armY, s * 0.72, s * 0.16);
+  rect(ctx, '#AAB0B3', cx + s * (0.72 + reach * 0.18), armY - s * 0.08, s * 0.2, s * 0.24);
+}
+
+function drawHall(ctx: Frame['ctx'], t: number, pull: number) {
+  rect(ctx, '#252A2E', 0, 0, W, H);
+  // The rear volume stays full-frame while a second architectural layer scales away to reveal its size.
+  const z = 1.14 - pull * 0.36;
+  ctx.save(); ctx.translate(W / 2, 672); ctx.scale(z, z); ctx.translate(-W / 2, -672);
+  polygon(ctx, '#111619', [[0, 0], [540, 160], [1080, 0], [1080, 930], [540, 782], [0, 930]]);
+  polygon(ctx, '#343B40', [[0, 0], [540, 178], [1080, 0], [1080, 80], [540, 254], [0, 80]]);
+  // Roof ribs converge on the tiny market cabinet.
+  for (let i = 0; i < 8; i++) {
+    const y = 54 + i * 64;
+    const inX = i * 18;
+    line(ctx, [[-40, y], [220 + inX, y + 30], [540, 220 + i * 42]], i % 2 ? '#727A7F' : '#92999D', i % 3 ? 7 : 11);
+    line(ctx, [[1120, y], [860 - inX, y + 30], [540, 220 + i * 42]], i % 2 ? '#727A7F' : '#92999D', i % 3 ? 7 : 11);
+    rect(ctx, '#3D454A', 0, y + 36, Math.max(140, 310 - inX), 12);
+    rect(ctx, '#3D454A', 1080 - Math.max(140, 310 - inX), y + 36, Math.max(140, 310 - inX), 12);
   }
-  // Double doors glow with monochrome spill at the vanishing end of the hall.
-  polygon(ctx, '#555B60', [[422, 386], [658, 386], [690, 844], [390, 844]]);
-  polygon(ctx, '#171A1D', [[442, 404], [638, 404], [660, 820], [420, 820]]);
-  rect(ctx, '#3A4044', 536, 414, 8, 386);
-  rect(ctx, '#858B8F', 492, 616, 12, 12);
-  rect(ctx, '#858B8F', 576, 616, 12, 12);
-  line(ctx, [[0, 1040], [540, 842], [1080, 1040]], '#383D41', 12);
-  line(ctx, [[0, 1152], [540, 884], [1080, 1152]], '#2D3135', 12);
-  // Foreground venue pillars pass at different times to sell the backward camera move.
-  const slide = Math.sin(time * 2.5) * 12;
-  rect(ctx, '#30353A', -14 + slide, 152, 52, 1020);
-  rect(ctx, '#858B90', 34 + slide, 152, 10, 1020);
-  rect(ctx, '#30353A', 1042 - slide, 152, 52, 1020);
-  rect(ctx, '#858B90', 1036 - slide, 152, 10, 1020);
-}
-
-function drawPriceStep(ctx: Frame['ctx'], lifted: number) {
-  const base: [number, number][] = [[140, 488], [300, 488], [300, 472], [424, 472], [424, 456], [540, 456], [540, 440], [604, 440]];
-  const jump: [number, number][] = [[604, 440], [604, 384], [720, 384], [720, 368], [830, 368], [830, 320], [924, 320]];
-  line(ctx, base, '#81221F', 8);
-  for (let i = 0; i < 6; i++) rect(ctx, '#B54139', 196 + i * 68, 480 - i * 8, 8, 8);
-  if (lifted > 0) {
-    const reach = clamp(lifted * 1.3);
-    const full = jump.slice(1);
-    const count = Math.max(1, Math.ceil(reach * full.length));
-    const path = [[604, 446] as [number, number], ...full.slice(0, count)];
-    if (count < full.length) {
-      const a = path.at(-1)!, b = full[count]!;
-      const local = reach * full.length - Math.floor(reach * full.length);
-      path[path.length - 1] = [a[0] + (b[0] - a[0]) * local, a[1] + (b[1] - a[1]) * local];
+  // Balconies, lamps, and rows of buyers show the market hall's scale.
+  for (let tier = 0; tier < 5; tier++) {
+    const y = 264 + tier * 142;
+    const depth = tier / 5;
+    const xInset = tier * 34;
+    const tierW = 416 - tier * 34;
+    for (const side of [-1, 1]) {
+      const x = side < 0 ? -8 + xInset : W - tierW - xInset + 8;
+      rect(ctx, tier % 2 ? '#343B40' : '#454D52', x, y, tierW, 58);
+      rect(ctx, '#9AA1A5', x, y, tierW, 8);
+      rect(ctx, '#171C1F', x + 8, y + 14, tierW - 16, 34);
+      for (let i = 0; i < 21 - tier; i++) {
+        const px = x + 18 + i * (tierW - 36) / (21 - tier);
+        const bob = Math.sin(t * 6 + i * 1.7 + tier) * 3;
+        rect(ctx, i % 4 ? '#51595E' : '#92999D', px, y + 20 + bob, 9, 15);
+        rect(ctx, '#242A2E', px - 3, y + 35 + bob, 15, 13);
+      }
+      rect(ctx, '#BCC1C3', x + 8, y + 62, tierW - 16, 8);
+      const lampX = side < 0 ? x + tierW - 28 : x + 8;
+      rect(ctx, '#C9CDCE', lampX, y + 70, 16, 42);
     }
-    line(ctx, path, '#C3453D', 10);
-    rect(ctx, '#F07A70', path.at(-1)![0] - 4, path.at(-1)![1] - 4, 12, 12);
+    // Roof-to-floor buttresses add a strong vanishing point behind the rack.
+    const pillarW = 18 + tier * 4;
+    rect(ctx, '#262D31', 48 + tier * 26, 210, pillarW, 642);
+    rect(ctx, '#8A9296', 52 + tier * 26, 210, 6, 642);
+    rect(ctx, '#262D31', 1014 - tier * 26, 210, pillarW, 642);
+    rect(ctx, '#8A9296', 1018 - tier * 26, 210, 6, 642);
   }
+  ctx.restore();
+
+  // A bright, expanding floor grid keeps the bottom half out of shadow.
+  polygon(ctx, '#434B50', [[0, 806], [540, 700], [1080, 806], [1080, 1290], [0, 1290]]);
+  polygon(ctx, '#757D82', [[0, 806], [540, 700], [1080, 806], [1080, 830], [540, 724], [0, 830]]);
+  for (let i = -7; i <= 7; i++) {
+    const nearX = 540 + i * 240;
+    const farX = 540 + i * 22;
+    line(ctx, [[farX, 716], [nearX, 1294]], i % 2 ? '#626B70' : '#9BA2A5', i % 3 === 0 ? 8 : 4);
+  }
+  for (let i = 0; i < 10; i++) {
+    const p = (i / 10 + t * 0.12) % 1;
+    const y = 740 + p * p * 620;
+    const half = 36 + p * 550;
+    rect(ctx, i % 3 ? '#51595E' : '#A0A6A9', 540 - half, y, half * 2, p > 0.45 ? 8 : 4);
+  }
+  // Foreground balcony posts move across lens as the camera retreats.
+  const drift = t * 44;
+  for (let i = -1; i < 6; i++) {
+    const x = snap((i * 282 - drift + 1800) % 1500 - 180);
+    rect(ctx, '#30373B', x, 256, 34, 906);
+    rect(ctx, '#A2A9AC', x + 8, 256, 6, 906);
+    rect(ctx, '#60686D', x + 30, 256, 8, 906);
+  }
+  // Buyers press into the floor-level market from both wings, in separated depth bands.
+  for (let i = 0; i < 7; i++) {
+    const xL = 36 + i * 68 + Math.sin(t * 2 + i) * 8;
+    const xR = 1044 - i * 68 + Math.sin(t * 2.3 + i) * 8;
+    drawBuyer(ctx, xL, 1008 + (i % 3) * 45, 44 + (i % 2) * 10, i * 0.8, t, pull * 0.24);
+    drawBuyer(ctx, xR, 1004 + (i % 3) * 46, 42 + (i % 2) * 12, i * 1.1 + 3, t, pull * 0.24);
+  }
+  for (let i = 0; i < 5; i++) {
+    const x = 432 + i * 58 + Math.sin(t * 2.5 + i * 0.8) * 8;
+    drawBuyer(ctx, x, 1006 + (i % 2) * 38, 42 + (i % 3) * 5, i * 1.3 + 8, t, pull * 0.34);
+  }
+  // Lower-edge rail and a close passerby supply another moving parallax layer.
+  const passX = (t * 184 + 720) % 1320 - 120;
+  drawBuyer(ctx, passX, 1262, 80, 1.8, t, 0.18);
+  rect(ctx, '#161B1E', 0, 1250, W, 40);
+  rect(ctx, '#92999D', 0, 1246, W, 8);
 }
 
-function drawToken(ctx: Frame['ctx'], x: number, y: number, size = 36, bright = false) {
-  const s = Math.max(20, snap(size));
-  const u = snap(s / 6);
-  const cx = snap(x), cy = snap(y);
-  rect(ctx, '#101214', cx - u * 3, cy - u * 3, u * 6, u * 6);
-  rect(ctx, bright ? '#C9C8C3' : '#858A8D', cx - u * 2, cy - u * 3, u * 4, u * 6);
-  rect(ctx, bright ? '#EEECE5' : '#B4B7B8', cx - u * 3, cy - u * 2, u * 6, u * 4);
-  rect(ctx, '#585D60', cx - u, cy - u * 2, u * 2, u * 4);
-  rect(ctx, '#E4E2DC', cx - u, cy - u, u * 2, u * 2);
+function drawToken(ctx: Frame['ctx'], x: number, y: number, size: number, bright = false) {
+  const s = Math.max(12, snap(size));
+  const outer = s / 2 + 4, cut = Math.max(4, snap(s * 0.2));
+  polygon(ctx, '#13181B', [[x - outer + cut, y - outer], [x + outer - cut, y - outer], [x + outer, y - outer + cut], [x + outer, y + outer - cut], [x + outer - cut, y + outer], [x - outer + cut, y + outer], [x - outer, y + outer - cut], [x - outer, y - outer + cut]]);
+  const inner = s / 2;
+  polygon(ctx, bright ? '#D8DCDD' : '#899195', [[x - inner + cut, y - inner], [x + inner - cut, y - inner], [x + inner, y - inner + cut], [x + inner, y + inner - cut], [x + inner - cut, y + inner], [x - inner + cut, y + inner], [x - inner, y + inner - cut], [x - inner, y - inner + cut]]);
+  rect(ctx, bright ? '#F1F2F0' : '#C1C6C8', x - s * 0.3, y - s * 0.3, s * 0.6, s * 0.6);
+  rect(ctx, '#424A4F', x - s * 0.16, y - s * 0.25, s * 0.32, s * 0.5);
+  rect(ctx, '#21272A', x - s * 0.1, y - s * 0.08, s * 0.2, s * 0.16);
 }
 
-function drawRack(ctx: Frame['ctx'], t: number, liftAt: number, supply: number, asset: string, seed: number) {
-  const cx = 540, top = 560, width = 636, height = 252;
-  rect(ctx, '#111417', cx - width / 2 - 14, top - 20, width + 28, height + 48);
-  rect(ctx, '#93999C', cx - width / 2, top - 8, width, 16);
-  rect(ctx, '#5E6468', cx - width / 2, top + height + 8, width, 16);
-  rect(ctx, '#777D81', cx - width / 2, top, 16, height);
-  rect(ctx, '#777D81', cx + width / 2 - 16, top, 16, height);
-  rect(ctx, '#24292D', cx - width / 2 + 16, top + 16, width - 32, height - 24);
-  // Layered grey glass panes and thin supports retain depth without obscuring the tickets.
-  ctx.save(); ctx.globalAlpha *= 0.18; rect(ctx, '#CFD3D4', cx - width / 2 + 28, top + 24, width - 56, height - 48); ctx.restore();
-  rect(ctx, '#6F767A', cx - width / 2 + 24, top + 24, 8, height - 48);
-  rect(ctx, '#6F767A', cx + width / 2 - 32, top + 24, 8, height - 48);
-  rect(ctx, '#8C9295', cx - width / 2 + 28, top + 170, width - 56, 12);
-  rect(ctx, '#4E5559', cx - width / 2 + 28, top + 182, width - 56, 22);
-  rect(ctx, '#D0D2D0', cx - width / 2 + 84, top + 226, width - 168, 8);
+function drawRack(ctx: Frame['ctx'], t: number, demandAt: number, supply: number, asset: string, seed: number) {
+  const x = 338, y = 422, w = 482, h = 318;
+  rect(ctx, '#101518', x - 24, y - 24, w + 48, h + 50);
+  rect(ctx, '#A5ACAF', x - 12, y - 12, w + 24, h + 24);
+  rect(ctx, '#252C30', x, y, w, h);
+  rect(ctx, '#858D91', x + 12, y + 12, w - 24, h - 24);
+  rect(ctx, '#171D20', x + 24, y + 24, w - 48, h - 48);
+  // The glass catches a moving white strip, but the ticket faces stay high contrast.
+  const glareX = x + 24 + ((t * 146) % (w - 64));
+  rect(ctx, '#737B80', glareX, y + 36, 12, h - 92);
+  rect(ctx, '#353D41', x + 30, y + 52, w - 60, 10);
+  rect(ctx, '#B2B8BA', x + 34, y + h - 60, w - 68, 10);
+  rect(ctx, '#4B5358', x + 34, y + h - 50, w - 68, 26);
+  const label = asset.trim().toUpperCase().split(/[\s_-]+/)[0]?.slice(0, 10) || 'TICKET';
+  rect(ctx, '#111619', x + 150, y - 62, 182, 40);
+  rect(ctx, '#BBC1C3', x + 158, y - 54, 166, 6);
+  pixelText(ctx, label, x + 241, y - 42, 3, { color: '#F1F2EF', align: 'center', reveal: 1 });
 
-  const count = Math.max(2, Math.min(10, Math.floor(supply)));
-  const gap = Math.min(80, (width - 120) / count), left = cx - gap * (count - 1) / 2;
-  const ticketWidth = Math.min(70, gap - 8);
+  const count = Math.max(3, Math.min(8, Math.floor(supply)));
+  const slotGap = Math.min(82, (w - 96) / count);
+  const startX = x + w / 2 - slotGap * (count - 1) / 2;
   const soldSlot = count - 1;
-  const sold = t >= liftAt;
-  const assetLabel = asset.trim().toUpperCase().split(/[\s_-]+/)[0]?.slice(0, 14) || 'TICKET';
-  rect(ctx, '#272C30', cx - 94, top - 52, 188, 36);
-  pixelText(ctx, assetLabel, cx, top - 44, 3, { color: '#F2F2EF', align: 'center', reveal: 1 });
   for (let i = 0; i < count; i++) {
-    const x = left + i * gap;
-    rect(ctx, '#111315', x - 38, top + 66, 76, 104);
-    rect(ctx, '#666D71', x - 38, top + 66, 76, 8);
-    rect(ctx, '#777D80', x - 38, top + 162, 76, 8);
-    if (!(sold && i === soldSlot)) drawTicket2D(ctx, x, top + 116, ticketWidth, { rot: i % 2 ? 0.018 : -0.018 });
-    else {
-      rect(ctx, '#0D0F11', x - 26, top + 96, 52, 42);
-      rect(ctx, '#353B3F', x - 22, top + 100, 44, 34);
+    const tx = startX + i * slotGap;
+    rect(ctx, '#101518', tx - 36, y + 108, 72, 120);
+    rect(ctx, '#737B80', tx - 36, y + 108, 72, 8);
+    rect(ctx, '#353D41', tx - 36, y + 220, 72, 8);
+    if (i === soldSlot && t >= demandAt) {
+      rect(ctx, '#242A2E', tx - 23, y + 132, 46, 54);
+      rect(ctx, '#565E63', tx - 18, y + 138, 36, 42);
+    } else drawTicket2D(ctx, tx, y + 168, 70, { rot: i % 2 ? 0.018 : -0.018 });
+  }
+  // The removed ticket descends from its empty slot into the new buyer's reach.
+  if (t >= demandAt && t < demandAt + 0.36) {
+    const p = ease.outCubic(progress(t, demandAt, 0.36));
+    const fromX = startX + soldSlot * slotGap;
+    const toX = 802;
+    ctx.save(); ctx.globalAlpha *= Math.max(0.25, 1 - p * 0.28);
+    drawTicket2D(ctx, fromX + (toX - fromX) * p, y + 170 + 164 * p, 70 - 8 * p, { rot: -0.04 - p * 0.16 });
+    ctx.restore();
+    // A short row of clipped paper flecks stays attached to the ticket's path.
+    if (p < 0.75) {
+      const px = fromX + (toX - fromX) * p;
+      rect(ctx, '#D7DADB', px - 38, y + 174 + 164 * p, 8, 4);
+      rect(ctx, '#8C9498', px + 36, y + 182 + 164 * p, 8, 4);
     }
   }
-  if (t >= liftAt && t < liftAt + 0.34) {
-    const p = ease.outCubic(clamp((t - liftAt) / 0.34));
-    const from = left + soldSlot * gap;
-    const x = from + (388 - from) * p;
-    const y = top + 116 + 116 * p;
-    ctx.save(); ctx.globalAlpha *= 1 - p * 0.75;
-    drawTicket2D(ctx, x, y, ticketWidth, { rot: -0.12 - p * 0.32, tear: p * 0.08 });
-    ctx.restore();
-    drawBurst(ctx, t, { x: from, y: top + 112, seed: seed + 51, count: 13, kind: 'shard', start: liftAt, life: 0.32,
-      speed: 126, gravity: 120, drag: 0.5, size: 1, color: '#E1E2DF' });
-  }
+  // Lower lip and vanishing floor line carry the buyer queue into the hall.
+  rect(ctx, '#A5ACAF', x - 96, y + h + 24, w + 192, 16);
+  rect(ctx, '#454D52', x - 108, y + h + 40, w + 216, 34);
+  rect(ctx, '#1A2023', x - 64, y + h + 76, w + 128, 12);
+  drawToken(ctx, x + 110, y + h + 14, 44);
+  drawToken(ctx, x + 188, y + h + 14, 44);
+  drawToken(ctx, x + 266, y + h + 14, 44);
+  const joinP = ease.outExpo(progress(t, demandAt, 0.31));
+  const joinX = 1004 - 208 * joinP;
+  const joinY = y + h + 14 - Math.sin(joinP * Math.PI) * 18;
+  if (t >= demandAt - 0.04) drawToken(ctx, joinX, joinY, 58, true);
+  void seed;
 }
 
-function marketGroup(ctx: Frame['ctx'], zoom: number, x: number, y: number) {
-  ctx.translate(snap(540 + x), snap(690 + y));
+function applyPull(ctx: Frame['ctx'], zoom: number, x: number, y: number) {
+  ctx.translate(W / 2 + snap(x), 720 + snap(y));
   ctx.scale(zoom, zoom);
-  ctx.translate(-540, -690);
+  ctx.translate(-W / 2, -720);
+}
+
+function drawPricePath(ctx: Frame['ctx'], anchor: [number, number], t: number, higherAt: number) {
+  const [x, y] = anchor;
+  const base: [number, number][] = [[x - 64, y + 104], [x - 26, y + 86], [x + 4, y + 80], [x + 38, y + 66]];
+  line(ctx, base, '#762321', 12);
+  line(ctx, base.slice(-3), '#C44A42', 6);
+  const jump = ease.outExpo(progress(t, higherAt, 0.10));
+  const stepX = x + 38, stepY = y + 66;
+  const raisedY = stepY - 228 * jump;
+  line(ctx, [[stepX, stepY], [stepX, raisedY], [stepX + 38, raisedY]], '#9D2F2A', 14);
+  line(ctx, [[stepX, stepY], [stepX, raisedY], [stepX + 38, raisedY]], '#E75E54', 6);
+  const climb = ease.outCubic(progress(t, higherAt + 0.12, 0.55));
+  const climbPts: [number, number][] = [
+    [stepX + 38, raisedY],
+    [stepX + 82, raisedY - 210 * climb],
+    [stepX + 120, raisedY - 380 * climb],
+    [stepX + 148, raisedY - 640 * climb],
+    [stepX + 180, raisedY - 940 * climb],
+  ];
+  line(ctx, climbPts, '#9D2F2A', 14);
+  line(ctx, climbPts, '#E75E54', 6);
+  const head = climbPts[climbPts.length - 1]!;
+  rect(ctx, '#FF8B80', head[0] - 6, head[1] - 6, 16, 16);
 }
 
 export const miniMarketShot: ShotDef = {
   name: 'minimarket',
-  describe: 'A tiny ticket market sits inside an enormous monochrome venue. A buyer token joins the queue, params.supplyCount (2–10) controls rack inventory, params.asset (default TICKET) labels the glass rack, and the camera pulls sharply back as one ticket sells.',
+  describe: 'The camera pulls back from Hedgy holding his buyback ticket to reveal a dwindling rack in a huge buyer-filled hall. On “demand” one ticket leaves and a buyer token joins; on “higher” the red price path jumps and climbs out of frame.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme, seed } = frame;
-    const dur = Math.max(0.01, frame.dur);
-    const t = clamp(frame.t, 0, dur);
-    const buyersAt = eventTime(props, 'buyers', 0.35, dur);
-    const liftAt = eventTime(props, 'lifts', 0.69, dur);
-    const supply = Math.max(2, Math.min(10, Math.floor(Number(props.params?.supplyCount ?? 5) || 5)));
+    const { ctx, seed } = frame;
+    const dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
+    const demandAt = eventTime(props, 'demand', 0.372, dur);
+    const higherAt = eventTime(props, 'higher', 0.742, dur);
+    const supply = Math.max(3, Math.min(8, Math.floor(Number(props.params?.supplyCount ?? 5) || 5)));
     const asset = String(props.params?.asset ?? 'TICKET').slice(0, 24);
+    const pull = ease.outCubic(t / dur);
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 18, handheld: 1.2,
+      width: W, height: H, seed: seed + 42, handheld: 1.25,
       keyframes: [
-        { t: 0, x: 0, y: 0, zoom: 1.12, rot: 0 },
-        { t: buyersAt, x: -8, y: 2, zoom: 1.08, rot: 0.004 },
-        { t: liftAt, x: 14, y: -8, zoom: 1.04, rot: -0.006 },
-        { t: Math.min(dur, liftAt + dur * 0.31), x: 0, y: -8, zoom: 0.61, rot: 0 },
-        { t: dur, x: 0, y: 0, zoom: 0.56, rot: 0 },
+        { t: 0, x: 0, y: 4, zoom: 1.36, rot: 0 },
+        { t: demandAt, x: -8, y: 2, zoom: 0.93, rot: 0.003 },
+        { t: higherAt, x: 10, y: -10, zoom: 0.66, rot: -0.004 },
+        { t: dur, x: 4, y: -22, zoom: 0.46, rot: 0.002 },
       ],
-      whip: [{ at: liftAt + dur * 0.11, direction: 'down', duration: 0.24, amount: 0.12 }],
     });
     const pose = rig.poseAt(t);
-
     ctx.imageSmoothingEnabled = false;
-    drawEnv(ctx, { type: 'stage', t, theme, seed: seed + 6, width: W, height: H,
-      camera: { x: pose.x * 0.08, y: pose.y * 0.08, zoom: 1.015, yaw: pose.rot * 0.08, pitch: 0.015 } });
-    drawHall(ctx, t);
+    drawHall(ctx, t, pull);
 
-    // The only red in the hall marks the upward price path; “lifts” adds its new step.
-    const liftProgress = clamp((t - liftAt + 0.02) / Math.max(0.14, dur * 0.18));
-    drawPriceStep(ctx, liftProgress);
-
-    ctx.save();
-    marketGroup(ctx, pose.zoom, pose.x * 0.35, pose.y * 0.25);
-    ctx.rotate(pose.rot * 0.18);
-    drawRack(ctx, t, liftAt, supply, asset, seed);
-
-    // Buyer tokens line up at the near lip. The arriving one slides into the queue on “buyers”.
-    rect(ctx, '#A2A7A9', 232, 820, 616, 20);
-    rect(ctx, '#363B3F', 216, 840, 648, 38);
-    rect(ctx, '#111315', 260, 878, 560, 14);
-    drawToken(ctx, 488, 802, 36, false);
-    drawToken(ctx, 440, 802, 36, false);
-    drawToken(ctx, 392, 802, 36, false);
-    const buyerP = ease.outExpo(clamp((t - buyersAt) / Math.max(0.12, dur * 0.2)));
-    const arrivingX = 870 - buyerP * 526;
-    const arrivingY = 802 - Math.sin(buyerP * Math.PI) * 12;
-    if (t >= buyersAt - 0.06) drawToken(ctx, arrivingX, arrivingY, 42, true);
-    rect(ctx, '#262A2D', 252, 900, 24, 82);
-    rect(ctx, '#A0A5A8', 246, 896, 36, 10);
-    rect(ctx, '#262A2D', 804, 900, 24, 82);
-    rect(ctx, '#A0A5A8', 798, 896, 36, 10);
+    ctx.save(); applyPull(ctx, pose.zoom, pose.x, pose.y);
+    // Small inventory remains a bright focal island against the giant architecture.
+    drawRack(ctx, t, demandAt, supply, asset, seed + 19);
+    const hedgyPose = t < demandAt ? 'carry' : t < higherAt ? 'sweat' : 'shock';
+    drawHedgy(ctx, {
+      x: 298, y: 1108, scale: 6.3, t: Math.max(0, t - demandAt),
+      pose: hedgyPose, facing: 1,
+      expression: t < demandAt ? 'determined' : t < higherAt ? 'worried' : 'shocked',
+      look: t < demandAt ? 'forward' : 'up',
+    });
+    // The handoff ticket from shot 11 stays in Hedgy's raised paw as the lens retreats.
+    const heldX = 389 + Math.sin(t * 4) * 3;
+    drawTicket2D(ctx, heldX, 815, 126, { rot: -0.04 + Math.sin(t * 3) * 0.012 });
+    rect(ctx, '#3E281B', heldX - 38, 818, 30, 22);
+    rect(ctx, '#8A5E3D', heldX - 34, 818, 22, 16);
+    rect(ctx, '#D4A66F', heldX - 26, 818, 10, 6);
     ctx.restore();
 
-    // Foreground scale cues hold their size while the little cabinet recedes.
-    rect(ctx, '#202428', 0, 1080, W, 210);
-    polygon(ctx, '#747A7E', [[0, 1060], [540, 1000], [1080, 1060], [1080, 1088], [540, 1028], [0, 1088]]);
-    rect(ctx, '#A3A8AB', 0, 1088, W, 8);
-    for (let i = 0; i < 12; i++) {
-      const x = i * 102 - 28;
-      rect(ctx, i % 2 ? '#5E6468' : '#33383C', x, 1136, 14, 154);
-      rect(ctx, '#91979A', x + 14, 1136, 6, 154);
-    }
-    // Camera retreat rakes close speed marks across the lens for a single clean accent beat.
-    if (t >= liftAt && t <= liftAt + dur * 0.42) {
-      drawSpeedLines(ctx, t, { center: { x: 540, y: 700 }, count: 18, reach: 320, start: liftAt, duration: dur * 0.28,
-        color: '#BFC3C4', seed: seed + 101, strength: 0.38 });
+    // The price path is screen-facing and physically anchored to the rack's right edge.
+    const anchorX = W / 2 + pose.x + (842 - W / 2) * pose.zoom;
+    const anchorY = 720 + pose.y + (514 - 720) * pose.zoom;
+    drawPricePath(ctx, [snap(anchorX), snap(anchorY)], t, higherAt);
+
+    // A last near-camera rail sweeps upward, giving the next whip-up a moving edge to catch.
+    const railY = 1212 - pull * 88;
+    rect(ctx, '#272E32', 0, railY, W, 78);
+    rect(ctx, '#8B9397', 0, railY, W, 8);
+    const railOffset = (t * 118) % 228;
+    for (let i = -1; i < 7; i++) {
+      const x = snap(i * 228 - railOffset);
+      rect(ctx, '#596166', x, railY + 18, 104, 8);
+      rect(ctx, '#A7AEB1', x + 18, railY + 28, 8, 30);
     }
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const buyers = eventTime(props, 'buyers', 0.35, dur), lifts = eventTime(props, 'lifts', 0.69, dur);
+    const demandAt = eventTime(props, 'demand', 0.372, dur);
+    const higherAt = eventTime(props, 'higher', 0.742, dur);
     const cues: Cue[] = [
-      { t: buyers, kind: 'coin', gain: 0.72, pan: -0.18 },
-      { t: lifts, kind: 'tick', gain: 0.78, pan: 0.14 },
-      { t: lifts + 0.075, kind: 'tick', gain: 0.58, pan: 0.31 },
-      { t: lifts + 0.12, kind: 'bass', gain: 0.72, pan: 0 },
-      { t: lifts + 0.015, kind: 'whoosh', gain: 0.52, len: 0.23, pan: 0.02 },
+      { t: demandAt, kind: 'coin', gain: 0.7, pan: 0.26 },
+      { t: higherAt, kind: 'tick', gain: 0.78, pan: 0.43 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t <= dur);
   },

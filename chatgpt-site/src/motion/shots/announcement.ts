@@ -8,6 +8,9 @@ import { fitPixel, pixelText } from '../prim.ts';
 import { CELL, bayer } from '../pix.ts';
 import type { ShotDef } from './index.ts';
 
+const W = 1080;
+const H = 1290;
+
 function eventTime(props: ShotProps, kind: string, dur: number, fallback: number) {
   const event = props.events?.find(item => item.kind.toLowerCase() === kind);
   return clamp(event?.at ?? fallback, 0, Math.max(0, dur));
@@ -23,248 +26,254 @@ function textParam(value: unknown) {
   return clean || 'REUNION';
 }
 
-function lightTiming(dur: number, reunionAt: number, count: number) {
-  const remaining = Math.max(.12, dur - reunionAt);
-  return {
-    gap: count > 1 ? Math.min(.13, Math.max(.05, remaining * .68 / (count - 1))) : 0,
-    length: Math.min(.15, Math.max(.06, remaining * .16)),
-  };
+function drawArena(ctx: Frame['ctx'], t: number, reunionAt: number, count: number) {
+  // The concert bowl climbs behind the stage in distinct steel and stone tiers.
+  ctx.fillStyle = '#101013'; ctx.fillRect(0, 170, W, 1000);
+  ctx.fillStyle = '#39393F'; ctx.fillRect(0, 184, W, 10);
+  for (let tier = 0; tier < count; tier++) {
+    const y = 250 + tier * 116, half = 284 + tier * 92;
+    ctx.fillStyle = tier % 2 ? '#1B1B1F' : '#242429';
+    ctx.fillRect(540 - half, y, half * 2, 35);
+    ctx.fillStyle = '#74747B'; ctx.fillRect(540 - half, y, half * 2, CELL);
+    ctx.fillStyle = '#09090B'; ctx.fillRect(540 - half + 10, y + 38, half * 2 - 20, 20);
+    for (let seat = 0; seat < 16 + tier * 3; seat++) {
+      const x = 540 - half + 24 + seat * (2 * half - 48) / (15 + tier * 3);
+      const flash = t >= reunionAt + tier * .095;
+      const lit = flash && (seat + tier) % 3 !== 1;
+      ctx.fillStyle = lit ? '#DADAE0' : (seat + tier) % 2 ? '#3C3C42' : '#55555B';
+      ctx.fillRect(Math.round(x / CELL) * CELL, y - 21, CELL * 3, CELL * 2);
+      if (lit && (seat + tier) % 4 === 0) {
+        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(Math.round(x / CELL) * CELL, y - 25, CELL * 3, CELL);
+      }
+    }
+    // Each row has a strong horizontal lip, so the light cascade reads at phone size.
+    if (t >= reunionAt + tier * .095) {
+      ctx.fillStyle = '#BABABF'; ctx.fillRect(540 - half, y + 48, half * 2, CELL);
+      ctx.fillStyle = '#F0F0F2'; ctx.fillRect(540 - half, y + 48, half * 2, CELL / 2);
+    }
+  }
+
+  // Stage arch, floor and side towers give the poster a deep, legible frame.
+  ctx.fillStyle = '#0A0A0C'; ctx.fillRect(126, 310, 828, 610);
+  ctx.fillStyle = '#38383E'; ctx.fillRect(145, 294, 790, 18);
+  ctx.fillStyle = '#77777D'; ctx.fillRect(158, 300, 764, CELL);
+  ctx.fillStyle = '#151519'; ctx.fillRect(162, 334, 756, 520);
+  ctx.fillStyle = '#55555B'; ctx.fillRect(194, 836, 692, 12);
+  ctx.fillStyle = '#B4B4B9'; ctx.fillRect(222, 848, 636, CELL);
+  ctx.fillStyle = '#08080A'; ctx.beginPath(); ctx.moveTo(0, 1010); ctx.lineTo(W, 1010); ctx.lineTo(990, 1100); ctx.lineTo(90, 1100); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#5D5D63'; ctx.fillRect(0, 1002, W, CELL * 2);
+  ctx.fillStyle = '#C0C0C4'; ctx.fillRect(0, 1002, W, CELL);
+  for (let i = -6; i <= 6; i++) {
+    ctx.strokeStyle = '#2C2C32'; ctx.lineWidth = CELL;
+    ctx.beginPath(); ctx.moveTo(540, 1012); ctx.lineTo(540 + i * 144, 1290); ctx.stroke();
+  }
+  for (let i = 1; i < 7; i++) {
+    ctx.fillStyle = i % 2 ? '#202024' : '#2B2B30'; ctx.fillRect(0, 1010 + i * i * 7, W, CELL);
+  }
+
+  // Low front balcony carries Hedgy through the full reveal.
+  ctx.fillStyle = '#08080A'; ctx.beginPath(); ctx.moveTo(-28, 1128); ctx.lineTo(1108, 1128); ctx.lineTo(1080, 1240); ctx.lineTo(0, 1240); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#535359'; ctx.fillRect(0, 1118, W, CELL * 3);
+  ctx.fillStyle = '#D0D0D4'; ctx.fillRect(0, 1118, W, CELL);
+  ctx.fillStyle = '#29292E'; ctx.fillRect(0, 1144, W, 12);
+  for (let i = 0; i < 12; i++) {
+    const x = 30 + i * 91;
+    ctx.fillStyle = '#76767D'; ctx.fillRect(x, 1156, CELL * 2, 66);
+    ctx.fillStyle = '#303035'; ctx.fillRect(x + CELL * 2, 1162, CELL * 2, 60);
+  }
 }
 
 function ditherCone(ctx: Frame['ctx'], ax: number, ay: number, reach: number, halfWidth: number, energy: number, seed: number) {
-  const top = Math.floor(ay / CELL) * CELL, bottom = Math.min(1240, Math.ceil((ay + reach) / CELL) * CELL);
-  for (let y = top; y < bottom; y += CELL) {
+  const step = CELL * 2;
+  const bottom = Math.min(1240, Math.ceil((ay + reach) / step) * step);
+  for (let y = Math.floor(ay / step) * step; y < bottom; y += step) {
     const v = clamp((y - ay) / Math.max(1, reach));
-    const half = Math.max(CELL, halfWidth * v);
-    const left = Math.max(0, Math.floor((ax - half) / CELL) * CELL), right = Math.min(1080, Math.ceil((ax + half) / CELL) * CELL);
-    for (let x = left; x < right; x += CELL) {
-      const across = Math.abs((x + CELL / 2 - ax) / half);
-      const density = energy * (1 - v * .42) * (1 - across * .44);
+    const half = Math.max(step, halfWidth * v);
+    const left = Math.max(0, Math.floor((ax - half) / step) * step);
+    const right = Math.min(W, Math.ceil((ax + half) / step) * step);
+    for (let x = left; x < right; x += step) {
+      const across = Math.abs((x + step / 2 - ax) / half);
+      const density = energy * (1 - v * .38) * (1 - across * .46);
       const threshold = (bayer(x / CELL + seed, y / CELL + seed * 3) + .08) % 1;
       if (density <= threshold) continue;
       ctx.fillStyle = density > .72 ? '#D8D8DC' : density > .43 ? '#99999F' : '#68686E';
-      ctx.fillRect(x, y, CELL, CELL);
+      ctx.fillRect(x, y, step, step);
     }
   }
 }
 
-function drawStage(ctx: Frame['ctx'], t: number, dur: number, theme: Frame['theme'], lightCount: number, reunionAt: number) {
-  const light = lightTiming(dur, reunionAt, lightCount);
-  // Far stage arch and receding floor establish the long journey through the gap.
-  ctx.fillStyle = '#0B0B0D'; ctx.fillRect(205, 468, 670, 370);
-  ctx.fillStyle = '#36363C'; ctx.fillRect(222, 458, 636, CELL * 3);
-  ctx.fillStyle = '#111114'; ctx.fillRect(254, 492, 572, 275);
-  ctx.fillStyle = '#55555B'; ctx.fillRect(274, 505, 532, CELL * 2);
-  ctx.fillStyle = '#202024'; ctx.fillRect(304, 523, 472, 212);
-  ctx.fillStyle = '#6D6D73'; ctx.fillRect(338, 713, 404, CELL * 2);
-  ctx.fillStyle = '#B7B7BC'; ctx.fillRect(386, 733, 308, CELL);
-  ctx.fillStyle = '#08080A'; ctx.beginPath(); ctx.moveTo(132, 876); ctx.lineTo(948, 876); ctx.lineTo(844, 946); ctx.lineTo(236, 946); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#54545A'; ctx.fillRect(132, 869, 816, CELL * 2);
-  ctx.fillStyle = '#A4A4A9'; ctx.fillRect(132, 869, 816, CELL);
-
-  // Deep stepped balcony ribs; light travels across them in a timed white cascade.
-  for (let i = 0; i < lightCount; i++) {
-    const y = 388 + i * 79, half = 258 + i * 67, front = y + 18;
-    ctx.fillStyle = i % 2 ? '#17171B' : '#202024';
-    ctx.fillRect(540 - half, y, half * 2, 27);
-    ctx.fillStyle = '#56565C'; ctx.fillRect(540 - half, y, half * 2, CELL);
-    ctx.fillStyle = '#09090B'; ctx.fillRect(540 - half + 8, y + 27, half * 2 - 16, 12);
-    for (let x = 540 - half + 22; x < 540 + half - 15; x += 38) {
-      ctx.fillStyle = '#2B2B30'; ctx.fillRect(x, y + 9, 22, 8);
-    }
-    const lightProgress = clamp((t - reunionAt - i * light.gap) / light.length);
-    if (lightProgress > 0) {
-      const cells = Math.ceil((2 * half - 36) / 34 * ease.outCubic(lightProgress));
-      for (let cell = 0; cell < cells; cell++) {
-        const x = 540 - half + 18 + cell * 34;
-        ctx.fillStyle = (cell + i) % 5 === 0 ? '#FFFFFF' : '#D6D6D9';
-        ctx.fillRect(x, front, 23, CELL * 2);
-        if ((cell + i) % 3 === 0) { ctx.fillStyle = '#F1F1F3'; ctx.fillRect(x + 4, front - 6, 11, CELL); }
-      }
-      ctx.fillStyle = '#B5B5BA';
-      ctx.fillRect(540 - half, front + 13, 2 * half, CELL);
-    }
+function drawSpotlights(ctx: Frame['ctx'], t: number, reunionAt: number) {
+  if (t < reunionAt) return;
+  const bloom = .36 + .64 * ease.outExpo((t - reunionAt) / .22);
+  // These three hard-edged beams land from the roof onto the poster and the crowd bowl.
+  ditherCone(ctx, 320, 264, 770, 260, .65 * bloom, 7);
+  ditherCone(ctx, 760, 264, 770, 260, .65 * bloom, 19);
+  ditherCone(ctx, 540, 270, 680, 150, .48 * bloom, 31);
+  for (const [x, y] of [[320, 258], [540, 254], [760, 258]]) {
+    ctx.fillStyle = '#D6D6DA'; ctx.fillRect(x - 24, y, 48, 16);
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(x - 12, y - 8, 24, 8);
+    ctx.fillStyle = '#606066'; ctx.fillRect(x - 30, y + 16, 60, CELL);
   }
-  // Three broad, ordered-dither spotlights, fed by the stage shutter at reunion.
-  const beamLength = Math.min(.36, Math.max(.18, dur * .18));
-  const beam = ease.outCubic((t - reunionAt + beamLength * .32) / beamLength);
-  if (beam > 0) {
-    ditherCone(ctx, 376, 482, 414, 216, .72 * beam, 7);
-    ditherCone(ctx, 704, 482, 414, 216, .72 * beam, 19);
-    ditherCone(ctx, 540, 476, 355, 120, .52 * beam, 31);
-    for (const [x, y] of [[376, 474], [540, 468], [704, 474]]) {
-      ctx.fillStyle = '#DCDCE0'; ctx.fillRect(x - 15, y, 30, 14);
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(x - 8, y - 7, 16, 7);
-      ctx.fillStyle = '#55555B'; ctx.fillRect(x - 21, y + 14, 42, 5);
-    }
-  }
-
-  // Foreground lower balcony carries Hedgy; its rails slide under the crane move.
-  ctx.fillStyle = '#08080A'; ctx.beginPath(); ctx.moveTo(-35, 1127); ctx.lineTo(1110, 1127); ctx.lineTo(1080, 1238); ctx.lineTo(0, 1238); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#49494F'; ctx.fillRect(0, 1122, 1080, CELL * 3);
-  ctx.fillStyle = '#C2C2C6'; ctx.fillRect(0, 1122, 1080, CELL);
-  ctx.fillStyle = '#222227'; ctx.fillRect(0, 1141, 1080, 11);
-  for (let i = 0; i < 13; i++) {
-    const x = 22 + i * 86;
-    ctx.fillStyle = '#6D6D73'; ctx.fillRect(x, 1144, CELL * 2, 75);
-    ctx.fillStyle = '#303035'; ctx.fillRect(x + CELL * 2, 1150, CELL * 2, 68);
-    ctx.fillStyle = '#98989E'; ctx.fillRect(x, 1215, CELL * 4, CELL * 2);
-  }
-  ctx.fillStyle = theme.line; ctx.fillRect(0, 1234, 1080, CELL * 2);
 }
 
-function drawCurtain(ctx: Frame['ctx'], open: number, t: number) {
-  const gapL = 540 - open * 432, gapR = 540 + open * 432;
-  // Two tall, heavy leaves with alternating velvet ribs and clipped pixel folds.
-  ctx.fillStyle = '#17171A'; ctx.fillRect(-12, -8, gapL + 12, 1300);
+function drawMarquee(ctx: Frame['ctx'], t: number, announcesAt: number, reunionAt: number, word: string, seed: number) {
+  if (t < reunionAt) {
+    // Once the curtains part, a compact sign cassette hangs above the empty stage.
+    const deploy = ease.outExpo((t - announcesAt) / .14);
+    const caseWidth = 264 * deploy;
+    if (caseWidth > 0) {
+      ctx.fillStyle = '#08080A'; ctx.fillRect(540 - caseWidth / 2 - 12, 538, caseWidth + 24, 56);
+      ctx.fillStyle = '#8B8B91'; ctx.fillRect(540 - caseWidth / 2, 542, caseWidth, 8);
+      ctx.fillStyle = '#D6D6DA'; ctx.fillRect(540 - caseWidth / 2 + 8, 544, Math.max(0, caseWidth - 16), CELL);
+      ctx.fillStyle = '#414147'; ctx.fillRect(540 - 6, 552, 12, 32);
+      ctx.fillStyle = '#A5A5AB'; ctx.fillRect(540 - 14, 580, 28, CELL);
+    }
+    return;
+  }
+  const p = ease.outBack(clamp((t - reunionAt) / .2));
+  const scale = .82 + .18 * p;
+  ctx.save();
+  ctx.translate(540, 556); ctx.scale(scale, scale); ctx.translate(-540, -556);
+  const x = 104, y = 328, w = 872, h = 456;
+  // Deep black casing and polished silver rails make this an arena marquee, not a title card.
+  ctx.fillStyle = '#050506'; ctx.fillRect(x - 28, y - 24, w + 56, h + 60);
+  ctx.fillStyle = '#7B7B81'; ctx.fillRect(x - 18, y - 16, w + 36, h + 36);
+  ctx.fillStyle = '#D5D5D9'; ctx.fillRect(x - 10, y - 10, w + 20, 14);
+  ctx.fillStyle = '#151518'; ctx.fillRect(x, y, w, h);
+  ctx.fillStyle = '#E4E4E7'; ctx.fillRect(x + 14, y + 14, w - 28, h - 28);
+  ctx.fillStyle = '#F3F3F5'; ctx.fillRect(x + 24, y + 24, w - 48, h - 48);
+  ctx.fillStyle = '#9F9FA5'; ctx.fillRect(x + 34, y + 34, 10, h - 68);
+  ctx.fillStyle = '#C3C3C7'; ctx.fillRect(x + w - 44, y + 34, 10, h - 68);
+
+  // A restrained halftone grain holds the paper face without filling the frame with noise.
+  for (let row = 0; row < 28; row++) for (let col = 0; col < 64; col++) {
+    if (bayer(col + seed, row + seed * 3) > .91) {
+      ctx.fillStyle = '#C5C5CA'; ctx.fillRect(x + 56 + col * 12, y + 44 + row * 12, CELL, CELL);
+    }
+  }
+  ctx.fillStyle = '#333338'; ctx.fillRect(x + 78, y + 78, w - 156, 8);
+  ctx.fillStyle = '#A2A2A8'; ctx.fillRect(x + 78, y + h - 86, w - 156, 8);
+  ctx.fillStyle = '#5E5E64'; ctx.fillRect(x + 112, y + h - 64, w - 224, CELL);
+
+  const fitted = fitPixel(word, 716, 1, [14, 13, 12, 11, 10, 9, 8]);
+  pixelText(ctx, fitted.lines[0] ?? 'REUNION', 540, y + 190, fitted.px, { color: '#111114', align: 'center', reveal: 1, mode: 'type', seed });
+
+  // The bulb row snaps to life with the sign; alternating pixels retain a handmade marquee feel.
+  for (let i = 0; i < 21; i++) {
+    const bx = x + 32 + i * 40;
+    ctx.fillStyle = i % 3 === 0 ? '#FFFFFF' : '#A5A5AA';
+    ctx.fillRect(bx, y - 2, 12, 12);
+    ctx.fillRect(bx, y + h - 10, 12, 12);
+  }
+  for (let i = 0; i < 9; i++) {
+    const by = y + 30 + i * 48;
+    ctx.fillStyle = i % 2 ? '#BFC0C4' : '#FFFFFF';
+    ctx.fillRect(x - 5, by, 12, 12); ctx.fillRect(x + w - 7, by, 12, 12);
+  }
+  ctx.restore();
+}
+
+function drawCurtains(ctx: Frame['ctx'], open: number, t: number, announceAt: number) {
+  const shiver = Math.sin((t - announceAt) * 42) * (1 - open) * 5;
+  const gapL = Math.round(540 - open * 516 + shiver);
+  const gapR = Math.round(540 + open * 516 - shiver);
+  ctx.fillStyle = '#1A1A1E'; ctx.fillRect(-12, -8, gapL + 12, 1300);
   for (let x = -8; x < gapL; x += 28) {
     const rib = Math.floor((x + 8) / 28), pulse = Math.sin(rib * .63 + t * .28) * 4;
     const width = Math.min(20, gapL - x);
-    ctx.fillStyle = rib % 2 ? '#252529' : '#35353B'; ctx.fillRect(x + 4, 0, width, 1288);
-    ctx.fillStyle = rib % 3 === 0 ? '#66666C' : '#44444A'; ctx.fillRect(x + 4 + Math.round(pulse), 0, 4, 1288);
-    ctx.fillStyle = '#111114'; ctx.fillRect(x + 22, 0, 6, 1288);
+    ctx.fillStyle = rib % 2 ? '#2B2B30' : '#414147'; ctx.fillRect(x + 4, 0, width, 1288);
+    ctx.fillStyle = rib % 3 === 0 ? '#85858B' : '#55555B'; ctx.fillRect(x + 4 + Math.round(pulse), 0, 4, 1288);
+    ctx.fillStyle = '#101013'; ctx.fillRect(x + 22, 0, 6, 1288);
   }
-  ctx.fillStyle = '#151518'; ctx.fillRect(gapR, -8, 1092 - gapR, 1300);
+  ctx.fillStyle = '#1A1A1E'; ctx.fillRect(gapR, -8, 1092 - gapR, 1300);
   for (let x = gapR; x < 1092; x += 28) {
     const rib = Math.floor((x - gapR) / 28), pulse = Math.sin(rib * .62 + t * .3 + 1) * 4;
     const width = Math.min(20, 1092 - x);
-    ctx.fillStyle = rib % 2 ? '#333339' : '#202024'; ctx.fillRect(x + 4, 0, width, 1288);
-    ctx.fillStyle = rib % 3 === 0 ? '#55555B' : '#414147'; ctx.fillRect(x + 4 + Math.round(pulse), 0, 4, 1288);
-    ctx.fillStyle = '#111114'; ctx.fillRect(x + 22, 0, 6, 1288);
+    ctx.fillStyle = rib % 2 ? '#414147' : '#2B2B30'; ctx.fillRect(x + 4, 0, width, 1288);
+    ctx.fillStyle = rib % 3 === 0 ? '#85858B' : '#55555B'; ctx.fillRect(x + 4 + Math.round(pulse), 0, 4, 1288);
+    ctx.fillStyle = '#101013'; ctx.fillRect(x + 22, 0, 6, 1288);
   }
-  // Polished inner hem makes the opening read as weighty fabric, not a wipe mask.
-  ctx.fillStyle = '#B0B0B5'; ctx.fillRect(gapL - 5, 0, 5, 1288);
-  ctx.fillStyle = '#74747A'; ctx.fillRect(gapL, 0, 5, 1288);
-  ctx.fillStyle = '#BDBDC2'; ctx.fillRect(gapR, 0, 5, 1288);
-  ctx.fillStyle = '#74747A'; ctx.fillRect(gapR + 5, 0, 4, 1288);
-  // A monumental valance and an inner silver track frame the stage reveal.
-  ctx.fillStyle = '#242428'; ctx.fillRect(-8, 0, 1096, 76);
-  ctx.fillStyle = '#5C5C62'; ctx.fillRect(0, 69, 1080, 8);
-  ctx.fillStyle = '#A5A5AA'; ctx.fillRect(0, 73, 1080, CELL);
-  for (let x = 18; x < 1080; x += 42) {
-    ctx.fillStyle = x % 3 === 0 ? '#6D6D73' : '#37373D'; ctx.fillRect(x, 79, 10, 18);
-  }
-}
-
-function drawPoster(ctx: Frame['ctx'], t: number, announceAt: number, reunionAt: number, word: string, seed: number) {
-  const span = Math.max(.18, reunionAt - announceAt);
-  const fold = ease.outCubic((t - announceAt) / span);
-  const height = Math.round(360 * fold / CELL) * CELL;
-  const x = 306, y = 280, w = 468;
-  // Folded paper is attached to a black stage rail; the folds remain visible after it opens.
-  ctx.fillStyle = '#0A0A0C'; ctx.fillRect(x - 24, y - 20, w + 48, 25);
-  ctx.fillStyle = '#B8B8BD'; ctx.fillRect(x - 12, y - 16, w + 24, 5);
-  ctx.fillStyle = '#35353A'; ctx.fillRect(x, y - 34, w, 20);
-  ctx.fillStyle = '#C3C3C7'; ctx.fillRect(x + 8, y - 30, w - 16, 7);
-  if (height > 0) {
-    ctx.fillStyle = '#D4D4D7'; ctx.fillRect(x, y, w, height);
-    ctx.fillStyle = '#F2F2F3'; ctx.fillRect(x + 8, y + 4, w - 16, Math.max(0, height - 8));
-    ctx.fillStyle = '#A9A9AE'; ctx.fillRect(x + 20, y + 12, 8, Math.max(0, height - 24));
-    ctx.fillStyle = '#B1B1B6'; ctx.fillRect(x + w - 28, y + 12, 8, Math.max(0, height - 24));
-    // Concert-poster grain and a central fold remain fine-pixel detail, not a gradient.
-    for (let row = 0; row < Math.floor(height / CELL); row++) {
-      for (let col = 0; col < Math.floor(w / CELL); col++) {
-        if (bayer(col + seed, row + seed * 5) > .91) {
-          ctx.fillStyle = '#B8B8BD'; ctx.fillRect(x + col * CELL, y + row * CELL, CELL, CELL);
-        }
-      }
-    }
-    if (fold > .78) {
-      ctx.fillStyle = '#8D8D93'; ctx.fillRect(536, y + 4, CELL, height - 8);
-      ctx.fillStyle = '#FFFFFF'; ctx.fillRect(532, y + 4, CELL, height - 8);
-    }
-    const typeReveal = ease.outCubic((t - (announceAt + span * .56)) / Math.max(.07, span * .44));
-    if (height >= 172) {
-      const fitted = fitPixel(word, 410, 1, [10, 9, 8, 7, 6]);
-      pixelText(ctx, fitted.lines[0] ?? 'REUNION', 540, y + Math.max(64, Math.round(height * .53 - 34)), fitted.px, { color: '#131316', align: 'center', reveal: typeReveal, mode: 'type', seed });
-    }
-    if (height > 116) {
-      ctx.fillStyle = '#6B6B71'; ctx.fillRect(x + 54, y + height - 54, w - 108, CELL);
-      ctx.fillStyle = '#99999F'; ctx.fillRect(x + 92, y + height - 37, w - 184, CELL);
+  // Weighty valance and bright inner hems keep the curtain action tactile.
+  ctx.fillStyle = '#242428'; ctx.fillRect(-8, 0, 1096, 82);
+  ctx.fillStyle = '#77777D'; ctx.fillRect(0, 74, W, 8);
+  ctx.fillStyle = '#D0D0D4'; ctx.fillRect(0, 78, W, CELL);
+  ctx.fillStyle = '#B8B8BD'; ctx.fillRect(gapL - 5, 0, 5, 1288);
+  ctx.fillStyle = '#B8B8BD'; ctx.fillRect(gapR, 0, 5, 1288);
+  // One narrow house spot glows through the closed velvet and fades as it parts.
+  ctx.save(); ctx.globalAlpha *= .42 * (1 - open);
+  ctx.fillStyle = '#9A9AA0';
+  for (let row = 0; row < 32; row++) {
+    const y = 100 + row * 16, half = 12 + row * 3;
+    for (let x = 540 - half; x <= 540 + half; x += 12) {
+      if (bayer(Math.floor(x / CELL), row) < .53) ctx.fillRect(x, y, CELL * 2, CELL * 2);
     }
   }
-  // A slight paper kick on the reveal is made from stepped shadow and curled corners.
-  if (fold > .2) {
-    ctx.fillStyle = '#7A7A80'; ctx.fillRect(x + 4, y + height - 8, 13, 8);
-    ctx.fillStyle = '#F8F8FA'; ctx.fillRect(x + w - 17, y + height - 12, 13, 8);
-  }
+  ctx.fillStyle = '#F0F0F2'; ctx.fillRect(528, 90, 24, 8);
+  ctx.fillStyle = '#77777D'; ctx.fillRect(512, 98, 56, 8);
+  ctx.restore();
 }
 
 export const announcementShot: ShotDef = {
   name: 'announcement',
-  describe: 'Curtain-reveal set piece with a folding concert poster, a white tier-by-tier light sweep, Hedgy shock pose, dithered spotlights and pixel bloom; params: posterWord, lightCount (3–9).',
+  describe: 'The venue curtains snap open on announces; a REUNION marquee hits with a shock pop as seven balcony tiers and three spotlights ignite on reunion.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, t: rawT, dur, theme, seed } = frame;
     const t = clamp(rawT, 0, Math.max(.01, dur));
-    const p = props.params ?? {};
-    const lightCount = Math.round(numberParam(p.lightCount, 7, 3, 9));
-    const word = textParam(p.posterWord);
-    const announcesAt = eventTime(props, 'announces', dur, dur * .14);
-    const reunionAt = eventTime(props, 'reunion', dur, dur * .50);
-    const open = ease.outCubic((t - announcesAt) / Math.min(.72, Math.max(.28, dur * .38)));
-    const cam = createCameraRig({
-      width: 1080, height: 1920, seed: seed + 41, handheld: 1.6,
+    const lightCount = Math.round(numberParam(props.params?.lightCount, 7, 4, 9));
+    const word = textParam(props.params?.posterWord);
+    const announcesAt = eventTime(props, 'announces', dur, dur * .32);
+    const reunionAt = eventTime(props, 'reunion', dur, dur * .54);
+    const open = ease.outExpo((t - announcesAt) / .18);
+    const rig = createCameraRig({
+      width: W, height: 1920, seed: seed + 41, handheld: 1.6,
       keyframes: [
-        { t: 0, x: 0, y: 4, zoom: 1.015, rot: 0, ease: 'linear' },
-        { t: announcesAt, x: -6, y: -10, zoom: 1.025, rot: 0, ease: 'out' },
-        { t: reunionAt, x: 6, y: -48, zoom: 1.045, rot: -.004, ease: 'inOut' },
-        { t: dur, x: -3, y: -126, zoom: 1.075, rot: .006, ease: 'inOut' },
-      ], hits: [reunionAt], punch: .016, shake: 3.2,
+        { t: 0, x: 0, y: 8, zoom: 1.005, rot: 0, ease: 'linear' },
+        { t: announcesAt, x: -4, y: 0, zoom: 1.02, rot: 0, ease: 'out' },
+        { t: reunionAt, x: 8, y: -34, zoom: 1.045, rot: -.003, ease: 'inOut' },
+        { t: dur, x: -12, y: -90, zoom: 1.075, rot: .006, ease: 'inOut' },
+      ], hits: [announcesAt, reunionAt], punch: .022, shake: 4.4,
     });
-    const camera = cam.poseAt(t);
-    drawEnv(ctx, { type: 'stage', t, theme, seed, camera: { x: camera.x, y: camera.y, zoom: camera.zoom, rot: camera.rot, yaw: camera.rot * 1.2, pitch: .23 } });
+    const camera = rig.poseAt(t);
+    drawEnv(ctx, { type: 'stage', t, theme, seed, width: W, height: H, camera: { x: camera.x, y: camera.y, zoom: camera.zoom, rot: camera.rot, yaw: camera.rot * 1.2, pitch: .23 } });
 
-    ctx.save(); cam.apply(ctx, t);
-    drawStage(ctx, t, dur, theme, lightCount, reunionAt);
-    // Tall architecture and distant roof trusses stay visible between the curtain ribs.
-    for (let side = 0; side < 2; side++) {
-      const x = side === 0 ? 74 : 976;
-      ctx.fillStyle = '#17171B'; ctx.fillRect(x, 140, 30, 880);
-      ctx.fillStyle = '#707076'; ctx.fillRect(x + (side ? 20 : 4), 140, 5, 880);
-      ctx.fillStyle = '#2C2C31'; ctx.fillRect(side ? 880 : 108, 255, 92, 22);
-      for (let brace = 0; brace < 6; brace++) {
-        const by = 205 + brace * 142;
-        ctx.fillStyle = brace % 2 ? '#424248' : '#5A5A60'; ctx.fillRect(x - 22, by, 74, 7);
-        ctx.fillStyle = '#1B1B1F'; ctx.fillRect(x + (side ? -28 : 25), by - 18, 6, 42);
-      }
-    }
-    drawPoster(ctx, t, announcesAt, reunionAt, word, seed + 3);
-    // Curtain leaves are nearest; the poster and lit tiers stay behind the moving fabric.
-    drawCurtain(ctx, open, t);
-    const pose = t < reunionAt ? 'idle' : 'shock';
+    ctx.save();
+    ctx.imageSmoothingEnabled = false;
+    rig.apply(ctx, t);
+    drawArena(ctx, t, reunionAt, lightCount);
+    drawSpotlights(ctx, t, reunionAt);
+    drawMarquee(ctx, t, announcesAt, reunionAt, word, seed + 3);
+    drawCurtains(ctx, open, t, announcesAt);
+
+    // Hedgy starts low in the front balcony, then pops upright in a clear shock pose.
+    const pop = ease.outBack(clamp((t - reunionAt) / .17));
+    const feet = 1212 - pop * 78;
+    const pose = t < reunionAt ? 'peek' : 'shock';
     const poseT = Math.max(0, t - reunionAt);
-    // The lower-balcony hero is clearly foregrounded against the reveal.
-    ctx.fillStyle = '#070709'; ctx.fillRect(688, 1095, 340, 31);
-    ctx.fillStyle = '#BDBDC2'; ctx.fillRect(688, 1090, 340, 5);
-    ctx.fillStyle = '#55555B'; ctx.fillRect(714, 1126, 9, 98);
-    ctx.fillStyle = '#77777D'; ctx.fillRect(993, 1126, 9, 98);
-    drawHedgy(ctx, { x: 850, y: 1148, scale: 1.65, t: poseT, pose, facing: -1, look: 'up', expression: pose === 'shock' ? 'shocked' : 'worried' });
-    ctx.fillStyle = '#A9A9AE'; ctx.fillRect(714, 1214, 288, CELL * 2);
-    ctx.fillStyle = '#27272B'; ctx.fillRect(714, 1222, 288, CELL * 2);
+    ctx.fillStyle = '#08080A'; ctx.fillRect(104, 1218, 310, 20);
+    ctx.fillStyle = '#B8B8BD'; ctx.fillRect(104, 1212, 310, CELL);
+    drawHedgy(ctx, {
+      x: 252, y: feet, scale: 4.1, t: poseT || Math.max(0, t - announcesAt),
+      pose, facing: 1, look: 'up', expression: pose === 'shock' ? 'shocked' : 'worried', prop: 'none',
+    });
 
-    // Fine dust and paper flecks burst from the stage toward the lens on the reunion beat.
-    drawBurst(ctx, t, { center: { x: 540, y: 716 }, seed: seed + 101, count: 76, kind: 'dust', start: reunionAt - .04, life: 1.25, speed: 430, gravity: -8, drag: .12, floor: 5000, size: 1, color: '#E1E1E4' });
-    drawBurst(ctx, t, { center: { x: 540, y: 616 }, seed: seed + 127, count: 34, kind: 'confetti', start: reunionAt + .02, life: 1.1, speed: 342, spread: 5.4, gravity: 190, drag: .2, floor: 1300, spin: 8, size: 2, color: '#F0F0F2' });
+    // A brief white pixel burst lifts away from the marquee impact, then drifts through depth.
+    if (t >= reunionAt - .02) {
+      drawBurst(ctx, t, { center: { x: 540, y: 570 }, seed: seed + 101, count: 48, kind: 'dust', start: reunionAt, life: 1.0, speed: 390, spread: 5.8, gravity: 82, drag: .16, floor: 1300, size: 1, color: '#E5E5E9' });
+      drawBurst(ctx, t, { center: { x: 540, y: 650 }, seed: seed + 127, count: 22, kind: 'confetti', start: reunionAt + .025, life: .92, speed: 280, spread: 5.4, gravity: 220, drag: .2, floor: 1300, spin: 8, size: 2, color: '#F0F0F2' });
+    }
     ctx.restore();
 
-    // Dithered white pixels bleed into their neighbours without losing the hard pixel edges.
-    if (t >= reunionAt - .04) applyPixelBloom(ctx, { x: 96, y: 148, w: 888, h: 980, threshold: 178, radius: 2, strength: .44, cell: CELL });
+    // Pixel bloom is confined to the sign and beam landing zone for a clean, bright hit.
+    if (t >= reunionAt) applyPixelBloom(ctx, { x: 112, y: 276, w: 856, h: 650, threshold: 186, radius: 2, strength: .5, cell: 8 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const announcesAt = eventTime(props, 'announces', dur, dur * .14);
-    const reunionAt = eventTime(props, 'reunion', dur, dur * .50);
-    const lights = Math.round(numberParam(props.params?.lightCount, 7, 3, 9));
-    const light = lightTiming(dur, reunionAt, lights);
+    const announcesAt = eventTime(props, 'announces', dur, dur * .32);
+    const reunionAt = eventTime(props, 'reunion', dur, dur * .54);
     const cues: Cue[] = [
-      { t: Math.max(0, Number((announcesAt - .06).toFixed(3))), kind: 'rise', len: .22, pan: 0, gain: .56 },
-      { t: Number(announcesAt.toFixed(3)), kind: 'servo', pan: .15, gain: .7 },
-      { t: Number(reunionAt.toFixed(3)), kind: 'crack', pan: 0, gain: .9 },
-      { t: Number(reunionAt.toFixed(3)), kind: 'whoosh', pan: 0, gain: .68 },
+      { t: Number(announcesAt.toFixed(3)), kind: 'servo', pan: 0, gain: .78 },
+      { t: Number(reunionAt.toFixed(3)), kind: 'impact', pan: 0, gain: .92 },
+      { t: Number(Math.min(dur, reunionAt + .19).toFixed(3)), kind: 'shimmer', pan: .12, gain: .46, len: .22 },
     ];
-    for (let i = 0; i < lights; i++) {
-      const at = reunionAt + i * light.gap;
-      if (at < dur) cues.push({ t: Number(at.toFixed(3)), kind: 'tick', pan: (i / Math.max(1, lights - 1) - .5) * .8, gain: .42 + i * .018, step: i / Math.max(1, lights - 1) });
-    }
     return cues.filter(cue => cue.t <= dur);
   },
 };

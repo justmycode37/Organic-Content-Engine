@@ -2,359 +2,331 @@ import { clamp, ease, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawEnv } from '../env/index.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { drawBurst, drawMotionStreak } from '../fx/particles.ts';
+import { drawBurst, drawMotionStreak, drawSpeedLines } from '../fx/particles.ts';
 import { pixelText } from '../prim.ts';
-import { drawTicket2D, TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
-import { box, cylinder, merge, place, render3d, type Material, type Mesh } from '../three.ts';
+import { drawTicket2D } from '../sets/ticket.ts';
 import type { ShotDef } from './index.ts';
 
 const W = 1080, H = 1290;
-const ink = '#070809', wall = '#26282D', steel = '#62656C', edge = '#B4B6BA', paper = '#F0EBE2';
-const MATERIALS: Material[] = [
-  { ramp: 'steel', tone: .9, spec: .56 },
-  { ramp: 'chrome', tone: .95, spec: .76 },
-  { ramp: 'ink', tone: .72 },
-  { ramp: 'paper', tone: .96 },
-];
-const PORTAL_MESH = merge(
-  place(box(2.7, 1.45, .72, 0, [0, 0, 1, 0, 0, 0]), { pos: [0, 0, 0] }),
-  place(box(2.18, .22, .06, 2), { pos: [0, -.23, -.39] }),
-  place(box(2.35, .12, .08, 1), { pos: [0, .48, -.4] }),
-  place(box(.16, .92, .09, 1), { pos: [-1.1, .02, -.42] }),
-  place(box(.16, .92, .09, 1), { pos: [1.1, .02, -.42] }),
-);
-const SHARE_MESH = merge(box(1.8, 1, .07, 3), place(box(1.1, .16, .025, 2), { pos: [0, .2, -.05] }));
-const COIN_MESH = cylinder(.72, .15, 12, 1, 1);
+const ink = '#08090B', deep = '#15171B', steel = '#6D7076', bright = '#D5D7DA', paper = '#EDEDED';
+const mix = (a: number, b: number, p: number) => a + (b - a) * clamp(p);
 
-type AssetKind = 'ticket' | 'share' | 'coin' | 'banknote';
-function assetKind(value: unknown): AssetKind {
-  const name = String(value ?? 'ticket').toLowerCase();
-  if (['share', 'shares', 'stock', 'certificate'].includes(name)) return 'share';
-  if (['coin', 'token', 'deposit'].includes(name)) return 'coin';
-  if (['banknote', 'cash', 'bill'].includes(name)) return 'banknote';
-  return 'ticket';
-}
-function assetMesh(kind: AssetKind): Mesh {
-  return kind === 'ticket' ? ticketMesh() : kind === 'coin' ? COIN_MESH : kind === 'share' ? SHARE_MESH : box(1.8, .86, .06, 3);
-}
-function assetMaterials(kind: AssetKind): Material[] { return kind === 'ticket' ? TICKET_MATERIALS : MATERIALS; }
-function textParam(params: Record<string, unknown>, key: string, fallback: string) {
-  const value = params[key];
-  return typeof value === 'string' && value.trim() ? value.trim().slice(0, 18) : fallback;
-}
-function numberParam(params: Record<string, unknown>, key: string, fallback: number, min: number, max: number) {
-  const value = Number(params[key]);
-  return Number.isFinite(value) ? Math.max(min, Math.min(max, value)) : fallback;
-}
-function alias(props: ShotProps, key: string): string[] {
-  const raw = props.params?.syncEvents;
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return [];
-  const val = (raw as Record<string, unknown>)[key];
-  return typeof val === 'string' ? [val.toLowerCase()] : Array.isArray(val) ? val.map(String).map(s => s.toLowerCase()) : [];
-}
-function eventAt(props: ShotProps, kind: string, fallback: number, dur: number, also: string[] = []): number {
-  const wanted = [kind.toLowerCase(), ...also.map(s => s.toLowerCase()), ...alias(props, kind)];
+function eventAt(props: ShotProps, names: string[], fallback: number, dur: number) {
+  const wanted = names.map(name => name.toLowerCase());
   const found = props.events?.find(event => wanted.includes(String(event.kind).toLowerCase()));
   return clamp(found?.at ?? fallback * dur, 0, dur);
 }
-function polygon(ctx: Frame['ctx'], points: [number, number][], fill: string, stroke?: string, width = 4) {
-  ctx.beginPath(); ctx.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]![0], points[i]![1]);
-  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
-  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.lineJoin = 'miter'; ctx.stroke(); }
-}
+
 function line(ctx: Frame['ctx'], x1: number, y1: number, x2: number, y2: number, color: string, width = 4) {
   ctx.strokeStyle = color; ctx.lineWidth = width; ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
 }
-function mix(a: number, b: number, p: number) { return a + (b - a) * ease.outCubic(clamp(p)); }
 
-/** Perspective ticket-counter shaft with repeating counter banks, a central throat and close rails. */
-function drawShaft(frame: Frame, t: number, depthLayers: number, cameraPath: string) {
+function polygon(ctx: Frame['ctx'], pts: [number, number][], fill: string, stroke?: string, width = 5) {
+  ctx.beginPath(); ctx.moveTo(pts[0]![0], pts[0]![1]);
+  for (let i = 1; i < pts.length; i++) ctx.lineTo(pts[i]![0], pts[i]![1]);
+  ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
+}
+
+/** Deep lending hall; the two windows stay separated by open air so each transaction reads. */
+function drawHall(frame: Frame, t: number) {
   const { ctx, theme, seed } = frame;
-  drawEnv(ctx, { type: 'stage', t, seed: seed + 29, theme, width: W, height: H,
-    camera: { x: Math.sin(t * .6) * 18, y: -t * 16, zoom: 1.025, yaw: Math.sin(t * .28) * .05, pitch: .1 } });
-  const drift = cameraPath.toLowerCase().includes('left') ? -18 : cameraPath.toLowerCase().includes('right') ? 18 : 0;
-  const vpX = 540 + drift + Math.sin(t * .5) * 12, vpY = 258 + (t * 10 % 44);
-  // Shaft walls are bright enough to frame the dark central drop.
-  polygon(ctx, [[0, 0], [252, 0], [vpX - 112, vpY], [355, 1290], [0, 1290]], '#3F4248', '#B6B8BC', 8);
-  polygon(ctx, [[1080, 0], [828, 0], [vpX + 112, vpY], [725, 1290], [1080, 1290]], '#35383D', '#96999F', 8);
-  polygon(ctx, [[252, 0], [828, 0], [vpX + 112, vpY], [vpX - 112, vpY]], '#56595F', '#C2C4C8', 8);
-  polygon(ctx, [[355, 1290], [725, 1290], [vpX + 112, vpY], [vpX - 112, vpY]], '#111316', '#4E5157', 5);
-  // Deep vertical ribs and ducts pull the eye through the shaft.
-  for (let i = 0; i < 7; i++) {
-    const x = 80 + i * 154;
-    const x2 = vpX + (x - 540) * .22;
-    line(ctx, x, 0, x2, 1290, i % 2 ? '#65686E' : '#A2A4A9', i % 3 === 0 ? 10 : 5);
-    ctx.fillStyle = i % 2 ? '#222429' : '#7A7D83'; ctx.fillRect(x - 8, 0, 14, 1290);
-  }
-  // Corrugated bulkheads stream upward past camera; each frame has a measurable depth cue.
-  const beamCount = Math.max(4, Math.min(8, Math.floor(depthLayers) + 1)), scroll = (t * 250) % 190;
-  for (let i = -1; i < beamCount; i++) {
-    const y = 122 + i * 190 + scroll;
-    if (y < -55 || y > 1260) continue;
-    const p = clamp((y - vpY) / Math.max(1, 1280 - vpY)), half = 72 + p * 420, thick = 13 + p * 9;
-    const l = vpX - half, r = vpX + half;
-    polygon(ctx, [[l - 18, y], [r + 18, y], [r + 32, y + thick], [l - 32, y + thick]], i % 2 ? '#74777D' : '#55585E', '#C2C4C8', 4);
-    ctx.fillStyle = '#D0D2D5'; ctx.fillRect(l - 18, y + thick, r - l + 36, 6);
-    for (let k = -1; k <= 1; k++) {
-      const x = vpX + k * half * .56;
-      ctx.fillStyle = '#AEB0B5'; ctx.fillRect(x, y + thick + 5, 6, Math.max(5, 30 * p));
+  drawEnv(ctx, { type: 'stage', t, seed: seed + 220, theme, width: W, height: H,
+    camera: { x: Math.sin(t * .4) * 18, y: -t * 13, zoom: 1.01, yaw: Math.sin(t * .25) * .04, pitch: .06 } });
+  const vpX = 540 + Math.sin(t * .32) * 12, vpY = 270 + Math.sin(t * .7) * 9;
+  polygon(ctx, [[0, 0], [260, 0], [vpX - 142, vpY], [345, 1110], [0, 1290]], '#34373C', '#96999E', 7);
+  polygon(ctx, [[1080, 0], [820, 0], [vpX + 142, vpY], [735, 1110], [1080, 1290]], '#303237', '#85888D', 7);
+  polygon(ctx, [[260, 0], [820, 0], [vpX + 142, vpY], [vpX - 142, vpY]], '#45484E', '#B8BABF', 7);
+  // Stacked balconies establish height; wide gaps leave room for the ticket and tether.
+  for (let row = 0; row < 5; row++) {
+    const p = row / 4, y = 170 + row * 116, half = 510 - p * 228, thick = 15 - p * 3;
+    const left = vpX - half, right = vpX + half;
+    polygon(ctx, [[left - 18, y], [right + 18, y], [right + 10, y + thick], [left - 10, y + thick]], row % 2 ? '#70737A' : '#575A60', '#AEB1B5', 4);
+    ctx.fillStyle = '#C5C7CB'; ctx.fillRect(left, y + thick, right - left, 5);
+    for (let x = left + 28; x < right - 16; x += 106 - p * 26) {
+      ctx.fillStyle = '#85888E'; ctx.fillRect(x, y - 34, 6, 32);
     }
   }
-  // Counter windows and numbered-looking blank slats form the market depth, with no floating type.
-  const counters = Math.max(3, Math.min(6, Math.floor(depthLayers)));
-  for (let row = 0; row < counters; row++) {
-    const p = row / Math.max(1, counters - 1), y = 390 + row * 143 + scroll * .62, scale = .34 + p * .67;
-    for (const side of [-1, 1]) {
-      const x = vpX + side * (120 + p * 370), w = 112 * scale, h = 74 * scale;
-      ctx.fillStyle = '#1A1C20'; ctx.fillRect(x - w / 2 - 8, y - h / 2 - 9, w + 16, h + 18);
-      ctx.fillStyle = row % 2 ? '#777A80' : '#96999F'; ctx.fillRect(x - w / 2, y - h / 2, w, h);
-      ctx.fillStyle = '#17191C'; ctx.fillRect(x - w / 2 + 7, y - h / 2 + 7, w - 14, h * .48);
-      ctx.fillStyle = '#C4C6C9'; ctx.fillRect(x - w / 2 + 12, y + h * .2, w * .64, Math.max(3, 4 * scale));
-      ctx.fillStyle = '#55585E'; ctx.fillRect(x + w * .27, y + h * .15, Math.max(4, 7 * scale), Math.max(6, 16 * scale));
+  // Floor paths and passing edge beams add foreground parallax without crossing the exchange.
+  polygon(ctx, [[vpX - 145, vpY], [vpX + 145, vpY], [1080, 1290], [0, 1290]], '#191B1F', '#66696F', 5);
+  for (let i = 1; i <= 10; i++) {
+    const q = i / 10, y = vpY + q * (1290 - vpY);
+    ctx.fillStyle = i % 2 ? '#41444A' : '#65686E'; ctx.fillRect(0, Math.round(y / 4) * 4, W, i % 2 ? 3 : 5);
+  }
+  for (let i = -5; i <= 5; i++) {
+    ctx.strokeStyle = i % 2 ? '#4A4D53' : '#777A80'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(vpX, vpY); ctx.lineTo(540 + i * 164, 1290); ctx.stroke();
+  }
+  const edgeTravel = (t * 330) % 360;
+  for (const x of [32, 1004]) {
+    for (let i = -1; i < 5; i++) {
+      const y = Math.round((160 + i * 300 + edgeTravel) / 4) * 4;
+      ctx.fillStyle = '#B9BBC0'; ctx.fillRect(x, y, 44, 10);
+      ctx.fillStyle = '#4A4D53'; ctx.fillRect(x + 10, y + 10, 9, 74);
     }
   }
-  // Close rails cross lens at different speeds than the stationary counter banks.
-  const railTravel = (t * 350) % 510;
-  for (let side = 0; side < 2; side++) {
-    const x = side === 0 ? 116 : 948;
-    ctx.fillStyle = '#C4C6C9'; ctx.fillRect(x, 0, 16, 1290);
-    ctx.fillStyle = '#55585E'; ctx.fillRect(x + 16, 0, 18, 1290);
-    for (let y = -210 + railTravel; y < 1320; y += 255) {
-      ctx.fillStyle = '#A8AAAF'; ctx.fillRect(x - 32, Math.round(y / 4) * 4, 106, 16);
-      ctx.fillStyle = '#23252A'; ctx.fillRect(x - 23, Math.round(y / 4) * 4 + 16, 87, 8);
-    }
-  }
-  // Recessed depth lights and cable runs keep the entire top half occupied.
-  for (let i = 0; i < 8; i++) {
-    const y = 44 + i * 154 + scroll * .4;
-    const span = 84 + i * 52;
-    ctx.fillStyle = i % 2 ? '#70737A' : '#C6C8CB';
-    ctx.fillRect(Math.round((vpX - span) / 4) * 4, Math.round(y / 4) * 4, Math.round(span * 2 / 4) * 4, 5);
-  }
-  for (let i = 0; i < 6; i++) {
-    const x = 250 + i * 116;
-    ctx.fillStyle = '#8F9298'; ctx.fillRect(x, 0, 5, 160 + i * 18);
-  }
-  // Near-floor crossbar and dithered rivets sell the camera passing through a real shaft.
-  ctx.fillStyle = '#C0C2C6'; ctx.fillRect(0, 1210, W, 12);
-  ctx.fillStyle = '#32353A'; ctx.fillRect(0, 1222, W, 42);
-  for (let i = 0; i < 42; i++) {
-    ctx.fillStyle = i % 3 === 0 ? '#D2D3D6' : '#676A70'; ctx.fillRect(i * 27, 1236 + i % 2 * 4, 6, 6);
-  }
-  // A pale shaft beam highlights the route without introducing a new hue.
-  for (let i = 0; i < 12; i++) {
-    const x = 466 + i * 12, y = 260 + Math.round(i * 34 + Math.sin(t * 3 + i) * 5);
-    ctx.fillStyle = i % 3 ? '#6E7177' : '#D1D3D6'; ctx.fillRect(x, y, 4, 246);
-  }
+  ctx.fillStyle = '#BFC1C5'; ctx.fillRect(0, 1258, W, 8);
+  ctx.fillStyle = '#34363B'; ctx.fillRect(0, 1266, W, 24);
 }
 
-function drawPaperAsset(ctx: Frame['ctx'], kind: AssetKind, x: number, y: number, w: number, rot = 0, tear = 0) {
-  if (kind === 'ticket') { drawTicket2D(ctx, x, y, w, { rot, tear }); return; }
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot);
-  const h = kind === 'coin' ? w * .4 : kind === 'share' ? w * .54 : w * .45;
-  if (kind === 'coin') {
-    ctx.fillStyle = ink; ctx.beginPath(); ctx.moveTo(-w * .48, -h * .24); ctx.lineTo(-w * .28, -h * .46); ctx.lineTo(w * .23, -h * .46); ctx.lineTo(w * .47, -h * .2);
-    ctx.lineTo(w * .45, h * .26); ctx.lineTo(w * .18, h * .46); ctx.lineTo(-w * .3, h * .4); ctx.closePath(); ctx.fill();
-    ctx.fillStyle = '#A9ABB0'; ctx.fillRect(-w * .42, -h * .31, w * .82, h * .6);
-    ctx.strokeStyle = '#E0E1E3'; ctx.lineWidth = 4; ctx.strokeRect(-w * .34, -h * .22, w * .66, h * .43);
-  } else {
-    ctx.fillStyle = ink; ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.fillStyle = paper; ctx.fillRect(-w * .47, -h * .45, w * .94, h * .9);
-    ctx.fillStyle = '#3B3D42'; ctx.fillRect(-w * .36, -h * .28, w * .72, h * .12);
-    ctx.fillStyle = '#73767C'; ctx.fillRect(-w * .36, h * .04, w * .55, 6); ctx.fillRect(-w * .36, h * .18, w * .32, 5);
-    if (kind === 'share') {
-      ctx.strokeStyle = '#55585E'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(-w * .2, h * .22); ctx.lineTo(-w * .02, -h * .02); ctx.lineTo(w * .08, h * .08); ctx.lineTo(w * .3, -h * .17); ctx.stroke();
-    }
+function drawWindow(ctx: Frame['ctx'], x: number, y: number, w: number, h: number, opening = .8) {
+  ctx.fillStyle = '#101215'; ctx.fillRect(x - w / 2 - 22, y - h / 2 - 20, w + 44, h + 40);
+  ctx.fillStyle = '#62656B'; ctx.fillRect(x - w / 2 - 32, y - h / 2 - 24, w + 64, 17);
+  ctx.fillStyle = '#9DA0A5'; ctx.fillRect(x - w / 2 - 32, y + h / 2 + 8, w + 64, 14);
+  ctx.fillStyle = '#C8CACE'; ctx.fillRect(x - w / 2 - 32, y - h / 2 - 24, 14, h + 46);
+  ctx.fillRect(x + w / 2 + 18, y - h / 2 - 24, 14, h + 46);
+  ctx.fillStyle = '#08090B'; ctx.fillRect(x - w / 2, y - h / 2, w, h);
+  ctx.fillStyle = '#2E3035'; ctx.fillRect(x - w / 2 + 12, y - h / 2 + 12, w - 24, h - 24);
+  const shutterY = y - h / 2 - 2 + (1 - opening) * (h - 18);
+  ctx.fillStyle = '#B8BABF'; ctx.fillRect(x - w / 2 + 8, shutterY, w - 16, 16);
+  ctx.fillStyle = '#70737A';
+  for (let i = 0; i < 9; i++) ctx.fillRect(x - w / 2 + 18 + i * ((w - 42) / 8), shutterY + 4, 4, 8);
+  ctx.fillStyle = '#D8DADD'; ctx.fillRect(x - w / 2 - 34, y - h / 2 - 32, w + 68, 7);
+}
+
+function drawMechanicalPaw(ctx: Frame['ctx'], x: number, y: number, reach: number, t: number) {
+  const elbowX = x + reach * .58, elbowY = y + 16 + Math.sin(t * 8) * 2;
+  line(ctx, x, y, elbowX, elbowY, '#1B1D21', 38);
+  line(ctx, x, y - 5, elbowX, elbowY - 5, '#AEB1B5', 25);
+  ctx.fillStyle = '#3C3F44'; ctx.fillRect(elbowX - 24, elbowY - 18, 48, 34);
+  ctx.fillStyle = '#D6D8DB'; ctx.fillRect(elbowX - 24, elbowY - 18, 48, 7);
+  ctx.fillStyle = '#BFC2C6'; ctx.fillRect(elbowX + 8, elbowY - 23, 32, 16);
+  ctx.fillRect(elbowX + 12, elbowY + 8, 34, 13);
+  ctx.fillStyle = '#55585E'; ctx.fillRect(elbowX + 27, elbowY - 6, 20, 17);
+}
+
+function drawTicket(ctx: Frame['ctx'], x: number, y: number, width: number, rot: number, tear = 0) {
+  drawTicket2D(ctx, x, y, width, { rot, tear });
+}
+
+function drawCash(ctx: Frame['ctx'], x: number, y: number, p: number, t: number) {
+  if (p <= 0) return;
+  const wobble = Math.sin(t * 18) * 5 * (1 - p);
+  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round((y + wobble) / 4) * 4);
+  const reveal = ease.outBack(clamp(p));
+  ctx.translate((1 - reveal) * 132, (1 - reveal) * 42);
+  // A banded cash stack and a perforated receipt come out together, then settle in Hedgy's paw.
+  ctx.fillStyle = '#090A0C'; ctx.fillRect(-104, -34, 160, 75);
+  ctx.fillStyle = '#D5D7DA'; ctx.fillRect(-98, -30, 148, 64);
+  ctx.fillStyle = '#8B8E94'; ctx.fillRect(-98, -30, 148, 8);
+  ctx.fillStyle = '#55585E'; ctx.fillRect(-74, -6, 104, 25);
+  ctx.strokeStyle = '#3C3F44'; ctx.lineWidth = 4; ctx.strokeRect(-88, -22, 128, 46);
+  ctx.fillStyle = '#F1F2F3'; ctx.fillRect(-26, -18, 22, 23);
+  pixelText(ctx, '$', -15, -17, 2, { color: '#292B30', align: 'center' });
+  ctx.fillStyle = '#E9EAEC'; ctx.fillRect(62, -48, 98, 94);
+  ctx.fillStyle = '#777A80'; ctx.fillRect(74, -34, 72, 7);
+  for (let i = 0; i < 4; i++) {
+    ctx.fillStyle = i % 2 ? '#96999F' : '#5C5F65'; ctx.fillRect(76, -14 + i * 14, 66 - i * 7, 4);
   }
+  for (let i = 0; i < 7; i++) ctx.fillRect(62 + i * 16, 39, 8, 4);
   ctx.restore();
 }
 
-function drawReceipt(ctx: Frame['ctx'], x: number, y: number, width: number, mode: string, t: number) {
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4);
-  const envelope = mode.toLowerCase().includes('envelope');
-  const w = envelope ? width * 1.12 : width, h = envelope ? 114 : 154;
-  ctx.fillStyle = ink; ctx.fillRect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10);
-  ctx.fillStyle = envelope ? '#C6C8CB' : paper; ctx.fillRect(-w / 2, -h / 2, w, h);
-  ctx.fillStyle = envelope ? '#777A80' : '#3B3D42'; ctx.fillRect(-w * .39, -h * .31, w * .78, 11);
-  for (let i = 0; i < 5; i++) {
-    const widthScale = (i % 2 ? .66 : .8) - i * .035;
-    ctx.fillStyle = i % 2 ? '#777A80' : '#A6A8AD'; ctx.fillRect(-w * widthScale / 2, -h * .03 + i * 17, w * widthScale, 5);
-  }
-  // Perforated lower edge and a receipt fold move under the camera as the paper zips out.
-  ctx.fillStyle = '#767980';
-  for (let x0 = -w / 2; x0 < w / 2; x0 += 14) ctx.fillRect(x0, h / 2 - 4, 7, 4);
-  if (mode.toLowerCase().includes('ledger')) { ctx.fillStyle = '#4E5157'; ctx.fillRect(-w * .42, -h * .42, 8, h * .8); }
-  ctx.fillStyle = '#D9DBDE'; ctx.fillRect(-w / 2 + 10, h / 2 - 15 + Math.sin(t * 14) * 2, w - 20, 4);
-  ctx.restore();
-}
-
-function drawReturnStub(ctx: Frame['ctx'], x: number, y: number, width: number, label: string, progress: number, rotate: number) {
-  const w = width, h = 86, snap = (n: number) => Math.round(n / 4) * 4;
-  ctx.save(); ctx.translate(snap(x), snap(y)); ctx.rotate(rotate);
-  ctx.fillStyle = ink; ctx.fillRect(-w / 2 - 5, -h / 2 - 5, w + 10, h + 10);
-  ctx.fillStyle = '#E8E4DC'; ctx.fillRect(-w / 2, -h / 2, w, h);
-  ctx.fillStyle = '#7D8086'; ctx.fillRect(-w * .46, -h * .38, w * .92, 7);
-  ctx.fillStyle = '#27292D'; ctx.fillRect(-w * .44, -h * .29, w * .88, h * .66);
-  pixelText(ctx, label.toUpperCase(), -10, -10, 3, { color: '#F1F2F3', align: 'center' });
-  // Fine perforation bars on the detachable corner.
-  ctx.fillStyle = '#D1D2D5';
-  for (let i = 0; i < 6; i++) ctx.fillRect(w * .3 + i * 7, -h * .3, 3, h * .6);
-  ctx.fillStyle = '#F7F4ED'; ctx.fillRect(-w / 2 + 5, -h / 2 + 4, Math.max(0, (w - 10) * clamp(progress)), 4);
-  ctx.restore();
-}
-
-function drawSeal(ctx: Frame['ctx'], x: number, y: number, progress: number) {
+function drawReturnStub(ctx: Frame['ctx'], x: number, y: number, width: number, t: number, progress: number, pinned: number) {
   if (progress <= 0) return;
-  const scale = .78 + ease.outBack(clamp(progress * 1.05)) * .22;
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.scale(scale, scale);
-  ctx.fillStyle = ink; ctx.fillRect(-44, -11, 92, 24);
-  ctx.fillStyle = '#ECE9E2'; ctx.fillRect(-40, -7, 84, 16);
-  ctx.fillStyle = '#6B6E74'; ctx.fillRect(-33, -3, 66, 7);
-  ctx.fillStyle = '#E4E5E7'; ctx.fillRect(31, -3, 10, 7);
+  const w = width, h = 104, rot = -.06 + Math.sin(t * 7) * .025 * (1 - pinned);
+  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot);
+  ctx.fillStyle = '#08090B'; ctx.fillRect(-w / 2 - 7, -h / 2 - 7, w + 14, h + 14);
+  ctx.fillStyle = '#E7E8EA'; ctx.fillRect(-w / 2, -h / 2, w, h);
+  ctx.fillStyle = '#676A70'; ctx.fillRect(-w / 2 + 9, -h / 2 + 9, w - 18, 9);
+  ctx.fillStyle = '#1A1C20'; ctx.fillRect(-w / 2 + 12, -h / 2 + 25, w - 24, 62);
+  pixelText(ctx, 'RETURN 1', 0, -h / 2 + 42, 4, { color: '#FFFFFF', align: 'center' });
+  ctx.fillStyle = '#C5C7CB';
+  for (let i = 0; i < 7; i++) ctx.fillRect(w / 2 - 39 + i * 5, -h * .33, 3, h * .66);
+  ctx.fillStyle = '#0C0D0F'; ctx.fillRect(w / 2 - 24, h / 2 - 16, 44, 30);
+  ctx.fillStyle = '#D3D5D8'; ctx.fillRect(w / 2 - 19, h / 2 - 10, 34, 19);
+  if (pinned > .05) {
+    ctx.fillStyle = '#27292D'; ctx.fillRect(w / 2 - 20, h / 2 - 7, 34, 8);
+    ctx.fillStyle = '#FFFFFF'; ctx.fillRect(w / 2 - 8, h / 2 - 18, 8, 34);
+  }
   ctx.restore();
-}
-
-function timings(props: ShotProps, dur: number) {
-  return {
-    short: eventAt(props, 'short', .22, dur, ['short-selling', 'selling']),
-    promises: eventAt(props, 'promises', .48, dur),
-    returns: eventAt(props, 'return', .72, dur, ['returns', 'receipt']),
-  };
 }
 
 export const shortSaleHandoffShot: ShotDef = {
   name: 'shortsalehandoff',
-  describe: 'Camera tracks down a vertical ticket-counter shaft as Hedgy passes a borrowed asset through a one-way sale portal. A return stub stays tethered above, then is sealed to his wrist on the promise beat. Params: asset, salePortal, proceedsContainer, returnReceipt, syncEvents, cameraPath, depthLayers.',
+  describe: 'A lender hands Hedgy a ticket and clips on its tether; he feeds the ticket through a separate sale slot, catches the cash and receipt, then wears the RETURN 1 stub pinned to his wrist. The camera follows each exchange. Params: asset, salePortal, proceedsContainer, returnReceipt, syncEvents, cameraPath, depthLayers.',
   render(frame: Frame, props: ShotProps) {
-    const dur = Math.max(.1, frame.dur), t = clamp(frame.t, 0, dur), p = props.params ?? {}, ctx = frame.ctx, kind = assetKind(p.asset);
-    const { short, promises, returns } = timings(props, dur);
-    const salePortal = textParam(p, 'salePortal', 'center chrome slot').toLowerCase();
-    const proceedsContainer = textParam(p, 'proceedsContainer', 'receipt tray').toLowerCase();
-    const returnLabel = textParam(p, 'returnReceipt', 'RETURN 1').toUpperCase();
-    const cameraPath = textParam(p, 'cameraPath', 'tracking drop');
-    const depthLayers = numberParam(p, 'depthLayers', 5, 3, 7);
-    const portalX = salePortal.includes('left') ? 432 : salePortal.includes('right') ? 648 : 540;
-    const slotY = 674 + Math.sin(t * 2.4) * 5;
-    const promiseProgress = clamp((t - promises + .025) / .13);
-    const shortProgress = ease.outExpo(clamp((t - short + .08) / .19));
-    const returnProgress = ease.outCubic(clamp((t - (returns - dur * .14)) / (dur * .14)));
+    const dur = Math.max(.1, frame.dur), t = Math.max(0, frame.t), activeT = clamp(t, 0, dur), ctx = frame.ctx;
+    const borrows = eventAt(props, ['borrows', 'borrow', 'loan'], .34, dur);
+    const sells = eventAt(props, ['sells', 'sell', 'sale'], .46, dur);
+    const owes = eventAt(props, ['owes', 'owe', 'return'], .61, dur);
+    const portalT = ease.outCubic(clamp(activeT / .25));
+    const handoffStart = borrows - .18;
+    const beforeLoan = activeT < handoffStart;
+    const handoff = ease.outCubic(clamp((activeT - handoffStart) / .36));
+    const saleOpen = ease.outCubic(clamp((activeT - sells + .13) / .19));
+    const cashP = ease.outCubic(clamp((activeT - sells) / .36));
+    const stubP = ease.outCubic(clamp((activeT - (owes - .22)) / .22));
+    const pinned = ease.outBack(clamp((activeT - (owes - .11)) / .11));
+    const tetherPulse = .68 + .32 * (0.5 + .5 * Math.sin((activeT - owes) * 15));
+
     const rig = createCameraRig({
-      width: W, height: H, seed: frame.seed + 203, handheld: 1.45, punch: .045, shake: 6, hits: [promises, returns],
+      width: W, height: H, seed: frame.seed + 203, handheld: 1.45, punch: .05, shake: 7,
+      hits: [borrows, sells, owes],
       keyframes: [
-        { t: 0, x: -5, y: 18, zoom: 1.035, rot: .003 },
-        { t: dur * .34, x: 20, y: -26, zoom: 1.06, rot: -.006, ease: 'inOut' },
-        { t: dur * .7, x: -18, y: -62, zoom: 1.12, rot: .004, ease: 'inOut' },
-        { t: dur, x: -6, y: -91, zoom: 1.17, rot: 0, ease: 'out' },
+        { t: 0, x: 0, y: 18, zoom: .96, rot: -.002 },
+        { t: .26, x: 14, y: 8, zoom: 1.015, rot: .002, ease: 'out' },
+        { t: borrows - .12, x: 46, y: -22, zoom: 1.045, rot: 0, ease: 'inOut' },
+        { t: borrows + .12, x: 172, y: -48, zoom: 1.12, rot: -.004, ease: 'out' },
+        { t: sells - .12, x: -62, y: -16, zoom: 1.08, rot: .003, ease: 'inOut' },
+        { t: sells + .16, x: -130, y: -58, zoom: 1.14, rot: -.003, ease: 'out' },
+        { t: owes - .08, x: 74, y: -100, zoom: 1.15, rot: .002, ease: 'inOut' },
+        { t: owes + .24, x: 50, y: -146, zoom: 1.19, rot: -.003, ease: 'out' },
+        { t: dur - .28, x: 12, y: -88, zoom: 1.16, rot: .002, ease: 'inOut' },
+        { t: dur + .2, x: -12, y: -66, zoom: 1.15, rot: 0, ease: 'out' },
       ],
-      whip: cameraPath.toLowerCase().includes('spiral') ? [{ at: dur * .58, direction: 'left', duration: .24, amount: .12 }] : [],
+      whip: [
+        { at: borrows, direction: 'left', duration: .18, amount: .06 },
+        { at: sells, direction: 'right', duration: .16, amount: .07 },
+      ],
     });
     ctx.save(); ctx.imageSmoothingEnabled = false; ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); rig.apply(ctx, t);
-    drawShaft(frame, t, depthLayers, cameraPath);
+    drawHall(frame, t);
 
-    // 3D chrome portal anchors the scene; the 2D mechanisms make its paper actions legible.
-    render3d(ctx, frame.theme, {
-      x: portalX - 215, y: slotY - 130, w: 430, h: 250, zoom: 205,
-      yaw: Math.sin(t * .4) * .07, pitch: .16, distance: 6.2, cell: 3, outline: true,
-      ambient: .43, rim: .54, light: [-.56, .79, -.34], fog: { near: 7, far: 18 },
-    }, [{ mesh: PORTAL_MESH, materials: MATERIALS, rot: [0, t * .035, 0] }]);
-    ctx.fillStyle = '#111316'; ctx.fillRect(portalX - 151, slotY - 24, 302, 53);
-    ctx.fillStyle = '#D0D2D5'; ctx.fillRect(portalX - 157, slotY - 32, 314, 8);
-    ctx.fillRect(portalX - 157, slotY + 29, 314, 8);
-    ctx.fillStyle = '#6D7076'; ctx.fillRect(portalX - 144, slotY + 36, 288, 10);
-    ctx.fillStyle = '#E2E3E5'; ctx.fillRect(portalX - 135, slotY - 41, 270, 6);
-    // Portal depth rails slide as the camera travels down the shaft.
-    for (let i = 0; i < 12; i++) {
-      ctx.fillStyle = i % 2 ? '#51545A' : '#C8CACE'; ctx.fillRect(portalX - 132 + i * 24, slotY - 20, 4, 43);
-    }
-    // Lender rack and tethered strip are placed above the sale throat in the same vertical axis.
-    const rackY = 260 - t * 13;
-    ctx.fillStyle = '#202227'; ctx.fillRect(portalX - 148, rackY - 33, 296, 69);
-    ctx.fillStyle = '#9A9DA3'; ctx.fillRect(portalX - 176, rackY - 46, 352, 14);
-    ctx.fillStyle = '#D1D3D6'; ctx.fillRect(portalX - 162, rackY + 31, 324, 9);
-    for (let i = -2; i <= 2; i++) {
-      ctx.fillStyle = i % 2 ? '#777A80' : '#C7C9CC'; ctx.fillRect(portalX + i * 48 - 3, rackY - 30, 7, 57);
-      ctx.fillStyle = '#D8DADD'; ctx.fillRect(portalX + i * 48 - 8, rackY + 24, 16, 9);
-    }
-    ctx.fillStyle = '#D9DBDE'; ctx.fillRect(portalX - 68, rackY - 57, 136, 7);
-
-    const assetStart = Math.max(0, short - dur * .18), assetEnd = short + dur * .08;
-    const feed = ease.outCubic(clamp((t - assetStart) / Math.max(.01, assetEnd - assetStart)));
-    const assetX = portalX - 10, assetY = mix(slotY - 104, slotY + 95, feed);
-    if (t < short + dur * .06) {
-      // The ticket is pulled down through the one-way mouth; the perforated return piece stays above.
-      drawPaperAsset(ctx, kind, assetX, assetY, 286 * (1 - feed * .28), -.02 + feed * .035, feed);
-      if (t < dur * .22) {
-        render3d(ctx, frame.theme, {
-          x: portalX - 126, y: rackY - 22, w: 252, h: 110, zoom: 164, yaw: .18 + t * .1, pitch: .26,
-          distance: 5.2, cell: 3, outline: true, ambient: .45, rim: .54,
-        }, [{ mesh: assetMesh(kind), materials: assetMaterials(kind), rot: [0, t * .18, -.02] }]);
-      }
+    // Monumental mechanism with distinct lending and sale apertures.
+    polygon(ctx, [[122, 342], [950, 342], [926, 963], [154, 963]], '#282A2F', '#A6A9AE', 9);
+    polygon(ctx, [[162, 374], [910, 374], [886, 916], [190, 916]], '#3C3F45', '#686B71', 5);
+    ctx.fillStyle = '#C2C4C8'; ctx.fillRect(140, 352, 804, 12);
+    ctx.fillStyle = '#15171A'; ctx.fillRect(174, 390, 8, 516); ctx.fillRect(900, 390, 8, 516);
+    // Lender counter at upper left.
+    const lenderX = 330, lenderY = 548;
+    drawWindow(ctx, lenderX, lenderY, 286, 144, beforeLoan ? .64 : .94);
+    ctx.fillStyle = '#D0D2D5'; ctx.fillRect(lenderX - 192, lenderY + 98, 384, 10);
+    ctx.fillStyle = '#5B5E64'; ctx.fillRect(lenderX - 168, lenderY + 108, 336, 20);
+    // Sale counter and lower cash drawer at right.
+    const saleX = 744, saleY = 690;
+    drawWindow(ctx, saleX, saleY, 318, 128, saleOpen);
+    ctx.fillStyle = '#C9CBCF'; ctx.fillRect(saleX - 194, saleY + 88, 388, 13);
+    ctx.fillStyle = '#46494F'; ctx.fillRect(saleX - 160, saleY + 113, 320, 74);
+    ctx.fillStyle = '#111316'; ctx.fillRect(saleX - 132, saleY + 121, 264, 48);
+    ctx.fillStyle = '#B8BBC0'; ctx.fillRect(saleX - 152, saleY + 105, 304, 10);
+    ctx.fillStyle = '#777A80'; ctx.fillRect(saleX - 122, saleY + 170, 244, 9);
+    for (let i = 0; i < 11; i++) {
+      ctx.fillStyle = i % 2 ? '#4A4D52' : '#999CA2'; ctx.fillRect(saleX - 118 + i * 23, saleY + 129, 4, 32);
     }
 
-    // The return stub peels away from the asset but remains tied to the rack by a fine wire.
-    const wristX = 606 + Math.sin(t * 1.1) * 5, wristY = 1024 + Math.sin(t * 5.4) * 2;
-    const stubP = ease.outBack(clamp((t - promises + .12) / .2));
-    const stubX = mix(portalX - 18, wristX - 204, stubP), stubY = mix(rackY + 102, wristY - 34, stubP);
-    ctx.strokeStyle = '#D4D6D9'; ctx.lineWidth = 3; ctx.beginPath();
-    ctx.moveTo(portalX, rackY + 24);
-    ctx.bezierCurveTo(portalX + 56, rackY + 138, stubX - 82, stubY - 82, stubX, stubY);
+    const wristX = 656 + Math.sin(t * 2.2) * 4, wristY = 1025 + Math.sin(t * 5.2) * 3;
+    const stubX = mix(saleX + 68, 522, stubP), stubY = mix(saleY + 12, 970, stubP);
+    const loanTicketX = lenderX + 22 + handoff * 115;
+    const loanTicketY = lenderY - 8 + handoff * 236;
+    const saleT = clamp((activeT - handoffStart) / Math.max(.12, sells - handoffStart));
+    let ticketX: number, ticketY: number, ticketRot: number, ticketSize: number;
+    if (beforeLoan) {
+      ticketX = lenderX + 4 + Math.sin(t * 6) * 2; ticketY = lenderY - 9; ticketRot = -.02; ticketSize = 252;
+    } else if (activeT < sells) {
+      const q = ease.inOutCubic(saleT);
+      const first = clamp(q / .37), second = clamp((q - .37) / .63);
+      ticketX = q < .37 ? mix(lenderX + 8, 350, ease.outCubic(first)) : mix(350, saleX - 8, ease.inOutCubic(second));
+      ticketY = q < .37 ? mix(lenderY - 8, 920, ease.outCubic(first)) : mix(920, saleY - 6, ease.inOutCubic(second));
+      ticketRot = mix(-.025, -.11, q) + Math.sin(t * 13) * .018; ticketSize = mix(252, 286, q);
+    } else {
+      const feed = ease.inOutCubic(clamp((activeT - sells) / .16));
+      ticketX = mix(saleX - 8, saleX + 20, feed); ticketY = mix(saleY - 6, saleY + 6, feed);
+      ticketRot = mix(-.11, .06, feed); ticketSize = mix(286, 54, feed);
+    }
+
+    // Loan origin, continuous tether, and perforation clip are drawn behind the ticket.
+    const tetherSourceX = lenderX - 104, tetherSourceY = lenderY + 9;
+    let tetherEndX = beforeLoan ? ticketX + ticketSize * .34 : activeT < sells ? ticketX + ticketSize * .34 : stubX - 116;
+    let tetherEndY = beforeLoan ? ticketY : activeT < sells ? ticketY : stubY;
+    ctx.save(); ctx.globalAlpha *= activeT < borrows ? .26 : 1;
+    ctx.strokeStyle = '#F0F2F4'; ctx.lineWidth = activeT >= owes ? 14 : 9; ctx.beginPath();
+    ctx.moveTo(tetherSourceX, tetherSourceY);
+    if (activeT < sells) ctx.bezierCurveTo(lenderX + 90, lenderY + 74, ticketX - 130, ticketY - 70, tetherEndX, tetherEndY);
+    else {
+      ctx.bezierCurveTo(lenderX + 154, lenderY + 88, saleX - 200, saleY - 114, saleX - 16, saleY - 8);
+      ctx.bezierCurveTo(saleX + 132, saleY + 94, stubX - 154, stubY - 130, tetherEndX, tetherEndY);
+    }
+    ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = activeT >= owes ? '#FFFFFF' : '#C8CACE'; ctx.lineWidth = activeT >= owes ? 4 + tetherPulse * 2 : 3;
+    ctx.beginPath(); ctx.moveTo(tetherSourceX, tetherSourceY);
+    if (activeT < sells) ctx.bezierCurveTo(lenderX + 90, lenderY + 74, ticketX - 130, ticketY - 70, tetherEndX, tetherEndY);
+    else {
+      ctx.bezierCurveTo(lenderX + 154, lenderY + 88, saleX - 200, saleY - 114, saleX - 16, saleY - 8);
+      ctx.bezierCurveTo(saleX + 132, saleY + 94, stubX - 154, stubY - 130, tetherEndX, tetherEndY);
+    }
     ctx.stroke();
-    ctx.fillStyle = '#E4E5E7'; ctx.fillRect(portalX - 4, rackY + 20, 8, 8);
-    // A short paper link and band visibly pin the stub to Hedgy's wrist on “promises”.
-    ctx.strokeStyle = '#F2EFE8'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(stubX + 107, stubY + 13); ctx.lineTo(wristX - 8, wristY + 18); ctx.stroke();
+    ctx.fillStyle = '#E8EAEC'; ctx.fillRect(tetherSourceX - 5, tetherSourceY - 6, 12, 12);
 
-    // The proceeds receipt zips from the far side after the transfer, while the stub stays with Hedgy.
-    const receiptX = portalX - 210 + returnProgress * 24, receiptY = slotY + 72 + returnProgress * 82;
-    const receiptWidth = 238 + returnProgress * 18;
-    if (t >= returns - dur * .16) {
-      drawReceipt(ctx, receiptX, receiptY, receiptWidth, proceedsContainer, t);
-      drawMotionStreak(ctx, { x: receiptX - 68, y: receiptY - 24, dx: 0, dy: 1, length: 118, width: 3, alpha: .5 * (1 - returnProgress), color: '#D4D6D9' });
+    // Lender's mechanical hand extends with the paper, then retracts as Hedgy takes it.
+    const lenderReach = beforeLoan ? 64 : mix(64, -8, handoff);
+    drawMechanicalPaw(ctx, lenderX - 142, lenderY - 10, lenderReach, t);
+    if (beforeLoan) {
+      ctx.save(); ctx.beginPath(); ctx.rect(lenderX - 140, lenderY - 58, 280, 118); ctx.clip();
+      drawTicket(ctx, ticketX, ticketY, ticketSize, ticketRot);
+      ctx.restore();
     }
 
-    // Hedgy rides the shaft with one paw at the wrist seal; his sprite stays the only warm color.
-    const hedgyX = 728 + Math.sin(t * 1.25) * 6, hedgyY = 1147 + Math.sin(t * 5) * 3;
-    ctx.fillStyle = '#0B0C0E'; ctx.fillRect(hedgyX - 190, hedgyY + 4, 380, 18);
-    ctx.fillStyle = '#55585E'; ctx.fillRect(hedgyX - 134, hedgyY + 9, 268, 7);
-    const hedgyPose = t < promises - .06 ? 'think' : t < returns ? 'point' : 'carry';
-    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.1, t: Math.max(0, t - promises), pose: hedgyPose, facing: -1,
-      look: 'down', expression: t < promises ? 'worried' : t < returns ? 'determined' : 'happy' });
-    drawReturnStub(ctx, stubX, stubY, 248, returnLabel, promiseProgress, (1 - stubP) * .11);
-    drawSeal(ctx, wristX, wristY + 23, promiseProgress);
-    if (promiseProgress > .82) {
-      ctx.fillStyle = '#F2F0EA'; ctx.fillRect(wristX + 39, wristY + 12, 8, 18);
-      ctx.fillStyle = '#74777D'; ctx.fillRect(wristX + 47, wristY + 12, 8, 18);
-    }
+    const hedgyX = 520 + Math.sin(t * 1.6) * 6, hedgyY = 1210 + Math.sin(t * 5.3) * 2;
+    const heroPose = activeT < handoffStart ? 'think' : activeT < handoffStart + .35 ? 'jump' : activeT < sells - .04 ? 'carry' : activeT < sells + .18 ? 'push' : activeT < owes - .05 ? 'carry' : 'shock';
+    const facing: 1 | -1 = activeT < sells - .08 ? -1 : 1;
+    const expression = activeT < borrows ? 'worried' : activeT < sells ? 'determined' : activeT < owes ? 'smug' : 'shocked';
+    ctx.fillStyle = '#0B0C0E'; ctx.fillRect(hedgyX - 206, hedgyY + 6, 412, 18);
+    ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 151, hedgyY + 10, 302, 7);
+    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: heroPose, facing,
+      look: activeT < borrows ? 'up' : activeT < owes ? 'forward' : 'down', expression });
 
-    // Pass close guide rails, receipt flecks and a restrained pin-impact burst.
-    const railOffset = (t * 240) % 320;
-    for (let i = -1; i < 5; i++) {
-      const x = 48 + i * 255, y = Math.round((220 + i * 274 + railOffset) / 4) * 4;
-      if (y > 40 && y < 1230) {
-        ctx.fillStyle = '#C9CBCF'; ctx.fillRect(x, y, 70, 8);
-        ctx.fillStyle = '#53565C'; ctx.fillRect(x + 10, y + 8, 9, 68);
-        ctx.fillStyle = '#96999F'; ctx.fillRect(x + 53, y + 8, 9, 68);
+    if (!beforeLoan && activeT < sells + .17) {
+      const tear = clamp((activeT - sells + .07) / .19);
+      drawTicket(ctx, ticketX, ticketY, ticketSize, ticketRot, tear);
+      if (activeT < sells) {
+        const clipX = ticketX + ticketSize * .34, clipY = ticketY;
+        ctx.fillStyle = '#101215'; ctx.fillRect(clipX - 9, clipY - 12, 19, 25);
+        ctx.fillStyle = '#F1F2F3'; ctx.fillRect(clipX - 4, clipY - 8, 8, 17);
+        if (activeT >= borrows - .04 && activeT <= borrows + .13) {
+          ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 4; ctx.beginPath();
+          ctx.moveTo(clipX - 26, clipY - 28); ctx.lineTo(clipX, clipY - 44); ctx.lineTo(clipX + 25, clipY - 25); ctx.stroke();
+        }
       }
     }
-    drawBurst(ctx, t, { center: [wristX, wristY, 0], projector: point => ({ x: point[0], y: point[1], scale: 1 }),
-      seed: frame.seed + 61, count: 12, kind: 'confetti', start: promises, life: .55, speed: 140, gravity: 180,
-      drag: .5, floor: 1240, bounce: .1, spin: 4, size: 2, color: '#E7E4DE' });
+    if (!beforeLoan && activeT < borrows + .12) {
+      // The near paw crosses the tether clip, completing the lender-to-Hedgy handoff.
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: heroPose,
+        facing, look: activeT < borrows ? 'up' : 'forward', expression });
+    }
+    // The payout exits its own drawer and reaches Hedgy's open paw on the sale beat.
+    const cashX = mix(saleX + 22, 590, cashP), cashY = mix(saleY + 164, 917, cashP);
+    drawCash(ctx, cashX, cashY, cashP, t);
+    if (activeT >= sells + .18 && activeT < owes - .05) {
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, activeT - handoffStart), pose: 'carry',
+        facing: 1, look: 'forward', expression: 'smug' });
+    }
+
+    // The perforated RETURN 1 half travels back from the sale slot and pins to Hedgy's wrist on “owes”.
+    if (activeT >= owes - .22) {
+      drawReturnStub(ctx, stubX, stubY, 270, t, stubP, pinned);
+      if (pinned > .5) {
+        ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wristX - 8, wristY - 12, 8, 30);
+        ctx.fillStyle = '#4F5258'; ctx.fillRect(wristX, wristY - 12, 9, 30);
+      }
+    }
+
+    // Action accents are brief; the continuing camera path and cable pulse carry the final beat.
+    if (!beforeLoan && activeT < borrows + .18) {
+      drawSpeedLines(ctx, t, { center: { x: loanTicketX, y: loanTicketY }, count: 12, reach: 230,
+        start: borrows, duration: .18, color: '#E2E4E7', seed: frame.seed + 44, strength: .45 });
+      ctx.strokeStyle = '#FFFFFF'; ctx.lineWidth = 3; ctx.beginPath();
+      ctx.moveTo(lenderX + 145, lenderY - 24); ctx.lineTo(lenderX + 170, lenderY - 48); ctx.lineTo(lenderX + 192, lenderY - 20); ctx.stroke();
+    }
+    drawBurst(ctx, t, { center: [saleX, saleY, 0], projector: point => ({ x: point[0], y: point[1], scale: 1 }),
+      seed: frame.seed + 61, count: 12, kind: 'confetti', start: sells, life: .48, speed: 148, gravity: 260,
+      drag: .48, floor: 1230, bounce: .08, spin: 3, size: 2, color: '#D5D7DA' });
+    drawMotionStreak(ctx, { x: cashX - 86, y: cashY - 16, dx: -1, dy: .2, length: 112, width: 4,
+      alpha: .38 * (1 - clamp(cashP)), color: '#D9DBDE' });
+    if (activeT < .25) {
+      const portalWidth = mix(1740, 0, portalT);
+      drawTicket(ctx, 510, 820 - activeT * 46, portalWidth, -.01 + activeT * .12);
+    }
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const { short, promises, returns } = timings(props, dur);
+    const borrows = eventAt(props, ['borrows', 'borrow', 'loan'], .34, dur);
+    const sells = eventAt(props, ['sells', 'sell', 'sale'], .46, dur);
+    const owes = eventAt(props, ['owes', 'owe', 'return'], .61, dur);
     const cues: Cue[] = [
-      { t: Math.min(.2, dur * .08), kind: 'servo', gain: .63, pan: -.05, len: .18 },
-      { t: Math.max(0, short - dur * .1), kind: 'clack', gain: .72, pan: 0 },
-      { t: short, kind: 'paper', gain: .67, pan: 0, len: .12 },
-      { t: Math.max(short, promises - .045), kind: 'swish', gain: .56, pan: .2, len: .14 },
-      { t: promises, kind: 'click', gain: .88, pan: .24 },
-      { t: Math.min(dur, promises + .025), kind: 'snap', gain: .68, pan: .2 },
-      { t: Math.min(dur, promises + .05), kind: 'paper', gain: .42, pan: .15 },
-      { t: Math.max(promises, returns - dur * .15), kind: 'rise', gain: .42, pan: 0, len: dur * .12 },
-      { t: returns, kind: 'swish', gain: .88, pan: -.1, len: .2 },
-      { t: Math.min(dur, returns + .03), kind: 'paper', gain: .72, pan: -.06 },
-      { t: Math.min(dur, returns + .12), kind: 'tick', gain: .38, pan: -.08, step: .6 },
+      { t: borrows, kind: 'paper', gain: .72, pan: -.38, len: .11 },
+      { t: sells, kind: 'cash', gain: .78, pan: .38, len: .16 },
+      { t: owes, kind: 'snap', gain: .76, pan: .12 },
     ];
     return cues.filter(cue => Number.isFinite(cue.t) && cue.t <= dur);
   },

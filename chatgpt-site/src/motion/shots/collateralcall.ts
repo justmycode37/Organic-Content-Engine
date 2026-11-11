@@ -2,17 +2,17 @@ import { clamp, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { ASSETS } from '../assets/index.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawEnv } from '../env/index.ts';
-import { createCameraRig } from '../fx/rig.ts';
 import { drawBurst } from '../fx/particles.ts';
+import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
 import { drawTicket2D, TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
 import { box, cylinder, merge, place, render3d, sphere, type Mesh, type Object3D } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
-const SCALE = ASSETS['balance-scale']({ detail: 0.85 });
+const SCALE = ASSETS['balance-scale']({ detail: 0.92 });
 const CASH = ASSETS['banknote-bundle']({ count: 4 });
 const TICKET = ticketMesh();
-const TICKET_SCALE = 0.43;
+const TICKET_SCALE = 0.46;
 const PRICE_TRACE: Mesh = merge(
   place(box(0.24, 0.07, 0.035, 0), { pos: [-0.55, -0.25, 0.1], rot: [0, 0, 0.03] }),
   place(box(0.26, 0.07, 0.035, 0), { pos: [-0.32, -0.17, 0.1], rot: [0, 0, 0.22] }),
@@ -29,13 +29,13 @@ const eventAt = (props: ShotProps, kind: string, fallback: number, dur: number) 
 };
 const progress = (t: number, start: number, end: number) => clamp((t - start) / Math.max(0.001, end - start));
 const easeOut = (value: number) => 1 - (1 - clamp(value)) ** 3;
-const label = (value: unknown, fallback: string, max = 12) => String(value ?? fallback).trim().toUpperCase().replace(/\s+/g, ' ').slice(0, max) || fallback;
+const easeInOut = (value: number) => value < 0.5 ? 4 * value ** 3 : 1 - ((-2 * value + 2) ** 3) / 2;
+const snap = (value: number) => Math.round(value / GRID) * GRID;
 
 function scaleObjects(sink: number): Object3D[] {
-  const unit = 1.42, angle = -0.19 * sink, pivotY = 0.43, centerX = 0.48, depth = -1.15;
+  const unit = 1.42, angle = -0.31 * sink, pivotY = 0.45, centerX = 0.48, depth = -1.15;
   const at = (x: number, y: number, z = depth): [number, number, number] => [centerX + x * unit, y * unit, z * unit];
   const objects: Object3D[] = [];
-  // Keep the shared asset's base, upright and pivot; build its moving pieces as clear, individually posed parts.
   for (const name of ['weighted-base', 'pedestal', 'central-pivot', 'top-finial']) {
     const part = SCALE.parts.find(candidate => candidate.name === name)!;
     objects.push({ mesh: part.mesh, pos: at(part.pos?.[0] ?? 0, part.pos?.[1] ?? 0), rot: part.rot, scale: unit, materials: SCALE.materials });
@@ -44,10 +44,9 @@ function scaleObjects(sink: number): Object3D[] {
   objects.push({ mesh: sphere(0.11, 14, 8, 2), pos: at(-1.12 * Math.cos(angle), pivotY - 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
   objects.push({ mesh: sphere(0.11, 14, 8, 2), pos: at(1.12 * Math.cos(angle), pivotY + 1.12 * Math.sin(angle), depth - 0.08), scale: unit, materials: SCALE.materials });
   for (const side of [-1, 1] as const) {
-    const sideName = side < 0 ? 'left' : 'right';
     const endY = pivotY + side * 1.02 * Math.sin(angle);
-    const sideSink = side > 0 ? sink * 0.48 : -sink * 0.13;
-    const chainLength = 0.62 + (side > 0 ? sink * 0.5 : 0);
+    const sideSink = side > 0 ? sink * 0.73 : -sink * 0.16;
+    const chainLength = 0.62 + (side > 0 ? sink * 0.56 : 0);
     const chainY = endY - chainLength / 2;
     const panY = endY - chainLength - 0.06 + sideSink;
     const endX = side * 1.02 * Math.cos(angle);
@@ -59,7 +58,6 @@ function scaleObjects(sink: number): Object3D[] {
       const ticketPos = at(endX, panY + 0.15, depth - 0.08);
       objects.push({ mesh: TICKET, pos: ticketPos, scale: TICKET_SCALE, materials: TICKET_MATERIALS });
       objects.push({ mesh: PRICE_TRACE, pos: ticketPos, scale: TICKET_SCALE, materials: RED_MATERIAL });
-      // A compact steel counterweight makes the obligation visibly heavier than the notes.
       objects.push({ mesh: box(0.34, 0.19, 0.28, 0), pos: at(endX - 0.18, panY + 0.14, depth + 0.18), scale: unit, materials: [{ ramp: 'steel', tone: 0.84, spec: 0.65 }] });
     }
   }
@@ -68,77 +66,105 @@ function scaleObjects(sink: number): Object3D[] {
 
 function drawWall(ctx: Frame['ctx'], theme: Frame['theme'], t: number, unfold: number) {
   const open = easeOut(unfold);
-  ctx.fillStyle = '#101214'; ctx.fillRect(172, 322, 736, 540);
-  ctx.fillStyle = '#343A3E'; ctx.fillRect(192, 342, 696, 502);
-  ctx.fillStyle = '#171A1D'; ctx.fillRect(216, 366, 648, 462);
-  // Tall folded steel leaves swing out from the venue wall.
-  const wing = Math.round(188 * open / GRID) * GRID;
-  ctx.fillStyle = '#454B50'; ctx.fillRect(192 - wing, 416, wing, 360);
-  ctx.fillRect(888, 416, wing, 360);
-  ctx.fillStyle = '#AAB1B5'; ctx.fillRect(192 - wing, 416, wing, 8); ctx.fillRect(888, 416, wing, 8);
-  ctx.fillStyle = '#858C91'; ctx.fillRect(188, 390, 8, 425); ctx.fillRect(884, 390, 8, 425);
-  for (let i = 0; i < 7; i++) {
-    const y = 444 + i * 48;
-    ctx.fillStyle = i % 2 ? '#25292D' : '#202428';
-    ctx.fillRect(240, y, 600, 8);
-    ctx.fillStyle = i % 2 ? '#555C61' : '#3D4449';
-    ctx.fillRect(240, y + 8, 600, 4);
+  ctx.fillStyle = '#101214'; ctx.fillRect(118, 266, 844, 608);
+  ctx.fillStyle = '#343A3E'; ctx.fillRect(138, 286, 804, 568);
+  ctx.fillStyle = '#171A1D'; ctx.fillRect(164, 310, 752, 522);
+  const wing = Math.round(202 * open / GRID) * GRID;
+  ctx.fillStyle = '#454B50'; ctx.fillRect(138 - wing, 378, wing, 402); ctx.fillRect(942, 378, wing, 402);
+  ctx.fillStyle = '#AAB1B5'; ctx.fillRect(138 - wing, 378, wing, 8); ctx.fillRect(942, 378, wing, 8);
+  ctx.fillStyle = '#858C91'; ctx.fillRect(132, 344, 8, 476); ctx.fillRect(940, 344, 8, 476);
+  for (let i = 0; i < 8; i++) {
+    const y = 396 + i * 48;
+    ctx.fillStyle = i % 2 ? '#25292D' : '#202428'; ctx.fillRect(182, y, 716, 8);
+    ctx.fillStyle = i % 2 ? '#555C61' : '#3D4449'; ctx.fillRect(182, y + 8, 716, 4);
   }
-  const pulse = Math.sin(t * 9) > 0.88 ? 1 : 0;
-  ctx.fillStyle = pulse ? '#E6E8E9' : '#858B90';
-  ctx.fillRect(220, 360, 10, 60);
-  ctx.fillRect(850, 360, 10, 60);
-  ctx.fillStyle = theme.dim;
-  for (let i = 0; i < 5; i++) ctx.fillRect(252 + i * 132, 390, 4, 12);
+  const sweep = Math.sin(t * 5.5);
+  ctx.fillStyle = sweep > 0.72 ? '#E6E8E9' : '#858B90';
+  ctx.fillRect(166, 330, 12, 48); ctx.fillRect(902, 330, 12, 48);
+  ctx.fillStyle = '#9AA1A5'; ctx.fillRect(196, 344, 176, 8); ctx.fillRect(708, 344, 176, 8);
 }
 
-function drawCounter(ctx: Frame['ctx'], theme: Frame['theme'], t: number, drawerProgress: number, demand: string, asksAt: number) {
-  // A deep, extruded counter front and a bright steel lip frame the scale behind it.
-  ctx.fillStyle = '#090A0C'; ctx.fillRect(0, 894, 1080, 396);
-  ctx.fillStyle = '#30363A'; ctx.fillRect(0, 862, 1080, 38);
-  ctx.fillStyle = '#C1C6C9'; ctx.fillRect(0, 858, 1080, 8);
-  ctx.fillStyle = '#1C2023'; ctx.fillRect(0, 900, 1080, 18);
-  ctx.fillStyle = '#52595E'; ctx.fillRect(0, 920, 1080, 10);
-  ctx.fillStyle = '#24282B'; ctx.fillRect(0, 930, 1080, 360);
+function drawCounterBase(ctx: Frame['ctx'], t: number, camera: number) {
+  // The bright lip occupies the near foreground; the camera pushes between this edge and the scale.
+  ctx.fillStyle = '#090A0C'; ctx.fillRect(0, 876, 1080, 414);
+  ctx.fillStyle = '#30363A'; ctx.fillRect(0, 844, 1080, 38);
+  ctx.fillStyle = '#D1D5D7'; ctx.fillRect(0, 840, 1080, 8);
+  ctx.fillStyle = '#181C1F'; ctx.fillRect(0, 888, 1080, 18);
+  ctx.fillStyle = '#52595E'; ctx.fillRect(0, 908, 1080, 12);
+  ctx.fillStyle = '#252A2E'; ctx.fillRect(0, 920, 1080, 370);
   for (let i = 0; i < 15; i++) {
-    const x = i * 76;
-    ctx.fillStyle = '#363D42'; ctx.fillRect(x, 936, 4, 326);
-    ctx.fillStyle = '#111416'; ctx.fillRect(x + 4, 936, 5, 326);
+    const x = snap(i * 82 - camera * (0.18 + i % 3 * 0.06));
+    ctx.fillStyle = '#3A4146'; ctx.fillRect(x, 928, 5, 322);
+    ctx.fillStyle = '#111416'; ctx.fillRect(x + 5, 928, 5, 322);
+    if (i % 2 === 0) { ctx.fillStyle = '#687176'; ctx.fillRect(x + 13, 956, 17, 5); }
   }
-  // Drawer telescopes out at the collateral call, with rails visible in the gap.
-  const open = easeOut(drawerProgress), x = 510 - 52 * open, y = 986 + 40 * open;
-  ctx.fillStyle = '#090B0D'; ctx.fillRect(364, 968, 440, 94);
-  ctx.fillStyle = '#747D82'; ctx.fillRect(380, 960, 400, 12);
-  ctx.fillRect(380, 1058, 400, 10);
-  ctx.fillStyle = '#565E63'; ctx.fillRect(x - 12, y - 9, 440, 92);
-  ctx.fillStyle = '#A1A8AC'; ctx.fillRect(x - 12, y - 9, 440, 8);
-  ctx.fillStyle = '#252A2E'; ctx.fillRect(x, y, 416, 68);
-  ctx.fillStyle = '#C1C6C9'; ctx.fillRect(x, y, 416, 6);
-  ctx.fillStyle = '#727A7F'; ctx.fillRect(x + 24, y + 18, 112, 32);
-  ctx.fillStyle = '#171A1C'; ctx.fillRect(x + 32, y + 24, 96, 20);
-  pixelText(ctx, demand, x + 80, y + 25, demand.length > 7 ? 2 : 3, { color: theme.fg, align: 'center' });
-  ctx.fillStyle = '#D8DCDE'; ctx.fillRect(x + 300, y + 20, 56, 12);
-  ctx.fillStyle = '#33383C'; ctx.fillRect(x + 312, y + 32, 32, 8);
+  ctx.fillStyle = '#717A7F';
+  for (let i = 0; i < 10; i++) {
+    const x = snap(i * 126 - camera * 0.42);
+    ctx.fillRect(x, 1256 + Math.round(Math.sin(t * 3 + i) * 2), 60, 4);
+  }
+  // Two bolted runner rails make the drawer's depth legible before it moves.
+  ctx.fillStyle = '#858D92'; ctx.fillRect(380, 948, 400, 8); ctx.fillRect(380, 1070, 400, 8);
+  ctx.fillStyle = '#1A1E21'; ctx.fillRect(388, 962, 384, 100);
+}
 
-  const bellHit = Math.max(0, 1 - (t - asksAt) / 0.24);
-  const bellRock = (t >= asksAt && t < asksAt + 0.24) ? Math.sin((t - asksAt) * 76) * bellHit * 7 : 0;
-  ctx.save(); ctx.translate(842, 856); ctx.rotate(bellRock * Math.PI / 180);
-  ctx.fillStyle = '#15181A'; ctx.fillRect(-42, 18, 84, 14);
-  ctx.fillStyle = '#A6ADB1'; ctx.fillRect(-34, 12, 68, 8);
-  ctx.fillStyle = '#646C71'; ctx.fillRect(-28, -8, 56, 22);
-  ctx.fillStyle = '#E2E5E7'; ctx.fillRect(-18, -26, 36, 20);
-  ctx.fillStyle = '#71797E'; ctx.fillRect(-9, -36, 18, 12);
-  ctx.fillStyle = '#CDD2D5'; ctx.fillRect(-5, -43, 10, 8);
-  ctx.restore();
-  ctx.fillStyle = theme.line;
-  for (let i = 0; i < 10; i++) ctx.fillRect(40 + i * 108, 1238, 42, 4);
+function drawDrawer(ctx: Frame['ctx'], t: number, collateralAt: number) {
+  const thrust = easeOut(progress(t, collateralAt - 0.04, collateralAt + 0.23));
+  const recoil = Math.exp(-Math.max(0, t - collateralAt - 0.23) * 6);
+  const kick = t < collateralAt + 0.24 ? Math.sin(progress(t, collateralAt, collateralAt + 0.24) * Math.PI) * 14 : 0;
+  const x = 516 - 330 * thrust - 24 * recoil + kick;
+  const y = 972 + 78 * thrust + kick * 0.35;
+  const w = 434 + 72 * thrust, h = 94 + 18 * thrust;
+  ctx.fillStyle = '#080A0B'; ctx.fillRect(snap(x - 18), snap(y + 8), snap(w + 22), snap(h + 10));
+  ctx.fillStyle = '#6F787D'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), 10);
+  ctx.fillStyle = '#4A5257'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), snap(h));
+  ctx.fillStyle = '#B9C0C3'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), 8);
+  ctx.fillStyle = '#252A2D'; ctx.fillRect(snap(x), snap(y + 12), snap(w - 8), snap(h - 20));
+  ctx.fillStyle = '#A6ADB1'; ctx.fillRect(snap(x + 20), snap(y + h - 12), snap(w - 48), 6);
+
+  const plateX = snap(x + 26), plateY = snap(y + 20), plateW = Math.min(264, snap(w * 0.57)), plateH = 42;
+  ctx.fillStyle = '#111416'; ctx.fillRect(plateX, plateY, plateW, plateH);
+  ctx.fillStyle = '#C1C7CA'; ctx.fillRect(plateX, plateY, plateW, 5); ctx.fillRect(plateX, plateY + plateH - 5, plateW, 5);
+  ctx.fillStyle = '#171A1C'; ctx.fillRect(plateX + 8, plateY + 8, plateW - 16, plateH - 16);
+  if (thrust > 0.34) pixelText(ctx, 'COLLATERAL', plateX + plateW / 2, plateY + 11, 2, { color: '#F0F2F3', align: 'center' });
+  const handleX = snap(x + w - 86);
+  ctx.fillStyle = '#D8DCDE'; ctx.fillRect(handleX, plateY + 10, 48, 10);
+  ctx.fillStyle = '#4D555A'; ctx.fillRect(handleX + 8, plateY + 22, 36, 8);
+  ctx.fillStyle = '#AEB5B9';
+  for (let i = 0; i < 4; i++) ctx.fillRect(snap(x + 12 + i * 12), snap(y + 10), 4, 4);
+
+}
+
+function drawClosingDrawer(ctx: Frame['ctx'], close: number) {
+  if (close <= 0) return;
+  // The drawer rises out of the counter and becomes a full-height steel shutter into shot 10.
+  const top = snap(1290 - easeInOut(close) * 1320);
+  const height = 1290 - top;
+  ctx.fillStyle = '#080A0B'; ctx.fillRect(0, top - 10, 1080, height + 10);
+  ctx.fillStyle = '#343B3F'; ctx.fillRect(0, top, 1080, height);
+  ctx.fillStyle = '#AEB6BA'; ctx.fillRect(0, top, 1080, 12);
+  ctx.fillStyle = '#171B1E'; ctx.fillRect(20, top + 24, 1040, Math.max(0, height - 42));
+  for (let i = 0; i < 5; i++) {
+    const y = top + 52 + i * 72;
+    if (y + 12 >= 1290) continue;
+    ctx.fillStyle = i % 2 ? '#2C3236' : '#363D42'; ctx.fillRect(36, y, 1008, 8);
+    ctx.fillStyle = '#788186'; ctx.fillRect(36, y + 8, 1008, 4);
+  }
+  if (close > 0.24) {
+    const plateY = Math.max(top + 68, 1280 - close * 650);
+    ctx.fillStyle = '#080A0B'; ctx.fillRect(334, plateY, 412, 72);
+    ctx.fillStyle = '#AEB6BA'; ctx.fillRect(334, plateY, 412, 8); ctx.fillRect(334, plateY + 64, 412, 8);
+    pixelText(ctx, 'COLLATERAL', 540, plateY + 20, 3, { color: '#F0F2F3', align: 'center' });
+  }
 }
 
 function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
-  const x = 870 + Math.round(Math.sin(t * 0.7) * 4), y = 700 + Math.round(sink * 44);
-  drawTicket2D(ctx, x, y, 124, { rot: -0.035 });
+  const x = 790 + Math.round(Math.sin(t * 1.4) * 4), y = 690 + Math.round(sink * 105);
+  drawTicket2D(ctx, x, y, 136, { rot: -0.035 + sink * 0.012 });
+  // One continuous red obligation line is pinned to the ticket's perforated edge.
   const points: Array<[number, number]> = [
-    [x - 39, y + 8], [x - 24, y + 8], [x - 13, y + 2], [x - 1, y + 3], [x + 11, y - 8], [x + 23, y - 5], [x + 39, y - 17],
+    [x + 44, y + 8], [x + 60, y + 8], [x + 72, y], [x + 84, y + 4],
+    [x + 96, y - 9], [x + 108, y - 5], [x + 126, y - 20], [x + 150, y - 20],
   ];
   ctx.fillStyle = '#B73532';
   for (let segment = 0; segment < points.length - 1; segment++) {
@@ -146,68 +172,93 @@ function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
     const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / GRID));
     for (let i = 0; i <= steps; i++) {
       const u = i / steps;
-      ctx.fillRect(Math.round((x0 + (x1 - x0) * u) / GRID) * GRID, Math.round((y0 + (y1 - y0) * u) / GRID) * GRID, GRID, GRID);
+      ctx.fillRect(snap(x0 + (x1 - x0) * u), snap(y0 + (y1 - y0) * u), GRID, GRID);
     }
   }
 }
 
+function drawWarning(ctx: Frame['ctx'], t: number, collateralAt: number) {
+  const pulses = [0, 0.18, 0.38, 0.58];
+  const lit = pulses.some(offset => Math.abs(t - collateralAt - offset) < 0.075);
+  ctx.fillStyle = '#101315'; ctx.fillRect(742, 322, 144, 50);
+  ctx.fillStyle = '#6F787D'; ctx.fillRect(750, 330, 128, 34);
+  ctx.fillStyle = lit ? '#F2F4F5' : '#2F3539'; ctx.fillRect(758, 338, 112, 18);
+  if (lit) {
+    ctx.fillStyle = '#DDE1E3'; ctx.fillRect(696, 348, 32, 5); ctx.fillRect(890, 348, 32, 5);
+    ctx.fillRect(772, 306, 12, 8); ctx.fillRect(836, 306, 12, 8);
+  }
+  ctx.fillStyle = '#333A3E'; ctx.fillRect(764, 368, 100, 6);
+}
+
 export const collateralCallShot: ShotDef = {
   name: 'collateralcall',
-  describe: 'A steel broker counter unfolds around an animated balance scale as Hedgy is called for more collateral. params.demand changes the drawer label (default MORE).',
+  describe: 'The obligation pan sinks on demands; a marked collateral drawer punches out toward Hedgy as the camera pushes between the counter and the scale.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, theme, seed } = frame, dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
-    const asksAt = eventAt(props, 'asks', dur * 0.32, dur);
-    const collateralAt = eventAt(props, 'collateral', dur * 0.66, dur);
-    const unfold = progress(t, 0.02, Math.min(dur * 0.28, 0.42));
-    const drawer = progress(t, collateralAt, collateralAt + Math.min(0.26, dur * 0.18));
-    const sink = easeOut(progress(t, collateralAt, collateralAt + Math.min(0.42, dur * 0.28)));
-    const demand = label(props.params?.demand ?? props.params?.requiredCollateral, 'MORE', 8);
+    const demandsAt = eventAt(props, 'demands', dur * 0.31, dur);
+    const collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
+    const sinkHit = easeOut(progress(t, demandsAt - 0.08, demandsAt + 0.28));
+    const sinkSettle = t > demandsAt + 0.28 ? 0.1 * Math.sin((t - demandsAt - 0.28) * 18) * Math.exp(-(t - demandsAt - 0.28) * 4.5) : 0;
+    const sink = clamp(sinkHit + sinkSettle, 0, 1.14);
+    const unfold = progress(t, 0.015, Math.min(dur * 0.22, 0.36));
+    const endClose = progress(t, dur - 0.31, dur - 0.025);
     const rig = createCameraRig({
-      width: 1080, height: 1290, seed: seed + 81, handheld: 3.2,
+      width: 1080, height: 1290, seed: seed + 81, handheld: 1.8,
       keyframes: [
-        { t: 0, x: -14, y: 5, zoom: 1, rot: 0 },
-        { t: dur * 0.46, x: 2, y: -3, zoom: 1.025, rot: 0, ease: 'inOut' },
-        { t: dur, x: 30, y: 8, zoom: 1.09, rot: 0.004, ease: 'in' },
-      ], hits: [asksAt, collateralAt], punch: 0.012, shake: 7,
+        { t: 0, x: -22, y: 8, zoom: 1, rot: 0 },
+        { t: demandsAt, x: 0, y: 0, zoom: 1.035, rot: 0, ease: 'inOut' },
+        { t: collateralAt, x: 12, y: -10, zoom: 1.13, rot: -0.003, ease: 'inOut' },
+        { t: dur, x: 30, y: -16, zoom: 1.2, rot: -0.005, ease: 'in' },
+      ], hits: [demandsAt, collateralAt], punch: 0.022, shake: 8,
+      dollyZoom: { start: demandsAt, end: Math.min(dur, collateralAt + 0.32), amount: 0.12 },
     });
     const pose = rig.poseAt(t), camera = rig.view3D(t);
     ctx.imageSmoothingEnabled = false;
-    drawEnv(ctx, { type: 'exchange', t, theme, seed: seed + 5, width: 1080, height: 1290, camera: { x: pose.x * 0.28, y: pose.y * 0.24, zoom: pose.zoom, rot: pose.rot, yaw: camera.yaw, pitch: camera.pitch } });
+    drawEnv(ctx, { type: 'exchange', t, theme, seed: seed + 5, width: 1080, height: 1290, camera: { x: pose.x * 0.22, y: pose.y * 0.2, zoom: pose.zoom, rot: pose.rot, yaw: camera.yaw, pitch: camera.pitch } });
     ctx.save(); rig.apply(ctx, t);
     drawWall(ctx, theme, t, unfold);
     render3d(ctx, theme, {
-      x: 122, y: 230, w: 910, h: 790, zoom: 100, yaw: camera.yaw + 0.12, pitch: 0.34 + camera.pitch * 0.22,
-      distance: 6.8, target: [camera.target[0], camera.target[1] + 0.17, camera.target[2]], cell: 4, outline: true, light: [-0.5, 0.78, -0.46], ambient: 0.4, rim: 0.48,
+      x: -84, y: 178, w: 1032, h: 778, zoom: 112, yaw: camera.yaw + 0.12, pitch: 0.34 + camera.pitch * 0.24,
+      distance: Math.max(4.5, camera.distance - 0.28), target: [camera.target[0], camera.target[1] + 0.17, camera.target[2]], cell: 4,
+      outline: true, light: [-0.5, 0.78, -0.46], ambient: 0.44, rim: 0.54,
       ground: { y: -2.2, shadow: 0.54, grid: false }, fog: { near: 7, far: 15, color: '#16191B' },
     }, scaleObjects(sink));
     drawTicketTrace(ctx, t, sink);
-    drawCounter(ctx, theme, t, drawer, demand, asksAt);
-    drawHedgy(ctx, { x: 246, y: 1188, scale: 5.05, t, pose: t < collateralAt ? 'sweat' : 'shock', look: 'up', expression: 'worried' });
-    // Hedgy's pouch turns inside-out exactly on the word “collateral.”
-    const pouchOpen = easeOut(progress(t, collateralAt - 0.12, collateralAt + 0.18));
-    ctx.save(); ctx.translate(330, 1112); ctx.rotate(-0.13 + pouchOpen * 0.62);
-    ctx.fillStyle = '#08090A'; ctx.fillRect(-42, -33, 84, 54); ctx.fillRect(-34, 19, 68, 14); ctx.fillRect(-24, 33, 48, 8);
-    ctx.fillStyle = '#777E82'; ctx.fillRect(-37, -29, 74, 46); ctx.fillRect(-29, 17, 58, 14); ctx.fillRect(-20, 31, 40, 7);
-    ctx.fillStyle = '#D0D5D7'; ctx.fillRect(-42, -38, 84, 14);
-    ctx.fillStyle = '#25292C'; ctx.fillRect(-31, -32, 62, 18);
-    ctx.fillStyle = '#989FA3'; ctx.fillRect(-20, 23, 40, 5);
-    ctx.fillStyle = '#B7BEC2'; ctx.fillRect(-45, -26, 5, 12); ctx.fillRect(40, -26, 5, 12);
-    ctx.restore();
-    if (t >= collateralAt && t < collateralAt + 0.42) drawBurst(ctx, t, { x: 414, y: 1005, seed: seed + 119, count: 10, kind: 'dust', start: collateralAt, life: 0.42, speed: 70, gravity: 20, drag: 1.2, size: 2, color: theme.dim });
-    // Alarm strip flashes briefly after the drawer's demand lands.
-    if (t >= collateralAt + 0.13 && t < collateralAt + 0.42 && Math.sin((t - collateralAt) * 38) > 0.1) {
-      ctx.fillStyle = theme.fg; ctx.fillRect(420, 402, 240, 7); ctx.fillRect(430, 414, 220, 4);
+    drawCounterBase(ctx, t, pose.x);
+    drawWarning(ctx, t, collateralAt);
+    const recoil = easeOut(progress(t, collateralAt + 0.01, collateralAt + 0.22));
+    drawHedgy(ctx, {
+      x: 240 - 32 * recoil, y: 1160, scale: 5.15, t: Math.max(0, t - demandsAt),
+      pose: t < demandsAt ? 'sweat' : t < collateralAt + 0.08 ? 'shock' : 'sweat', facing: 1,
+      look: 'up', expression: t < demandsAt ? 'worried' : 'shocked',
+    });
+    const alarmDustStart = collateralAt + 0.13;
+    if (t >= demandsAt && t < demandsAt + 0.38) {
+      drawBurst(ctx, t, { x: 950, y: 846 + sink * 55, seed: seed + 119, count: 8, kind: 'dust', start: demandsAt, life: 0.36, speed: 48, gravity: 24, drag: 1.3, size: 2, color: '#C7CDD0' });
+    }
+    drawDrawer(ctx, t, collateralAt);
+    drawClosingDrawer(ctx, endClose);
+    if (t >= alarmDustStart && t < collateralAt + 0.56) {
+      const p = pulsesAt(t, collateralAt);
+      if (p > 0) {
+        ctx.fillStyle = '#E1E4E6';
+        ctx.fillRect(742, 374, Math.round(196 * p / GRID) * GRID, 4);
+        ctx.fillRect(760, 386, Math.round(160 * p / GRID) * GRID, 4);
+      }
     }
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const asksAt = eventAt(props, 'asks', dur * 0.32, dur), collateralAt = eventAt(props, 'collateral', dur * 0.66, dur);
-    const cues = ([
-      { t: asksAt, kind: 'ding', pan: 0.48, gain: 0.72 },
-      { t: collateralAt, kind: 'clack', pan: 0.36, gain: 0.9 },
-      { t: Math.min(dur, collateralAt + 0.06), kind: 'servo', pan: -0.12, gain: 0.72 },
-      { t: Math.min(dur, collateralAt + 0.2), kind: 'alarm', pan: -0.08, gain: 0.48, len: 0.16 },
+    const demandsAt = eventAt(props, 'demands', dur * 0.31, dur), collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
+    return ([
+      { t: demandsAt, kind: 'thud', pan: 0.56, gain: 0.58 },
+      { t: collateralAt, kind: 'clack', pan: -0.18, gain: 0.84 },
+      { t: collateralAt + 0.18, kind: 'alarm', pan: -0.12, gain: 0.34, len: 0.2 },
     ] satisfies Cue[]).filter(cue => cue.t >= 0 && cue.t <= dur);
-    return cues;
   },
 };
+
+function pulsesAt(t: number, start: number) {
+  const pulses = [0, 0.18, 0.38, 0.58];
+  return Math.max(0, ...pulses.map(offset => 1 - Math.abs(t - start - offset) / 0.075));
+}

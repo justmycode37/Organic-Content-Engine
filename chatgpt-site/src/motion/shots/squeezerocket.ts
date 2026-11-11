@@ -1,6 +1,5 @@
 import { clamp, ease, hash, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
-import { drawEnv } from '../env/index.ts';
 import { drawBurst, drawImpactStar, drawShockwave, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { applyImpactFrame } from '../fx/post.ts';
@@ -9,11 +8,7 @@ import { drawTicket2D } from '../sets/ticket.ts';
 import { box, merge, place, render3d } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
-const W = 1080, H = 1290;
-const RED = '#E43A34';
-const IVORY = '#E8E5DE';
-const STEEL = '#737B82';
-const INK = '#090A0C';
+const W = 1080, H = 1290, RED = '#E43A34', INK = '#090B0D', PAPER = '#E5E7E9';
 const TAU = Math.PI * 2;
 type Point = { x: number; y: number; z: number; u: number; angle: number };
 
@@ -31,18 +26,17 @@ function makeTower() {
     const y = 0.15 + floor * 1.04;
     parts.push(place(box(3.58, 0.12, 1.78, floor % 2 ? 1 : 2), { pos: [0, y, -0.02] }));
     for (let col = 0; col < 4; col++) {
-      const lit = hash(floor * 11 + col, 65) > 0.28;
-      if (!lit) continue;
-      parts.push(place(box(0.36, 0.5, 0.055, 2), { pos: [-1.25 + col * 0.82, y + 0.38, -0.89] }));
+      if (hash(floor * 11 + col, 65) > 0.28) parts.push(place(box(0.36, 0.5, 0.055, 2), { pos: [-1.25 + col * 0.82, y + 0.38, -0.89] }));
     }
   }
   return merge(...parts);
 }
+
 const TOWER = makeTower();
 const TOWER_MATERIALS = [
-  { ramp: 'steel' as const, tone: 0.64 },
-  { ramp: 'mono' as const, tone: 0.82 },
-  { ramp: 'chrome' as const, tone: 0.66, spec: 0.28 },
+  { ramp: 'steel' as const, tone: 0.7 },
+  { ramp: 'mono' as const, tone: 0.86 },
+  { ramp: 'chrome' as const, tone: 0.68, spec: 0.28 },
 ];
 const BLOCK = box(1.7, 6.4, 1.0, 0, [1, 1, 2, 0, 2, 0]);
 const BLOCKS = [
@@ -57,269 +51,242 @@ const numParam = (props: ShotProps, key: string, fallback: number, lo: number, h
   const value = Number(props.params?.[key]);
   return Number.isFinite(value) ? clamp(value, lo, hi) : fallback;
 };
-const listParam = (props: ShotProps, key: string): unknown[] => Array.isArray(props.params?.[key]) ? props.params![key] as unknown[] : [];
 const strParam = (props: ShotProps, key: string, fallback: string) => String(props.params?.[key] ?? fallback);
 function eventAt(props: ShotProps, kind: string, fallback: number, dur: number) {
-  const event = props.events?.find(item => item.kind.toLowerCase() === kind.toLowerCase());
+  const event = props.events?.find(item => item.kind.toLowerCase() === kind);
   return clamp(event?.at ?? fallback, 0, Math.max(0, dur));
 }
-function buyTimes(props: ShotProps, dur: number, loopAt: number, squeezeAt: number, count: number) {
-  const span = Math.max(0, squeezeAt - loopAt - 0.12);
-  return Array.from({ length: count }, (_, i) => clamp(loopAt + 0.1 + span * ((i + 1) / (count + 1)), 0, Math.max(0, dur)));
-}
 
-function helixPoint(u: number, turns: number, time: number, boost: number, radius = 308): Point {
-  const angle = u * turns * TAU + Math.sin(time * 0.42) * 0.08;
+function helixPoint(u: number, turns: number, t: number, rise: number, radius = 328): Point {
+  const angle = u * turns * TAU + Math.sin(t * 0.46) * 0.065;
   const z = Math.cos(angle);
   return {
     x: Math.round((540 + Math.sin(angle) * radius) / 4) * 4,
-    y: Math.round((1004 - u * 682 - Math.cos(angle) * 70 - boost) / 4) * 4,
-    z,
-    u,
-    angle,
+    y: Math.round((982 - u * 650 - Math.cos(angle) * 64 - rise) / 4) * 4,
+    z, u, angle,
   };
 }
 
-function drawHelix(ctx: Frame['ctx'], points: Point[], progress: number, front: boolean, width: number, color: string) {
-  if (points.length < 2 || progress <= 0) return;
-  const maxIndex = Math.floor(clamp(progress) * (points.length - 1));
-  ctx.beginPath(); let drawing = false;
-  for (let i = 0; i <= maxIndex; i++) {
-    const p = points[i]!;
-    const visible = front ? p.z < 0.02 : p.z >= 0.02;
-    if (!visible) { drawing = false; continue; }
-    if (!drawing) { ctx.moveTo(p.x, p.y); drawing = true; }
-    else ctx.lineTo(p.x, p.y);
+function drawVenue(ctx: Frame['ctx'], t: number, seed: number) {
+  ctx.fillStyle = '#14181C'; ctx.fillRect(0, 0, W, H);
+  const drift = (t * 136) % 240;
+  for (let side = 0; side < 2; side++) {
+    const x = side ? 850 : 0, width = 230;
+    ctx.fillStyle = side ? '#252B30' : '#20262B'; ctx.fillRect(x, 0, width, 1150);
+    ctx.fillStyle = '#515A61'; ctx.fillRect(x + (side ? 14 : 0), 0, 8, 1150);
+    for (let row = -1; row < 7; row++) {
+      const y = Math.round(row * 240 + drift - 140);
+      ctx.fillStyle = '#343C42'; ctx.fillRect(x + 12, y, width - 24, 12);
+      ctx.fillStyle = '#69727A'; ctx.fillRect(x + 12, y, width - 24, 4);
+      for (let col = 0; col < 4; col++) {
+        const id = row * 41 + col * 7 + side * 91;
+        if (hash(id, seed) > 0.22) {
+          const wx = x + 28 + col * 47;
+          ctx.fillStyle = hash(id, seed + Math.floor(t * 1.8)) > 0.52 ? '#818A91' : '#535C63';
+          ctx.fillRect(wx, y + 29, 29, 48); ctx.fillStyle = '#30373C'; ctx.fillRect(wx + 4, y + 34, 21, 38);
+        }
+      }
+    }
   }
-  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = 'square'; ctx.lineJoin = 'bevel'; ctx.stroke();
+  // Layered bridge girders slide past the venue windows during the vertical climb.
+  for (let i = 0; i < 5; i++) {
+    const y = Math.round(((i * 286 + drift * 0.68) % 1480) - 150);
+    ctx.fillStyle = '#31383E'; ctx.fillRect(0, y, W, 16); ctx.fillStyle = '#899197'; ctx.fillRect(0, y, W, 5);
+    ctx.fillStyle = '#0B0D0F'; ctx.fillRect(0, y + 16, W, 8);
+    for (let x = 20; x < W; x += 92) { ctx.fillStyle = i % 2 ? '#596168' : '#3F474D'; ctx.fillRect(x, y + 24, 6, 26); }
+  }
+  ctx.fillStyle = '#0E1114'; ctx.fillRect(0, 1080, W, 210);
 }
 
-function drawKiosk(ctx: Frame['ctx'], x: number, y: number, scale: number, t: number, active: number) {
-  const w = Math.round(112 * scale / 4) * 4, h = Math.round(94 * scale / 4) * 4, left = Math.round((x - w / 2) / 4) * 4, top = Math.round((y - h / 2) / 4) * 4;
-  ctx.fillStyle = INK; ctx.fillRect(left, top, w, h);
-  ctx.fillStyle = '#D0D4D7'; ctx.fillRect(left + 4, top + 4, w - 8, 6); ctx.fillRect(left + 4, top + 4, 6, h - 8);
-  ctx.fillStyle = '#343A40'; ctx.fillRect(left + w - 10, top + 8, 6, h - 12); ctx.fillRect(left + 8, top + h - 10, w - 16, 6);
-  ctx.fillStyle = '#20252A'; ctx.fillRect(left + 14, top + 16, w - 28, h - 34);
-  ctx.fillStyle = '#9BA2A8'; ctx.fillRect(left + 20, top + 22, w - 40, 5);
-  ctx.fillStyle = active > 0.05 ? RED : '#B8BDC1'; ctx.fillRect(left + w - 44, top + h - 30, 28, 8);
-  ctx.fillStyle = '#070809'; ctx.fillRect(left + 18, top + h - 34, w - 58, 16);
-  ctx.fillStyle = '#C4C8CA'; ctx.fillRect(left + 24, top + h - 30, w - 70, 4);
-  if (active > 0.18 && active < 0.92) drawTicket2D(ctx, x, y + h * 0.43 + Math.sin(t * 14) * 4, Math.max(34, 48 * scale), { rot: 0.08 });
-  for (let i = 0; i < 4; i++) {
-    ctx.fillStyle = '#ECEDEF'; ctx.fillRect(left + 12 + (i % 2) * (w - 24), top + 14 + Math.floor(i / 2) * (h - 28), 5, 5);
+function drawLoop(ctx: Frame['ctx'], points: Point[], progress: number, front: boolean, width: number, color: string) {
+  if (progress <= 0 || points.length < 2) return;
+  const max = Math.floor(clamp(progress) * (points.length - 1));
+  ctx.beginPath(); let open = false;
+  for (let i = 0; i <= max; i++) {
+    const p = points[i]!, visible = front ? p.z < 0 : p.z >= 0;
+    if (!visible) { open = false; continue; }
+    if (!open) { ctx.moveTo(p.x, p.y); open = true; } else ctx.lineTo(p.x, p.y);
   }
+  ctx.strokeStyle = '#090B0D'; ctx.lineWidth = width + 22; ctx.lineCap = 'square'; ctx.lineJoin = 'bevel'; ctx.stroke();
+  ctx.strokeStyle = '#353C42'; ctx.lineWidth = width + 12; ctx.stroke();
+  ctx.strokeStyle = color; ctx.lineWidth = width; ctx.stroke();
+  ctx.strokeStyle = '#F3AAA4'; ctx.lineWidth = 4; ctx.stroke();
 }
 
 function drawPress(ctx: Frame['ctx'], t: number, squeezeAt: number) {
-  const inHit = clamp((t - (squeezeAt - 0.09)) / 0.16);
-  const release = clamp((t - (squeezeAt + 0.06)) / 0.38);
-  const close = ease.outCubic(inHit) * (1 - ease.outCubic(release) * 0.72);
-  const topY = Math.round(252 + close * 285), bottomY = Math.round(1014 - close * 257);
-  // Monochrome press frame is a single huge die with bright machined edges and stepped pins.
-  ctx.fillStyle = '#111519'; ctx.fillRect(0, 84, W, 118);
-  ctx.fillStyle = '#92999E'; ctx.fillRect(0, 84, W, 10); ctx.fillRect(0, 84, 14, 118);
-  ctx.fillStyle = '#353C42'; ctx.fillRect(0, 190, W, 12);
-  for (const x of [72, 930]) {
-    ctx.fillStyle = '#151A1E'; ctx.fillRect(x, 126, 78, 960);
-    ctx.fillStyle = '#9AA1A6'; ctx.fillRect(x, 126, 9, 960); ctx.fillRect(x + 62, 126, 12, 960);
-    ctx.fillStyle = '#2E353A'; ctx.fillRect(x + 15, 145, 40, 920);
-    for (let bolt = 0; bolt < 8; bolt++) {
-      ctx.fillStyle = bolt % 2 ? '#AEB3B6' : '#555D63';
-      ctx.fillRect(x + 22, 170 + bolt * 118, 24, 10);
-    }
+  const slam = ease.outCubic(clamp((t - (squeezeAt - 0.12)) / 0.14));
+  const release = ease.outCubic(clamp((t - (squeezeAt + 0.035)) / 0.48));
+  const close = slam * (1 - release * 0.83);
+  const topY = Math.round(204 + close * 300), bottomY = Math.round(1000 - close * 276);
+  // Two independent hydraulic carriages and their piston rods make the cause of the crush clear.
+  ctx.fillStyle = '#151A1E'; ctx.fillRect(94, 154, 92, 926); ctx.fillRect(894, 154, 92, 926);
+  ctx.fillStyle = '#7A8389'; ctx.fillRect(94, 154, 10, 926); ctx.fillRect(976, 154, 10, 926);
+  ctx.fillStyle = '#30373D'; ctx.fillRect(116, 178, 50, 878); ctx.fillRect(906, 178, 50, 878);
+  for (const x of [124, 914]) for (let bolt = 0; bolt < 9; bolt++) {
+    ctx.fillStyle = bolt % 2 ? '#AEB5B9' : '#5D666D'; ctx.fillRect(x, 202 + bolt * 94, 26, 12);
   }
-  // Twin piston rods visibly travel with the platen.
-  ctx.fillStyle = '#B5BABD'; ctx.fillRect(190, topY - 82, 34, 86); ctx.fillRect(856, topY - 82, 34, 86);
-  ctx.fillStyle = '#444B51'; ctx.fillRect(198, topY - 72, 18, 80); ctx.fillRect(864, topY - 72, 18, 80);
-  ctx.fillStyle = '#111519'; ctx.fillRect(124, topY, 832, 122);
-  ctx.fillStyle = '#B4BABE'; ctx.fillRect(124, topY, 832, 10); ctx.fillRect(124, topY, 12, 122);
-  ctx.fillStyle = '#41484E'; ctx.fillRect(145, topY + 24, 790, 15);
-  for (let notch = 0; notch < 24; notch++) { ctx.fillStyle = notch % 2 ? '#171B1F' : '#7B8389'; ctx.fillRect(154 + notch * 32, topY + 48, 18, 28); }
-  ctx.fillStyle = '#0D1012'; ctx.fillRect(124, bottomY, 832, 96);
-  ctx.fillStyle = '#B4BABE'; ctx.fillRect(124, bottomY, 832, 10); ctx.fillRect(124, bottomY + 80, 832, 12);
-  ctx.fillStyle = '#373E44'; ctx.fillRect(148, bottomY + 22, 784, 28);
-  for (let tooth = 0; tooth < 26; tooth++) { ctx.fillStyle = tooth % 2 ? '#111417' : '#7D858B'; ctx.fillRect(150 + tooth * 30, bottomY + 55, 18, 18); }
+  ctx.fillStyle = '#A8B0B5'; ctx.fillRect(234, topY - 118, 40, 124); ctx.fillRect(806, topY - 118, 40, 124);
+  ctx.fillStyle = '#535C63'; ctx.fillRect(245, topY - 108, 18, 108); ctx.fillRect(817, topY - 108, 18, 108);
+  ctx.fillStyle = '#111519'; ctx.fillRect(150, topY, 780, 120);
+  ctx.fillStyle = '#C2C7CA'; ctx.fillRect(150, topY, 780, 12); ctx.fillRect(150, topY, 14, 120);
+  ctx.fillStyle = '#434B51'; ctx.fillRect(176, topY + 30, 726, 18);
+  for (let tooth = 0; tooth < 22; tooth++) {
+    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, topY + 62, 20, 32);
+  }
+  ctx.fillStyle = '#111519'; ctx.fillRect(150, bottomY, 780, 104);
+  ctx.fillStyle = '#C2C7CA'; ctx.fillRect(150, bottomY + 82, 780, 12); ctx.fillRect(916, bottomY, 14, 104);
+  ctx.fillStyle = '#434B51'; ctx.fillRect(176, bottomY + 25, 726, 20);
+  for (let tooth = 0; tooth < 22; tooth++) {
+    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, bottomY + 55, 20, 28);
+  }
   return { topY, bottomY, close };
 }
 
-function pathPoints(value: unknown[], fallback: Point[]) {
-  const points = value.slice(0, 16).map(point => {
-    if (Array.isArray(point)) {
-      const x = Number(point[0]), y = Number(point[1]);
-      return Number.isFinite(x) && Number.isFinite(y) ? { x: clamp(x, -100, 1180), y: clamp(y, -120, 1260), z: 0, u: 0, angle: 0 } : null;
-    }
-    if (point && typeof point === 'object') {
-      const p = point as Record<string, unknown>, x = Number(p.x), y = Number(p.y);
-      return Number.isFinite(x) && Number.isFinite(y) ? { x: clamp(x, -100, 1180), y: clamp(y, -120, 1260), z: 0, u: 0, angle: 0 } : null;
-    }
-    return null;
-  }).filter((p): p is Point => p !== null);
-  return points.length > 1 ? points : fallback;
+function drawPressFront(ctx: Frame['ctx'], topY: number, bottomY: number) {
+  ctx.fillStyle = '#111519'; ctx.fillRect(150, topY + 110, 780, 15);
+  ctx.fillStyle = '#929BA1'; ctx.fillRect(150, topY + 110, 780, 5);
+  ctx.fillStyle = '#111519'; ctx.fillRect(150, bottomY - 14, 780, 18);
+  ctx.fillStyle = '#929BA1'; ctx.fillRect(150, bottomY - 14, 780, 5);
 }
 
-function drawLaunch(ctx: Frame['ctx'], path: Point[], progress: number) {
-  if (progress <= 0) return;
-  const n = (path.length - 1) * clamp(progress), last = Math.floor(n), partial = n - last;
-  ctx.beginPath(); ctx.moveTo(path[0]!.x, path[0]!.y);
-  for (let i = 1; i <= Math.min(last, path.length - 1); i++) ctx.lineTo(path[i]!.x, path[i]!.y);
-  if (last < path.length - 1 && partial > 0) {
-    const a = path[last]!, b = path[last + 1]!;
-    ctx.lineTo(Math.round(a.x + (b.x - a.x) * partial), Math.round(a.y + (b.y - a.y) * partial));
-  }
-  ctx.strokeStyle = '#292E33'; ctx.lineWidth = 42; ctx.lineCap = 'square'; ctx.lineJoin = 'bevel'; ctx.stroke();
-  ctx.strokeStyle = RED; ctx.lineWidth = 18; ctx.stroke();
-  ctx.strokeStyle = '#F6ACA5'; ctx.lineWidth = 4; ctx.stroke();
-}
-
-function drawPointingFinger(ctx: Frame['ctx'], x: number, feetY: number) {
-  // A few enlarged brown art-pixels reinforce the actor's upward point at the final hold.
-  const cells: Array<[number, number, number, number]> = [
-    [x + 24, feetY - 174, 30, 26], [x + 40, feetY - 202, 30, 28],
-    [x + 56, feetY - 232, 28, 28], [x + 64, feetY - 262, 22, 42],
-    [x + 64, feetY - 312, 22, 58],
-  ];
-  ctx.fillStyle = '#291910';
-  for (const [cx, cy, w, h] of cells) ctx.fillRect(cx, cy, w, h);
-  ctx.fillStyle = '#8B5C38';
-  for (const [cx, cy, w, h] of cells) ctx.fillRect(cx + 5, cy + 4, w - 10, h - 8);
-  ctx.fillStyle = '#D4A66F';
-  ctx.fillRect(x + 70, feetY - 312, 10, 26); ctx.fillRect(x + 74, feetY - 320, 6, 12);
-  ctx.fillStyle = '#F0D9B3'; ctx.fillRect(x + 74, feetY - 322, 6, 8);
+function drawStampedTicket(ctx: Frame['ctx'], x: number, y: number, width: number, rotation: number, stamp: string, reveal: number) {
+  if (reveal <= 0 || width <= 0) return;
+  ctx.save(); ctx.globalAlpha *= clamp(reveal);
+  ctx.translate(x, y); ctx.rotate(rotation);
+  drawTicket2D(ctx, 0, 0, width);
+  const size = Math.max(3, Math.min(8, Math.round(width / 150)));
+  const stampX = -width * 0.16, stampY = width * 0.13 / 2.4;
+  const stampW = width * 0.64, stampH = Math.max(32, size * 12);
+  ctx.fillStyle = '#1A1D20'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY - stampH / 2), Math.round(stampW), stampH);
+  ctx.fillStyle = '#8E312E'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY - stampH / 2), Math.round(stampW), 5);
+  ctx.fillStyle = '#6F2927'; ctx.fillRect(Math.round(stampX - stampW / 2), Math.round(stampY + stampH / 2 - 5), Math.round(stampW), 5);
+  pixelText(ctx, stamp, stampX, stampY - size * 3.5, size, {
+    color: '#F1F2F3', align: 'center', reveal: 1, mode: 'type',
+  });
+  ctx.restore();
 }
 
 export const squeezeRocketShot: ShotDef = {
   name: 'squeezerocket',
-  describe: 'A rising ticket loop wraps the venue tower, then a hydraulic press stamps the oversized ticket. params: stampWord/terminalLabel, loopTurns, launchPath, riderActor, particleSet, loopOutPoint.',
+  describe: 'A red ticket chain rises into a loop around the tower, gets crushed by a hydraulic press, then its stamped ticket rockets through the lens to match the opening.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme, seed } = frame;
-    const dur = Math.max(0.25, frame.dur), t = clamp(frame.t, 0, dur);
-    const loopAt = eventAt(props, 'loop', dur * 0.34, dur);
-    const squeezeAt = eventAt(props, 'squeeze', dur * 0.76, dur);
-    const turns = numParam(props, 'loopTurns', 2.2, 1.2, 3.4);
-    const count = Math.floor(numParam(props, 'buybackCount', 5, 3, 7));
-    const purchases = buyTimes(props, dur, loopAt, squeezeAt, count);
+    const { ctx, theme, seed } = frame, dur = Math.max(0.25, frame.dur), t = clamp(frame.t, 0, dur);
+    const loopAt = eventAt(props, 'loop', dur * 0.22, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.43, dur);
+    const turns = numParam(props, 'loopTurns', 1, 0.8, 2.2);
     const stamp = strParam(props, 'stampWord', strParam(props, 'terminalLabel', 'SHORT SQUEEZE')).toUpperCase().replace(/[^A-Z0-9 ]/g, '').trim().slice(0, 18) || 'SHORT SQUEEZE';
-    const rider = strParam(props, 'riderActor', 'hedgy').toLowerCase() !== 'none';
-    const burstKind = ['shard', 'confetti', 'spark', 'dust'].includes(strParam(props, 'particleSet', 'shard')) ? strParam(props, 'particleSet', 'shard') as 'shard' | 'confetti' | 'spark' | 'dust' : 'shard';
-    const launchDir = strParam(props, 'loopOutPoint', 'top').toLowerCase();
-    const fallbackLaunch: Point[] = launchDir === 'left'
-      ? [{ x: 560, y: 470, z: 0, u: 0, angle: 0 }, { x: 370, y: 290, z: 0, u: 0, angle: 0 }, { x: 170, y: 180, z: 0, u: 0, angle: 0 }, { x: -70, y: 90, z: 0, u: 0, angle: 0 }]
-      : launchDir === 'right'
-        ? [{ x: 560, y: 470, z: 0, u: 0, angle: 0 }, { x: 730, y: 290, z: 0, u: 0, angle: 0 }, { x: 930, y: 180, z: 0, u: 0, angle: 0 }, { x: 1150, y: 90, z: 0, u: 0, angle: 0 }]
-        : [{ x: 560, y: 506, z: 0, u: 0, angle: 0 }, { x: 544, y: 348, z: 0, u: 0, angle: 0 }, { x: 540, y: 162, z: 0, u: 0, angle: 0 }, { x: 540, y: -160, z: 0, u: 0, angle: 0 }];
-    const launch = pathPoints(listParam(props, 'launchPath'), fallbackLaunch);
+    const rushAt = Math.min(dur - 0.18, Math.max(2.2, squeezeAt + 0.88));
+    const impactAt = Math.round(squeezeAt * 30) / 30;
+    const beforeLoop = 0.04 + 0.96 * clamp(t / Math.max(0.1, loopAt));
+    const progress = t < loopAt ? beforeLoop : 1;
+    const rise = Math.max(0, t - loopAt) * 92;
+    const points = Array.from({ length: 181 }, (_, i) => helixPoint(i / 180, turns, t, rise));
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 901, handheld: 1.4,
+      width: W, height: H, seed: seed + 901, handheld: 0, hits: [squeezeAt], punch: 0.028, shake: 27,
       keyframes: [
-        { t: 0, x: -28, y: 24, zoom: 1.02, rot: -0.012 },
-        { t: loopAt, x: 24, y: -18, zoom: 1.075, rot: 0.014 },
-        { t: squeezeAt - 0.06, x: -18, y: 26, zoom: 1.13, rot: -0.018 },
-        { t: dur, x: 0, y: 0, zoom: 1.015, rot: 0 },
+        { t: 0, x: -26, y: 24, zoom: 1.015, rot: -0.01 },
+        { t: loopAt, x: 22, y: -16, zoom: 1.065, rot: 0.014 },
+        { t: squeezeAt - 0.05, x: -14, y: 20, zoom: 1.11, rot: -0.016 },
+        { t: rushAt, x: -8, y: 12, zoom: 0.99, rot: 0.004 },
+        // Same camera transform as borrowedasset at t=0, for a true ticket match on the final frame.
+        { t: Math.max(rushAt + 0.05, dur - 1 / 30), x: 0, y: 8, zoom: 1.055, rot: -0.004 },
       ],
-      hits: [...purchases, squeezeAt], punch: 0.022, shake: 30,
-      whip: [{ at: squeezeAt + 0.08, direction: 'up', duration: 0.32, amount: 0.1 }],
+      whip: [{ at: squeezeAt + 0.08, direction: 'up', duration: 0.32, amount: 0.075 }],
     });
-    const squeezePulse = clamp((t - (squeezeAt - 0.09)) / 0.16) * (1 - clamp((t - (squeezeAt + 0.07)) / 0.35) * 0.72);
-    const ratchet = purchases.reduce((sum, at) => sum + ease.outCubic(clamp((t - at) / 0.16)) * 26, 0);
-    const progress = 0.18 + 0.82 * clamp((t - loopAt + 0.12) / Math.max(0.15, squeezeAt - loopAt + 0.12));
-    const pts = Array.from({ length: 181 }, (_, i) => helixPoint(i / 180, turns, t, ratchet));
 
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.imageSmoothingEnabled = false;
-    drawEnv(ctx, { type: 'city', t, camera: { x: Math.sin(t * 0.42) * 28, y: Math.cos(t * 0.31) * 20, zoom: 1.04 + Math.sin(t * 0.28) * 0.015, yaw: Math.sin(t * 0.36) * 0.06, pitch: 0.04 }, theme: { ...theme, bg: '#121417' }, seed: seed + 19, width: W, height: H });
-    // The far half of the demand spiral slips behind a fully lit voxel tower.
-    drawHelix(ctx, pts, progress, false, 38, '#31373D'); drawHelix(ctx, pts, progress, false, 23, '#111417'); drawHelix(ctx, pts, progress, false, 12, RED);
-    const cameraX = Math.sin(t * 0.72) * 2.3, cameraY = 4.3 + Math.sin(t * 0.52) * 0.54;
-    const view = { x: 210, y: 18, w: 660, h: 1102, zoom: 120, fov: 43, position: [cameraX, cameraY, -14] as [number, number, number], target: [0, 4.5, 0] as [number, number, number], light: [-0.48, 0.78, -0.36] as [number, number, number], ambient: 0.48, rim: 0.42, cell: 5, outline: true, fog: { near: 14, far: 27 } };
-    render3d(ctx, theme, view, [
+    drawVenue(ctx, t, seed + 19);
+    ctx.save(); rig.apply(ctx, t);
+    const lastFrame = Math.max(rushAt + 0.05, dur - 1 / 30);
+    const rushProgress = clamp((t - rushAt) / Math.max(0.1, lastFrame - rushAt));
+    const pressAlpha = 1 - ease.outCubic(clamp((t - rushAt + 0.1) / 0.28));
+    const rushFade = ease.outCubic(rushProgress);
+    drawSpeedLines(ctx, t, { center: { x: 540, y: 636 }, count: 40, reach: 730, start: loopAt, duration: Math.max(0.35, squeezeAt - loopAt + 0.5), color: '#9DA5AA', seed: seed + 65, strength: 0.32, cell: 6 });
+    if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 650 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
+
+    // A tall voxel tower anchors the rising loop; the far rail passes behind it.
+    drawLoop(ctx, points, progress, false, 20, '#C92F2B');
+    render3d(ctx, theme, {
+      x: 198, y: 22, w: 684, h: 1078, zoom: 126,
+      position: [Math.sin(t * 0.54) * 1.9, 4.2 + Math.sin(t * 0.43) * 0.28, -14],
+      target: [0, 4.7, 0], fov: 43, light: [-0.48, 0.78, -0.36], ambient: 0.5, rim: 0.44, cell: 5, outline: true,
+      fog: { near: 14, far: 27 },
+    }, [
       { mesh: TOWER, materials: TOWER_MATERIALS, pos: [0, 0, 0], rot: [0, t * 0.018, 0] },
       { mesh: BLOCK, materials: BLOCK_MATERIALS, instances: BLOCKS },
     ]);
+    drawLoop(ctx, points, progress, true, 25, RED);
 
-    ctx.save(); rig.apply(ctx, t);
-    drawSpeedLines(ctx, t, { center: { x: 540, y: 650 }, count: 58, reach: 710, start: loopAt, duration: Math.max(0.22, squeezeAt - loopAt), color: '#999FA4', seed: seed + 65, strength: 0.34, cell: 6 });
-    // Buyback points pulse like physical ratchets; their click timing also raises the entire spiral.
-    purchases.forEach((at, i) => {
-      const p = clamp((t - at) / 0.22), point = pts[Math.floor((i + 1) * pts.length / (count + 1))]!;
-      const scale = 0.7 + ease.outBack(p) * 0.5;
-      drawKiosk(ctx, point.x + (point.z > 0 ? -50 : 48), point.y - 12, (point.z < 0 ? 1.04 : 0.78) * scale, t, p);
-      if (p > 0 && p < 1) { ctx.fillStyle = RED; ctx.fillRect(point.x - 14, point.y - 36, 28, 12); }
-      drawBurst(ctx, t, { x: point.x, y: point.y, seed: seed + 181 + i * 13, count: 9, kind: 'spark', start: at, life: 0.52, speed: 150, gravity: 120, drag: 0.52, floor: 1220, size: 1, color: '#D8DADD', cell: 4 });
-    });
-    drawHelix(ctx, pts, progress, true, 42, '#292F35'); drawHelix(ctx, pts, progress, true, 28, '#0D1012'); drawHelix(ctx, pts, progress, true, 15, RED);
-    // Identical shared concert tickets stream around both sides of the tower with close-to-lens parallax.
-    const queueCount = 13, queueOffset = (t * 0.27) % 1;
-    for (let i = 0; i < queueCount; i++) {
-      const u = (i / queueCount + queueOffset) % 1;
-      if (u > progress) continue;
-      const p = helixPoint(u, turns, t, ratchet), tangent = helixPoint(Math.min(1, u + 0.006), turns, t, ratchet);
-      const scale = p.z < 0 ? 1 : 0.56;
-      drawTicket2D(ctx, p.x, p.y, (p.z < 0 ? 72 : 42) * scale, { rot: Math.atan2(tangent.y - p.y, tangent.x - p.x) });
-    }
-
-    const press = drawPress(ctx, t, squeezeAt);
-    // Purchase tickets collapse into the paper shape while the press is at maximum travel.
-    const ticketReveal = ease.outBack(clamp((t - squeezeAt + 0.025) / 0.18));
-    if (ticketReveal > 0) {
-      ctx.save(); ctx.globalAlpha *= clamp(ticketReveal);
-      const ticketY = 642 + Math.round((1 - ticketReveal) * 54);
-      drawTicket2D(ctx, 540, ticketY, 850 + ticketReveal * 26, { rot: 0.012 * (1 - ticketReveal) });
-      pixelText(ctx, stamp, 389, ticketY - 30, 6, { color: '#111315', align: 'center', reveal: clamp((t - squeezeAt - 0.06) / 0.22), mode: 'type', seed: seed + 77 });
+    // Tickets are perforated links in a single moving chain, not decorative confetti.
+    const chainAlpha = 1 - clamp((t - squeezeAt + 0.025) / 0.2);
+    if (chainAlpha > 0) {
+      ctx.save(); ctx.globalAlpha *= chainAlpha;
+      const chainCount = 10, offset = (t * 0.22) % 1;
+      for (let i = 0; i < chainCount; i++) {
+        const u = (i / chainCount + offset) % 1;
+        if (u > progress) continue;
+        const p = points[Math.min(points.length - 1, Math.floor(u * (points.length - 1)))]!;
+        const next = points[Math.min(points.length - 1, Math.floor(Math.min(1, u + 0.006) * (points.length - 1)))]!;
+        const front = p.z < 0, size = front ? 74 : 48;
+        drawTicket2D(ctx, p.x, p.y, size, { rot: Math.atan2(next.y - p.y, next.x - p.x) * 0.24 + (front ? 0 : 0.1) });
+      }
       ctx.restore();
     }
-    // The red line rockets out through the top after the die releases.
-    const launchProgress = ease.outCubic(clamp((t - squeezeAt - 0.055) / 0.58));
-    drawLaunch(ctx, launch, launchProgress);
-    if (launchProgress > 0.18) drawSpeedLines(ctx, t, { center: { x: launch[0]!.x, y: launch[0]!.y }, count: 30, reach: 580, start: squeezeAt + 0.08, duration: 0.32, color: '#A6ADB2', seed: seed + 69, strength: 0.48, cell: 4 });
-    drawImpactStar(ctx, t, { x: 540, y: 647, size: 150, start: squeezeAt - 0.01, duration: 0.17, color: '#F3F1EC', seed: seed + 79, cell: 4 });
-    drawBurst(ctx, t, { x: 540, y: 644, seed: seed + 91, count: 62, kind: 'shard', start: squeezeAt, life: 1.55, speed: 470, spread: TAU, gravity: 270, drag: 0.3, floor: 1220, bounce: 0.18, spin: 8, size: 2, color: IVORY, cell: 4 });
-    drawShockwave(ctx, t, { x: 540, y: 644, start: squeezeAt, duration: 0.7, radius: 18, maxRadius: 520, width: 2, color: '#E1E3E5', seed: seed + 111, cell: 4 });
-    drawPressFront(ctx, press.topY, press.bottomY);
 
-    // Foreground ledge and Hedgy's landing: tumbling arrival, curled impact, uncurl, then point at the launch.
-    ctx.fillStyle = '#0C0F12'; ctx.fillRect(600, 1120, 480, 170);
-    ctx.fillStyle = '#C0C5C8'; ctx.fillRect(600, 1120, 480, 12);
-    ctx.fillStyle = '#343B41'; ctx.fillRect(620, 1142, 440, 12); ctx.fillRect(680, 1200, 14, 90); ctx.fillRect(984, 1200, 14, 90);
-    for (let bolt = 0; bolt < 7; bolt++) { ctx.fillStyle = '#E5E7E8'; ctx.fillRect(630 + bolt * 68, 1124, 10, 8); }
-    if (rider) {
-      const fallStart = squeezeAt - 0.36, landAt = squeezeAt + 0.02, elapsed = t - landAt;
-      const x = 846 + Math.sin(t * 2.4) * 8;
-      if (t < landAt) drawHedgy(ctx, { x, y: 1120, scale: 5.3, t: Math.max(0, t - fallStart), pose: 'fall', facing: 1, look: 'up', expression: 'shocked' });
-      else if (elapsed < 0.3) drawHedgy(ctx, { x, y: 1120, scale: 5.3, t: Math.max(0, 0.78 - elapsed * 2.6), pose: 'curl', facing: 1, look: 'up', expression: 'shocked' });
-      else {
-        drawHedgy(ctx, { x, y: 1120, scale: 5.3, t: elapsed - 0.3, pose: 'point', facing: 1, look: 'up', expression: 'determined' });
-        drawPointingFinger(ctx, x, 1120);
-      }
+    // The press enters with the set, its jaws slam shut at “squeeze,” then lift away from the ticket.
+    let pressTop = 220, pressBottom = 980;
+    if (pressAlpha > 0.01) {
+      ctx.save(); ctx.globalAlpha *= pressAlpha;
+      const press = drawPress(ctx, t, squeezeAt);
+      drawLoop(ctx, points, progress, true, 12, '#B92E2A');
+      ctx.restore();
+      pressTop = press.topY; pressBottom = press.bottomY;
     }
-    ctx.restore(); ctx.restore();
 
-    const impactFrame = Math.floor(t * 30) === Math.floor(squeezeAt * 30);
-    if (impactFrame) applyImpactFrame(ctx, { x: 0, y: 0, w: W, h: H, cell: 8, t, at: squeezeAt, fps: 30, seed: seed + 119, threshold: 130 });
-    const flash = Math.max(0, 1 - Math.abs(t - squeezeAt) / 0.05) * 0.42;
-    if (flash > 0.02) {
+    // Compress the chain into one stamped ticket, hold it in motion, then accelerate it into the lens.
+    const emerge = ease.outBack(clamp((t - squeezeAt + 0.02) / 0.25));
+    const ticketStartW = 270 + 360 * ease.outCubic(clamp((t - (squeezeAt + 0.12)) / Math.max(0.15, rushAt - squeezeAt - 0.12)));
+    const rushW = 630 + (1317 - 630) * rushProgress * rushProgress;
+    const ticketW = t < rushAt ? ticketStartW : rushW;
+    const ticketY = t >= lastFrame ? 881 : 658 + 223 * rushFade;
+    const ticketRot = t >= lastFrame ? -0.0373 : -0.11 + 0.0727 * rushFade + Math.sin(t * 8) * (1 - rushFade) * 0.018;
+
+    // Near ledge and Hedgy stay behind the lens ticket as it sweeps forward.
+    ctx.fillStyle = '#0B0E10'; ctx.fillRect(286, 1118, 514, 172);
+    ctx.fillStyle = '#D0D4D7'; ctx.fillRect(286, 1118, 514, 12);
+    ctx.fillStyle = '#353D43'; ctx.fillRect(306, 1142, 474, 12); ctx.fillRect(326, 1200, 14, 90); ctx.fillRect(746, 1200, 14, 90);
+    for (let bolt = 0; bolt < 8; bolt++) { ctx.fillStyle = '#E7E9EA'; ctx.fillRect(306 + bolt * 68, 1122, 10, 8); }
+    const fallStart = squeezeAt - 0.34, landAt = squeezeAt + 0.23, elapsed = t - landAt;
+    const hedgyX = 838 - 258 * ease.outCubic(clamp(t / 1.52));
+    if (t < fallStart) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t, pose: 'run', facing: -1, look: 'up', expression: 'determined' });
+    else if (t < landAt) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: Math.max(0, (t - fallStart) * 1.35), pose: 'fall', facing: -1, look: 'up', expression: 'shocked' });
+    else if (elapsed < 0.28) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: Math.max(0, 0.72 - elapsed * 2.4), pose: 'curl', facing: -1, look: 'up', expression: 'shocked' });
+    else drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: elapsed - 0.28, pose: 'point', facing: -1, look: 'up', expression: 'determined' });
+
+    drawStampedTicket(ctx, 540, ticketY, ticketW, ticketRot, stamp, emerge);
+    if (t > squeezeAt && t < rushAt + 0.12) drawPressFront(ctx, pressTop, pressBottom);
+
+    drawImpactStar(ctx, t, { x: 540, y: 646, size: 128, start: squeezeAt - 0.025, duration: 0.15, color: '#F2F3F4', seed: seed + 79, cell: 4 });
+    drawBurst(ctx, t, { x: 540, y: 648, seed: seed + 91, count: 38, kind: 'shard', start: squeezeAt, life: 1.22, speed: 410, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
+    drawShockwave(ctx, t, { x: 540, y: 648, start: squeezeAt, duration: 0.48, radius: 16, maxRadius: 500, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
+
+    ctx.restore(); ctx.restore();
+    // Quantize the post hit to an actual 30 fps frame so the impact treatment never misses the event.
+    applyImpactFrame(ctx, { x: 0, y: 0, w: W, h: H, cell: 8, t, at: impactAt, fps: 30, seed: seed + 119, threshold: 126 });
+    const flash = Math.max(0, 1 - Math.abs(t - impactAt) / 0.038) * 0.14;
+    if (flash > 0.01) {
       ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.fillStyle = '#FFFFFF'; ctx.globalAlpha = flash; ctx.fillRect(0, 0, W, H); ctx.restore();
     }
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const loopAt = eventAt(props, 'loop', dur * 0.34, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.76, dur);
-    const count = Math.floor(numParam(props, 'buybackCount', 5, 3, 7)), purchases = buyTimes(props, dur, loopAt, squeezeAt, count);
+    const loopAt = eventAt(props, 'loop', dur * 0.22, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.43, dur);
+    const rushAt = Math.min(dur - 0.18, Math.max(2.2, squeezeAt + 0.88));
     const cues: Cue[] = [
-      { t: 0, kind: 'whoosh', gain: 0.54, pan: -0.25 },
-      { t: loopAt, kind: 'build', len: Math.max(0.12, squeezeAt - loopAt), gain: 0.82, pan: 0 },
-      ...purchases.map((t, i) => ({ t, kind: 'servo' as const, pan: -0.58 + i * (1.16 / Math.max(1, count - 1)), gain: 0.46 + i * 0.08, step: i / Math.max(1, count - 1) })),
-      { t: Math.max(0, squeezeAt - 0.11), kind: 'bass', gain: 0.9 },
+      { t: 0, kind: 'whoosh', gain: 0.66, pan: -0.22 },
+      { t: loopAt, kind: 'build', len: Math.max(0.12, squeezeAt - loopAt), gain: 0.72, pan: 0 },
+      { t: Math.max(0, squeezeAt - 0.3), kind: 'bass', gain: 0.84, pan: 0 },
       { t: squeezeAt, kind: 'impact', gain: 1, pan: 0 },
-      { t: squeezeAt + 0.02, kind: 'paper', gain: 0.78, pan: 0.08 },
-      { t: squeezeAt + 0.12, kind: 'rise', len: Math.max(0.12, Math.min(0.5, dur - squeezeAt - 0.12)), gain: 0.75, pan: 0.1 },
-      { t: squeezeAt + 0.32, kind: 'land', gain: 0.58, pan: 0.58 },
+      { t: rushAt, kind: 'rise', len: Math.max(0.12, dur - rushAt), gain: 0.72, pan: 0.08 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t < dur);
   },
 };
-
-function drawPressFront(ctx: Frame['ctx'], topY: number, bottomY: number) {
-  // Thin front lips sit above the reveal so the oversized ticket reads as material captured by the press.
-  ctx.fillStyle = '#0C0F12'; ctx.fillRect(124, topY + 112, 832, 12);
-  ctx.fillStyle = '#7F878D'; ctx.fillRect(124, topY + 112, 832, 5);
-  ctx.fillStyle = '#171B1F'; ctx.fillRect(124, bottomY - 14, 832, 18);
-  ctx.fillStyle = '#A2A8AC'; ctx.fillRect(124, bottomY - 14, 832, 5);
-}

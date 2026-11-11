@@ -1,261 +1,324 @@
-import { clamp, ease, hash, type Cue, type Frame, type ShotProps } from '../core.ts';
+import { clamp, hash, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { drawBurst } from '../fx/particles.ts';
-import { box, instances, merge, place, project, render3d, type InstanceTransform, type Material, type Mesh, type Vec3, type View3D } from '../three.ts';
+import { pixelText } from '../prim.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
 import type { ShotDef } from './index.ts';
 
-const RED_DARK = '#421210';
-const RED_MID = '#A32B26';
-const RED_HOT = '#FF5148';
-const ARCH_MATERIALS: Material[] = [
-  { ramp: 'ink', tone: .76 }, { ramp: 'steel', tone: .86, spec: .18 },
-  { ramp: 'mono', tone: .71 }, { ramp: 'glass', tone: .94, emissive: .2 },
-  { ramp: 'bone', tone: .78 },
-];
-const numberParam = (value: unknown, fallback: number) => Number.isFinite(Number(value)) ? Number(value) : fallback;
-const eventAt = (props: ShotProps, kind: string, dur: number, fallback: number) => {
-  const found = props.events?.find(event => event.kind.toLowerCase() === kind.toLowerCase());
-  return clamp(found ? found.at : dur * fallback, 0, dur);
-};
-const snap = (n: number) => Math.round(n / 4) * 4;
+const CELL = 4;
+const RED_DARK = '#471715';
+const RED_MID = '#AA302A';
+const RED_HOT = '#F34A40';
+const snap = (n: number) => Math.round(n / CELL) * CELL;
+const clamp01 = (n: number) => clamp(n, 0, 1);
+const easeOut = (n: number) => 1 - (1 - clamp01(n)) ** 3;
 
-interface PathPoint { x: number; y: number; z: number }
+interface Point { x: number; y: number }
+interface KeyPoint { t: number; point: Point }
 
-function safePath(input: unknown): number[] {
-  const list = Array.isArray(input) ? input.slice(0, 32).map(value => Number(value)).filter(Number.isFinite) : [];
-  return list.length >= 2 ? list : [12, 15, 14, 19, 17, 24, 22, 30, 28, 38, 36, 48, 45, 60];
+function eventAt(props: ShotProps, kind: string, dur: number, fallback: number) {
+  const event = props.events?.find(item => item.kind.toLowerCase() === kind.toLowerCase());
+  return clamp(event && Number.isFinite(event.at) ? event.at : dur * fallback, 0, dur);
 }
 
-function makePath(values: number[], direction: 'up' | 'down'): PathPoint[] {
-  const lo = Math.min(...values), hi = Math.max(...values), span = hi - lo || 1;
-  return values.map((value, index) => {
-    const u = index / Math.max(1, values.length - 1), v = (value - lo) / span;
-    const rise = u * 13.4 + v * .85;
-    return {
-      x: -2.8 + Math.sin(u * Math.PI * 5) * 1.55 + (v - .5) * .48,
-      y: direction === 'up' ? .55 + rise : 14.35 - rise,
-      z: -2.35,
-    };
-  });
-}
-
-function pointAt(points: readonly PathPoint[], position: number): PathPoint {
-  const i = Math.min(points.length - 1, Math.floor(position)), j = Math.min(points.length - 1, i + 1), f = position - i;
-  return { x: points[i]!.x + (points[j]!.x - points[i]!.x) * f, y: points[i]!.y + (points[j]!.y - points[i]!.y) * f, z: points[i]!.z + (points[j]!.z - points[i]!.z) * f };
-}
-
-function buildArchMesh(): Mesh {
-  const pieces: Mesh[] = [];
-  const steps = 18, xs = Array.from({ length: steps + 1 }, (_, i) => -5 + i * 10 / steps);
-  const ys = xs.map(x => .16 + Math.abs(x) / 5 * .58);
-  for (let i = 0; i < steps; i++) {
-    const x0 = xs[i]!, x1 = xs[i + 1]!, y0 = ys[i]!, y1 = ys[i + 1]!, dx = x1 - x0, dy = y1 - y0;
-    pieces.push(place(box(Math.hypot(dx, dy), .13, .18, 1), { pos: [(x0 + x1) / 2, (y0 + y1) / 2, 0], rot: [0, 0, Math.atan2(dy, dx)] }));
-  }
-  return merge(...pieces);
-}
-
-function architecture(): Array<{ mesh: Mesh; pos?: Vec3; materials?: Material[]; instances?: readonly InstanceTransform[] }> {
-  const wall = box(12.2, 17.8, .28, 0);
-  const platform = box(10.8, .22, 2.3, 1);
-  const rail = box(10.4, .11, .16, 4);
-  const seat = box(.34, .34, .46, 2);
-  const windowFrame = merge(box(.86, .82, .16, 0), place(box(.58, .52, .08, 3), { pos: [0, .01, -.105] }), place(box(.78, .1, .07, 4), { pos: [0, .3, -.145] }));
-  const arch = buildArchMesh();
-  const floors: InstanceTransform[] = [], rails: InstanceTransform[] = [], seats: InstanceTransform[] = [], windows: InstanceTransform[] = [], arches: InstanceTransform[] = [];
-  const floorsCount = 8;
-  for (let level = 0; level < floorsCount; level++) {
-    const y = level * 1.82 + .15;
-    floors.push({ pos: [0, y, -.18] });
-    rails.push({ pos: [0, y + .18, -1.38] });
-    arches.push({ pos: [0, y, -1.18], rot: [0, level % 2 ? .035 : -.035, 0] });
-    for (let col = 0; col < 17; col++) {
-      const x = -4.6 + col * .575, aisle = col === 8 || col === 9;
-      if (!aisle) seats.push({ pos: [x, y + .43 + ((col % 3) ? 0 : .04), -.77 + (col % 2) * .08], rot: [0, col % 2 ? .018 : -.018, 0], scale: .86 + (col % 4) * .035 });
-    }
-    windows.push({ pos: [-3.9, y + .68, -1.52] }, { pos: [3.9, y + .68, -1.52] });
-  }
+function pathKeys(dur: number, jumpAt: number, lossesAt: number): KeyPoint[] {
+  const jumpDrift = Math.min(dur, jumpAt + Math.min(.18, Math.max(.08, (lossesAt - jumpAt) * .3)));
+  const lossDrift = Math.min(dur, lossesAt + Math.min(.18, Math.max(.08, (dur - lossesAt) * .22)));
   return [
-    { mesh: wall, pos: [0, 7.05, 1.45], materials: ARCH_MATERIALS },
-    { mesh: box(.34, 18, .3, 1), pos: [-5.45, 7, .14], materials: ARCH_MATERIALS },
-    { mesh: box(.34, 18, .3, 1), pos: [5.45, 7, .14], materials: ARCH_MATERIALS },
-    instances(platform, floors, { materials: ARCH_MATERIALS }),
-    instances(rail, rails, { materials: ARCH_MATERIALS }),
-    instances(seat, seats, { materials: ARCH_MATERIALS }),
-    instances(windowFrame, windows, { materials: ARCH_MATERIALS }),
-    instances(arch, arches, { materials: ARCH_MATERIALS }),
-    { mesh: box(.18, 14.5, .15, 1), pos: [-4.95, 6.8, -1.7], materials: ARCH_MATERIALS },
-    { mesh: box(.18, 14.5, .15, 1), pos: [4.95, 6.8, -1.7], materials: ARCH_MATERIALS },
+    { t: 0, point: { x: 1040, y: 1018 } },
+    { t: Math.max(.02, jumpAt - .08), point: { x: 954, y: 1004 } },
+    { t: jumpAt, point: { x: 846, y: 830 } },
+    { t: jumpDrift, point: { x: 812, y: 795 } },
+    { t: Math.max(jumpDrift + .01, lossesAt - .08), point: { x: 730, y: 780 } },
+    { t: lossesAt, point: { x: 668, y: 620 } },
+    { t: lossDrift, point: { x: 684, y: 592 } },
+    { t: dur, point: { x: 710, y: 630 } },
   ];
 }
 
-const VENUE = architecture();
-
-function drawCity(ctx: Frame['ctx'], time: number, rise: number, seed: number) {
-  ctx.fillStyle = '#090A0C'; ctx.fillRect(0, 0, 1080, 1290);
-  // A remote skyline sinks below the balcony rim as the camera climbs.
-  const base = 920 + rise * 430;
-  for (let layer = 0; layer < 3; layer++) {
-    const factor = [.22, .38, .58][layer]!, width = [92, 76, 58][layer]!;
-    let cursor = -80 + Math.sin(time * .34 + layer) * 20;
-    let n = 0;
-    while (cursor < 1160) {
-      const id = n + layer * 39, bw = width * (.46 + hash(id, seed + 2) * .48), bh = 160 + hash(id, seed + 5) * 320;
-      const x = Math.round((cursor - rise * 32 * factor) / 4) * 4, y = base - bh * factor;
-      ctx.fillStyle = layer === 0 ? '#191A1E' : layer === 1 ? '#202126' : '#2B2D32';
-      ctx.fillRect(x, snap(y), snap(bw), snap(bh));
-      ctx.fillStyle = layer === 2 ? '#5C6066' : '#3C3F44'; ctx.fillRect(x, snap(y), snap(bw), 6);
-      for (let row = 0; row < Math.floor(bh / 38); row++) for (let col = 0; col < Math.floor(bw / 20); col++) {
-        const key = id * 113 + row * 31 + col;
-        if (hash(key, seed + 11) > .69) { ctx.fillStyle = hash(key, Math.floor(time * 4) + seed) > .5 ? '#A6A9AE' : '#777B81'; ctx.fillRect(x + 10 + col * 20, snap(y + 16 + row * 36), 8, 10); }
-      }
-      cursor += bw + 22 + layer * 16; n++;
-    }
+function positionAt(keys: readonly KeyPoint[], time: number): Point {
+  if (time <= keys[0]!.t) return { ...keys[0]!.point };
+  for (let i = 1; i < keys.length; i++) {
+    const b = keys[i]!, a = keys[i - 1]!;
+    if (time > b.t) continue;
+    const p = easeOut((time - a.t) / Math.max(.001, b.t - a.t));
+    return { x: a.point.x + (b.point.x - a.point.x) * p, y: a.point.y + (b.point.y - a.point.y) * p };
   }
-  ctx.fillStyle = '#777B81'; ctx.fillRect(0, Math.min(1284, snap(base)), 1080, 6);
+  return { ...keys.at(-1)!.point };
 }
 
-function partialPath(values: readonly PathPoint[], progress: number): PathPoint[] {
-  const position = clamp(progress) * (values.length - 1), upto = Math.floor(position), current = pointAt(values, position);
-  const out = values.slice(0, upto + 1).map(point => ({ ...point }));
-  if (!out.length || Math.hypot(out.at(-1)!.x - current.x, out.at(-1)!.y - current.y) > .02) out.push(current);
-  return out;
+function pathToTime(keys: readonly KeyPoint[], time: number): Point[] {
+  const points = [keys[0]!.point];
+  for (let i = 1; i < keys.length; i++) {
+    const key = keys[i]!;
+    if (time >= key.t) points.push(key.point);
+    else break;
+  }
+  const head = positionAt(keys, time), last = points.at(-1)!;
+  if (Math.hypot(last.x - head.x, last.y - head.y) > 1) points.push(head);
+  return points;
 }
 
-function drawPixelSegment(ctx: Frame['ctx'], a: { x: number; y: number }, b: { x: number; y: number }, color: string, width: number, alpha = 1) {
-  let x = Math.round(a.x / 4), y = Math.round(a.y / 4), ex = Math.round(b.x / 4), ey = Math.round(b.y / 4);
-  const dx = Math.abs(ex - x), sx = x < ex ? 1 : -1, dy = -Math.abs(ey - y), sy = y < ey ? 1 : -1;
+function drawBalconyTier(ctx: Frame['ctx'], y: number, layer: number, index: number, seed: number, t: number) {
+  if (y < -210 || y > 1370) return;
+  const inset = layer === 0 ? 150 : layer === 1 ? 70 : 0;
+  const x = inset + Math.round(Math.sin(index * .8 + layer) * (layer === 0 ? 18 : 8));
+  const w = 1080 - inset * 2;
+  const face = layer === 0 ? '#24262B' : layer === 1 ? '#303238' : '#41444B';
+  const rail = layer === 0 ? '#5C6067' : layer === 1 ? '#777B82' : '#A1A5AB';
+  const height = layer === 0 ? 70 : layer === 1 ? 86 : 100;
+
+  ctx.fillStyle = '#111317';
+  ctx.fillRect(snap(x - 12), snap(y - 16), snap(w + 24), height + 36);
+  ctx.fillStyle = face;
+  ctx.fillRect(snap(x), snap(y), snap(w), height);
+  ctx.fillStyle = rail;
+  ctx.fillRect(snap(x), snap(y), snap(w), 7);
+  ctx.fillStyle = '#17191D';
+  ctx.fillRect(snap(x + 8), snap(y + 19), snap(w - 16), 15);
+  ctx.fillStyle = layer === 2 ? '#26292E' : '#1B1D22';
+  ctx.fillRect(snap(x + 8), snap(y + 39), snap(w - 16), height - 46);
+  ctx.fillStyle = layer === 0 ? '#363940' : '#4B4F56';
+  ctx.fillRect(snap(x), snap(y + height - 10), snap(w), 8);
+
+  const bays = layer === 0 ? 10 : layer === 1 ? 8 : 6;
+  for (let bay = 0; bay < bays; bay++) {
+    const bx = x + 28 + bay * (w - 56) / bays;
+    const bw = (w - 56) / bays - 12;
+    const lit = hash(index * 57 + bay, seed + layer * 31) > (layer === 0 ? .72 : .62);
+    ctx.fillStyle = '#0C0D10';
+    ctx.fillRect(snap(bx), snap(y + 45), snap(bw), height - 63);
+    ctx.fillStyle = lit ? '#B8BBC1' : layer === 0 ? '#454950' : '#6C7077';
+    ctx.fillRect(snap(bx + 8), snap(y + 52), snap(Math.max(8, bw - 16)), layer === 0 ? 21 : 30);
+    ctx.fillStyle = '#272A30';
+    ctx.fillRect(snap(bx + 5), snap(y + height - 20), snap(Math.max(8, bw - 10)), 5);
+  }
+
+  for (let post = 0; post <= bays; post++) {
+    const px = x + post * w / bays;
+    ctx.fillStyle = layer === 2 ? '#989CA3' : '#666A71';
+    ctx.fillRect(snap(px), snap(y + 7), layer === 2 ? 6 : 4, height - 10);
+  }
+  if (layer === 2) {
+    // The nearest balcony sweeps past the lens fastest.
+    ctx.fillStyle = '#B4B7BD';
+    ctx.fillRect(0, snap(y + height - 2), 1080, 7);
+    ctx.fillStyle = '#1A1C20';
+    for (let post = 0; post < 13; post++) ctx.fillRect(post * 92 + 18, snap(y + height + 5), 12, 54);
+  }
+
+  // A few shifting seat pixels create lateral parallax within each tier.
+  const drift = Math.round(Math.sin(t * (layer + 1) * .7 + index) * (layer + 1) * 3);
+  ctx.fillStyle = '#D0D2D7';
+  for (let i = 0; i < 11; i++) {
+    const px = x + 22 + i * (w - 44) / 11 + drift;
+    const py = y + height - 22 - (i % 3) * 5;
+    if (hash(index * 101 + i, seed + 97 + layer) > .35) ctx.fillRect(snap(px), snap(py), 8, 8);
+  }
+}
+
+function drawVenue(ctx: Frame['ctx'], time: number, scroll: number, seed: number) {
+  ctx.fillStyle = '#181A1F';
+  ctx.fillRect(0, 0, 1080, 1290);
+  ctx.fillStyle = '#25272D';
+  ctx.fillRect(0, 0, 1080, 230);
+  ctx.fillStyle = '#0E1013';
+  ctx.beginPath();
+  ctx.moveTo(0, 218); ctx.lineTo(176, 0); ctx.lineTo(904, 0); ctx.lineTo(1080, 218);
+  ctx.lineTo(1010, 254); ctx.lineTo(70, 254); ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#8A8E95';
+  ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.moveTo(0, 220); ctx.lineTo(177, 10); ctx.lineTo(903, 10); ctx.lineTo(1080, 220); ctx.stroke();
+  ctx.strokeStyle = '#4F535A';
+  ctx.lineWidth = 16;
+  for (let i = 0; i < 7; i++) {
+    const x = 110 + i * 145;
+    ctx.beginPath(); ctx.moveTo(snap(x), 10); ctx.lineTo(snap(540 + (x - 540) * .73), 240); ctx.stroke();
+  }
+
+  const farShift = scroll * .25;
+  const middleShift = scroll * .62;
+  const nearShift = scroll * 1.12;
+  for (let i = -2; i < 9; i++) {
+    drawBalconyTier(ctx, snap(i * 238 + farShift), 0, i, seed, time);
+    drawBalconyTier(ctx, snap(-105 + i * 270 + middleShift), 1, i, seed, time);
+    drawBalconyTier(ctx, snap(-265 + i * 355 + nearShift), 2, i, seed, time);
+  }
+
+  // Haze and suspended lamps make the upward camera travel legible between balcony passes.
+  for (let i = 0; i < 140; i++) {
+    const x = Math.floor(hash(i, seed + 141) * 1080 / CELL) * CELL;
+    const y = Math.floor(hash(i, seed + 155) * 1290 / CELL) * CELL;
+    ctx.fillStyle = hash(i, seed + Math.floor(time * 2) + 171) > .52 ? '#33363D' : '#292C32';
+    ctx.fillRect(x, y, i % 9 === 0 ? 8 : CELL, CELL);
+  }
+}
+
+function drawPixelLine(ctx: Frame['ctx'], a: Point, b: Point, color: string, width: number, alpha = 1) {
+  let x = Math.round(a.x / CELL), y = Math.round(a.y / CELL);
+  const ex = Math.round(b.x / CELL), ey = Math.round(b.y / CELL);
+  const dx = Math.abs(ex - x), sx = x < ex ? 1 : -1;
+  const dy = -Math.abs(ey - y), sy = y < ey ? 1 : -1;
   let err = dx + dy, guard = 0;
-  ctx.fillStyle = color; ctx.globalAlpha *= alpha;
-  while (guard++ < 4200) {
-    ctx.fillRect(x * 4 - Math.floor(width / 2), y * 4 - Math.floor(width / 2), width, width);
-    if (x === ex && y === ey) break;
-    const e2 = err * 2;
-    if (e2 >= dy) { err += dy; x += sx; }
-    if (e2 <= dx) { err += dx; y += sy; }
-  }
-  ctx.globalAlpha /= alpha || 1;
-}
-
-function drawTrack(ctx: Frame['ctx'], line: readonly { x: number; y: number }[]) {
-  if (!line.length) return;
   ctx.save();
-  if (line.length > 1) {
-    for (let i = 1; i < line.length; i++) drawPixelSegment(ctx, line[i - 1]!, line[i]!, RED_DARK, 36, .72);
-    for (let i = 1; i < line.length; i++) drawPixelSegment(ctx, line[i - 1]!, line[i]!, RED_MID, 20, .96);
-    for (let i = 1; i < line.length; i++) drawPixelSegment(ctx, line[i - 1]!, line[i]!, RED_HOT, 8, 1);
+  ctx.globalAlpha *= alpha;
+  ctx.fillStyle = color;
+  while (guard++ < 5000) {
+    ctx.fillRect(x * CELL - width / 2, y * CELL - width / 2, width, width);
+    if (x === ex && y === ey) break;
+    const twice = err * 2;
+    if (twice >= dy) { err += dy; x += sx; }
+    if (twice <= dx) { err += dx; y += sy; }
   }
-  const head = line.at(-1)!;
-  ctx.fillStyle = RED_DARK; ctx.fillRect(snap(head.x - 24), snap(head.y - 24), 48, 48);
-  ctx.fillStyle = RED_HOT; ctx.fillRect(snap(head.x - 16), snap(head.y - 16), 32, 32);
-  ctx.fillStyle = '#FFD1CB'; ctx.fillRect(snap(head.x - 4), snap(head.y - 4), 8, 8);
   ctx.restore();
 }
 
-function drawTether(ctx: Frame['ctx'], from: { x: number; y: number }, to: { x: number; y: number }, t: number, tight: boolean, seed: number) {
-  const mid = tight ? { x: (from.x + to.x) / 2, y: (from.y + to.y) / 2 + Math.sin(t * 29 + seed) * 4 } : { x: (from.x + to.x) / 2 + 26, y: Math.max(from.y, to.y) + 68 };
-  ctx.save(); ctx.strokeStyle = '#151619'; ctx.lineWidth = 10; ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(mid.x), snap(mid.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke();
-  ctx.strokeStyle = '#D0D2D6'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(mid.x), snap(mid.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke(); ctx.restore();
+function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number, amount: number, seed: number) {
+  if (points.length < 2 || amount <= .01) return;
+  const first = points[0]!, head = points.at(-1)!;
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(snap(first.x), snap(first.y));
+  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
+  ctx.lineTo(snap(head.x), snap(saleY));
+  ctx.lineTo(snap(first.x), snap(saleY));
+  ctx.closePath();
+  ctx.clip();
+  ctx.globalAlpha *= amount;
+  ctx.fillStyle = '#511B18';
+  ctx.fillRect(snap(head.x), snap(Math.min(...points.map(point => point.y))), snap(first.x - head.x), snap(saleY - Math.min(...points.map(point => point.y))));
+  for (let y = snap(Math.min(...points.map(point => point.y))); y < saleY; y += 8) {
+    for (let x = snap(head.x); x < first.x; x += 8) {
+      const value = hash((x / 8) * 4099 + y / 8, seed + 201);
+      if (value > .43) {
+        ctx.fillStyle = value > .86 ? '#D7473D' : value > .67 ? '#9E2B26' : '#68211D';
+        ctx.fillRect(x, y, 8, 8);
+      }
+    }
+  }
+  ctx.restore();
 }
 
-function drawCityDropMarker(ctx: Frame['ctx'], x: number, y: number, t: number, alpha: number) {
-  if (alpha <= .02) return;
-  ctx.save(); ctx.globalAlpha *= alpha; ctx.fillStyle = '#08090A';
-  ctx.beginPath(); ctx.moveTo(x - 66, y); ctx.lineTo(x + 54, y + 16); ctx.lineTo(x - 206, y + 440); ctx.lineTo(x - 304, y + 396); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#222429'; ctx.fillRect(snap(x - 65), snap(y - 12), 128, 16);
-  // The shadow's stepped tail lengthens as the venue falls away beneath him.
-  ctx.fillStyle = '#111215'; ctx.fillRect(snap(x - 304), snap(y + 388), 50, 8); ctx.globalAlpha /= alpha || 1; ctx.restore();
+function drawPriceTrack(ctx: Frame['ctx'], points: readonly Point[]) {
+  if (!points.length) return;
+  for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_DARK, 34, .9);
+  for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_MID, 20, 1);
+  for (let i = 1; i < points.length; i++) drawPixelLine(ctx, points[i - 1]!, points[i]!, RED_HOT, 8, 1);
+  const head = points.at(-1)!;
+  ctx.fillStyle = RED_DARK;
+  ctx.fillRect(snap(head.x - 27), snap(head.y - 27), 54, 54);
+  ctx.fillStyle = RED_HOT;
+  ctx.fillRect(snap(head.x - 19), snap(head.y - 19), 38, 38);
+  ctx.fillStyle = '#FFD8D4';
+  ctx.fillRect(snap(head.x - 5), snap(head.y - 5), 10, 10);
 }
 
-function drawWorldTicket(ctx: Frame['ctx'], point: { x: number; y: number }, t: number) {
-  drawTicket2D(ctx, snap(point.x), snap(point.y), 78, { rot: Math.sin(t * 2.2) * .08 });
+function drawSaleLevel(ctx: Frame['ctx'], saleY: number) {
+  ctx.fillStyle = '#C0C3C8';
+  for (let x = 480; x < 1072; x += 34) ctx.fillRect(x, saleY, 20, 5);
+  ctx.fillStyle = '#777B82';
+  ctx.fillRect(478, saleY + 7, 594, 4);
+  // A small marker is embedded in the foreground balcony beam.
+  ctx.fillStyle = '#25272D';
+  ctx.fillRect(780, saleY - 26, 112, 36);
+  ctx.fillStyle = '#C4C7CC';
+  ctx.fillRect(780, saleY - 26, 112, 5);
+  pixelText(ctx, 'SALE', 836, saleY - 21, 3, { color: '#E1E3E6', align: 'center' });
+  ctx.fillStyle = '#D0D3D8';
+  ctx.fillRect(816, saleY - 5, 28, 20);
+  ctx.fillStyle = '#3D4148';
+  ctx.fillRect(820, saleY - 1, 20, 10);
+}
+
+function drawTether(ctx: Frame['ctx'], from: Point, to: Point) {
+  ctx.save();
+  ctx.strokeStyle = '#101216';
+  ctx.lineWidth = 9;
+  ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke();
+  ctx.strokeStyle = '#D6D8DC';
+  ctx.lineWidth = 4;
+  ctx.beginPath(); ctx.moveTo(snap(from.x), snap(from.y)); ctx.lineTo(snap(to.x), snap(to.y)); ctx.stroke();
+  ctx.restore();
+}
+
+function drawOpeningTicket(ctx: Frame['ctx'], t: number) {
+  const alpha = 1 - easeOut(t / .2);
+  if (alpha <= .01) return;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  drawTicket2D(ctx, 1032 - t * 68, 970 - t * 74, 86, { rot: .13 - t * .38 });
+  ctx.restore();
 }
 
 export const priceRideShot: ShotDef = {
   name: 'priceride',
-  describe: 'A camera rides behind a self-drawing red price path through stacked venue balconies. Params: pathValues, colorDirection (red-up/red-down), riderActor, rideSpeed.',
+  describe: 'A camera rides the rising red price pixel past parallax balconies; a dithered loss band opens between Hedgy and his original sale level.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme } = frame, dur = Math.max(.1, frame.dur), t = clamp(frame.t, 0, dur), params = props.params ?? {};
-    const directionRaw = String(params.colorDirection ?? params.direction ?? 'red-up').toLowerCase();
-    const direction: 'up' | 'down' = directionRaw.includes('down') ? 'down' : 'up';
-    const values = safePath(params.pathValues ?? params.values);
-    const world = makePath(values, direction), startAt = eventAt(props, 'climbs', dur, .18), lossAt = eventAt(props, 'losses', dur, .57);
-    const requestedSpeed = clamp(numberParam(params.rideSpeed, 1), .65, 1.5);
-    const rideDuration = clamp((lossAt - startAt + dur * .24) / requestedSpeed, dur * .42, dur * .78);
-    const progress = ease.outCubic(clamp((t - startAt) / rideDuration));
-    const traveled = partialPath(world, progress), headWorld = traveled.at(-1) ?? world[0]!;
-    const sample = pointAt(world, Math.max(0, progress * (world.length - 1) - .85));
-    const camX = headWorld.x + Math.sin(t * 2.3) * .07;
-    const camY = headWorld.y;
-    const rig = createCameraRig({ width: 1080, height: 1290, seed: frame.seed + 809, handheld: 1.15, hits: [lossAt], punch: .014, shake: 5, keyframes: [
-      { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
-      { t: dur * .42, x: 12, y: -4, zoom: 1.015, rot: -.002, ease: 'inOut' },
-      { t: dur, x: -8, y: 5, zoom: 1.04, rot: .003, ease: 'out' },
-    ] });
-    const target: Vec3 = [camX, camY - .92, -.8];
-    const view: View3D = {
-      x: 0, y: 0, w: 1080, h: 1290, zoom: 290, cell: 4, fov: 42,
-      position: [camX - .36, camY - 1.8, -12.2], target, light: [-.5, .76, -.44], ambient: .43, rim: .5,
-      outline: true, fog: { near: 9, far: 24 },
-    };
-    const screenPath = traveled.map(point => project(view, [point.x, point.y, point.z]));
-    const head = screenPath.at(-1) ?? project(view, [headWorld.x, headWorld.y, headWorld.z]);
-    ctx.save(); ctx.beginPath(); ctx.rect(0, 0, 1080, 1290); ctx.clip(); ctx.imageSmoothingEnabled = false;
-    ctx.save(); rig.apply(ctx, t);
-    drawCity(ctx, t, progress, frame.seed);
-    // Small suspended lights and a dithered concrete haze keep the far chamber alive.
-    for (let i = 0; i < 72; i++) {
-      const x = Math.floor(hash(i, frame.seed + 42) * 1080 / 4) * 4;
-      const y = Math.floor(hash(i, frame.seed + 51) * 660 / 4) * 4;
-      ctx.fillStyle = hash(i, frame.seed + Math.floor(t * 2)) > .62 ? '#696D73' : '#35383D';
-      ctx.fillRect(x, y, i % 8 === 0 ? 8 : 4, 4);
-    }
-    const objects = VENUE.map(object => ({ ...object }));
-    render3d(ctx, theme, view, objects);
-    // Lens-close balcony bars create strong depth parallax as the camera passes each tier.
-    const passLevel = Math.floor(camY / 1.82), passY = passLevel * 1.82 + 1.1;
-    const nearRailA = project(view, [-6.2, passY - .34, -4.2]), nearRailB = project(view, [6.2, passY - .34, -4.2]);
-    const nearRailTopA = project(view, [-6.2, passY - .48, -4.2]), nearRailTopB = project(view, [6.2, passY - .48, -4.2]);
-    ctx.fillStyle = '#15171A'; ctx.beginPath(); ctx.moveTo(nearRailTopA.x, nearRailTopA.y); ctx.lineTo(nearRailTopB.x, nearRailTopB.y); ctx.lineTo(nearRailB.x, nearRailB.y); ctx.lineTo(nearRailA.x, nearRailA.y); ctx.closePath(); ctx.fill();
-    ctx.strokeStyle = '#B5B8BD'; ctx.lineWidth = 7; ctx.beginPath(); ctx.moveTo(snap(nearRailTopA.x), snap(nearRailTopA.y)); ctx.lineTo(snap(nearRailTopB.x), snap(nearRailTopB.y)); ctx.stroke();
-    drawTrack(ctx, screenPath);
-    // A crisp tail spark is tied to the first spoken climb beat.
-    drawBurst(ctx, t, { x: head.x, y: head.y, start: startAt, life: .42, count: 16, kind: 'spark', seed: frame.seed + 117, speed: 190, gravity: 28, drag: .8, size: 5, color: RED_HOT, cell: 4 });
-    const hxWorld: PathPoint = { x: headWorld.x + 2.65, y: headWorld.y - 6.1, z: -.9 };
-    const hedgyFeet = project(view, [hxWorld.x, hxWorld.y, hxWorld.z]);
-    const hedgyX = clamp(snap(hedgyFeet.x), 175, 910), hedgyY = clamp(snap(hedgyFeet.y), 820, 1160);
-    const shadowAlpha = clamp((t - lossAt + .12) / .34);
-    drawCityDropMarker(ctx, hedgyX + 8, hedgyY - 5, t, shadowAlpha * .58);
-    const tetherFrom = { x: hedgyX - 50, y: hedgyY - 176 };
-    const stub = project(view, [sample.x, sample.y, sample.z - .18]);
-    const tight = t >= lossAt;
-    drawTether(ctx, tetherFrom, { x: stub.x, y: stub.y }, t, tight, frame.seed);
-    drawWorldTicket(ctx, stub, t);
-    const riderOption = String(params.riderActor ?? params.rider ?? 'hedgy').toLowerCase();
-    if (riderOption !== 'none' && riderOption !== 'false') {
-      const shocked = t >= lossAt;
-      drawHedgy(ctx, {
-        x: hedgyX, y: hedgyY, scale: 3.5, t: Math.max(0, t - (shocked ? lossAt : 0)),
-        pose: shocked ? 'shock' : 'think', facing: -1, look: 'up', expression: shocked ? 'shocked' : 'neutral', prop: 'none',
+    const { ctx, seed } = frame;
+    const dur = Math.max(.1, frame.dur), t = clamp(frame.t, 0, dur);
+    const jumpAt = eventAt(props, 'jump', dur, .225);
+    const lossesAt = eventAt(props, 'losses', dur, .53);
+    const keys = pathKeys(dur, jumpAt, lossesAt);
+    const points = pathToTime(keys, t);
+    const head = points.at(-1)!;
+    const saleY = 1024;
+    const jumpTravel = easeOut((t - jumpAt) / .58);
+    const lossesTravel = easeOut((t - lossesAt) / .62);
+    const scroll = 42 + jumpTravel * 194 + lossesTravel * 206 + (t / dur) * 86;
+    const bandAmount = t < lossesAt ? 0 : .38 + .62 * easeOut((t - lossesAt) / .2);
+
+    const rig = createCameraRig({
+      width: 1080, height: 1290, seed: seed + 83, handheld: 1.5,
+      hits: [jumpAt, lossesAt], punch: .016, shake: 6,
+      keyframes: [
+        { t: 0, x: 4, y: 4, zoom: 1.01, rot: 0 },
+        { t: jumpAt, x: -4, y: -10, zoom: 1.025, rot: -.002, ease: 'inOut' },
+        { t: lossesAt, x: -18, y: -24, zoom: 1.045, rot: .002, ease: 'inOut' },
+        { t: dur, x: -32, y: -38, zoom: 1.07, rot: -.003, ease: 'out' },
+      ],
+    });
+    ctx.imageSmoothingEnabled = false;
+    ctx.save();
+    ctx.beginPath(); ctx.rect(0, 0, 1080, 1290); ctx.clip();
+    ctx.save();
+    rig.apply(ctx, t);
+    drawVenue(ctx, t, scroll, seed);
+    ctx.restore();
+
+    // The opening ticket is the final ticket leaving shot 7; its perforation becomes the line's lead.
+    drawLossBand(ctx, points, saleY, bandAmount, seed);
+    drawSaleLevel(ctx, saleY);
+
+    const shocked = t >= lossesAt;
+    const hedgyX = 842, hedgyY = 1194;
+    const tetherStart = { x: hedgyX - 49, y: hedgyY - 164 };
+    const saleMarker = { x: 840, y: saleY + 3 };
+    drawTether(ctx, tetherStart, saleMarker);
+
+    // The grey dashed trace stays attached to Hedgy while the camera chases the rising market.
+    drawHedgy(ctx, {
+      x: hedgyX, y: hedgyY, scale: 3.65,
+      t: Math.max(0, t - (shocked ? lossesAt : jumpAt)),
+      pose: shocked ? 'shock' : t >= jumpAt ? 'fall' : 'think',
+      facing: -1, look: 'up',
+      expression: shocked ? 'shocked' : 'worried',
+      squash: shocked ? .9 : 1,
+      prop: 'none',
+    });
+
+    drawPriceTrack(ctx, points);
+    drawOpeningTicket(ctx, t);
+    if (t >= jumpAt && t < jumpAt + .38) {
+      drawBurst(ctx, t, {
+        x: head.x, y: head.y, start: jumpAt, life: .38, count: 12, kind: 'spark',
+        seed: seed + 117, speed: 168, gravity: 22, drag: .9, size: 4, color: RED_HOT, cell: CELL,
       });
     }
-    // Glowing path head is drawn last so it stays sharp above the rib highlights.
-    drawTrack(ctx, [head]);
-    ctx.restore(); ctx.restore();
+    ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const d = Math.max(.1, dur), climb = eventAt(props, 'climbs', d, .18), loss = eventAt(props, 'losses', d, .57);
-    const cues: Cue[] = [
-      { t: climb, kind: 'servo', gain: .65, len: Math.min(.72, d * .38), pan: 0 },
-      { t: climb + .08, kind: 'rise', gain: .53, len: Math.min(.66, d * .34), pan: .08 },
-      { t: climb + .18, kind: 'sparkle', gain: .58, pan: 0 },
-      { t: loss, kind: 'heartbeat', gain: .8, pan: .28 },
-      { t: Math.min(d, loss + .17), kind: 'heartbeat', gain: 1, pan: .28 },
-      { t: loss, kind: 'impact', gain: .46, pan: .26 },
-      { t: loss + .04, kind: 'squeak', gain: .36, pan: .32 },
-    ];
-    return cues.filter(cue => cue.t >= 0 && cue.t <= d);
+    const d = Math.max(.1, dur), lossesAt = eventAt(props, 'losses', d, .53);
+    return [{ t: lossesAt, kind: 'heartbeat', pan: .16, gain: .84, len: .34 }];
   },
 };

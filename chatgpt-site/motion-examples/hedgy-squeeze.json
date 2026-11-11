@@ -10,15 +10,15 @@
    "type": "shot",
    "shot": "borrowedasset",
    "duration": 2.2,
-   "say": "Hedgy sells a concert ticket he borrowed.",
+   "say": "Hedgy sells a concert ticket that isn't his.",
    "sync": [
     {
      "word": "sells",
      "kind": "sells"
     },
     {
-     "word": "borrowed",
-     "kind": "borrowed"
+     "word": "his",
+     "kind": "his"
     }
    ],
    "transition": "cut",
@@ -28,54 +28,56 @@
    "type": "shot",
    "shot": "shortsalehandoff",
    "duration": 2.5,
-   "say": "That's short selling: he promises to return one,",
+   "say": "That's short selling: he borrows it, sells it, and owes the lender a ticket back.",
    "sync": [
     {
-     "word": "short",
-     "kind": "short"
+     "word": "borrows",
+     "kind": "borrows"
     },
     {
-     "word": "promises",
-     "kind": "promises"
+     "word": "sells",
+     "kind": "sells"
     },
     {
-     "word": "return",
-     "kind": "return"
+     "word": "owes",
+     "kind": "owes"
     }
    ],
-   "transition": "slice",
-   "transitionDir": "down"
+   "transition": "zoomthrough",
+   "transitionAt": [824, 820],
+   "transitionDir": "right"
   },
   {
    "type": "shot",
    "shot": "pricestair",
    "duration": 2.2,
-   "say": "betting he can buy it back cheaper.",
+   "say": "He bets prices will fall, so he can buy it back cheaper.",
    "sync": [
     {
-     "word": "betting",
-     "kind": "betting"
+     "word": "fall",
+     "kind": "fall"
     },
     {
      "word": "cheaper",
      "kind": "cheaper"
     }
    ],
-   "transition": "match"
+   "transition": "whip",
+   "transitionDir": "down"
   },
   {
    "type": "shot",
    "shot": "vaultlock",
    "duration": 2.5,
-   "say": "His sale money stays locked with the broker",
+   "say": "His broker holds the sale money as collateral",
    "sync": [
     {
      "word": "money",
      "kind": "money"
     },
     {
-     "word": "locked",
-     "kind": "locked"
+     "word": "collateral",
+     "kind": "collateral"
     }
    ],
    "transition": "zoomthrough"
@@ -84,12 +86,8 @@
    "type": "shot",
    "shot": "waitclock",
    "duration": 3.0,
-   "say": "as collateral while he waits for hype to fade.",
+   "say": "while he waits for the hype to fade.",
    "sync": [
-    {
-     "word": "collateral",
-     "kind": "collateral"
-    },
     {
      "word": "waits",
      "kind": "waits"
@@ -99,7 +97,8 @@
      "kind": "fade"
     }
    ],
-   "transition": "iris"
+   "transition": "iris",
+   "transitionAt": [640, 1000]
   },
   {
    "type": "shot",
@@ -124,15 +123,15 @@
    "type": "shot",
    "shot": "crowdrush",
    "duration": 2.2,
-   "say": "and fans chase the few tickets left.",
+   "say": "and fans rush for the last tickets.",
    "sync": [
     {
-     "word": "chase",
-     "kind": "chase"
+     "word": "rush",
+     "kind": "rush"
     },
     {
-     "word": "few",
-     "kind": "few"
+     "word": "last",
+     "kind": "last"
     }
    ],
    "transition": "whip",
@@ -142,11 +141,11 @@
    "type": "shot",
    "shot": "priceride",
    "duration": 2.3,
-   "say": "As the price climbs, Hedgy's losses grow;",
+   "say": "Prices jump. Hedgy's losses grow,",
    "sync": [
     {
-     "word": "climbs",
-     "kind": "climbs"
+     "word": "jump",
+     "kind": "jump"
     },
     {
      "word": "losses",
@@ -161,11 +160,11 @@
    "type": "shot",
    "shot": "collateralcall",
    "duration": 2.0,
-   "say": "his broker asks for more collateral.",
+   "say": "so the broker demands more collateral.",
    "sync": [
     {
-     "word": "asks",
-     "kind": "asks"
+     "word": "demands",
+     "kind": "demands"
     },
     {
      "word": "collateral",
@@ -179,11 +178,11 @@
    "type": "shot",
    "shot": "forcedbuyback",
    "duration": 2.6,
-   "say": "He can't cover it, so he must buy",
+   "say": "He can't pay, so he must buy",
    "sync": [
     {
-     "word": "cover",
-     "kind": "cover"
+     "word": "pay",
+     "kind": "pay"
     },
     {
      "word": "buy",
@@ -196,15 +195,15 @@
    "type": "shot",
    "shot": "buybackhandoff",
    "duration": 2.0,
-   "say": "a ticket back now. That rush",
+   "say": "a ticket back now.",
    "sync": [
     {
      "word": "back",
      "kind": "back"
     },
     {
-     "word": "rush",
-     "kind": "rush"
+     "word": "now",
+     "kind": "now"
     }
    ],
    "transition": "zoomthrough"
@@ -213,35 +212,36 @@
    "type": "shot",
    "shot": "minimarket",
    "duration": 1.5,
-   "say": "adds buyers, lifts prices",
+   "say": "Those forced buys add demand and push prices higher,",
    "sync": [
     {
-     "word": "buyers",
-     "kind": "buyers"
+     "word": "demand",
+     "kind": "demand"
     },
     {
-     "word": "lifts",
-     "kind": "lifts"
+     "word": "higher",
+     "kind": "higher"
     }
    ],
-   "transition": "flip"
+   "transition": "push",
+   "transitionDir": "up"
   },
   {
    "type": "shot",
    "shot": "demandfeedback",
    "duration": 2.3,
-   "say": "and can scare other short sellers into covering.",
+   "say": "scaring other short sellers into buying back too.",
    "sync": [
     {
-     "word": "scare",
-     "kind": "scare"
+     "word": "scaring",
+     "kind": "scaring"
     },
     {
-     "word": "covering",
-     "kind": "covering"
+     "word": "buying",
+     "kind": "buying"
     }
    ],
-   "transition": "push",
+   "transition": "whip",
    "transitionDir": "up"
   },
   {

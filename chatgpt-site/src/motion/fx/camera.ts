@@ -15,8 +15,11 @@ export function applyCamera(frame: Frame, hits: number[], clipBottom: number = S
   const centerX = x + width / 2;
   const centerY = fullBleed ? clipBottom / 2 : y + (Math.min(CONTENT_BOTTOM, clipBottom) - y) / 2;
   const path = cinematic ? [
+    // Pre-roll and tail keyframes keep both sides of a cut moving through the overlap.
+    { t: -0.42, x: -18, y: 7, zoom: 0.992, rot: -0.002 },
     { t: 0, x: -8, y: 4, zoom: 1, rot: 0 },
     { t: Math.max(0.01, dur), x: 8, y: -4, zoom: 1.018, rot: 0.002, ease: 'inOut' as const },
+    { t: Math.max(0.01, dur) + 0.42, x: 18, y: -7, zoom: 1.026, rot: 0.003 },
   ] : [];
   const rig = createCameraRig({
     width, height,

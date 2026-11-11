@@ -5,9 +5,9 @@ import type { Ctx } from '../core.ts';
 
 /** Material slots: 0 paper body, 1 printed band (ink), 2 stub, 3 perforation dots (dark), 4 star / mark (white, slight glow). */
 export const TICKET_MATERIALS: Material[] = [
-  { ramp: 'paper', tone: 0.95 },
+  { ramp: 'mono', tone: 0.97 },
   { ramp: 'ink', tone: 0.35 },
-  { ramp: 'paper', tone: 0.8 },
+  { ramp: 'mono', tone: 0.8 },
   { ramp: 'ink', tone: 0.1 },
   { ramp: 'mono', tone: 1, emissive: 0.35 },
 ];
@@ -38,7 +38,7 @@ export function drawTicket2D(ctx: Ctx, x: number, y: number, w: number, opts: { 
   const snap = (v: number) => Math.round(v / px) * px;
   ctx.save(); ctx.translate(snap(x), snap(y)); ctx.rotate(opts.rot ?? 0);
   const body = snap(w * 0.675), stubW = snap(w - body), left = snap(-w / 2), top = snap(-h / 2), tear = (opts.tear ?? 0) * w * 0.12;
-  const paper = opts.dark ? '#B9B4AA' : '#F0EBE2', shade = opts.dark ? '#8A857B' : '#CBC5B8', ink = '#121315', outline = '#060708';
+  const paper = opts.dark ? '#B4B4B4' : '#EDEDED', shade = opts.dark ? '#858585' : '#C4C4C4', ink = '#121315', outline = '#060708';
   const notch = (cx: number, cy: number) => { ctx.fillStyle = outline; ctx.fillRect(snap(cx - px * 3), snap(cy - px * 3), px * 6, px * 6); };
   ctx.fillStyle = outline; ctx.fillRect(left - px, top - px, body + px * 2, h + px * 2); ctx.fillRect(left + body + tear - px, top - px, stubW + px * 2, h + px * 2);
   ctx.fillStyle = paper; ctx.fillRect(left, top, body, h);

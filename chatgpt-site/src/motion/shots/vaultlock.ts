@@ -1,296 +1,311 @@
-import { clamp, lerp, type Cue, type Frame, type ShotProps } from '../core.ts';
+import { clamp, lerp, type Cue, type Ctx, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
-import { ASSETS, type AssetModel } from '../assets/index.ts';
-import { drawEnv } from '../env/index.ts';
-import { drawBurst } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { pixelText } from '../prim.ts';
-import { ticketMesh, TICKET_MATERIALS } from '../sets/ticket.ts';
-import { box, merge, place, project, render3d, type Material, type Mesh, type Object3D } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
 const W = 1080;
 const H = 1290;
-const ROOM_MATERIALS: Material[] = [
-  { ramp: 'steel', tone: 1.08, spec: 0.44, emissive: 0.035 },
-  { ramp: 'chrome', tone: 1.12, spec: 0.84, emissive: 0.075 },
-  { ramp: 'bone', tone: 1.04, spec: 0.32, emissive: 0.045 },
-  { ramp: 'glass', tone: 0.88, spec: 0.86, emissive: 0.16 },
-  { ramp: 'ink', tone: 0.82, emissive: 0.06 },
-  { ramp: 'paper', tone: 1.08, emissive: 0.09, spec: 0.25 },
-  { ramp: 'mono', tone: 1.08, emissive: 0.06, spec: 0.32 },
-];
-const DOOR_MATERIALS: Material[] = [
-  { ramp: 'steel', tone: 1.1, spec: 0.64, emissive: 0.06 },
-  { ramp: 'steel', tone: 0.94, spec: 0.72, emissive: 0.045 },
-  { ramp: 'chrome', tone: 1.08, spec: 0.92, emissive: 0.09 },
-  { ramp: 'glass', tone: 1.0, spec: 0.95, emissive: 0.13 },
-  { ramp: 'ink', tone: 0.94, emissive: 0.09 },
-  { ramp: 'paper', tone: 1.04, emissive: 0.055 },
-  { ramp: 'mono', tone: 1.08, spec: 0.55, emissive: 0.05 },
-];
-const CASH_MATERIALS: Material[] = [
-  { ramp: 'paper', tone: 1.14, spec: 0.32, emissive: 0.12 },
-  { ramp: 'steel', tone: 1.05, spec: 0.3, emissive: 0.035 },
-  { ramp: 'chrome', tone: 1.18, spec: 0.74, emissive: 0.08 },
-  { ramp: 'glass', tone: 0.86, spec: 0.72, emissive: 0.08 },
-  { ramp: 'ink', tone: 1.0, emissive: 0.08 },
-  { ramp: 'paper', tone: 1.18, spec: 0.28, emissive: 0.11 },
-  { ramp: 'brown', tone: 0.82, spec: 0.18, emissive: 0.02 },
-  { ramp: 'red', tone: 0.65, spec: 0.12 },
-  { ramp: 'green', tone: 0.65, spec: 0.12 },
-  { ramp: 'mono', tone: 1.08, spec: 0.36, emissive: 0.07 },
-  { ramp: 'paper', tone: 1.2, emissive: 0.16, unlit: true },
-];
-const ROOM_MESH: Mesh = merge(
-  place(box(3.82, 3.76, 0.3, 4), { pos: [0, 0.18, 1.82] }),
-  place(box(0.2, 3.95, 2.32, 1), { pos: [-1.9, 0.18, 0.65] }),
-  place(box(0.2, 3.95, 2.32, 1), { pos: [1.9, 0.18, 0.65] }),
-  place(box(3.98, 0.2, 2.32, 1), { pos: [0, 2.06, 0.65] }),
-  place(box(3.98, 0.2, 2.32, 1), { pos: [0, -1.7, 0.65] }),
-  place(box(3.42, 0.19, 1.6, 0), { pos: [0, -0.75, 0.68] }),
-  place(box(3.52, 0.065, 0.05, 2), { pos: [0, -0.635, -0.14] }),
-  place(box(3.42, 0.07, 0.05, 2), { pos: [0, 0.35, -0.12] }),
-  place(box(0.12, 1.03, 0.05, 2), { pos: [-1.66, -0.15, -0.1] }),
-  place(box(0.12, 1.03, 0.05, 2), { pos: [1.66, -0.15, -0.1] }),
-  place(box(3.05, 0.11, 1.2, 2), { pos: [0, 0.42, 0.72] }),
-  place(box(2.9, 0.12, 1.2, 2), { pos: [0, -0.15, 0.72] }),
-  place(box(2.62, 0.1, 1.2, 2), { pos: [0, -0.72, 0.72] }),
-  place(box(2.08, 0.065, 0.035, 1), { pos: [0, 0.505, 0.1] }),
-  place(box(1.94, 0.065, 0.035, 1), { pos: [0, -0.065, 0.1] }),
-);
-const CASH_MODEL = ASSETS['banknote-bundle']({ detail: 1, count: 9, seed: 47 });
-const TICKET = ticketMesh();
-const ASSET_FACTORIES = ASSETS as unknown as Record<string, (options?: { detail?: number; count?: number; seed?: number }) => AssetModel>;
-const MODEL_CACHE = new Map<string, AssetModel>();
-const DOOR_MODEL = ASSETS['vault-door']({ detail: 1.12, seed: 53 });
-const DOOR_BASE: Mesh = merge(...DOOR_MODEL.parts
-  .filter(part => !['wheel', 'wheel-hub', 'wheel-spokes'].includes(part.name))
-  .map(part => place(part.mesh, { pos: part.pos, rot: part.rot, ...(part.scale === undefined ? {} : { scale: part.scale }) })));
-const DOOR_WHEEL = DOOR_MODEL.parts.find(part => part.name === 'wheel')!;
-const DOOR_HUB = DOOR_MODEL.parts.find(part => part.name === 'wheel-hub')!;
-const DOOR_SPOKES = DOOR_MODEL.parts.find(part => part.name === 'wheel-spokes')!;
-const DOOR_POS: [number, number, number] = [2.05, 0.16, -2.72];
-const DOOR_SCALE = 2.12;
-
-function modelFor(name: string): AssetModel | undefined {
-  const factory = ASSET_FACTORIES[name];
-  if (!factory) return undefined;
-  let model = MODEL_CACHE.get(name);
-  if (!model) {
-    model = factory({ detail: 0.9, count: 8, seed: 47 });
-    MODEL_CACHE.set(name, model);
-  }
-  return model;
-}
+const CELL = 4;
+const snap = (n: number) => Math.round(n / CELL) * CELL;
+const VAULT_CENTER: readonly [number, number] = [540, 645];
 
 function eventTime(props: ShotProps, kind: string, dur: number, fallback: number): number {
   const at = props.events?.find(event => String(event.kind).toLowerCase() === kind)?.at;
   return clamp(Number.isFinite(at) ? at! : dur * fallback, 0, dur);
 }
 
-function pixelLine(ctx: Frame['ctx'], x0: number, y0: number, x1: number, y1: number, color: string, size = 6) {
-  let x = Math.round(x0 / 4), y = Math.round(y0 / 4);
-  const bx = Math.round(x1 / 4), by = Math.round(y1 / 4);
-  const dx = Math.abs(bx - x), sx = x < bx ? 1 : -1;
-  const dy = -Math.abs(by - y), sy = y < by ? 1 : -1;
-  let error = dx + dy;
-  ctx.fillStyle = color;
-  for (let guard = 0; guard < 2000; guard++) {
-    ctx.fillRect(x * 4 - size / 2, y * 4 - size / 2, size, size);
-    if (x === bx && y === by) break;
-    const twice = 2 * error;
-    if (twice >= dy) { error += dy; x += sx; }
-    if (twice <= dx) { error += dx; y += sy; }
-  }
-}
+type Point = readonly [number, number];
 
-function pixelDisc(ctx: Frame['ctx'], cx: number, cy: number, radius: number, color: string) {
-  ctx.fillStyle = color;
-  for (let y = -radius; y <= radius; y += 4) {
-    const half = Math.floor(Math.sqrt(Math.max(0, radius * radius - y * y)) / 4) * 4;
-    ctx.fillRect(Math.round((cx - half) / 4) * 4, Math.round((cy + y) / 4) * 4, half * 2, 4);
-  }
-}
-
-function drawWheel(ctx: Frame['ctx'], center: { x: number; y: number }, t: number, lockedAt: number, radius: number) {
-  const close = clamp((t - (lockedAt - 0.3)) / 0.3);
-  const angle = (1 - close) * (t * 2.8 + 1.9);
-  pixelDisc(ctx, center.x, center.y, radius + 12, '#141719');
-  ctx.strokeStyle = '#C9D0D4'; ctx.lineWidth = 8;
-  for (const r of [radius, radius - 17, Math.max(10, radius - 34)]) {
-    for (let i = 0; i < 56; i++) {
-      const a = i * Math.PI * 2 / 56;
-      ctx.fillStyle = i % 3 === 0 ? '#E0E5E8' : '#68727A';
-      ctx.fillRect(Math.round((center.x + Math.cos(a) * r) / 4) * 4, Math.round((center.y + Math.sin(a) * r) / 4) * 4, 8, 8);
-    }
-  }
-  for (let i = 0; i < 6; i++) {
-    const a = angle + i * Math.PI / 3;
-    pixelLine(ctx, center.x, center.y, center.x + Math.cos(a) * (radius - 22), center.y + Math.sin(a) * (radius - 22), '#B9C2C7', 12);
-    const hx = center.x + Math.cos(a) * (radius + 7), hy = center.y + Math.sin(a) * (radius + 7);
-    pixelDisc(ctx, hx, hy, 10, '#E2E6E8');
-  }
-  pixelDisc(ctx, center.x, center.y, 20, '#E0E5E8');
-  pixelDisc(ctx, center.x, center.y, 9, '#373E43');
-}
-
-function drawGlass(ctx: Frame['ctx'], view: Parameters<typeof project>[0], t: number, dur: number, actorZ: number, push: number) {
-  const z = actorZ - 0.48;
-  const left = project(view, [-3.22, -1.62, z]);
-  const right = project(view, [0.16, -1.62, z]);
-  const rightTop = project(view, [0.16, 2.04, z]);
-  const leftTop = project(view, [-3.22, 2.04, z]);
-  const points = [left, right, rightTop, leftTop].map(p => [Math.round(p.x / 4) * 4, Math.round(p.y / 4) * 4] as [number, number]);
-  ctx.save();
-  ctx.beginPath(); ctx.moveTo(points[0]![0], points[0]![1]);
-  for (let i = 1; i < points.length; i++) ctx.lineTo(points[i]![0], points[i]![1]);
+function polygon(ctx: Ctx, points: readonly Point[], fill: string, stroke?: string, width = 4) {
+  ctx.beginPath();
+  ctx.moveTo(snap(points[0]![0]), snap(points[0]![1]));
+  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]![0]), snap(points[i]![1]));
   ctx.closePath();
-  ctx.globalAlpha = 0.12;
-  ctx.fillStyle = '#BCC6CB'; ctx.fill();
-  ctx.globalAlpha = 0.82;
-  ctx.lineWidth = 12; ctx.strokeStyle = '#9DA8AE'; ctx.stroke();
-  ctx.globalAlpha = 0.7;
-  ctx.lineWidth = 4; ctx.strokeStyle = '#E2E7E9'; ctx.stroke();
+  ctx.fillStyle = fill;
+  ctx.fill();
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
+}
+
+function drawRoom(ctx: Ctx, t: number) {
+  ctx.fillStyle = '#111619'; ctx.fillRect(0, 0, W, H);
+  polygon(ctx, [[0, 0], [1080, 0], [1080, 774], [540, 605], [0, 774]], '#191F23');
+  polygon(ctx, [[0, 758], [540, 605], [1080, 758], [1080, 1290], [0, 1290]], '#22292D');
+  polygon(ctx, [[0, 895], [540, 670], [1080, 895], [1080, 1290], [0, 1290]], '#2A3135');
+
+  // Vault gallery ribs drift at separate rates to keep the room deep and active.
+  for (let i = 0; i < 9; i++) {
+    const x = i * 152 - 24 + snap((t * (13 + i * 1.8)) % 64);
+    const y = 94 + (i % 3) * 42;
+    ctx.fillStyle = i % 2 ? '#252D32' : '#30383D';
+    ctx.fillRect(x, y, 34, 650);
+    ctx.fillStyle = '#89949A'; ctx.fillRect(x + 30, y + 12, 8, 612);
+    ctx.fillStyle = '#465057'; ctx.fillRect(x - 24, y + 18, 92, 10);
+    ctx.fillRect(x - 10, y + 80, 64, 6);
+  }
+  for (let i = 0; i < 7; i++) {
+    line(ctx, [540, 645], [i * 190 - 120, 1290], i % 2 ? '#4B555B' : '#364046', 5, 0.7);
+  }
+  for (let i = 0; i < 5; i++) {
+    const y = 842 + i * 82 + snap((t * 24) % 40);
+    ctx.fillStyle = i % 2 ? '#30383D' : '#394248';
+    ctx.fillRect(0, y, W, 7);
+    ctx.fillStyle = '#737F86'; ctx.fillRect(0, y + 7, W, 3);
+  }
+  // Foreground gantry and side rails pass on their own parallax track.
+  const rail = snap((t * 44) % 96);
+  ctx.fillStyle = '#111416';
+  ctx.fillRect(-12 + rail, 260, 38, 1040);
+  ctx.fillRect(1030 - rail, 190, 48, 1090);
+  ctx.fillStyle = '#A9B2B7';
+  ctx.fillRect(22 + rail, 266, 8, 1012);
+  ctx.fillRect(1024 - rail, 194, 8, 1060);
+}
+
+function line(ctx: Ctx, a: Point, b: Point, color: string, width = 6, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.strokeStyle = color;
+  ctx.lineWidth = width;
+  ctx.lineCap = 'square';
+  ctx.beginPath(); ctx.moveTo(snap(a[0]), snap(a[1])); ctx.lineTo(snap(b[0]), snap(b[1])); ctx.stroke();
+  ctx.restore();
+}
+
+function drawChamber(ctx: Ctx) {
+  polygon(ctx, [[236, 346], [829, 312], [914, 912], [272, 960]], '#0B0E10', '#5E6970', 18);
+  polygon(ctx, [[276, 382], [798, 354], [860, 876], [310, 914]], '#171D21', '#343D42', 6);
+  for (let i = 0; i < 3; i++) {
+    const yy = 472 + i * 138;
+    polygon(ctx, [[315 + i * 12, yy], [838 - i * 15, yy - 22], [847 - i * 12, yy + 21], [320 + i * 12, yy + 48]], i % 2 ? '#313A40' : '#3C454B', '#8E999F', 5);
+    ctx.fillStyle = '#AAB4B9'; ctx.fillRect(364 + i * 10, yy + 5, 400 - i * 22, 5);
+  }
+  for (const [x, y] of [[286, 390], [800, 365], [320, 892], [846, 858]] as const) {
+    ctx.fillStyle = '#E1E5E7'; ctx.fillRect(x, y, 16, 16);
+    ctx.fillStyle = '#4B555B'; ctx.fillRect(x + 4, y + 4, 8, 8);
+  }
+}
+
+function drawCashBundle(ctx: Ctx, x: number, y: number, scale: number, angle: number, id: number) {
+  ctx.save();
+  ctx.translate(snap(x), snap(y)); ctx.rotate(angle); ctx.scale(scale, scale);
+  ctx.fillStyle = '#07090A'; ctx.fillRect(-68, -36, 140, 74);
+  for (let layer = 0; layer < 5; layer++) {
+    ctx.fillStyle = layer % 2 ? '#9DA8AE' : '#CAD1D5';
+    ctx.fillRect(-64, -36 + layer * 4, 128, 62);
+    ctx.fillStyle = '#6D787E'; ctx.fillRect(-60, 18 + layer * 4, 120, 4);
+  }
+  ctx.fillStyle = id % 2 ? '#C5CDD1' : '#E0E4E6'; ctx.fillRect(-62, -38, 124, 54);
+  ctx.strokeStyle = '#5E6970'; ctx.lineWidth = 4; ctx.strokeRect(-62, -38, 124, 54);
+  ctx.fillStyle = '#8E999F'; ctx.fillRect(-7, -36, 14, 50);
+  ctx.fillStyle = '#F0F2F3'; ctx.fillRect(-47, -27, 30, 30);
+  ctx.fillStyle = '#78838A'; ctx.fillRect(-41, -21, 18, 18);
+  ctx.fillStyle = '#5A646A'; ctx.fillRect(18, -24, 32, 5); ctx.fillRect(18, -12, 26, 5); ctx.fillRect(18, 0, 32, 5);
+  pixelText(ctx, '$100', 33, -20, 2, { color: '#F3F4F5', align: 'center' });
+  ctx.restore();
+}
+
+function drawGlass(ctx: Ctx, t: number, moneyAt: number) {
+  const pane: Point[] = [[262, 356], [836, 326], [892, 922], [286, 956]];
+  ctx.save();
+  ctx.beginPath(); ctx.moveTo(pane[0]![0], pane[0]![1]);
+  for (let i = 1; i < pane.length; i++) ctx.lineTo(pane[i]![0], pane[i]![1]);
+  ctx.closePath();
+  ctx.globalAlpha = 0.16; ctx.fillStyle = '#CFD8DC'; ctx.fill();
+  ctx.globalAlpha = 0.92; ctx.lineWidth = 28; ctx.strokeStyle = '#87939A'; ctx.stroke();
+  ctx.globalAlpha = 0.9; ctx.lineWidth = 8; ctx.strokeStyle = '#E2E7E9'; ctx.stroke();
   ctx.clip();
-  const bounds = points.reduce((r, point) => ({
-    minX: Math.min(r.minX, point[0]), maxX: Math.max(r.maxX, point[0]),
-    minY: Math.min(r.minY, point[1]), maxY: Math.max(r.maxY, point[1]),
-  }), { minX: Infinity, maxX: -Infinity, minY: Infinity, maxY: -Infinity });
-  const sweep = Math.round((t / Math.max(0.05, dur) * 96 + push * 360) / 4) * 4;
-  ctx.globalAlpha = 0.26 + push * 0.28;
-  for (let i = -3; i < 8; i++) {
-    const x = bounds.minX + i * 118 + sweep;
-    ctx.fillStyle = i % 2 === 0 ? '#E5EAEC' : '#727E85';
-    ctx.beginPath();
-    ctx.moveTo(x, bounds.maxY); ctx.lineTo(x + 30 + push * 112, bounds.maxY);
-    ctx.lineTo(x + 292 + push * 220, bounds.minY); ctx.lineTo(x + 268, bounds.minY);
-    ctx.closePath(); ctx.fill();
+  const sweep = snap((Math.max(0, t - moneyAt) * 280) % 760) - 360;
+  ctx.globalAlpha = 0.25;
+  for (let i = -1; i < 4; i++) {
+    const x = 210 + i * 190 + sweep;
+    polygon(ctx, [[x, 980], [x + 22, 980], [x + 290, 300], [x + 254, 300]], '#F2F4F5');
+  }
+  ctx.globalAlpha = 0.44;
+  ctx.fillStyle = '#EDF0F1';
+  ctx.fillRect(438 + sweep * 0.36, 350, 16, 585);
+  ctx.restore();
+  for (const [x, y] of [[278, 370], [826, 342], [304, 936], [876, 901]] as const) {
+    ctx.fillStyle = '#ECF0F2'; ctx.fillRect(x, y, 20, 20);
+    ctx.fillStyle = '#525D63'; ctx.fillRect(x + 5, y + 5, 10, 10);
+  }
+}
+
+function octagonPoints(cx: number, cy: number, radius: number, angle = -Math.PI / 8): Point[] {
+  return Array.from({ length: 8 }, (_, i) => [
+    snap(cx + Math.cos(angle + i * Math.PI / 4) * radius),
+    snap(cy + Math.sin(angle + i * Math.PI / 4) * radius),
+  ] as const);
+}
+
+function drawPreDoor(ctx: Ctx, cx: number, cy: number, t: number) {
+  ctx.save(); ctx.globalAlpha = 0.46;
+  ctx.strokeStyle = '#C1C9CD'; ctx.lineWidth = 12;
+  for (const radius of [42, 30]) {
+    ctx.beginPath(); ctx.arc(cx, cy, radius, 0, Math.PI * 2); ctx.stroke();
+  }
+  ctx.fillStyle = '#E3E7E9';
+  ctx.fillRect(snap(cx + Math.cos(t * 1.8) * 42), snap(cy + Math.sin(t * 1.8) * 42), 8, 8);
+  ctx.restore();
+}
+
+function drawDoor(ctx: Ctx, cx: number, cy: number, t: number, eventAt: number, progress: number, scale: number, spin: number, label: string) {
+  if (progress <= 0) { drawPreDoor(ctx, cx, cy, t); return; }
+  ctx.save();
+  ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy);
+  const outer = octagonPoints(cx, cy, 412, -Math.PI / 8 + 0.035);
+  const inner = octagonPoints(cx, cy, 282, -Math.PI / 8 + 0.035);
+  ctx.beginPath();
+  ctx.moveTo(outer[0]![0], outer[0]![1]);
+  for (let i = 1; i < outer.length; i++) ctx.lineTo(outer[i]![0], outer[i]![1]);
+  ctx.closePath();
+  ctx.moveTo(inner[0]![0], inner[0]![1]);
+  for (let i = inner.length - 1; i >= 0; i--) ctx.lineTo(inner[i]![0], inner[i]![1]);
+  ctx.closePath();
+  ctx.fillStyle = '#59636A'; ctx.globalAlpha = 0.96; ctx.fill('evenodd');
+  ctx.strokeStyle = '#E0E5E7'; ctx.lineWidth = 16; ctx.stroke();
+  ctx.strokeStyle = '#20272B'; ctx.lineWidth = 8;
+  for (let i = 0; i < outer.length; i++) line(ctx, outer[i]!, outer[(i + 1) % outer.length]!, '#20272B', 8, 0.92);
+
+  // Segmented armor plates and perimeter teeth make the door read at Reel scale.
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4 + Math.PI / 8;
+    ctx.save(); ctx.translate(cx, cy); ctx.rotate(angle);
+    ctx.fillStyle = i % 2 ? '#8D989E' : '#B6BEC2';
+    ctx.fillRect(312, -18, 72, 36);
+    ctx.fillStyle = '#252C30'; ctx.fillRect(326, -7, 45, 14);
+    ctx.fillStyle = '#E7EBED'; ctx.fillRect(382, -6, 28, 12);
+    ctx.restore();
+  }
+  ctx.save(); ctx.translate(cx, cy); ctx.rotate(spin);
+  for (let i = 0; i < 6; i++) {
+    ctx.save(); ctx.rotate(i * Math.PI / 3);
+    ctx.fillStyle = '#AEB8BD'; ctx.fillRect(58, -15, 213, 30);
+    ctx.fillStyle = '#434C52'; ctx.fillRect(82, -5, 165, 10);
+    ctx.fillStyle = '#E4E8EA'; ctx.fillRect(240, -22, 28, 44);
+    ctx.restore();
+  }
+  ctx.fillStyle = '#D8DEE1'; ctx.beginPath(); ctx.arc(0, 0, 70, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#59636A'; ctx.beginPath(); ctx.arc(0, 0, 42, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = '#1A2024'; ctx.fillRect(-10, -34, 20, 68);
+  ctx.fillRect(-34, -10, 68, 20);
+  ctx.restore();
+
+  const lockAmount = clamp((t - eventAt + 0.04) / 0.18);
+  for (let i = 0; i < 8; i++) {
+    const angle = i * Math.PI / 4 + Math.PI / 8;
+    ctx.save(); ctx.translate(cx + Math.cos(angle) * 252, cy + Math.sin(angle) * 252); ctx.rotate(angle);
+    ctx.fillStyle = '#E4E8EA';
+    ctx.fillRect(lerp(-12, 20, lockAmount), -12, lerp(28, 78, lockAmount), 24);
+    ctx.fillStyle = '#495258'; ctx.fillRect(lerp(-8, 26, lockAmount), -4, lerp(20, 60, lockAmount), 8);
+    ctx.restore();
+  }
+  if (lockAmount > 0.92) {
+    ctx.fillStyle = '#20272B'; ctx.fillRect(722, 221, 284, 58);
+    ctx.fillStyle = '#D8DEE1'; ctx.fillRect(730, 229, 268, 6);
+    pixelText(ctx, label.toUpperCase().slice(0, 13), 864, 242, 4, { color: '#F1F3F4', align: 'center', reveal: clamp((lockAmount - 0.92) / 0.08), mode: 'type' });
+  }
+  // Tight impact rays dissipate quickly while the room's moving camera continues the shot.
+  const hit = clamp(1 - (t - eventAt) / 0.16);
+  if (t >= eventAt && hit > 0) {
+    ctx.globalAlpha = hit * 0.72; ctx.strokeStyle = '#F0F2F3'; ctx.lineWidth = 8;
+    for (let i = 0; i < 12; i++) {
+      const a = i * Math.PI / 6;
+      ctx.beginPath();
+      ctx.moveTo(snap(cx + Math.cos(a) * 426), snap(cy + Math.sin(a) * 426));
+      ctx.lineTo(snap(cx + Math.cos(a) * (464 + hit * 34)), snap(cy + Math.sin(a) * (464 + hit * 34)));
+      ctx.stroke();
+    }
   }
   ctx.restore();
 }
 
-function stencilLabel(ctx: Frame['ctx'], label: string, anchor: { x: number; y: number }) {
-  const text = String(label || 'COLLATERAL').trim().replace(/[^a-z0-9 -]/gi, '').slice(0, 13).toUpperCase() || 'COLLATERAL';
-  const width = Math.min(330, Math.max(180, text.length * 24 + 52));
-  const x = clamp(anchor.x - 150, width / 2 + 54, W - width / 2 - 148);
-  const y = clamp(anchor.y, 250, 1120);
-  ctx.fillStyle = '#20262A'; ctx.fillRect(x - width / 2, y - 25, width, 50);
-  ctx.fillStyle = '#D5DADD'; ctx.fillRect(x - width / 2 + 8, y - 20, width - 16, 4);
-  ctx.fillStyle = '#080A0B'; ctx.fillRect(x - width / 2 + 8, y + 16, width - 16, 4);
-  for (const dx of [-width / 2 + 14, width / 2 - 14]) {
-    ctx.fillStyle = '#E0E4E6'; ctx.fillRect(x + dx - 3, y - 3, 6, 6);
-  }
-  pixelText(ctx, text, x, y - 14, 4, { color: '#F0F2F3', align: 'center' });
-}
-
 export const vaultLockShot: ShotDef = {
   name: 'vaultlock',
-  describe: 'A monumental vault door seals sale proceeds as Hedgy reaches through a thick glass collateral chamber; params.what/locked selects the collateral asset, label sets the face stencil (default COLLATERAL).',
+  describe: 'Sale cash sweeps into a thick glass broker vault; the inset becomes a monumental steel door and wheel that slams shut and locks on collateral, with Hedgy reaching from the foreground.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme, seed } = frame;
+    const { ctx, seed } = frame;
     const dur = Math.max(0.05, frame.dur);
     const t = clamp(frame.t, 0, dur);
     const p = props.params ?? {};
-    const lockedName = typeof p.locked === 'string' ? p.locked : typeof p.what === 'string' ? p.what : 'banknote-bundle';
-    const lockedModel = modelFor(lockedName) ?? (lockedName === 'ticket' ? undefined : CASH_MODEL);
     const label = typeof p.label === 'string' ? p.label : 'COLLATERAL';
-    const moneyAt = eventTime(props, 'money', dur, 0.28);
-    const lockedAt = eventTime(props, 'locked', dur, 0.67);
-    const pushAt = Math.min(dur, lockedAt + dur * 0.075);
-    const push = clamp((t - pushAt) / Math.max(0.22, dur * 0.22));
+    const moneyAt = eventTime(props, 'money', dur, 0.46);
+    const collateralAt = eventTime(props, 'collateral', dur, 0.64);
+    const span = Math.max(0.24, collateralAt - moneyAt - 0.06);
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 47, handheld: 2.8,
+      width: W, height: H, seed: seed + 47, handheld: 1.4,
       keyframes: [
-        { t: 0, x: -6, y: 8, zoom: 0.97, rot: -0.006 },
-        { t: dur * 0.38, x: -20, y: 16, zoom: 1.015, rot: 0.012 },
-        { t: dur * 0.68, x: 20, y: -10, zoom: 1.07, rot: 0.028 },
-        { t: dur, x: -4, y: -36, zoom: 1.16, rot: 0.002 },
+        { t: 0, x: -22, y: 12, zoom: 0.985, rot: -0.008 },
+        { t: Math.max(0.08, moneyAt), x: -4, y: -3, zoom: 1.005, rot: 0.002 },
+        { t: collateralAt, x: 28, y: -32, zoom: 1.052, rot: 0.008 },
+        { t: dur, x: -18, y: -66, zoom: 1.092, rot: -0.003 },
       ],
-      hits: [lockedAt], punch: 0.038, shake: 6.5,
+      hits: [collateralAt], punch: 0.034, shake: 5.2,
     });
-    const camera = rig.view3D(t);
-    const view = {
-      x: 0, y: 0, w: W, h: H, zoom: 360,
-      yaw: camera.yaw + lerp(-0.08, 0.12, clamp(t / dur)),
-      pitch: camera.pitch + 0.055, distance: camera.distance + 2.35,
-      cell: 4, outline: true, light: [-0.56, 0.82, -0.68] as [number, number, number],
-      ambient: 0.5, rim: 0.55, ground: { y: -2.1, shadow: 0.58, grid: false }, fog: { near: 8, far: 20 },
-    };
-    const close = clamp((t - (lockedAt - 0.25)) / 0.25);
-    const closeEase = 1 - (1 - close) ** 4;
-    const doorYaw = lerp(-0.24, 0.012, closeEase);
-    const travelLength = Math.max(0.22, Math.min(0.78, lockedAt - moneyAt + 0.18));
-    const cashMove = clamp((t - (moneyAt - 0.12)) / travelLength);
-    const cashModel = lockedModel;
-    const movingCash = Array.from({ length: 3 }, (_, i) => {
-      const delay = i * 0.095;
-      const q = clamp((t - (moneyAt - 0.16 + delay)) / travelLength);
-      const eased = 1 - (1 - q) ** 3;
-      return {
-        mesh: cashModel?.mesh ?? TICKET,
-        materials: cashModel ? CASH_MATERIALS : TICKET_MATERIALS,
-        pos: [lerp(0.34 - i * 0.28, -1.35 + i * 0.36, eased), lerp(0.93 - i * 0.14, 0.68 + (i % 2) * 0.04, eased), lerp(-1.0, 0.08 + i * 0.1, eased)] as [number, number, number],
-        rot: [0.03 + Math.sin(t * 3 + i) * 0.06, t * (0.46 + i * 0.06), Math.sin(t * 2.4 + i * 0.8) * 0.12] as [number, number, number],
-        scale: lockedName === 'ticket' ? 0.76 : 0.72,
-      };
-    });
+    const growth = clamp((t - (collateralAt - 0.16)) / 0.16);
+    const settle = Math.exp(-Math.max(0, t - collateralAt) / 0.15);
+    const doorScale = growth < 1 ? 0.24 + 0.86 * (1 - (1 - growth) ** 3) : 1.1 - 0.1 * (1 - settle);
+    const spinStart = (t - moneyAt) * 5.4 + 0.12;
+    const spinTarget = Math.round(spinStart / (Math.PI / 3)) * (Math.PI / 3);
+    const spinLock = clamp((t - (collateralAt - 0.08)) / 0.16);
+    const spin = lerp(spinStart, spinTarget, spinLock);
 
     ctx.save();
     ctx.imageSmoothingEnabled = false;
     rig.apply(ctx, t);
-    drawEnv(ctx, { type: 'vault', t, theme, seed: seed + 4, width: W, height: H, camera: { x: t * 12, y: t * -8, zoom: 1.02 + push * 0.1, yaw: camera.yaw, pitch: camera.pitch } });
+    drawRoom(ctx, t);
+    drawChamber(ctx);
 
-    const objects: Object3D[] = [
-      { mesh: ROOM_MESH, pos: [-1.3, 0.05, 0.42] as [number, number, number], materials: ROOM_MATERIALS },
-      ...movingCash,
-      { mesh: DOOR_BASE, pos: DOOR_POS, rot: [0, doorYaw, 0] as [number, number, number], scale: DOOR_SCALE, materials: DOOR_MATERIALS },
-      { mesh: DOOR_WHEEL.mesh, pos: [DOOR_POS[0], DOOR_POS[1], DOOR_POS[2] - 0.42 * DOOR_SCALE] as [number, number, number], rot: [Math.PI / 2, 0, (1 - closeEase) * (t * 2.8 + 1.9)] as [number, number, number], scale: DOOR_SCALE, materials: DOOR_MATERIALS },
-      { mesh: DOOR_SPOKES.mesh, pos: [DOOR_POS[0], DOOR_POS[1], DOOR_POS[2] - 0.38 * DOOR_SCALE] as [number, number, number], rot: [0, 0, (1 - closeEase) * (t * 2.8 + 1.9)] as [number, number, number], scale: DOOR_SCALE, materials: DOOR_MATERIALS },
-      { mesh: DOOR_HUB.mesh, pos: [DOOR_POS[0], DOOR_POS[1], DOOR_POS[2] - 0.44 * DOOR_SCALE] as [number, number, number], rot: [Math.PI / 2, 0, 0], scale: DOOR_SCALE, materials: DOOR_MATERIALS },
+    // Three readable paper bundles travel from the sale receipt into the chamber.
+    const cash = [
+      { start: [948, 435] as Point, end: [644, 480] as Point, delay: 0, angle: -0.14, size: 0.82 },
+      { start: [1002, 527] as Point, end: [568, 622] as Point, delay: 0.075, angle: 0.08, size: 0.96 },
+      { start: [936, 630] as Point, end: [432, 774] as Point, delay: 0.15, angle: -0.1, size: 0.9 },
     ];
-    render3d(ctx, theme, view, objects);
-
-    // Hedgy is composited at the glass depth, so the reflection can pass over his reaching paw.
-    const hedgyFoot = project(view, [-2.12, -1.42, 0.14]);
-    const hedgyX = clamp(hedgyFoot.x, 200, 485);
-    const hedgyY = clamp(hedgyFoot.y + 40, 930, 1195);
-    ctx.fillStyle = '#121315'; ctx.fillRect(hedgyX - 126, hedgyY + 6, 252, 10);
-    ctx.fillStyle = '#474A4D'; ctx.fillRect(hedgyX - 80, hedgyY + 6, 160, 5);
-    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 7.2, t: Math.max(0, t - moneyAt + 0.1), pose: 'push', facing: 1, look: 'forward', expression: 'worried' });
-
-    drawGlass(ctx, view, t, dur, 0.14, push);
-    const wheelWorld = project(view, [DOOR_POS[0], DOOR_POS[1], DOOR_POS[2] - 0.54 * DOOR_SCALE]);
-    const wheelRadius = Math.round(clamp(wheelWorld.y > 800 ? 108 : 95, 86, 118) / 4) * 4;
-    drawWheel(ctx, wheelWorld, t, lockedAt, wheelRadius);
-    const labelWorld = project(view, [DOOR_POS[0] - 0.1, DOOR_POS[1] + 1.58, DOOR_POS[2] - 0.16]);
-    stencilLabel(ctx, label, { x: labelWorld.x - 32, y: labelWorld.y });
-
-    if (cashMove > 0.78) {
-      const chamberCenter = project(view, [-1.3, 0.72, 0.05]);
-      drawBurst(ctx, t, { center: { x: chamberCenter.x, y: chamberCenter.y + 28 }, seed: seed + 81, count: 12, kind: 'dust', start: lockedAt - 0.02, life: 0.72, speed: 67, gravity: 126, drag: 0.4, size: 2, color: '#B8C0C4' });
-    }
-
-    // The sealed glass stays legible while its reflected bands surge toward lens on the exit push.
-    const foregroundDrift = Math.round((t * 24 + push * 124) / 4) * 4;
-    ctx.fillStyle = '#171B1E'; ctx.fillRect(-8, 1196 + foregroundDrift, 1096, 14);
-    ctx.fillStyle = '#879198'; ctx.fillRect(-8, 1196 + foregroundDrift, 1096, 5);
+    cash.forEach((bundle, index) => {
+      // Begin the paper sweep during “sale” so the cash is visibly crossing the glass on “money”.
+      const q = clamp((t - moneyAt + 0.18 - bundle.delay) / Math.max(0.12, span - bundle.delay));
+      const eased = 1 - (1 - q) ** 3;
+      const x = lerp(bundle.start[0], bundle.end[0], eased);
+      const y = lerp(bundle.start[1], bundle.end[1], eased) - Math.sin(Math.PI * q) * 48;
+      drawCashBundle(ctx, x, y, bundle.size, bundle.angle + Math.sin(t * 3 + index) * 0.025, index);
+      if (q > 0 && q < 1) {
+        line(ctx, bundle.start, [x, y], '#D3DADF', 7, 0.26 + q * 0.24);
+      }
+    });
+    drawGlass(ctx, t, moneyAt);
+    drawDoor(ctx, VAULT_CENTER[0], VAULT_CENTER[1], t, collateralAt, growth, doorScale, spin, label);
     ctx.restore();
+
+    // Fixed foreground composition keeps the whole actor between x=120 and x=450 as the camera arcs.
+    ctx.fillStyle = '#111416'; ctx.fillRect(142, 1160, 302, 18);
+    ctx.fillStyle = '#606A70'; ctx.fillRect(170, 1160, 240, 6);
+    drawHedgy(ctx, {
+      x: 280, y: 1160, scale: 4.95,
+      t: Math.max(0, t - moneyAt + 0.12),
+      pose: t < moneyAt ? 'think' : 'push', facing: 1,
+      look: 'forward', expression: t < collateralAt ? 'worried' : 'shocked',
+    });
+    // Paw-to-wheel camera arc: a narrow reflected line sweeps from his reach into the inset.
+    const arc = clamp((t - moneyAt + 0.05) / Math.max(0.28, collateralAt - moneyAt));
+    if (arc > 0) {
+      const q = 1 - (1 - arc) ** 3;
+      const x = lerp(412, 540, q), y = lerp(1010, 645, q);
+      line(ctx, [412, 1010], [x, y], '#D2D9DD', 5, 0.24);
+      ctx.fillStyle = '#EFF2F3'; ctx.fillRect(snap(x - 4), snap(y - 4), 8, 8);
+    }
+    // Nearby glass mullions slide past lens and keep the final frames in motion.
+    const drift = snap((t * 32) % 64);
+    ctx.fillStyle = '#151A1D'; ctx.fillRect(-10 + drift, 1218, 1100, 24);
+    ctx.fillStyle = '#AAB4B9'; ctx.fillRect(-10 + drift, 1218, 1100, 5);
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur);
-    const moneyAt = eventTime(props, 'money', safeDur, 0.28);
-    const lockedAt = eventTime(props, 'locked', safeDur, 0.67);
+    const moneyAt = eventTime(props, 'money', safeDur, 0.46);
+    const collateralAt = eventTime(props, 'collateral', safeDur, 0.64);
     const cues: Cue[] = [
-      { t: clamp(moneyAt - 0.12, 0, safeDur), kind: 'swish', pan: 0.25, gain: 0.62 },
-      { t: moneyAt, kind: 'cash', pan: 0.1, gain: 0.86 },
-      { t: clamp(moneyAt + 0.13, 0, safeDur), kind: 'paper', pan: -0.12, gain: 0.48 },
-      { t: clamp(moneyAt + 0.3, 0, safeDur), kind: 'cash', pan: -0.35, gain: 0.54 },
-      { t: clamp(lockedAt - 0.08, 0, safeDur), kind: 'servo', pan: 0.62, gain: 0.65 },
-      { t: lockedAt, kind: 'thud', pan: 0.72, gain: 1.12 },
-      { t: clamp(lockedAt + 0.035, 0, safeDur), kind: 'clack', pan: 0.72, gain: 0.95 },
-      { t: clamp(lockedAt + 0.12, 0, safeDur), kind: 'glass', pan: 0.48, gain: 0.64 },
-      { t: clamp(lockedAt + 0.2, 0, safeDur), kind: 'rumble', pan: 0.4, gain: 0.58 },
+      { t: moneyAt, kind: 'paper', pan: 0.54, gain: 0.68 },
+      { t: collateralAt, kind: 'clack', pan: 0.02, gain: 0.96 },
     ];
     return cues.filter(cue => cue.t <= safeDur).sort((a, b) => a.t - b.t);
   },

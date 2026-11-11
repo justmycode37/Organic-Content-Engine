@@ -219,7 +219,7 @@ export const MATERIAL_RAMPS: Readonly<Record<RampName, readonly string[]>> = {
   brown: ['#160D08', '#29190F', '#432B1B', '#6C482D', '#8C6543', '#B48A60', '#E0BE91'],
   red: ['#190807', '#35100E', '#581915', '#8C2924', '#B7433B', '#D9756C', '#F4AAA0'],
   green: ['#07130A', '#102719', '#20412A', '#34663C', '#508951', '#82B17D', '#C4DDB0'],
-  paper: ['#201E1C', '#383532', '#58544F', '#858077', '#A19B8F', '#CBC5B8', '#F0EBE2'],
+  paper: ['#1E1E1E', '#363636', '#555555', '#808080', '#9C9C9C', '#C6C6C6', '#EEEEEE'],
 };
 
 export interface Ground3D { y: number; shadow?: boolean | number; grid?: boolean; color?: string; ramp?: RampName | string[] }

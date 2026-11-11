@@ -72,13 +72,23 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
         s = edge * (swell * (lo * 0.34 + hi * (kind === 'reverse' ? 0.28 : 0.13) + shimmer) + (kind === 'reverse' ? Math.sin(TAU * 54 * t) * u * 0.05 : Math.sin(TAU * 54 * t) * u * 0.08));
         break;
       }
-      case 'shimmer': case 'sparkle': case 'ding': case 'glass': case 'coin': {
-        const e = decay(t, seconds, kind === 'ding' || kind === 'glass' ? 0.38 : 0.26, 0.003);
-        const f = (kind === 'coin' ? 980 : kind === 'ding' ? 1220 : kind === 'glass' ? 1080 : 1460) * base;
+      case 'shimmer': case 'sparkle': case 'glass': case 'coin': {
+        const e = decay(t, seconds, kind === 'glass' ? 0.38 : 0.26, 0.003);
+        const f = (kind === 'coin' ? 980 : kind === 'glass' ? 1080 : 1460) * base;
         const p = TAU * f * t;
         const detune = Math.sin(TAU * (f * 1.497) * t + Math.sin(TAU * f * 0.23 * t) * 0.14);
         const stagger = variant % 2 ? Math.sin(TAU * f * 2.03 * Math.max(0, t - 0.014)) : Math.sin(TAU * f * 2.51 * t);
         s = e * (Math.sin(p) * 0.44 + detune * 0.26 + stagger * 0.13 + hi * 0.035);
+        break;
+      }
+      case 'ding': {
+        // A warm two-note major-third button with a soft lower body and a long designed tail.
+        const first = decay(t, seconds, 0.42, 0.004);
+        const secondAt = 0.135, secondTime = t - secondAt;
+        const second = secondTime > 0 ? decay(secondTime, Math.max(0.08, seconds - secondAt), 0.34, 0.004) : 0;
+        const f = 660 * base, p1 = TAU * f * t, p2 = TAU * f * 1.26 * Math.max(0, secondTime);
+        s = first * (Math.sin(p1) * 0.32 + Math.sin(p1 * 2.01) * 0.08 + Math.sin(p1 * 0.5) * 0.14)
+          + second * (Math.sin(p2) * 0.28 + Math.sin(p2 * 2.02) * 0.07);
         break;
       }
       case 'impact': case 'thud': case 'drop': case 'bass': case 'land': case 'step': case 'heartbeat': {

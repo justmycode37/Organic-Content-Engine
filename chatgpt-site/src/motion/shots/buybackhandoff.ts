@@ -1,33 +1,21 @@
 import { clamp, ease, type Cue, type Frame, type ShotProps } from '../core.ts';
 import { drawHedgy } from '../actor/hedgy.ts';
-import { drawEnv } from '../env/index.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { drawBurst, drawEmitter } from '../fx/particles.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
-import { pixelText } from '../prim.ts';
 import type { ShotDef } from './index.ts';
 
-const W = 1080, H = 1290;
-const snap = (n: number) => Math.round(n / 4) * 4;
-
-function eventTime(props: ShotProps, kind: string, fallback: number, dur: number) {
+const W = 1080, H = 1290, GRID = 4;
+const snap = (n: number) => Math.round(n / GRID) * GRID;
+const rect = (ctx: Frame['ctx'], color: string, x: number, y: number, w: number, h: number) => {
+  ctx.fillStyle = color;
+  ctx.fillRect(snap(x), snap(y), Math.max(GRID, snap(w)), Math.max(GRID, snap(h)));
+};
+const eventTime = (props: ShotProps, kind: string, fallback: number, dur: number) => {
   const event = props.events?.find(item => item.kind.toLowerCase() === kind);
   return clamp(event?.at ?? dur * fallback, 0, dur);
-}
+};
 
-function layer(ctx: Frame['ctx'], pose: ReturnType<ReturnType<typeof createCameraRig>['poseAt']>, depth: number) {
-  ctx.translate(W / 2 + snap(pose.x * depth), H / 2 + snap(pose.y * depth));
-  ctx.rotate(pose.rot * depth);
-  ctx.scale(1 + (pose.zoom - 1) * depth, 1 + (pose.zoom - 1) * depth);
-  ctx.translate(-W / 2, -H / 2);
-}
-
-function rect(ctx: Frame['ctx'], color: string, x: number, y: number, w: number, h: number) {
-  ctx.fillStyle = color;
-  ctx.fillRect(snap(x), snap(y), snap(w), snap(h));
-}
-
-function line(ctx: Frame['ctx'], points: readonly [number, number][], color: string, width = 8) {
+function stroke(ctx: Frame['ctx'], points: readonly [number, number][], color: string, width = 8) {
   ctx.strokeStyle = color;
   ctx.lineWidth = width;
   ctx.lineCap = 'square';
@@ -38,224 +26,230 @@ function line(ctx: Frame['ctx'], points: readonly [number, number][], color: str
   ctx.stroke();
 }
 
-function doorsAndQueue(ctx: Frame['ctx'], t: number) {
-  // Monumental venue doors behind the small kiosk queue.
-  rect(ctx, '#101114', 264, 318, 552, 566);
-  rect(ctx, '#73777B', 292, 346, 496, 510);
-  rect(ctx, '#17191C', 308, 362, 464, 478);
-  rect(ctx, '#353A3F', 520, 364, 16, 474);
-  rect(ctx, '#555B60', 330, 386, 8, 428);
-  rect(ctx, '#555B60', 742, 386, 8, 428);
-  // Lit door slits and rows of seating make the lobby read as a deep public venue.
-  for (let i = 0; i < 7; i++) {
-    const y = 420 + i * 54;
-    rect(ctx, i % 2 ? '#4A4E52' : '#62676C', 352, y, 376, 8);
-    rect(ctx, '#1B1D20', 368, y + 12, 344, 6);
-  }
-  rect(ctx, '#9CA2A6', 430, 390, 8, 408);
-  rect(ctx, '#9CA2A6', 640, 390, 8, 408);
-
-  const pulse = Math.round(Math.sin(t * 8) * 4);
-  // Sparse queue silhouettes, kept clearly behind Hedgy and the counter.
-  const people = [[646, 798], [694, 786], [742, 797], [786, 778], [834, 795], [880, 781]];
-  for (let i = 0; i < people.length; i++) {
-    const [x, y] = people[i]!;
-    const bob = i % 2 ? pulse : -pulse;
-    rect(ctx, '#24272A', x - 13, y - 52 + bob, 26, 25);
-    rect(ctx, '#111316', x - 18, y - 27 + bob, 36, 46);
-    rect(ctx, '#4A4F53', x - 6, y - 48 + bob, 8, 8);
-  }
-  line(ctx, [[610, 840], [914, 800]], '#777D82', 8);
-  for (let x = 650; x <= 900; x += 84) rect(ctx, '#A5AAAD', x, 808, 8, 42);
-}
-
-function lenderRack(ctx: Frame['ctx'], t: number, clipTravel: number, supplyCount: number) {
-  const x = 846, y = 326;
-  rect(ctx, '#25292D', x, y, 186, 300);
-  rect(ctx, '#9AA0A4', x + 12, y + 12, 162, 276);
-  rect(ctx, '#15181B', x + 24, y + 24, 138, 252);
-  rect(ctx, '#5F666B', x + 36, y + 64, 114, 12);
-  rect(ctx, '#43494E', x + 36, y + 158, 114, 12);
-  rect(ctx, '#34393D', x + 36, y + 234, 114, 12);
-  const stored = Math.max(1, Math.floor(supplyCount) - 1 + (clipTravel > 0.92 ? 1 : 0));
-  for (let i = 0; i < stored; i++) {
-    const col = i % 5, row = Math.floor(i / 5), tx = x + 52 + col * 16;
-    const shelfY = [34, 126][row] ?? 200;
-    rect(ctx, row === 0 ? '#C8C8C6' : '#858B8E', tx, y + shelfY, 8, row === 0 ? 30 : 32);
-  }
-  // The cuff detaches on “back”; its small bright clip races home along the cable.
-  if (clipTravel < 1) {
-    const p = ease.outCubic(clipTravel);
-    const wrist: [number, number] = [453, 808];
-    const rackPoint: [number, number] = [x + 56, y + 72];
-    const endX = wrist[0] + (rackPoint[0] - wrist[0]) * p;
-    const endY = wrist[1] + (rackPoint[1] - wrist[1]) * p;
-    const bendX = wrist[0] + (endX - wrist[0]) * 0.62;
-    const bendY = Math.min(wrist[1], endY) - 90 * Math.sin(Math.PI * p);
-    line(ctx, [wrist, [bendX, bendY], [endX, endY]], '#D2D5D6', 4);
-    rect(ctx, '#F2F2F0', endX - 10, endY - 8, 20, 16);
-    rect(ctx, '#41464A', endX - 4, endY - 4, 8, 8);
-    if (clipTravel > 0.1 && clipTravel < 0.78) {
-      line(ctx, [[endX - 18, endY + 8], [endX - 38, endY + 16], [endX - 50, endY + 8]], '#B7BBC0', 4);
-    }
-  } else {
-    rect(ctx, '#F4F4F2', x + 44, y + 64, 24, 20);
-    rect(ctx, '#34383B', x + 52, y + 68, 8, 12);
-  }
-}
-
-function counter(ctx: Frame['ctx']) {
-  // Counter top catches the action; lower courses recede into the lobby.
-  ctx.fillStyle = '#BCC0C2';
+function polygon(ctx: Frame['ctx'], color: string, points: readonly [number, number][]) {
+  ctx.fillStyle = color;
   ctx.beginPath();
-  ctx.moveTo(0, 868); ctx.lineTo(1080, 810); ctx.lineTo(1080, 902); ctx.lineTo(0, 972); ctx.closePath(); ctx.fill();
-  rect(ctx, '#3D4246', 0, 908, 1080, 250);
-  rect(ctx, '#777D82', 0, 908, 1080, 18);
-  for (let x = -24; x <= 1080; x += 96) {
-    rect(ctx, '#262A2D', x, 956, 52, 112);
-    rect(ctx, '#53595E', x + 52, 956, 12, 112);
-  }
-  rect(ctx, '#181B1E', 0, 1072, 1080, 16);
-  rect(ctx, '#92989C', 0, 1104, 1080, 8);
+  ctx.moveTo(snap(points[0]![0]), snap(points[0]![1]));
+  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]![0]), snap(points[i]![1]));
+  ctx.closePath();
+  ctx.fill();
 }
 
-function drawMoney(ctx: Frame['ctx'], t: number, backAt: number, seed: number) {
-  const hit = backAt;
-  const settle = ease.outCubic(clamp((t - hit + 0.05) / 0.18));
-  // Funds are a bundled monochrome stack before impact, then split into paper and coins.
-  if (t < hit + 0.06) {
-    const slap = t >= hit - 0.06 ? Math.sin(clamp((t - hit + 0.06) / 0.12) * Math.PI) * 16 : 0;
-    rect(ctx, '#D0CCC3', 438, 821 + slap, 156, 30);
-    rect(ctx, '#F1ECE2', 450, 805 + slap, 136, 26);
-    rect(ctx, '#77766F', 460, 814 + slap, 116, 6);
-    rect(ctx, '#B9B4AA', 472, 792 + slap, 104, 20);
+function drawKioskWall(ctx: Frame['ctx'], t: number) {
+  rect(ctx, '#252A2E', 0, 0, W, 838);
+  // Tall steel ribs and a bright ticket window put this exchange inside a real hall.
+  for (let i = 0; i < 9; i++) {
+    const x = snap(i * 144 - 24 + Math.sin(t * 0.7 + i) * 5);
+    rect(ctx, i % 2 ? '#333A3F' : '#444B50', x, 56, 42, 700);
+    rect(ctx, '#828A8F', x + 4, 56, 8, 700);
+    rect(ctx, '#171B1E', x + 24, 84, 7, 626);
   }
-  if (t >= hit - 0.08) {
-    drawBurst(ctx, t, {
-      x: 520, y: 824, seed: seed + 71, count: 36, kind: 'coin', start: hit, life: 0.92,
-      speed: 252, gravity: 510, drag: 0.3, floor: 892, bounce: 0.22, spin: 7, size: 1, color: '#D3D2CE',
-    });
-    drawEmitter(ctx, t, {
-      kind: 'banknotes', x: 510, y: 808, width: 170, height: 60, seed: seed + 97,
-      start: hit + 0.015, rate: 17, life: 0.72, speed: 205, wind: 34, gravity: 0, size: 2, color: '#E6E2D8',
-    });
+  rect(ctx, '#111518', 660, 178, 364, 492);
+  rect(ctx, '#A4AAAD', 676, 194, 332, 460);
+  rect(ctx, '#202529', 692, 210, 300, 428);
+  // Lit glazing and deep frames make the lender's rack a readable destination.
+  rect(ctx, '#60686D', 708, 230, 268, 340);
+  rect(ctx, '#171B1E', 720, 242, 244, 316);
+  for (let shelf = 0; shelf < 3; shelf++) {
+    const sy = 284 + shelf * 88;
+    rect(ctx, shelf === 0 ? '#8B9296' : '#646C71', 734, sy, 216, 8);
+    rect(ctx, '#30373B', 734, sy + 8, 216, 8);
+    for (let i = 0; i < 5; i++) {
+      if (shelf > 1 && i > 1) continue;
+      drawTicket2D(ctx, 754 + i * 39, sy - 14, 32, { rot: i % 2 ? 0.02 : -0.02 });
+    }
   }
-  // Stack settles into a short fan of bill corners after the slap.
-  if (settle > 0.88) {
-    rect(ctx, '#E4DFD4', 438, 827, 104, 8);
-    rect(ctx, '#85837D', 442, 835, 96, 4);
+  rect(ctx, '#C2C7C9', 692, 594, 300, 20);
+  // A recessed doorway and moving light slats add a second depth plane.
+  rect(ctx, '#171B1E', 40, 176, 492, 518);
+  rect(ctx, '#60676C', 56, 192, 460, 486);
+  rect(ctx, '#202529', 72, 208, 428, 454);
+  rect(ctx, '#3B4247', 92, 228, 388, 12);
+  rect(ctx, '#92999D', 92, 240, 388, 8);
+  for (let i = 0; i < 6; i++) {
+    const y = 314 + i * 54;
+    rect(ctx, i % 2 ? '#50585D' : '#71797E', 110, y, 350, 8);
+    rect(ctx, '#292F33', 110, y + 12, 350, 22);
+    rect(ctx, '#9AA1A5', 110, y + 35, 350, 5);
+  }
+  for (let i = 0; i < 12; i++) {
+    const x = snap((i * 103 + t * 30) % 1250 - 70);
+    rect(ctx, '#777F84', x, 722 + (i % 3) * 24, 36, 4);
+  }
+  rect(ctx, '#858D92', 0, 808, W, 8);
+}
+
+function drawClerk(ctx: Frame['ctx'], t: number, slapAt: number) {
+  // A narrow clerk silhouette and a cuffed arm stay on the far side of the counter.
+  polygon(ctx, '#151A1D', [[1012, 354], [1080, 372], [1080, 748], [1044, 764], [1008, 604]]);
+  polygon(ctx, '#4A5257', [[1030, 374], [1072, 390], [1072, 560], [1032, 580]]);
+  rect(ctx, '#AEB5B8', 1036, 386, 36, 8);
+  const reach = ease.outCubic(clamp((t - slapAt + 0.1) / 0.3));
+  const handX = 790 + reach * 12;
+  stroke(ctx, [[1078, 486], [1026, 548], [956, 616], [handX + 30, 710]], '#171C1F', 58);
+  stroke(ctx, [[1076, 478], [1024, 540], [954, 608], [handX + 30, 702]], '#747D82', 40);
+  stroke(ctx, [[1072, 476], [1020, 538], [950, 606], [handX + 30, 700]], '#B5BBBD', 6);
+  rect(ctx, '#242A2E', handX + 2, 690, 22, 46);
+  // One deliberate wrist movement follows the money, then holds as the ticket is pushed.
+  const settle = clamp((t - slapAt) / 0.2);
+  if (settle < 1) {
+    rect(ctx, '#DFE2E2', handX + 8, 722 + (1 - settle) * 12, 20, 8);
   }
 }
 
-function drawSlapHand(ctx: Frame['ctx'], t: number, backAt: number) {
-  const reach = ease.outCubic(clamp((t - backAt + 0.2) / 0.2));
-  const recoil = clamp((t - backAt - 0.035) / 0.2);
-  const alpha = Math.max(0, 1 - recoil);
-  if (alpha <= 0) return;
-  const y = 762 + reach * 48;
-  ctx.save(); ctx.globalAlpha *= alpha;
-    line(ctx, [[438, 836], [480, y + 16], [544, y + 7]], '#291910', 24);
-    line(ctx, [[438, 834], [480, y + 13], [544, y + 5]], '#8B5C38', 16);
-  rect(ctx, '#291910', 528, y - 8, 48, 28);
-  rect(ctx, '#A87347', 532, y - 4, 40, 20);
-  rect(ctx, '#D4A66F', 538, y - 4, 18, 8);
-  ctx.restore();
+function drawClerkPaw(ctx: Frame['ctx'], t: number, slapAt: number) {
+  const reach = ease.outCubic(clamp((t - slapAt + 0.1) / 0.3));
+  const x = 780 + reach * 12;
+  // The paw sits clearly above the counter surface, with fingers reaching toward Hedgy's ticket.
+  rect(ctx, '#252B2F', x - 20, 684, 104, 52);
+  rect(ctx, '#D4D8D9', x - 12, 688, 88, 40);
+  rect(ctx, '#F1F2EF', x - 4, 684, 48, 10);
+  rect(ctx, '#929A9F', x + 62, 692, 16, 24);
+  rect(ctx, '#EFF1EF', x - 34, 694, 36, 12);
+  rect(ctx, '#D6DADB', x - 40, 708, 42, 12);
+  rect(ctx, '#EFF1EF', x - 30, 722, 34, 10);
+  rect(ctx, '#AAB2B5', x + 12, 716, 24, 14);
+  for (let i = 0; i < 3; i++) rect(ctx, '#8D969A', x + 2 + i * 18, 718, 8, 4);
+}
+
+function drawCounter(ctx: Frame['ctx']) {
+  polygon(ctx, '#B9BEC0', [[0, 794], [1080, 730], [1080, 886], [0, 958]]);
+  polygon(ctx, '#E1E3E3', [[0, 794], [1080, 730], [1080, 758], [0, 830]]);
+  stroke(ctx, [[0, 828], [1080, 764]], '#626A6F', 8);
+  polygon(ctx, '#363D42', [[0, 958], [1080, 886], [1080, 1224], [0, 1276]]);
+  stroke(ctx, [[0, 968], [1080, 896]], '#858D92', 12);
+  for (let i = 0; i < 9; i++) {
+    const x = i * 136 - 14;
+    polygon(ctx, i % 2 ? '#242A2E' : '#454C51', [[x, 1004], [x + 58, 1000], [x + 58, 1188], [x, 1192]]);
+    rect(ctx, '#747C81', x + 62, 1000, 8, 188);
+  }
+  rect(ctx, '#15191C', 0, 1216, W, 12);
+  rect(ctx, '#9AA1A4', 0, 1252, W, 8);
+}
+
+function drawCash(ctx: Frame['ctx'], t: number, slapAt: number) {
+  const drop = ease.outCubic(clamp((t - (slapAt - 0.12)) / 0.12));
+  const impactAge = t - slapAt;
+  const bounce = impactAge < 0 ? 0 : Math.sin(Math.max(0, impactAge) * 30) * 12 * Math.exp(-Math.max(0, impactAge) * 14);
+  const y = 590 + drop * 179 - (impactAge < 0 ? 0 : 0) + bounce;
+  // A two-note bundle drops from the clerk's side and lands with a square, readable slap.
+  rect(ctx, '#252A2E', 580, y + 17, 154, 18);
+  rect(ctx, '#7C8489', 570, y + 4, 160, 18);
+  rect(ctx, '#D5D9DA', 578, y - 7, 148, 18);
+  rect(ctx, '#F0F1EF', 594, y - 15, 120, 12);
+  rect(ctx, '#929A9F', 590, y - 2, 116, 4);
+  rect(ctx, '#747C80', 604, y + 10, 100, 4);
+  if (impactAge >= 0 && impactAge < 0.07) {
+    const alpha = 1 - impactAge / 0.07;
+    ctx.save(); ctx.globalAlpha *= alpha;
+    stroke(ctx, [[538, 758], [558, 750]], '#E7E9E8', 8);
+    stroke(ctx, [[742, 756], [762, 748]], '#E7E9E8', 8);
+    ctx.restore();
+  }
+}
+
+function drawTether(ctx: Frame['ctx'], t: number, nowAt: number) {
+  const snapAge = t - nowAt;
+  const taut = ease.outCubic(clamp((snapAge + 0.03) / 0.12));
+  const slack = 54 * (1 - taut);
+  const wrist: [number, number] = [382, 808], rackClip: [number, number] = [912, 486];
+  const pts: [number, number][] = [wrist, [442, 680 + slack], [650, 582 + slack * 0.42], [822, 520], rackClip];
+  stroke(ctx, pts, '#20262A', 12);
+  stroke(ctx, pts, snapAge >= -0.025 && snapAge < 0.12 ? '#F1F3F2' : '#9AA2A6', snapAge >= -0.025 && snapAge < 0.12 ? 8 : 4);
+  // The only white flare is attached to the moving tether and races toward its rack clip.
+  if (snapAge >= 0 && snapAge < 0.15) {
+    const p = ease.outCubic(clamp(snapAge / 0.15));
+    const x = wrist[0] + (rackClip[0] - wrist[0]) * p;
+    const y = wrist[1] + (rackClip[1] - wrist[1]) * p - Math.sin(Math.PI * p) * 106 * (1 - taut * 0.35);
+    rect(ctx, '#FFFFFF', x - 14, y - 6, 28, 12);
+    rect(ctx, '#FFFFFF', x - 6, y - 14, 12, 28);
+  }
+  if (snapAge > -0.03 && snapAge < 0.17) {
+    rect(ctx, '#F4F5F3', 896, 470, 32, 28);
+    rect(ctx, '#42494D', 906, 478, 12, 12);
+    rect(ctx, '#FFFFFF', 902, 466, 20, 8);
+  } else {
+    rect(ctx, '#C4C9CB', 900, 474, 24, 20);
+    rect(ctx, '#41484C', 908, 478, 8, 12);
+  }
 }
 
 export const buybackHandoffShot: ShotDef = {
   name: 'buybackhandoff',
-  describe: 'A forced buyback at a venue kiosk: funds slap down, Hedgy takes the replacement ticket, and his wrist tether clips back to the lender rack. params.asset (default TICKET) and params.supplyCount (2–10) keep the handoff reusable.',
+  describe: 'Tight counter close-up: the clerk slaps down the buyback money, slides one shared ticket to Hedgy on “back”, then the tether flashes home to the lender rack on “now”.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx, theme, seed } = frame;
-    const dur = Math.max(0.01, frame.dur);
-    const t = clamp(frame.t, 0, dur);
-    const backAt = eventTime(props, 'back', 0.43, dur);
-    const rushAt = eventTime(props, 'rush', 0.76, dur);
-    const supplyCount = Math.max(2, Math.min(10, Math.floor(Number(props.params?.supplyCount ?? 5) || 5)));
-    const clipTravel = clamp((t - backAt + 0.035) / Math.max(0.24, dur * 0.3));
-    const handoff = ease.outBack(clamp((t - backAt + 0.025) / Math.max(0.16, dur * 0.27)));
-    const rackStart = t < backAt ? 0 : clipTravel;
-    const rig = createCameraRig({
-      width: W, height: H, seed,
+    const { ctx, seed } = frame;
+    const dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
+    const backAt = eventTime(props, 'back', 0.335, dur), nowAt = eventTime(props, 'now', 0.495, dur);
+    const slapAt = clamp(backAt - Math.min(0.22, dur * 0.17), 0, dur);
+    const slide = ease.outCubic(clamp((t - backAt) / Math.max(0.12, Math.min(0.2, dur * 0.16))));
+    const pose = createCameraRig({
+      width: W, height: H, seed: seed + 117, handheld: 1.35,
       keyframes: [
-        { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
-        { t: dur * 0.23, x: -10, y: -4, zoom: 1.015, rot: -0.006 },
-        { t: backAt, x: 18, y: -18, zoom: 1.065, rot: 0.018 },
-        { t: Math.min(dur, backAt + dur * 0.24), x: 44, y: 10, zoom: 1.1, rot: -0.012 },
-        { t: rushAt, x: -22, y: 2, zoom: 1.045, rot: 0.006 },
-        { t: dur, x: 0, y: 0, zoom: 1.025, rot: 0 },
+        { t: 0, x: 0, y: 6, zoom: 1.015, rot: 0 },
+        { t: slapAt, x: -8, y: -4, zoom: 1.035, rot: -0.003 },
+        { t: backAt, x: 12, y: -14, zoom: 1.075, rot: 0.004 },
+        { t: nowAt, x: 22, y: -10, zoom: 1.085, rot: -0.004 },
+        { t: dur, x: 42, y: -24, zoom: 1.12, rot: 0.002 },
       ],
-      hits: [backAt], punch: 0.028, shake: 18, handheld: 2.4,
-      whip: [{ at: rushAt, direction: 'right', duration: 0.18, amount: 0.11 }],
-    });
-    const pose = rig.poseAt(t);
+      hits: [slapAt, nowAt], punch: 0.012, shake: 5,
+    }).poseAt(t);
 
     ctx.imageSmoothingEnabled = false;
-    drawEnv(ctx, { type: 'stage', t, theme, seed: seed + 10, width: W, height: H,
-      camera: { x: pose.x * 0.14, y: pose.y * 0.12, zoom: 1 + (pose.zoom - 1) * 0.12, rot: pose.rot * 0.1 } });
+    ctx.fillStyle = '#171B1E'; ctx.fillRect(0, 0, W, H);
+    // Quiet lateral light drift holds the depth while the counter transaction takes over.
+    for (let i = 0; i < 10; i++) {
+      const x = snap((i * 153 - t * (16 + i) + 1600) % 1300 - 100);
+      rect(ctx, i % 2 ? '#30363A' : '#42494E', x, 0, 4, 790);
+    }
+    ctx.save();
+    ctx.translate(W / 2 + snap(pose.x), H / 2 + snap(pose.y));
+    ctx.rotate(pose.rot);
+    ctx.scale(pose.zoom, pose.zoom);
+    ctx.translate(-W / 2, -H / 2);
+    drawKioskWall(ctx, t);
+    drawTether(ctx, t, nowAt);
+    drawClerk(ctx, t, slapAt);
+    drawCounter(ctx);
+    drawClerkPaw(ctx, t, slapAt);
 
-    ctx.save(); layer(ctx, pose, 0.28); doorsAndQueue(ctx, t); ctx.restore();
-    ctx.save(); layer(ctx, pose, 0.62);
-    // A single red path keeps pointing up behind the transaction.
-    line(ctx, [[94, 612], [254, 590], [350, 556], [480, 550], [560, 505], [676, 477], [746, 418], [862, 390]], '#A52B28', 8);
-    for (let i = 0; i < 8; i++) rect(ctx, '#D35A51', 240 + i * 74, 575 - i * 24, 8, 8);
-    lenderRack(ctx, t, rackStart, supplyCount);
-    ctx.restore();
-
-    ctx.save(); layer(ctx, pose, 0.84);
+    const hedgyPose = t < backAt - 0.02 ? 'push' : 'carry';
     drawHedgy(ctx, {
-      x: 265, y: 950, scale: 4.6, t: Math.max(0, t - backAt + 0.1),
-      pose: t < backAt ? 'push' : 'carry', facing: 1,
-      expression: t < backAt + 0.13 ? 'worried' : t < backAt + 0.46 ? 'shocked' : 'determined',
-      look: t < backAt ? 'forward' : 'up', prop: 'none',
+      x: 286, y: 1068, scale: 6.1, t: Math.max(0, t - backAt),
+      pose: hedgyPose, facing: 1,
+      expression: t < backAt ? 'worried' : t < nowAt ? 'determined' : 'shocked',
+      look: t < backAt ? 'forward' : t < nowAt ? 'down' : 'up',
     });
-    counter(ctx);
-    drawMoney(ctx, t, backAt, seed);
-    drawSlapHand(ctx, t, backAt);
-    // Bank notes still settling past the counter lip keep the impact alive.
-    if (t >= backAt) drawEmitter(ctx, t, { kind: 'banknotes', x: 514, y: 830, width: 300, height: 40, seed: seed + 121,
-      start: backAt + 0.1, rate: 7, life: 0.72, speed: 132, wind: -44, size: 2, color: '#C5C3BD' });
-    ctx.restore();
 
-    // The shared ticket stays in close foreground as the camera orbits around the exchange.
-    ctx.save(); layer(ctx, pose, 1.12);
-    const fly = clamp((t - backAt + 0.06) / Math.max(0.2, dur * 0.35));
-    const ticketX = 726 - ease.outCubic(fly) * 72;
-    const ticketY = 735 - ease.outCubic(fly) * 116;
-    const ticketRot = -0.08 - handoff * 0.11 + Math.sin(t * 11) * (fly < 0.92 ? 0.025 : 0.008);
-    drawTicket2D(ctx, ticketX, ticketY, 300, { rot: ticketRot });
-    // A diegetic asset tag sits on the kiosk fascia; only one short word is visible.
-    const rawAsset = String(props.params?.asset ?? 'TICKET').trim().toUpperCase();
-    const assetLabel = rawAsset.split(/[\s_-]+/)[0]?.slice(0, 12) || 'TICKET';
-    rect(ctx, '#272B2E', 824, 1120, 184, 56);
-    rect(ctx, '#B8BDC0', 836, 1132, 160, 8);
-    pixelText(ctx, assetLabel, 916, 1144, 3, { color: theme.fg, align: 'center' });
-    ctx.restore();
-
-    // Near-camera rails and paper flecks create a final parallax pass.
-    ctx.save(); layer(ctx, pose, 1.22);
-    rect(ctx, '#8A9094', -22, 1192, 1124, 20);
-    rect(ctx, '#282C30', -22, 1212, 1124, 68);
-    rect(ctx, '#C2C5C6', 46, 1170, 10, 120);
-    rect(ctx, '#666D72', 1014, 1170, 10, 120);
-    for (let i = 0; i < 8; i++) {
-      const x = (i * 153 + t * (180 + i * 6)) % 1200 - 60;
-      const y = 1070 + (i % 3) * 52;
-      ctx.save(); ctx.translate(snap(x), snap(y)); ctx.rotate((i % 2 ? 1 : -1) * 0.5);
-      rect(ctx, i % 2 ? '#D5D1C8' : '#777A7D', -5, -18, 10, 36);
-      ctx.restore();
+    drawCash(ctx, t, slapAt);
+    // Ticket starts directly under the clerk's paw and slides over the counter into Hedgy's reach.
+    const ticketX = 798 - 368 * slide;
+    const ticketY = 795 - 20 * slide + Math.sin(slide * Math.PI) * 8;
+    const ticketRot = -0.02 - 0.03 * slide + Math.sin(t * 15) * 0.008 * (1 - slide);
+    drawTicket2D(ctx, ticketX, ticketY, 244, { rot: ticketRot });
+    if (slide > 0.85) {
+      const grip = ease.outCubic(clamp((slide - 0.85) / 0.15));
+      const pawX = ticketX - 108 + grip * 8;
+      rect(ctx, '#3E281B', pawX, ticketY + 22, 44, 28);
+      rect(ctx, '#8A5E3D', pawX + 4, ticketY + 22, 36, 20);
+      rect(ctx, '#D4A66F', pawX + 14, ticketY + 22, 14, 8);
+    }
+    // The camera keeps creeping into the counter's chrome on the final frames.
+    const rail = (t * 32) % 192;
+    for (let i = -1; i < 8; i++) {
+      const x = snap(i * 192 - rail);
+      rect(ctx, '#555D62', x, 1264, 108, 8);
+      rect(ctx, '#A6ADB0', x + 20, 1272, 8, 16);
     }
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const back = eventTime(props, 'back', 0.43, dur), rush = eventTime(props, 'rush', 0.76, dur);
+    const backAt = eventTime(props, 'back', 0.335, dur), nowAt = eventTime(props, 'now', 0.495, dur);
+    const slapAt = clamp(backAt - Math.min(0.22, dur * 0.17), 0, dur);
     const cues: Cue[] = [
-      { t: Math.max(0, back - 0.025), kind: 'impact', gain: 1.15, pan: -0.05 },
-      { t: back + 0.018, kind: 'paper', gain: 0.9, pan: 0.08 },
-      { t: back + 0.15, kind: 'snap', gain: 0.68, pan: 0.46 },
-      { t: rush, kind: 'whoosh', gain: 0.76, pan: -0.32, len: 0.14 },
-      { t: rush + 0.075, kind: 'whoosh', gain: 0.62, pan: 0.38, len: 0.12 },
-      { t: Math.min(dur, rush + 0.12), kind: 'coins', gain: 0.38, pan: 0.1 },
+      { t: slapAt, kind: 'impact', gain: 0.9, pan: 0.22 },
+      { t: backAt, kind: 'paper', gain: 0.78, pan: -0.12, len: 0.28 },
+      { t: nowAt, kind: 'snap', gain: 0.72, pan: 0.48 },
     ];
     return cues.filter(cue => cue.t >= 0 && cue.t <= dur);
   },
