@@ -1,11 +1,11 @@
 import { clamp, CONTENT_BOTTOM, SAFE, type Frame } from '../core.ts';
 
 /** Applies a restrained impact camera. Call ctx.restore() afterwards. */
-export function applyCamera(frame: Frame, hits: number[]) {
+export function applyCamera(frame: Frame, hits: number[], clipBottom:number=SAFE.bottom, cinematic=false,exitZoom=false) {
   const { ctx, t } = frame;
   ctx.save();
   ctx.beginPath();
-  ctx.rect(SAFE.x, SAFE.y, SAFE.w, SAFE.bottom - SAFE.y);
+  ctx.rect(SAFE.x, SAFE.y, SAFE.w, clipBottom - SAFE.y);
   ctx.clip();
   let punch = 0;
   let sx = 0, sy = 0;
@@ -25,7 +25,8 @@ export function applyCamera(frame: Frame, hits: number[]) {
     sx = Math.round(sx * 12 / shakeLength);
     sy = Math.round(sy * 12 / shakeLength);
   }
-  const scale = 1 + punch;
+  const travel=cinematic? .04*Math.min(1,t/Math.max(1,frame.dur))+(exitZoom ? .28*Math.pow(Math.max(0,(t-frame.dur+.3)/.3),2):0):0;
+  const scale = 1 + punch + travel;
   const cx = SAFE.cx, cy = SAFE.y + (Math.min(CONTENT_BOTTOM, SAFE.bottom) - SAFE.y) / 2;
   ctx.translate(cx + sx, cy + sy);
   ctx.scale(scale, scale);

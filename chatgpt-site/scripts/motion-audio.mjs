@@ -9,7 +9,7 @@
 // .motion-cache by content hash, so re-rendering an unchanged line costs nothing.
 import {createHash} from 'node:crypto';
 import {spawn} from 'node:child_process';
-import {mkdir,readFile,writeFile,access,rm} from 'node:fs/promises';
+import {mkdir,readFile,writeFile,access,rm,appendFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {parseReelSpec} from '../src/motion/spec.ts';
@@ -18,8 +18,8 @@ import {FPS,markupWords,placeScenes,stripMarkup} from '../src/motion/core.ts';
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const CACHE=join(ROOT,'.motion-cache');
 const API='https://api.elevenlabs.io';
-const LEAD=0.12;   // silence before the voice in each scene, so a cut never clips a word
-const TAIL=0.32;   // breath after the last word before the next cut
+const LEAD=Number(process.env.MOTION_LEAD)||0.12;   // silence before the voice in each scene, so a cut never clips a word
+const TAIL=Number(process.env.MOTION_TAIL)||0.32;   // breath after the last word before the next cut
 
 /**
  * Sound design: soft, tonal and tightly synced, like a premium motion-design ad.
@@ -38,7 +38,7 @@ export const SFX={
 };
 /** Pops climb a pentatonic scale through a sequence, so a build sounds like it is going somewhere. */
 const SCALE=[0,2,4,7,9,12,14,16];
-const TRANSITION_SFX={blocks:'swish',wipe:'swish',zoom:'swish',shutter:'swish',glitch:'glitch',flash:'shimmer'};
+const TRANSITION_SFX={blocks:'pop',wipe:'tick',zoom:'rise',shutter:'glitch',glitch:'glitch',flash:'shimmer'};
 /** Used only for scenes that do not report their own cues. */
 const SCENE_BED={code:'type',diff:'type',terminal:'type',chat:'type'};
 
@@ -55,6 +55,7 @@ const exists=path=>access(path).then(()=>true,()=>false);
 
 async function eleven(path,body,key){
  const response=await fetch(`${API}${path}`,{method:body?'POST':'GET',headers:{'xi-api-key':key,...(body?{'content-type':'application/json'}:{})},body:body?JSON.stringify(body):undefined,signal:AbortSignal.timeout(120000)});
+ if(process.env.MOTION_USAGE_FILE)await appendFile(process.env.MOTION_USAGE_FILE,JSON.stringify({at:new Date().toISOString(),provider:'elevenlabs',endpoint:path.split('?')[0],status:response.status,characterCost:response.headers.get('character-cost'),characters:path.includes('text-to-speech')?body?.text?.length:undefined,seconds:body?.duration_seconds??(body?.music_length_ms?body.music_length_ms/1000:undefined)})+'\n');
  if(response.ok)return response;
  // Provider error bodies can echo request details; only the status is reported.
  const reason=response.status===401||response.status===403?'the API key was rejected or lacks this permission':response.status===402||response.status===429?'the account is out of credits or rate limited':`status ${response.status}`;
@@ -68,7 +69,7 @@ const pickVoice=()=>process.env.ELEVENLABS_VOICE_ID?.trim()||VOICE_ID;
 /** One narration line: cached MP3 plus the time each word is spoken. */
 async function speak(text,voice,key){
  const model=process.env.ELEVENLABS_MODEL??'eleven_multilingual_v2';
- const settings={stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:1.12};
+ const settings={stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:Number(process.env.MOTION_VOICE_SPEED)||1.12};
  const id=hash({text,voice,model,settings}),audio=join(CACHE,`voice-${id}.mp3`),meta=join(CACHE,`voice-${id}.json`);
  if(!(await exists(audio))||!(await exists(meta))){
   const data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`,{text,model_id:model,voice_settings:settings},key)).json();
@@ -84,7 +85,14 @@ async function speak(text,voice,key){
   await writeFile(audio,Buffer.from(data.audio_base64,'base64'));
   await writeFile(meta,JSON.stringify({words}));
  }
- return {audio,words:JSON.parse(await readFile(meta,'utf8')).words};
+ const words=JSON.parse(await readFile(meta,'utf8')).words,tempo=Number(process.env.MOTION_SPEECH_TEMPO)||1;
+ if(tempo!==1){
+  if(tempo<.7||tempo>1.3)throw new Error('MOTION_SPEECH_TEMPO must be .7 to 1.3');
+  const paced=join(CACHE,`voice-${id}-tempo-${tempo}.mp3`);
+  if(!await exists(paced))await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',audio,'-af',`atempo=${tempo}`,'-c:a','libmp3lame','-q:a','2',paced]);
+  return {audio:paced,words:words.map(w=>({...w,start:w.start/tempo,end:w.end/tempo}))};
+ }
+ return {audio,words};
 }
 
 async function effect(name,key){
@@ -144,7 +152,8 @@ export function arrange(spec,spoken,defs=sceneDefs){
   const duration=Math.min(8,Math.max(1.2,needed));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
-  return {...rest,duration,...(scene.hits?{hits:scene.hits.map(hit=>Math.round(Math.min(duration-0.05,hit*duration/scene.duration)*100)/100)}:{})};
+  const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
+  return {...rest,duration,...(events?{events}:{}),...(scene.hits?{hits:scene.hits.map(hit=>Math.round(Math.min(duration-0.05,hit*duration/scene.duration)*100)/100)}:{})};
  });
  const timed={...spec,scenes};
  const placed=placeScenes(timed),captions=[],cues=[];
@@ -155,7 +164,7 @@ export function arrange(spec,spoken,defs=sceneDefs){
    captions.push(...captionsFromSpeech(spec.scenes[index].say,voice.words,scene.start+LEAD,scene.end));
   }
   const length=scene.end-scene.start;
-  const transition=TRANSITION_SFX[scene.spec.transition];
+  const transition=scene.spec.transitionSound==='none'?null:scene.spec.transitionSound??TRANSITION_SFX[scene.spec.transition];
   if(index>0&&transition)cues.push({sfx:transition,at:Math.max(0,scene.start-0.1)});
   for(const hit of scene.spec.hits??[])cues.push({sfx:'impact',at:scene.start+hit});
   const own=sceneCues(scene.spec,length);
@@ -205,6 +214,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  if(!parsed.ok)throw new Error(`Invalid reel spec:\n${parsed.errors.join('\n')}`);
  await mkdir(CACHE,{recursive:true});
 
+ if(parsed.spec.series?.startsWith('HEDGY')&&!process.env.MOTION_VOICE_SPEED)process.env.MOTION_VOICE_SPEED='1.2';
  const voice=pickVoice();
  const spoken=[];
  for(const scene of parsed.spec.scenes)spoken.push(scene.say?await speak(stripMarkup(scene.say),voice,key):null);

@@ -1,0 +1,1 @@
+UPDATE accounts SET value=json_set(value,'$.brand.policyVersion',5,'$.brand.mascot','Naturally coloured flat 2D pixel actor with changing actions, poses and expressions','$.brand.captions','Complete text wrapped and fitted in an exclusive caption region; never clipped, hidden or overlapped'),updated_at=CURRENT_TIMESTAMP WHERE id='hedgy';

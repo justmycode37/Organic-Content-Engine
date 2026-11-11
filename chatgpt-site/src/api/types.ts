@@ -4,6 +4,8 @@ export type PlatformId =
   | 'bluesky' | 'mastodon' | 'linkedin' | 'x' | 'threads'
   | 'facebook' | 'instagram' | 'tiktok' | 'youtube' | 'pinterest';
 
+export interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;health:{state:'blocked'|'running';issues:string[]};schedule:{date:string;scheduledAt:string;status:string}[]}
+
 export interface PlatformStatus {
   id: PlatformId;
   displayName: string;

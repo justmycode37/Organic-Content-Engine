@@ -43,6 +43,62 @@
       "when": 1794310000000,
       "tag": "0005_video_renders",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794350000000,
+      "tag": "0006_accounts",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1794400000000,
+      "tag": "0007_hedgy_policy",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1794401000000,
+      "tag": "0008_hedgy_colour_exceptions",
+      "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1794402000000,
+      "tag": "0009_hedgy_2d_caption_lanes",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "6",
+      "when": 1794403000000,
+      "tag": "0010_hedgy_actor_caption_fit",
+      "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "6",
+      "when": 1794404000000,
+      "tag": "0011_hedgy_action_pacing",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1794405000000,
+      "tag": "0012_hedgy_coherent_story",
+      "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1794406000000,
+      "tag": "0013_hedgy_transition_variety",
+      "breakpoints": true
     }
   ]
 }

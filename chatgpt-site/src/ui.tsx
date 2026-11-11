@@ -1,4 +1,5 @@
 import {StorageView} from './views/Storage';
+import {AccountsView} from './views/Accounts';
 import {GenerationView} from './views/Generation';
 import { CalendarDays, FlaskConical, Layers3, Lightbulb, LoaderCircle, LogOut, Menu, Palette, Radio, Bot, Tags, OctagonPause, Play, X, ChartNoAxesCombined } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -22,6 +23,7 @@ const POLL_MS = 30_000;
 const TICK_STALE_MS = 2 * 60 * 60_000;
 
 const NAV: { id: ViewId; label: string; icon: ReactNode; group: 'Plan' | 'Configure' }[] = [
+  { id: 'accounts', label: 'Accounts', icon: <Bot size={16} aria-hidden />, group: 'Plan' },
   { id: 'calendar', label: 'Calendar', icon: <CalendarDays size={16} aria-hidden />, group: 'Plan' },
   { id: 'library', label: 'Library', icon: <Layers3 size={16} aria-hidden />, group: 'Plan' },
   { id: 'feedback', label: 'Feedback', icon: <ChartNoAxesCombined size={16} aria-hidden />, group: 'Plan' },
@@ -190,62 +192,11 @@ function Shell({ user, onUnreachable }: { user: Session['user']; onUnreachable: 
       <RouteProvider value={route}>
         <div className="shell">
           {menuOpen && <div className="scrim scrim-menu" onClick={() => setMenuOpen(false)} />}
-          <aside className={`sidebar ${menuOpen ? 'open' : ''}`}>
-            <div className="logo"><div className="mark">O</div><span>Organic Content Engine</span></div>
-            <nav aria-label="Main">
-              {(['Plan', 'Configure'] as const).map(group => (
-                <div key={group} className="navgroup">
-                  <div className="eyebrow">{group}</div>
-                  {NAV.filter(item => item.group === group).map(item => (
-                    <a key={item.id} href={hrefFor(item.id)} className={`navitem ${route.view === item.id ? 'active' : ''}`} aria-current={route.view === item.id ? 'page' : undefined} onClick={() => setMenuOpen(false)}>
-                      {item.icon}{item.label}{badge(item.id)}
-                    </a>
-                  ))}
-                </div>
-              ))}
-            </nav>
-            <div className="sidefoot">
-              <div className="sidefoot-line">Generator: <b>{status.generator.id}</b></div>
-              {user && <div className="sidefoot-line">{user.displayName}</div>}
-              <a className="navitem" href={signOutHref} target="_top">
-                <LogOut size={16} aria-hidden /> Sign out
-              </a>
-            </div>
-          </aside>
+
 
           <div className="main">
-            <div className="topbar">
-              <IconButton label="Open menu" className="hamburger" onClick={() => setMenuOpen(true)}><Menu size={17} aria-hidden /></IconButton>
-              <div className="topbar-status">
-                <a className={`pill ${dryRun ? '' : 'pill-strong'}`} href={hrefFor('platforms')} title={dryRun ? 'PUBLISH_MODE=dry_run. No network calls are made and posts end as Simulated.' : 'PUBLISH_MODE=live. Scheduled posts go to real accounts.'}>
-                  {dryRun ? <FlaskConical size={13} aria-hidden /> : <Radio size={13} aria-hidden />}
-                  {dryRun ? 'Dry run: nothing is posted' : 'Live: real posts'}
-                </a>
-                {attention && <a className="pill pill-alert" href={hrefFor('library', { status: attention })}>{attentionTotal} need{attentionTotal === 1 ? 's' : ''} action</a>}
-              </div>
-              {paused
-                ? <Button onClick={() => void setPublishingPaused(false)}><Play size={14} aria-hidden /> Resume publishing</Button>
-                : <Button onClick={() => void setPublishingPaused(true)}><OctagonPause size={14} aria-hidden /> Pause publishing</Button>}
-            </div>
-
-            <div className="banners">
-              {paused && <Notice tone="alert">Publishing is paused. No post goes out, including publish-now, until you resume.</Notice>}
-              {offline && <Notice tone="alert">Lost contact with the backend. Showing the last data; retrying every 30 seconds.</Notice>}
-              {waitingOnJob && <Notice>Nothing runs in the background on this host. Scheduled posts and autopilot only advance when <code>{status.scheduler.jobPath}</code> is called, and no call has arrived recently. Connect a Site schedule, or use Process due posts under Automation. Posts past the lateness limit fail as missed.</Notice>}
-              {status.scheduler.lastError && <Notice tone="alert">Last job run error: {status.scheduler.lastError}</Notice>}
-            </div>
-
             <main className="content">
-              {route.view === 'calendar' && <CalendarView />}
-              {route.view === 'library' && <LibraryView />}
-              {route.view === 'feedback' && <FeedbackView />}
-              {route.view === 'storage' && <StorageView />}
-              {route.view === 'generation' && <GenerationView />}
-              {route.view === 'ideas' && <IdeasView />}
-              {route.view === 'pillars' && <PillarsView />}
-              {route.view === 'brand' && <BrandView />}
-              {route.view === 'platforms' && <PlatformsView />}
-              {route.view === 'automation' && <AutomationView />}
+              <AccountsView />
             </main>
           </div>
 

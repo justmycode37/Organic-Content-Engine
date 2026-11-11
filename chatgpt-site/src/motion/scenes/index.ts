@@ -1,3 +1,4 @@
+import {hedgyScene} from './hedgy.ts';
 // Scene registry. One file per scene type; the key is the spec `type`.
 import type { SceneDef, SceneProps, SceneType } from '../core.ts';
 import { titleScene } from './title.ts';
@@ -19,6 +20,7 @@ import { objectScene } from './object.ts';
 import { outroScene } from './outro.ts';
 
 export const SCENES: { [K in SceneType]: SceneDef<SceneProps[K]> } = {
+  hedgy: hedgyScene,
   title: titleScene,
   code: codeScene,
   diff: diffScene,

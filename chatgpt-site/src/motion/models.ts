@@ -1,3 +1,4 @@
+import {detailedPhoneParts} from './detailed-phone.ts';
 import type { IconName, ModelName } from './core.ts';
 import { ICON_BITMAPS } from './icons.ts';
 import { iconMesh } from './icon3d.ts';
@@ -199,24 +200,7 @@ function buildMonitor(): Mesh[] {
 }
 
 /** Handset slab with inset display, app grid, and a separate raised rear camera island. */
-function buildPhone(): Mesh[] {
-  const shell = move(box(1.3, 2.26, 0.22, 2, [2, 2, 3, 4, 2, 2]), [0, 0, 0]);
-  const screen = move(box(1.08, 1.98, 0.045, 3), [0, -0.015, -0.14]);
-  const tiles: Mesh[] = [];
-  const appX = [-0.3, 0, 0.3], appY = [0.35, -0.05, -0.45];
-  for (let row = 0; row < appY.length; row++) for (let col = 0; col < appX.length; col++) {
-    const isAccent = (row === 0 && col === 1) || (row === 1 && col === 1) || (row === 1 && col === 2);
-    tiles.push(move(box(0.19, 0.19, 0.04, isAccent ? 1 : (row + col) % 2 ? 2 : 3), [appX[col]!, appY[row]!, -0.19]));
-  }
-  const speaker = move(box(0.22, 0.045, 0.035, 2), [0.18, 0.79, -0.19]);
-  const homeMark = move(box(0.13, 0.035, 0.035, 3), [0, -0.79, -0.19]);
-  const cameraIsland = merge(
-    move(box(0.43, 0.4, 0.12, 4), [-0.34, 0.79, -0.24]),
-    move(sphere(0.085, 12, 8, 2), [-0.42, 0.84, -0.32]),
-    move(sphere(0.085, 12, 8, 2), [-0.23, 0.73, -0.32]),
-  );
-  return [shell, screen, speaker, homeMark, merge(...tiles), cameraIsland];
-}
+function buildPhone(): Mesh[] { return detailedPhoneParts(); }
 
 /** Four offset cache slabs with one top face picked out in rainbow. */
 function buildStack(): Mesh[] {

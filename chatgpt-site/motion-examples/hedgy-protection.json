@@ -1,0 +1,104 @@
+{
+  "version": 1,
+  "title": "A backup plan for your stock",
+  "series": "HEDGY / FINANCE",
+  "mode": "dark",
+  "accent": "mono",
+  "music": "chill",
+  "scenes": [
+    {
+      "type": "hedgy",
+      "duration": 4,
+      "beat": "risk",
+      "action": "story",
+      "story": "phone",
+      "headline": "YOU PROTECT YOUR PHONE.",
+      "say": "You put a case on your phone because replacing it would hurt.",
+      "transition": "cut",
+      "transitionSound": "none"
+    },
+    {
+      "type": "hedgy",
+      "duration": 3,
+      "beat": "risk",
+      "action": "story",
+      "story": "worry",
+      "headline": "WHAT ABOUT YOUR STOCK?",
+      "mascot": true,
+      "say": "Hedgy wants that kind of protection for his stock,",
+      "transition": "zoom",
+      "transitionSound": "rise"
+    },
+    {
+      "type": "hedgy",
+      "duration": 4,
+      "beat": "hedge",
+      "action": "story",
+      "story": "put",
+      "headline": "A LITTLE PROTECTION",
+      "say": "so he buys a put: a contract that pays if the stock falls far enough.",
+      "sync": [
+        {
+          "word": "put",
+          "kind": "protect"
+        }
+      ],
+      "transition": "wipe",
+      "transitionSound": "tick"
+    },
+    {
+      "type": "hedgy",
+      "duration": 4,
+      "beat": "offset",
+      "action": "story",
+      "story": "cushion",
+      "headline": "A SMALLER HIT",
+      "mascot": true,
+      "say": "When the stock crashes, that payout covers part of his loss;",
+      "sync": [
+        {
+          "word": "crashes",
+          "kind": "crash"
+        },
+        {
+          "word": "payout",
+          "kind": "payout"
+        }
+      ],
+      "transition": "cut",
+      "transitionSound": "none"
+    },
+    {
+      "type": "hedgy",
+      "duration": 4,
+      "beat": "lesson",
+      "action": "story",
+      "story": "gain",
+      "headline": "BUT PROTECTION COSTS.",
+      "say": "and if it rises instead, he keeps the gains, minus the price of protection.",
+      "sync": [
+        {
+          "word": "rises",
+          "kind": "rise"
+        },
+        {
+          "word": "minus",
+          "kind": "deduct"
+        }
+      ],
+      "transition": "shutter",
+      "transitionSound": "glitch"
+    },
+    {
+      "type": "hedgy",
+      "duration": 4,
+      "beat": "lesson",
+      "action": "story",
+      "story": "backup",
+      "headline": "THAT'S HEDGING.",
+      "say": "That's hedging: keeping the investment, while paying to make a bad outcome hurt less.",
+      "transition": "blocks",
+      "transitionSound": "shimmer"
+    }
+  ]
+}

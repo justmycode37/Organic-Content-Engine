@@ -1,3 +1,5 @@
+import {generateHedgyReel} from '../hedgy-generation.ts';
+import {listAccounts,addAccount,updateAccount,accountCreate,accountPatch} from '../services/accounts.ts';
 import {videoPreflight} from '../services/video-preflight.ts';
 import {preparePlanCycle} from '../services/plan-cycle.ts';
 import { randomHex } from '../lib/crypto.ts';
@@ -201,6 +203,18 @@ export function createApp(): Hono<AppEnv> {
     if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Enter the workspace password');
     await next();
   });
+
+  api.post('/accounts/:id/generate',async c=>{
+    const db=c.get('container').db,id=c.req.param('id');
+    const row=await db.prepare('SELECT value FROM accounts WHERE id=?').bind(id).first<{value:string}>();
+    if(!row)throw new AppError(404,'not_found','Account not found');
+    const account=JSON.parse(row.value) as {topic:string};
+    const result=await keepAlive(c,generateHedgyReel(c.env,account.topic));
+    return c.json(result);
+  });
+  api.get('/accounts',async c=>c.json({accounts:await listAccounts(c.get('container').db)}));
+  api.post('/accounts',async c=>c.json(await addAccount(c.get('container').db,await readBody(c,accountCreate)),201));
+  api.patch('/accounts/:id',async c=>c.json(await updateAccount(c.get('container').db,c.req.param('id'),await readBody(c,accountPatch))));
 
   const present = (container: Container, post: Post) => ({ ...post, issues: container.gateway.validate(post.platform, post.body, post.mediaUrls) });
 

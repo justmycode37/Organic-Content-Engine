@@ -142,6 +142,8 @@ export interface View3D {
   cell?: number;
   /** One-pixel outline around the silhouette, and dark creases where depth jumps. Default true. */
   outline?: boolean;
+  /** Optional character/semantic palette; never used as a decorative accent. */
+  palette?: string[];
   /** Extra offset of the projected origin from the region centre, canvas px. */
   cx?: number; cy?: number;
 }
@@ -238,7 +240,7 @@ export function render3d(ctx: Ctx, theme: Theme, view: View3D, objects: Object3D
   const buffer = layer(cols, rows, '3d');
   const image = buffer.ctx.createImageData(cols, rows), data = image.data;
   const dark = theme.mode === 'dark';
-  const ramp = (dark ? ['#17171A', '#3A3A3F', '#77777D', '#BDBDC2', '#FFFFFF'] : ['#0A0A0C', '#3C3C40', '#7C7C82', '#C0C0C5', '#F4F4F5']).map(hexRgb);
+  const ramp = (view.palette ?? (theme.accentSolid.toLowerCase()==='#ffffff'?['#111111','#444444','#888888','#bbbbbb','#ffffff']:dark ? ['#17171A', '#3A3A3F', '#77777D', '#BDBDC2', '#FFFFFF'] : ['#0A0A0C', '#3C3C40', '#7C7C82', '#C0C0C5', '#F4F4F5'])).map(hexRgb);
   const colors = theme.spectrum.map(hexRgb), band = 3, drift = Math.floor(theme.time * 14);
   const edge = hexRgb(theme.fg), outline = view.outline !== false;
   const left = Math.round(view.x / cell), top = Math.round(view.y / cell);

@@ -66,7 +66,7 @@ function balancedLines(ctx: Frame['ctx'], words: CaptionWord[], size: number, we
 }
 
 /** Clean sans captions build word by word, with the marked phrase taking the accent. */
-export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) {
+export function drawCaption(frame: Frame, caption: ActiveCaption, time: number, region?:{top:number;bottom:number}) {
   if (!caption) return;
   const raw = String(caption?.text ?? '');
   if (!raw.trim() || !Number.isFinite(time)) return;
@@ -97,12 +97,12 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
   for (const candidateSize of WORD_SIZES) {
     const fitWords = splitOversizedWords(ctx, words, candidateSize, weight);
     const balanced = balancedLines(ctx, fitWords, candidateSize, weight);
-    if (balanced) {
+    if(balanced&&(!region||((balanced.length-1)*candidateSize*1.08+candidateSize*1.6<=region.bottom-region.top-40))){
       size = candidateSize;
       lines = balanced;
       break;
     }
-    if (candidateSize === 52) {
+    if (candidateSize === 52 && !region) {
       size = candidateSize;
       lines = greedyLines(ctx, fitWords, candidateSize, weight);
       break;
@@ -113,8 +113,11 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
     lines = greedyLines(ctx, splitOversizedWords(ctx, words, size, weight), size, weight);
   }
 
+  if(region){
+    while((lines.length-1)*size*1.08+size*1.6>region.bottom-region.top-40&&size>16){size-=2;lines=greedyLines(ctx,splitOversizedWords(ctx,words,size,weight),size,weight);}
+  }
   const lineHeight = size * 1.08;
-  const top = CAPTION_Y - ((lines.length - 1) * lineHeight) / 2;
+  const top = (region?(region.top+region.bottom)/2:CAPTION_Y) - ((lines.length - 1) * lineHeight) / 2;
   const span = Math.max(0.001, end - start);
   const enterWindow = Math.min(span * 0.45, words.length * 0.09);
   const wordDelay = words.length > 1 ? enterWindow / (words.length - 1) : 0;

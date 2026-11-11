@@ -14,3 +14,6 @@ coverage/
 
 chatgpt-credentials.json
 chatgpt-credentials.json.*.tmp
+
+# Local reel renders, provider traces and previews
+artifacts/

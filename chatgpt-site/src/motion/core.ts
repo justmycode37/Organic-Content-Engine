@@ -20,6 +20,7 @@ export const U = 12;
 
 /** `rainbow` (the default) is the animated spectrum mosaic from pix.ts; the others are solid single hues. */
 export const ACCENTS = {
+  mono: '#FFFFFF',
   rainbow: '#FF2A2A',
   red: '#FF2B2B',
   lime: '#B8FF1A',
@@ -184,6 +185,7 @@ export interface SceneBase {
   duration: number;
   /** How this scene ENTERS. Default 'cut'. */
   transition?: TransitionName;
+  transitionSound?:'swish'|'rise'|'tick'|'pop'|'glitch'|'shimmer'|'none';
   /** Seconds within the scene at which something lands: the player adds a camera punch and shake. */
   hits?: number[];
   /** Caption shown under this scene (bold sans, `*accent*` markup). An array is split evenly across the scene. */
@@ -232,13 +234,15 @@ export interface ObjectProps { model: ModelName; label?: string; note?: string; 
 /** Closing card: one action, the wordmark and the handle. */
 export interface OutroProps { cta: string; handle?: string; sub?: string }
 
+export interface HedgyProps { beat:'risk'|'drop'|'hedge'|'offset'|'cost'|'lesson'; headline:string; label?:string; secondary?:string; mascot?:boolean; action?:'buy'|'crash'|'contract'|'expiry'|'payout'|'net'|'upside'|'premium'|'story'; story?:'phone'|'worry'|'put'|'cushion'|'gain'|'backup'; sync?:{word:string;kind:string}[]; events?:{at:number;kind:string}[] }
 export interface SceneProps {
+  hedgy: HedgyProps;
   title: TitleProps; code: CodeProps; diff: DiffProps; terminal: TerminalProps; flow: FlowProps; stat: StatProps;
   bars: BarsProps; compare: CompareProps; list: ListProps; tokens: TokensProps; chat: ChatProps; layers: LayersProps;
   grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; object: ObjectProps; outro: OutroProps;
 }
 export type SceneType = keyof SceneProps;
-export const SCENE_TYPES = ['title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
+export const SCENE_TYPES = ['hedgy', 'title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */

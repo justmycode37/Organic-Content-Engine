@@ -1,6 +1,6 @@
 import type { EditPlan, Voice } from '../studio/plan';
 import type {
-  ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
+  Account, ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
   PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight,
 } from './types';
 
@@ -88,6 +88,11 @@ const at = (id: string) => encodeURIComponent(id);
 const post = <T>(path: string, json?: unknown) => request<T>(path, { method: 'POST', json });
 
 export const api = {
+  accounts: {
+    list: () => request<{accounts:Account[]}>('/accounts'),
+    create: (input:Partial<Account>) => post<Account>('/accounts', input),
+    update: (id:string, patch:Partial<Account>) => request<Account>(`/accounts/${at(id)}`, {method:'PATCH', json:patch}),
+  },
   social: {
     list: () => request<{items:SocialConnection[]}>('/social'),
     connect: (platform:string) => post<{url:string}>(`/social/${at(platform)}/connect`),

@@ -1,0 +1,1 @@
+UPDATE accounts SET value=json_set(value,'$.brand.style','Complex shaded 3D pixelart with generous negative space; black and white base; red and green only for stock direction and gains or losses','$.brand.mascot','Naturally coloured brown hedgehog as an occasional story actor','$.brand.policyVersion',3),updated_at=CURRENT_TIMESTAMP WHERE id='hedgy';

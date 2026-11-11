@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import type { Pillar, PlatformId, PlatformStatus, Status } from './api/types';
 
-export const VIEW_IDS = ['calendar', 'storage', 'generation', 'library', 'feedback', 'ideas', 'pillars', 'brand', 'platforms', 'automation'] as const;
+export const VIEW_IDS = ['accounts', 'calendar', 'storage', 'generation', 'library', 'feedback', 'ideas', 'pillars', 'brand', 'platforms', 'automation'] as const;
 export type ViewId = (typeof VIEW_IDS)[number];
 
 export type PostTarget =

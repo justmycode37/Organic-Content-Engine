@@ -1,0 +1,1 @@
+UPDATE accounts SET value=json_set(value,'$.brand.mascot','Always a flat 2D pixel sprite in natural brown colours; appears only as a story actor','$.brand.policyVersion',4,'$.brand.captions','Exclusive caption region, never overlapping animation or scene labels'),updated_at=CURRENT_TIMESTAMP WHERE id='hedgy';
