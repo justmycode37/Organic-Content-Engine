@@ -231,7 +231,12 @@ export const demandFeedbackShot: ShotDef = {
       { x: 736, y: 446 }, { x: 700, y: 308 }, { x: 812, y: 238 }, { x: 866, y: 88 },
     ];
     const path = resolvedPath(props, defaultPath);
-    drawTrack(ctx, path, 0.4 + 0.6 * clamp(t / dur));
+    const ratchetAnchors = covers.map((_at, i) => Math.min(path.length - 1, Math.max(0, Math.floor((i + 5) / (count + 4) * (path.length - 1)))));
+    const ratchetedPath = path.map((point, pointIndex) => {
+      const rise = covers.reduce((sum, at, i) => pointIndex > ratchetAnchors[i] ? sum + ease.outCubic(clamp((t - at) / 0.22)) * 24 : sum, 0);
+      return { x: point.x, y: point.y - rise };
+    });
+    drawTrack(ctx, ratchetedPath, 0.4 + 0.6 * clamp(t / dur));
     // Booth stacks slide past camera on alternating sides; their changing depth and size sell the vertical ride.
     const shift = clamp(t / dur) * 350;
     const booths = Array.from({ length: 7 }, (_, i) => {
@@ -248,7 +253,7 @@ export const demandFeedbackShot: ShotDef = {
     });
     // Purchases kick the price rail in a visible ratchet and send the same paper ticket past lens.
     covers.forEach((at, i) => {
-      const p = clamp((t - at) / 0.22), near = path[Math.min(path.length - 1, Math.max(0, Math.floor((i + 5) / (count + 4) * (path.length - 1))))]!;
+      const p = clamp((t - at) / 0.22), near = ratchetedPath[ratchetAnchors[i]!]!;
       const bumpY = near.y - i * 22 - ease.outBack(p) * 25;
       if (p > 0 && p < 1) {
         ctx.fillStyle = RED; ctx.fillRect(Math.round(near.x / 6) * 6 - 12, Math.round(bumpY / 6) * 6 - 6, 30, 12);

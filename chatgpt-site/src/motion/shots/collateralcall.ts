@@ -5,7 +5,7 @@ import { drawEnv } from '../env/index.ts';
 import { createCameraRig } from '../fx/rig.ts';
 import { drawBurst } from '../fx/particles.ts';
 import { pixelText } from '../prim.ts';
-import { TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
+import { drawTicket2D, TICKET_MATERIALS, ticketMesh } from '../sets/ticket.ts';
 import { box, cylinder, merge, place, render3d, sphere, type Mesh, type Object3D } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
@@ -134,6 +134,23 @@ function drawCounter(ctx: Frame['ctx'], theme: Frame['theme'], t: number, drawer
   for (let i = 0; i < 10; i++) ctx.fillRect(40 + i * 108, 1238, 42, 4);
 }
 
+function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
+  const x = 870 + Math.round(Math.sin(t * 0.7) * 4), y = 700 + Math.round(sink * 44);
+  drawTicket2D(ctx, x, y, 124, { rot: -0.035 });
+  const points: Array<[number, number]> = [
+    [x - 39, y + 8], [x - 24, y + 8], [x - 13, y + 2], [x - 1, y + 3], [x + 11, y - 8], [x + 23, y - 5], [x + 39, y - 17],
+  ];
+  ctx.fillStyle = '#B73532';
+  for (let segment = 0; segment < points.length - 1; segment++) {
+    const [x0, y0] = points[segment]!, [x1, y1] = points[segment + 1]!;
+    const steps = Math.max(1, Math.ceil(Math.max(Math.abs(x1 - x0), Math.abs(y1 - y0)) / GRID));
+    for (let i = 0; i <= steps; i++) {
+      const u = i / steps;
+      ctx.fillRect(Math.round((x0 + (x1 - x0) * u) / GRID) * GRID, Math.round((y0 + (y1 - y0) * u) / GRID) * GRID, GRID, GRID);
+    }
+  }
+}
+
 export const collateralCallShot: ShotDef = {
   name: 'collateralcall',
   describe: 'A steel broker counter unfolds around an animated balance scale as Hedgy is called for more collateral. params.demand changes the drawer label (default MORE).',
@@ -144,7 +161,7 @@ export const collateralCallShot: ShotDef = {
     const unfold = progress(t, 0.02, Math.min(dur * 0.28, 0.42));
     const drawer = progress(t, collateralAt, collateralAt + Math.min(0.26, dur * 0.18));
     const sink = easeOut(progress(t, collateralAt, collateralAt + Math.min(0.42, dur * 0.28)));
-    const demand = label(props.params?.demand ?? props.params?.requiredCollateral, 'MORE', 12);
+    const demand = label(props.params?.demand ?? props.params?.requiredCollateral, 'MORE', 8);
     const rig = createCameraRig({
       width: 1080, height: 1290, seed: seed + 81, handheld: 3.2,
       keyframes: [
@@ -163,6 +180,7 @@ export const collateralCallShot: ShotDef = {
       distance: 6.8, target: [camera.target[0], camera.target[1] + 0.17, camera.target[2]], cell: 4, outline: true, light: [-0.5, 0.78, -0.46], ambient: 0.4, rim: 0.48,
       ground: { y: -2.2, shadow: 0.54, grid: false }, fog: { near: 7, far: 15, color: '#16191B' },
     }, scaleObjects(sink));
+    drawTicketTrace(ctx, t, sink);
     drawCounter(ctx, theme, t, drawer, demand, asksAt);
     drawHedgy(ctx, { x: 246, y: 1188, scale: 5.05, t, pose: t < collateralAt ? 'sweat' : 'shock', look: 'up', expression: 'worried' });
     // Hedgy's pouch turns inside-out exactly on the word “collateral.”
