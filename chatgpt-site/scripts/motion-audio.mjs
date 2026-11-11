@@ -137,7 +137,7 @@ export function captionsFromSpeech(say,words,offset,sceneEnd){
   const next=groups[index+1]?.[0];
   const start=offset+items[0].start,end=Math.min(sceneEnd,next?offset+next.start:offset+items.at(-1).end+0.3);
   // Adjacent accent words merge into one span so the renderer sees a single marked phrase.
-  return {text:items.map(item=>item.text).join(' ').replaceAll('* *',' ').replace(/[,;:]$/,''),start:Math.round(start*1000)/1000,end:Math.round(end*1000)/1000};
+  return {text:items.map(item=>item.text).join(' ').replaceAll('* *',' ').replace(/[,;:]$/,''),start:Math.round(start*1000)/1000,end:Math.round(end*1000)/1000,words:items.map(item=>({start:Math.round((offset+item.start)*1000)/1000,end:Math.round((offset+item.end)*1000)/1000}))};
  }).filter(caption=>caption.end-caption.start>0.05);
 }
 
@@ -154,7 +154,8 @@ export function arrange(spec,spoken,defs=sceneDefs){
   const voice=spoken[index];
   if(!voice)return {...scene};
   const needed=Math.ceil((LEAD+voice.words.at(-1).end+TAIL)*FPS)/FPS;
-  const duration=Math.min(8,Math.max(1.2,needed));
+  // The final scene keeps at least its authored length: the payoff needs a hold after the last word.
+  const duration=Math.min(8,Math.max(1.2,needed,index===spec.scenes.length-1?scene.duration:0));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});

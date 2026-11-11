@@ -1,0 +1,659 @@
+{
+ "version": 1,
+ "title": "The ticket that took off",
+ "mode": "dark",
+ "accent": "mono",
+ "series": "HEDGY / FINANCE",
+ "music": "tense",
+ "scenes": [
+  {
+   "type": "shot",
+   "duration": 1.8333333333333333,
+   "transition": "cut",
+   "shot": "borrowedasset",
+   "mascot": true,
+   "sync": [
+    {
+     "word": "sells",
+     "kind": "sells"
+    },
+    {
+     "word": "borrowed",
+     "kind": "borrowed"
+    }
+   ],
+   "events": [
+    {
+     "kind": "sells",
+     "at": 0.34199999999999997
+    },
+    {
+     "kind": "borrowed",
+     "at": 1.178
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2.5,
+   "transition": "slice",
+   "transitionDir": "down",
+   "shot": "shortsalehandoff",
+   "sync": [
+    {
+     "word": "short",
+     "kind": "short"
+    },
+    {
+     "word": "promises",
+     "kind": "promises"
+    },
+    {
+     "word": "return",
+     "kind": "return"
+    }
+   ],
+   "events": [
+    {
+     "kind": "short",
+     "at": 0.307
+    },
+    {
+     "kind": "promises",
+     "at": 1.189
+    },
+    {
+     "kind": "return",
+     "at": 1.6540000000000001
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.7666666666666666,
+   "transition": "match",
+   "shot": "pricestair",
+   "sync": [
+    {
+     "word": "betting",
+     "kind": "betting"
+    },
+    {
+     "word": "cheaper",
+     "kind": "cheaper"
+    }
+   ],
+   "events": [
+    {
+     "kind": "betting",
+     "at": 0.04
+    },
+    {
+     "kind": "cheaper",
+     "at": 1.12
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2.033333333333333,
+   "transition": "zoomthrough",
+   "shot": "vaultlock",
+   "sync": [
+    {
+     "word": "money",
+     "kind": "money"
+    },
+    {
+     "word": "locked",
+     "kind": "locked"
+    }
+   ],
+   "events": [
+    {
+     "kind": "money",
+     "at": 0.45799999999999996
+    },
+    {
+     "kind": "locked",
+     "at": 0.899
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2.033333333333333,
+   "transition": "iris",
+   "shot": "waitclock",
+   "sync": [
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    },
+    {
+     "word": "waits",
+     "kind": "waits"
+    },
+    {
+     "word": "fade",
+     "kind": "fade"
+    }
+   ],
+   "events": [
+    {
+     "kind": "collateral",
+     "at": 0.214
+    },
+    {
+     "kind": "waits",
+     "at": 0.8410000000000001
+    },
+    {
+     "kind": "fade",
+     "at": 1.387
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.7,
+   "transition": "push",
+   "transitionDir": "up",
+   "shot": "announcement",
+   "mascot": true,
+   "sync": [
+    {
+     "word": "announces",
+     "kind": "announces"
+    },
+    {
+     "word": "reunion",
+     "kind": "reunion"
+    }
+   ],
+   "events": [
+    {
+     "kind": "announces",
+     "at": 0.539
+    },
+    {
+     "kind": "reunion",
+     "at": 0.9570000000000001
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2,
+   "transition": "whip",
+   "transitionDir": "right",
+   "shot": "crowdrush",
+   "sync": [
+    {
+     "word": "chase",
+     "kind": "chase"
+    },
+    {
+     "word": "few",
+     "kind": "few"
+    }
+   ],
+   "events": [
+    {
+     "kind": "chase",
+     "at": 0.481
+    },
+    {
+     "kind": "few",
+     "at": 0.806
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2.1333333333333333,
+   "transition": "push",
+   "transitionDir": "left",
+   "shot": "priceride",
+   "mascot": true,
+   "sync": [
+    {
+     "word": "climbs",
+     "kind": "climbs"
+    },
+    {
+     "word": "losses",
+     "kind": "losses"
+    }
+   ],
+   "events": [
+    {
+     "kind": "climbs",
+     "at": 0.493
+    },
+    {
+     "kind": "losses",
+     "at": 1.155
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.8333333333333333,
+   "transition": "whip",
+   "transitionDir": "up",
+   "shot": "collateralcall",
+   "sync": [
+    {
+     "word": "asks",
+     "kind": "asks"
+    },
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    }
+   ],
+   "events": [
+    {
+     "kind": "asks",
+     "at": 0.504
+    },
+    {
+     "kind": "collateral",
+     "at": 1.004
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.8333333333333333,
+   "transition": "shutter",
+   "shot": "forcedbuyback",
+   "sync": [
+    {
+     "word": "cover",
+     "kind": "cover"
+    },
+    {
+     "word": "buy",
+     "kind": "buy"
+    }
+   ],
+   "events": [
+    {
+     "kind": "cover",
+     "at": 0.365
+    },
+    {
+     "kind": "buy",
+     "at": 1.224
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2,
+   "transition": "zoomthrough",
+   "shot": "buybackhandoff",
+   "sync": [
+    {
+     "word": "back",
+     "kind": "back"
+    },
+    {
+     "word": "rush",
+     "kind": "rush"
+    }
+   ],
+   "events": [
+    {
+     "kind": "back",
+     "at": 0.423
+    },
+    {
+     "kind": "rush",
+     "at": 1.329
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.5333333333333334,
+   "transition": "flip",
+   "shot": "minimarket",
+   "sync": [
+    {
+     "word": "buyers",
+     "kind": "buyers"
+    },
+    {
+     "word": "lifts",
+     "kind": "lifts"
+    }
+   ],
+   "events": [
+    {
+     "kind": "buyers",
+     "at": 0.284
+    },
+    {
+     "kind": "lifts",
+     "at": 0.679
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 2.3,
+   "transition": "push",
+   "transitionDir": "up",
+   "shot": "demandfeedback",
+   "sync": [
+    {
+     "word": "scare",
+     "kind": "scare"
+    },
+    {
+     "word": "covering",
+     "kind": "covering"
+    }
+   ],
+   "events": [
+    {
+     "kind": "scare",
+     "at": 0.365
+    },
+    {
+     "kind": "covering",
+     "at": 1.561
+    }
+   ]
+  },
+  {
+   "type": "shot",
+   "duration": 1.9333333333333333,
+   "transition": "match",
+   "shot": "squeezerocket",
+   "mascot": true,
+   "sync": [
+    {
+     "word": "loop",
+     "kind": "loop"
+    },
+    {
+     "word": "squeeze",
+     "kind": "squeeze"
+    }
+   ],
+   "events": [
+    {
+     "kind": "loop",
+     "at": 0.5860000000000001
+    },
+    {
+     "kind": "squeeze",
+     "at": 1.236
+    }
+   ]
+  }
+ ],
+ "captions": [
+  {
+   "text": "Hedgy sells a",
+   "start": 0.04,
+   "end": 0.597
+  },
+  {
+   "text": "concert ticket he",
+   "start": 0.597,
+   "end": 1.178
+  },
+  {
+   "text": "borrowed.",
+   "start": 1.178,
+   "end": 1.833
+  },
+  {
+   "text": "That's short selling",
+   "start": 1.873,
+   "end": 2.906
+  },
+  {
+   "text": "he promises to",
+   "start": 2.906,
+   "end": 3.487
+  },
+  {
+   "text": "return one",
+   "start": 3.487,
+   "end": 4.333
+  },
+  {
+   "text": "betting he can",
+   "start": 4.373,
+   "end": 4.942
+  },
+  {
+   "text": "buy it back",
+   "start": 4.942,
+   "end": 5.453
+  },
+  {
+   "text": "cheaper.",
+   "start": 5.453,
+   "end": 6.1
+  },
+  {
+   "text": "His sale money",
+   "start": 6.14,
+   "end": 6.744
+  },
+  {
+   "text": "stays locked with",
+   "start": 6.744,
+   "end": 7.324
+  },
+  {
+   "text": "the broker",
+   "start": 7.324,
+   "end": 8.133
+  },
+  {
+   "text": "as collateral while",
+   "start": 8.173,
+   "end": 8.881
+  },
+  {
+   "text": "he waits for",
+   "start": 8.881,
+   "end": 9.264
+  },
+  {
+   "text": "hype to fade.",
+   "start": 9.264,
+   "end": 10.167
+  },
+  {
+   "text": "Then the band",
+   "start": 10.207,
+   "end": 10.706
+  },
+  {
+   "text": "announces a reunion",
+   "start": 10.706,
+   "end": 11.867
+  },
+  {
+   "text": "and fans chase",
+   "start": 11.907,
+   "end": 12.557
+  },
+  {
+   "text": "the few tickets",
+   "start": 12.557,
+   "end": 13.161
+  },
+  {
+   "text": "left.",
+   "start": 13.161,
+   "end": 13.867
+  },
+  {
+   "text": "As the price",
+   "start": 13.907,
+   "end": 14.36
+  },
+  {
+   "text": "climbs",
+   "start": 14.36,
+   "end": 14.731
+  },
+  {
+   "text": "Hedgy's losses grow",
+   "start": 14.731,
+   "end": 16
+  },
+  {
+   "text": "his broker asks",
+   "start": 16.04,
+   "end": 16.725
+  },
+  {
+   "text": "for more collateral.",
+   "start": 16.725,
+   "end": 17.833
+  },
+  {
+   "text": "He can't cover",
+   "start": 17.873,
+   "end": 18.453
+  },
+  {
+   "text": "it",
+   "start": 18.453,
+   "end": 18.558
+  },
+  {
+   "text": "so he must",
+   "start": 18.558,
+   "end": 19.057
+  },
+  {
+   "text": "buy",
+   "start": 19.057,
+   "end": 19.667
+  },
+  {
+   "text": "a ticket back",
+   "start": 19.707,
+   "end": 20.287
+  },
+  {
+   "text": "now.",
+   "start": 20.287,
+   "end": 20.787
+  },
+  {
+   "text": "That rush",
+   "start": 20.787,
+   "end": 21.667
+  },
+  {
+   "text": "adds buyers",
+   "start": 21.707,
+   "end": 22.346
+  },
+  {
+   "text": "lifts prices",
+   "start": 22.346,
+   "end": 23.2
+  },
+  {
+   "text": "and can scare",
+   "start": 23.24,
+   "end": 23.913
+  },
+  {
+   "text": "other short sellers",
+   "start": 23.913,
+   "end": 24.598
+  },
+  {
+   "text": "into covering.",
+   "start": 24.598,
+   "end": 25.5
+  },
+  {
+   "text": "That feedback loop",
+   "start": 25.54,
+   "end": 26.295
+  },
+  {
+   "text": "is a short",
+   "start": 26.295,
+   "end": 26.736
+  },
+  {
+   "text": "squeeze.",
+   "start": 26.736,
+   "end": 27.433
+  }
+ ],
+ "audioTiming": {
+  "bpm": 110,
+  "beatInterval": 0.5454545454545454,
+  "beats": [
+   0,
+   0.545,
+   1.091,
+   1.636,
+   2.182,
+   2.727,
+   3.273,
+   3.818,
+   4.364,
+   4.909,
+   5.455,
+   6,
+   6.545,
+   7.091,
+   7.636,
+   8.182,
+   8.727,
+   9.273,
+   9.818,
+   10.364,
+   10.909,
+   11.455,
+   12,
+   12.545,
+   13.091,
+   13.636,
+   14.182,
+   14.727,
+   15.273,
+   15.818,
+   16.364,
+   16.909,
+   17.455,
+   18,
+   18.545,
+   19.091,
+   19.636,
+   20.182,
+   20.727,
+   21.273,
+   21.818,
+   22.364,
+   22.909,
+   23.455,
+   24,
+   24.545,
+   25.091,
+   25.636,
+   26.182,
+   26.727,
+   27.273
+  ]
+ }
+}

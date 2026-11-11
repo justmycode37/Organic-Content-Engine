@@ -260,7 +260,7 @@ export const SCENE_TYPES = ['hedgy', 'shot', 'title', 'code', 'diff', 'terminal'
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */
-export interface CaptionSpec { text: string; start: number; end: number }
+export interface CaptionSpec { text: string; start: number; end: number; /** Absolute reel-time bounds of each spoken word, for word-by-word captions. */ words?: { start: number; end: number }[] }
 
 export interface ReelSpec {
   version: 1;

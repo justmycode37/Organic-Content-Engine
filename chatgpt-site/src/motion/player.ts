@@ -31,7 +31,7 @@ function transitionSurfaces(width = W, height = H) {
 
 /** Per-scene captions laid on the reel timeline; explicit `spec.captions` win when present. */
 export function reelCaptions(spec: ReelSpec, placed: PlacedScene[] = placeScenes(spec)): ActiveCaption[] {
-  if (spec.captions?.length) return [...spec.captions].sort((a, b) => a.start - b.start);
+  if (spec.captions?.length) return spec.captions.map(c => ({ text: c.text, start: c.start, end: c.end, ...(c.words ? { wordTimings: c.words } : {}) })).sort((a, b) => a.start - b.start);
   return placed.flatMap(scene => {
     const lines = (Array.isArray(scene.spec.caption) ? scene.spec.caption : scene.spec.caption ? [scene.spec.caption] : []).filter(line => line.trim());
     const span = (scene.end - scene.start) / Math.max(1, lines.length);

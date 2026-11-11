@@ -6,6 +6,20 @@ import { demoAudioShot } from './demo-audio.ts';
 import { demoVizShot } from './demo-viz.ts';
 import { demoAssetsShot } from './demo-assets.ts';
 import { demoFxShot } from './demo-fx.ts';
+import { announcementShot } from './announcement.ts';
+import { waitclockShot } from './waitclock.ts';
+import { buybackHandoffShot } from './buybackhandoff.ts';
+import { miniMarketShot } from './minimarket.ts';
+import { collateralCallShot } from './collateralcall.ts';
+import { forcedBuybackShot } from './forcedbuyback.ts';
+import { priceStairShot } from './pricestair.ts';
+import { vaultLockShot } from './vaultlock.ts';
+import { borrowedAssetShot } from './borrowedasset.ts';
+import { shortSaleHandoffShot } from './shortsalehandoff.ts';
+import { crowdRushShot } from './crowdrush.ts';
+import { priceRideShot } from './priceride.ts';
+import { demandFeedbackShot } from './demandfeedback.ts';
+import { squeezeRocketShot } from './squeezerocket.ts';
 
 export interface ShotDef {
   name: string;
@@ -21,6 +35,20 @@ export const SHOTS: Record<string, ShotDef> = {
   [demoVizShot.name]: demoVizShot,
   [demoAssetsShot.name]: demoAssetsShot,
   [demoFxShot.name]: demoFxShot,
+  [waitclockShot.name]: waitclockShot,
+  [announcementShot.name]: announcementShot,
+  [buybackHandoffShot.name]: buybackHandoffShot,
+  [miniMarketShot.name]: miniMarketShot,
+  [collateralCallShot.name]: collateralCallShot,
+  [forcedBuybackShot.name]: forcedBuybackShot,
+  [priceStairShot.name]: priceStairShot,
+  [vaultLockShot.name]: vaultLockShot,
+  [borrowedAssetShot.name]: borrowedAssetShot,
+  [shortSaleHandoffShot.name]: shortSaleHandoffShot,
+  [crowdRushShot.name]: crowdRushShot,
+  [priceRideShot.name]: priceRideShot,
+  [demandFeedbackShot.name]: demandFeedbackShot,
+  [squeezeRocketShot.name]: squeezeRocketShot,
 };
 
 export const shotScene: SceneDef<ShotProps> = {

@@ -50,232 +50,353 @@ export const HEDGY_TIMING = {
   'wave-off': { loop: 1.05, shrug: 0.45 },
 } as const;
 
-// Palette is deliberately confined to natural hedgehog browns, warm cream, and ink.
-// K is the one-pixel silhouette ink; the six quill browns each have a distinct job.
+// Ink, chestnut, toasted brown, and warm cream keep the little silhouette readable
+// against both black and grey scenes. Every visible edge is drawn on the art-pixel grid.
 const COLORS: Record<string, string> = {
-  K: '#291910', Q: '#402719', A: '#573621', B: '#70472b', C: '#8b5c38', D: '#a87347',
-  E: '#bd8b58', H: '#d4a66f', F: '#f0d9b3', G: '#e2c69b', S: '#c5a77f', I: '#17120f', W: '#fff0d3',
+  K: '#2a1a12', Q: '#3e281b', A: '#573822', B: '#70492e', C: '#8a5e3d', D: '#a97850',
+  E: '#bd9165', H: '#dfbd8c', F: '#f2dfbd', G: '#e6d1ac', S: '#d2b58a', I: '#1b120e', W: '#fff5df',
+  R: '#b88770',
 };
 
-// Hand-authored 1-art-pixel maps. The broken, bright tips give the quills depth at small sizes.
-const QUILLS = [
-  '        KQK     KQK     KQK     KQK',
-  '      KQAAAK  KQAAAK  KQAAAK  KQAAAK',
-  '    KQABBBBAKQABBBBAKQABBBBAKQABBBBAK',
-  '  KQABCCBBAABCCBBAABCCBBAABCCBBAK',
-  ' KQABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  'KQABCCBBAABCCBBAABCCBBAABCCBBAABK',
-  'KQABCCBBABCCBBABCCBBABCCBBABCCBBAK',
-  'KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  'KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  'KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  'KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  'KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  'KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  'KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  ' KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '  KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '   KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '    KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '      KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '        KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '          KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '            KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '              KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '                KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '                  KQABCCBBABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '                    KQABCCBBAABCCBBAABCCBBAABCCBBAABCCBAK',
-  '                      KQABCCBBABCCBBABCCBBABCCBBABCCBAK',
-  '                        KQABCCBBAABCCBBAABCCBBAABCCBAK',
-  '                          KQABCCBBABCCBBABCCBBABCCBAK',
-  '                            KQABCCBBAABCCBBAABCCBAK',
-  '                              KQABCCBBABCCBBABCCBAK',
-];
-
-const BODY = [
-  '             KQAAK',
-  '          KQABBBBAK',
-  '        KQABBBBBBBAK',
-  '      KQABBBBBBBBBBAK',
-  '     KQABBBBBBBBBBBBAK',
-  '    KQABBBBBCCBBBBBBBAK',
-  '   KQABBBBBCCCBBBBBBBBAK',
-  '  KQABBBBBCCCCCCBBBBBBBAK',
-  ' KQABBBBBCCCCCCGGGGBBBBBAK',
-  ' KQABBBBCCCCCCGGGGGGGBBBBAK',
-  'KQABBBBCCCCCCGGGGGGGGBBBBAK',
-  'KQABBBBCCCCCGGGGGGGGGGBBBBAK',
-  'KQABBBBCCCCGGGGGGGGGGGGBBBBAK',
-  'KQABBBBCCCCGGGGGGGGGGGGGBBBBAK',
-  'KQABBBBCCCCGGGGGGGGGGGGGBBBBAK',
-  'KQABBBBCCCCGGGGGGGGGGGGGBBBBAK',
-  'KQABBBBCCCBGGGGGGGGGGGGBBBBAK',
-  ' KQABBBBCCBBBBGGGGGGGGBBBBAK',
-  '  KQABBBBBBBBBBBGGGGGBBBBAK',
-  '   KQABBBBBBBBBBBBBBBBBBAK',
-  '    KQABBBBBBBBBBBBBBBBAK',
-  '      KQABBBBBBBBBBBBBAK',
-  '        KQABBBBBBBBBAK',
-  '          KQABBBBBAK',
-  '         KQABBBBBBBBBAK',
-  '          KQABBBBBBBBBBAK',
-  '            KQABBBBBBBGGBBAK',
-  '              KQABBBBBBGGBBAK',
-  '                KQABBBBGBBAK',
-  '                  KQABBBBAK',
-  '                    KQAAK',
-];
-
-const FACE = [
-  '              KQAAAK',
-  '           KQABBBCCAK',
-  '         KQABBBCCCCCBAK',
-  '       KQABBBCCCCCCCCCCAK',
-  '      KQABBBCCCGGGGGGGCCBAK',
-  '     KQABBBCCCGGGGGGGFFGGCCBAK',
-  '    KQABBBCCCGGGGGGGGGGGGGCCBAK',
-  '   KQABBBCCCGGGGGGGGGFFGGGGGCCBAK',
-  '  KQABBBCCCGGGGGGGGGGGGGGGGGGCCBAK',
-  '  KQABBBCCCGGGGGGGGGGGGGGGGGGGGCBAK',
-  ' KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGCCBAK',
-  ' KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGGGCBAK',
-  'KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGGGGGCBAK',
-  'KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGGGGGCCBAK',
-  'KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGGGGCCBAK',
-  ' KQABBBCCCGGGGGGGGGGGGGGGGGGGGGGCCBAK',
-  '  KQABBBCCCGGGGGGGGGGGGGGGGGGGCCBAK',
-  '   KQABBBCCCGGGGGGGGGGGGGGGGCCBAK',
-  '    KQABBBCCCGGGGGGGGGGGGGCCBAK',
-  '      KQABBBCCCGGGGGGGGGCCBAK',
-  '        KQABBBCCCGGGCCBAK',
-  '          KQABBBCCAK',
-  '            KQABBBCCCGGGGGGGGCCBAK',
-  '              KQABBBCCCGGGCCBAK',
-  '                KQABBBCCAK',
-];
-
-const BALL = [
-  '               KQK',
-  '          KQK  KQK   KQK',
-  '       KQAAAKQAAAKQAAAKQK',
-  '     KQABCCABBBCCABBBCCBAK',
-  '   KQABCCABBBCCABBBCCABBBBAK',
-  ' KQABCCABBBCCABBBCCABBBCCBBBAK',
-  'KQABCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  'KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  ' KQABBBCCABBBCCABBBCCABBBCCABBBBBAK',
-  '  KQABBBCCABBBCCABBBCCABBBCCABBBBAK',
-  '   KQABBBCCABBBCCABBBCCABBBCCABBBBAK',
-  '     KQABBBCCABBBCCABBBCCABBBCCBBAK',
-  '       KQABBBCCABBBCCABBBCCABBBBAK',
-  '         KQABBBCCABBBCCABBBCCBAK',
-  '           KQABBBCCABBBCCBAK',
-  '              KQABBBBBAK',
-  '                 KQK',
-];
-
 type Canvas2D = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
-type Motion = { dx: number; dy: number; sx: number; sy: number; angle: number; leg: number; arm: number; burst: number; blink: boolean; eyeWide: boolean; ball: boolean; roll: boolean };
+type Point = readonly [number, number];
+type Motion = {
+  dx: number; dy: number; sx: number; sy: number; angle: number; leg: number; arm: number;
+  burst: number; blink: boolean; eyeWide: boolean; ball: boolean; roll: boolean;
+};
+
 const TAU = Math.PI * 2;
 const clamp01 = (n: number) => Math.max(0, Math.min(1, n));
 const smooth = (n: number) => { const x = clamp01(n); return x * x * (3 - 2 * x); };
 const pulse = (t: number, start: number, duration: number) => Math.sin(Math.PI * clamp01((t - start) / duration));
-const px = (ctx: Canvas2D, x: number, y: number, w: number, h = w, color = 'K') => {
+
+function px(ctx: Canvas2D, x: number, y: number, w = 1, h = 1, color = 'K') {
   ctx.fillStyle = COLORS[color] ?? color;
   ctx.fillRect(Math.round(x), Math.round(y), Math.max(1, Math.round(w)), Math.max(1, Math.round(h)));
-};
+}
 
-function drawMap(ctx: Canvas2D, map: readonly string[], x: number, y: number, outline?: string) {
-  for (let row = 0; row < map.length; row++) {
-    const line = map[row]!;
-    for (let col = 0; col < line.length; col++) {
-      const cell = line[col]!;
-      if (cell !== ' ') px(ctx, x + col, y + row, 1, 1, cell === 'K' && outline ? outline : cell);
-    }
+function pointInPolygon(x: number, y: number, points: readonly Point[]): boolean {
+  let inside = false;
+  for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+    const [xi, yi] = points[i]!;
+    const [xj, yj] = points[j]!;
+    if ((yi > y) !== (yj > y) && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+  }
+  return inside;
+}
+
+function rasterPolygon(ctx: Canvas2D, points: readonly Point[], colorAt: (x: number, y: number) => string) {
+  const minX = Math.floor(Math.min(...points.map(p => p[0])));
+  const maxX = Math.ceil(Math.max(...points.map(p => p[0])));
+  const minY = Math.floor(Math.min(...points.map(p => p[1])));
+  const maxY = Math.ceil(Math.max(...points.map(p => p[1])));
+  for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
+    if (pointInPolygon(x + 0.5, y + 0.5, points)) px(ctx, x, y, 1, 1, colorAt(x, y));
   }
 }
 
-function segment(ctx: Canvas2D, x1: number, y1: number, x2: number, y2: number, inner: string, width = 5) {
-  // Bresenham cells keep arms and legs crisp, including on diagonals.
-  const xStart = Math.round(x1), yStart = Math.round(y1), xEnd = Math.round(x2), yEnd = Math.round(y2);
-  const dx = Math.abs(xEnd - xStart), sx = xStart < xEnd ? 1 : -1;
-  const dy = -Math.abs(yEnd - yStart), sy = yStart < yEnd ? 1 : -1;
-  let err = dx + dy, x = xStart, y = yStart;
+function line(ctx: Canvas2D, x1: number, y1: number, x2: number, y2: number, color = 'K', width = 1) {
+  let x = Math.round(x1), y = Math.round(y1);
+  const endX = Math.round(x2), endY = Math.round(y2);
+  const dx = Math.abs(endX - x), sx = x < endX ? 1 : -1;
+  const dy = -Math.abs(endY - y), sy = y < endY ? 1 : -1;
+  let err = dx + dy;
   for (;;) {
-    px(ctx, x - width / 2, y - width / 2, width + 2, width + 2, 'K');
-    px(ctx, x - width / 2 + 1, y - width / 2 + 1, width, width, inner);
-    if (x === xEnd && y === yEnd) break;
-    const e2 = 2 * err;
+    px(ctx, x - Math.floor(width / 2), y - Math.floor(width / 2), width, width, color);
+    if (x === endX && y === endY) break;
+    const e2 = err * 2;
     if (e2 >= dy) { err += dy; x += sx; }
     if (e2 <= dx) { err += dx; y += sy; }
   }
 }
 
-function paw(ctx: Canvas2D, x: number, y: number, color = 'D') {
-  px(ctx, x - 3, y - 2, 7, 5, 'K');
-  px(ctx, x - 2, y - 1, 5, 3, color);
-  px(ctx, x - 1, y - 1, 2, 1, 'H');
-  px(ctx, x + 2, y + 1, 1, 1, 'K');
+function rasterEllipse(ctx: Canvas2D, cx: number, cy: number, rx: number, ry: number, colorAt: (x: number, y: number) => string, outline = 'K') {
+  const minX = Math.floor(cx - rx - 1), maxX = Math.ceil(cx + rx + 1);
+  const minY = Math.floor(cy - ry - 1), maxY = Math.ceil(cy + ry + 1);
+  const innerRx = Math.max(0.1, rx - 1), innerRy = Math.max(0.1, ry - 1);
+  for (let y = minY; y < maxY; y++) for (let x = minX; x < maxX; x++) {
+    const nx = (x + 0.5 - cx) / rx, ny = (y + 0.5 - cy) / ry;
+    if (nx * nx + ny * ny <= 1) {
+      const ix = (x + 0.5 - cx) / innerRx, iy = (y + 0.5 - cy) / innerRy;
+      px(ctx, x, y, 1, 1, ix * ix + iy * iy > 1 ? outline : colorAt(x, y));
+    }
+  }
 }
 
-function drawLegs(ctx: Canvas2D, pose: HedgyPose, t: number, leg: number, squashY: number) {
-  if (pose === 'curl' || pose === 'roll' || pose === 'fall') return;
-  const stride = pose === 'run' ? 7 : pose === 'walk' ? 5 : pose === 'push' ? 3 : 0;
-  const lift = pose === 'run' ? 4 : pose === 'walk' ? 2 : 0;
-  const l = leg * stride;
-  const leftX = -6 + l, rightX = 8 - l;
+const deg = (n: number) => n * Math.PI / 180;
+function edgePoint(cx: number, cy: number, rx: number, ry: number, angle: number, radius = 1): Point {
+  const a = deg(angle);
+  return [Math.round(cx + Math.cos(a) * rx * radius), Math.round(cy + Math.sin(a) * ry * radius)];
+}
+
+function drawFeet(ctx: Canvas2D, pose: HedgyPose, t: number, leg: number) {
+  if (pose === 'curl' || pose === 'roll') return;
+  const walk = pose === 'walk' || pose === 'run' || pose === 'push';
+  const stride = pose === 'run' ? 3.2 : pose === 'walk' ? 2.5 : pose === 'push' ? 1.2 : 0;
+  const lift = pose === 'run' ? 2.8 : pose === 'walk' ? 1.8 : 0;
+  const sway = walk ? leg * stride : 0;
+  const leftX = -10 + sway, rightX = 8 - sway;
   const leftLift = Math.max(0, leg) * lift, rightLift = Math.max(0, -leg) * lift;
-  segment(ctx, -1, -7 * squashY, leftX, -2 - leftLift, 'B', 4);
-  segment(ctx, 9, -7 * squashY, rightX, -2 - rightLift, 'C', 4);
-  px(ctx, leftX - 4, -2 - leftLift, 7, 3, 'K'); px(ctx, leftX - 3, -2 - leftLift, 6, 2, 'D');
-  px(ctx, rightX - 4, -2 - rightLift, 7, 3, 'K'); px(ctx, rightX - 3, -2 - rightLift, 6, 2, 'E');
+  for (const [x, y, fill] of [[leftX, 1 - leftLift, 'C'], [rightX, 1 - rightLift, 'D']] as const) {
+    line(ctx, x, -4, x, y - 1, 'K', 3);
+    line(ctx, x, -3, x, y - 1, fill, 1);
+    rasterEllipse(ctx, x, y, 3.2, 2.2, () => fill, 'K');
+    px(ctx, x - 2, Math.round(y - 1), 2, 1, 'E');
+  }
+  if (pose === 'fall' && t < 0.78) {
+    line(ctx, -6, -7, -16, -10, 'K', 3); line(ctx, -6, -7, -15, -10, 'C', 1);
+    rasterEllipse(ctx, -17, -10, 3, 2.5, () => 'C', 'K');
+  }
 }
 
-function drawFace(ctx: Canvas2D, expression: HedgyExpression, look: HedgyLook, blink: boolean, eyeWide: boolean, pose: HedgyPose) {
-  // Face-map origin is (1,-46); these eye coordinates expose the near eye and a tiny far-eye glint.
-  const eyeX = 22, eyeY = -34;
+function shellGeometry(flare: number) {
+  const cx = -5, cy = -24, rx = 22, ry = 20;
+  const count = 20, start = 140, end = 316, step = (end - start) / count;
+  const outer: Point[] = [], tips: Point[] = [];
+  for (let i = 0; i < count; i++) {
+    const a0 = start + i * step, a1 = a0 + step, am = (a0 + a1) / 2;
+    const baseA = edgePoint(cx, cy, rx, ry, a0);
+    const baseB = edgePoint(cx, cy, rx, ry, a1);
+    const [ex, ey] = edgePoint(cx, cy, rx, ry, am);
+    const nx = Math.cos(deg(am)) / rx, ny = Math.sin(deg(am)) / ry;
+    const normal = Math.hypot(nx, ny);
+    const length = 4.4 + flare + (i % 4 === 1 ? 0.8 : 0);
+    const tip: Point = [Math.round(ex + nx / normal * length), Math.round(ey + ny / normal * length)];
+    outer.push(baseA, tip, baseB);
+    tips.push(tip);
+  }
+  const polygon: Point[] = [...outer];
+  for (let a = end; a >= start; a -= 8) polygon.push(edgePoint(cx, cy, rx, ry, a, 0.73));
+  return { polygon, outer, tips, center: [cx, cy] as Point };
+}
+
+function drawQuillCoat(ctx: Canvas2D, flare: number, outline?: string) {
+  const geometry = shellGeometry(flare);
+  const { polygon, outer, tips, center } = geometry;
+  rasterPolygon(ctx, polygon, (x, y) => {
+    if (y < -39) return (x + y) % 5 === 0 ? 'H' : 'D';
+    if (y < -33) return (x + y * 2) % 7 === 0 ? 'E' : 'C';
+    if (y < -25) return (x * 3 + y) % 9 === 0 ? 'D' : 'B';
+    return (x + y * 2) % 7 === 0 ? 'B' : 'A';
+  });
+  for (let i = 0; i < outer.length - 1; i++) {
+    const a = outer[i]!, b = outer[i + 1]!;
+    line(ctx, a[0], a[1], b[0], b[1], outline ?? 'K');
+  }
+  for (let i = 0; i < tips.length; i++) {
+    const [tx, ty] = tips[i]!;
+    const [cx, cy] = center;
+    const dx = cx - tx, dy = cy - ty, d = Math.hypot(dx, dy) || 1;
+    px(ctx, tx + Math.round(dx / d), ty + Math.round(dy / d), 1, 1, i % 3 === 0 ? 'H' : 'E');
+  }
+
+  // Two inset rows make the quills read as a coat over the round back, not a detached fan.
+  for (let row = 0; row < 2; row++) {
+    const radius = row === 0 ? 0.78 : 0.58;
+    const from = row === 0 ? 151 : 162, to = row === 0 ? 305 : 292, step = row === 0 ? 17 : 23;
+    for (let a = from; a <= to; a += step) {
+      const base = edgePoint(-5, -24, 22, 20, a, radius);
+      const [ex, ey] = edgePoint(-5, -24, 22, 20, a, radius);
+      const nx = Math.cos(deg(a)), ny = Math.sin(deg(a)), len = row === 0 ? 3 : 2.3;
+      const tip: Point = [Math.round(ex + nx * len), Math.round(ey + ny * len)];
+      line(ctx, base[0], base[1], tip[0], tip[1], row === 0 ? 'Q' : 'B');
+      px(ctx, tip[0] - (nx < -0.4 ? 1 : 0), tip[1] - (ny < -0.4 ? 1 : 0), 1, 1, row === 0 ? 'E' : 'D');
+    }
+  }
+}
+
+const FACE_SHAPE: Point[] = [
+  [2, -36], [5, -39], [10, -40], [15, -39], [20, -36], [24, -32], [27, -28],
+  [29, -26], [27, -23], [24, -21], [19, -19], [13, -19], [8, -21], [4, -24], [2, -29],
+];
+
+function shrinkPolygon(points: readonly Point[], amount: number): Point[] {
+  const cx = points.reduce((s, p) => s + p[0], 0) / points.length;
+  const cy = points.reduce((s, p) => s + p[1], 0) / points.length;
+  return points.map(([x, y]) => [Math.round(cx + (x - cx) * amount), Math.round(cy + (y - cy) * amount)] as Point);
+}
+
+function drawEar(ctx: Canvas2D) {
+  rasterEllipse(ctx, 7, -38, 4.5, 5, () => 'A', 'K');
+  rasterEllipse(ctx, 7.5, -38, 2.2, 2.8, () => 'D', 'B');
+  px(ctx, 7, -40, 2, 1, 'E');
+}
+
+function drawFaceMask(ctx: Canvas2D) {
+  rasterPolygon(ctx, FACE_SHAPE, () => 'B');
+  rasterPolygon(ctx, shrinkPolygon(FACE_SHAPE, 0.91), (x, y) => {
+    if (y < -34) return x < 14 ? 'F' : 'G';
+    if (y < -27) return x < 18 ? 'G' : 'F';
+    return (x + y) % 5 === 0 ? 'G' : 'F';
+  });
+  // A small muzzle pad rounds the end of the mask without making a long wedge.
+  rasterEllipse(ctx, 20, -25, 7, 4.7, () => 'F', 'G');
+  px(ctx, 10, -35, 4, 1, 'W');
+  px(ctx, 8, -34, 2, 1, 'F');
+  rasterEllipse(ctx, 20, -25, 3.3, 1.8, () => 'G', 'F');
+  px(ctx, 19, -26, 2, 1, 'D'); // muted natural cheek, kept very small
+}
+
+function drawEye(ctx: Canvas2D, expression: HedgyExpression, look: HedgyLook, blink: boolean, eyeWide: boolean, pose: HedgyPose) {
+  const x = 16, y = -32;
   const gazeX = look === 'camera' ? -1 : 0;
   const gazeY = look === 'up' ? -1 : look === 'down' ? 1 : 0;
-  if (blink || pose === 'sleep') {
-    px(ctx, eyeX - 1, eyeY + 1, 5, 1, 'K');
-    px(ctx, eyeX, eyeY, 3, 1, 'D');
+  if (blink || pose === 'sleep' || expression === 'happy') {
+    px(ctx, x - 2, y + 1, 1, 1, 'K'); px(ctx, x - 1, y, 1, 1, 'K');
+    px(ctx, x, y - 1, 1, 1, 'K'); px(ctx, x + 1, y, 1, 1, 'K'); px(ctx, x + 2, y + 1, 1, 1, 'K');
+    px(ctx, x - 1, y + 2, 3, 1, 'B');
   } else if (expression === 'shocked' || eyeWide) {
-    px(ctx, eyeX - 1, eyeY - 1, 5, 6, 'F'); px(ctx, eyeX, eyeY, 3, 4, 'I');
-    px(ctx, eyeX + gazeX, eyeY + gazeY, 1, 1, 'W');
+    rasterEllipse(ctx, x, y, 3, 3.8, () => 'W', 'B');
+    rasterEllipse(ctx, x + gazeX, y + gazeY, 1.6, 2.3, () => 'I', 'I');
+    px(ctx, x + gazeX - 1, y + gazeY - 2, 1, 1, 'W');
+  } else if (expression === 'smug') {
+    px(ctx, x - 3, y - 1, 7, 2, 'B');
+    rasterEllipse(ctx, x, y, 2.2, 2.3, () => 'I', 'K');
+    px(ctx, x + gazeX - 1, y - 1, 1, 1, 'W');
+  } else if (expression === 'determined') {
+    rasterEllipse(ctx, x, y, 2.1, 3, () => 'I', 'K');
+    px(ctx, x - 3, y - 3, 7, 2, 'B');
+    px(ctx, x + gazeX - 1, y - 1, 1, 1, 'W');
   } else {
-    px(ctx, eyeX - 1, eyeY, 5, 4, 'K'); px(ctx, eyeX + gazeX, eyeY + gazeY, 2, 3, 'I');
-    px(ctx, eyeX + gazeX, eyeY + gazeY, 1, 1, 'W');
+    rasterEllipse(ctx, x, y, 2.1, 3, () => 'I', 'K');
+    px(ctx, x + gazeX - 1, y + gazeY - 2, 1, 1, 'W');
+    px(ctx, x + gazeX + 1, y + gazeY - 1, 1, 1, 'W');
   }
-  px(ctx, 15, -34, 2, 2, 'I'); // far eye, softened by the 3/4 angle
-  px(ctx, 15, -35, 1, 1, 'W');
 
   if (expression === 'worried' || expression === 'sad') {
-    segment(ctx, 20, -37, 24, -38, 'A', 1);
-    px(ctx, 28, -25, 5, 1, 'K'); px(ctx, 29, -26, 3, 1, 'K');
+    line(ctx, x - 3, y - 5, x + 2, y - 7, 'B');
+    if (expression === 'sad') px(ctx, x + 1, y + 5, 3, 1, 'B');
   } else if (expression === 'determined') {
-    segment(ctx, 19, -38, 24, -36, 'A', 1);
-    px(ctx, 28, -24, 5, 1, 'K');
-  } else if (expression === 'smug') {
-    px(ctx, 20, -37, 5, 1, 'A'); px(ctx, 29, -24, 4, 1, 'A'); px(ctx, 32, -25, 2, 1, 'K');
-  } else if (expression === 'shocked') {
-    px(ctx, 29, -26, 3, 4, 'K'); px(ctx, 30, -25, 1, 2, 'S');
-  } else if (expression === 'happy') {
-    px(ctx, 28, -24, 2, 1, 'K'); px(ctx, 30, -23, 3, 1, 'K'); px(ctx, 33, -24, 2, 1, 'K');
-    px(ctx, 30, -23, 2, 1, 'F');
-  } else {
-    px(ctx, 29, -24, 4, 1, 'K');
+    line(ctx, x - 3, y - 6, x + 2, y - 4, 'A');
   }
-  // Nose and nostril sit on the cream muzzle; a single pale glint keeps it readable at small sizes.
-  px(ctx, 35, -29, 3, 3, 'K'); px(ctx, 35, -29, 2, 2, 'I'); px(ctx, 35, -29, 1, 1, 'W');
+
+  // Nose, single white catchlight, and one short mouth line anchor the rounded snout.
+  rasterEllipse(ctx, 27, -26, 2.8, 2.5, () => 'I', 'K');
+  px(ctx, 26, -28, 1, 1, 'W');
+  if (expression === 'shocked') {
+    rasterEllipse(ctx, 23, -20, 1.7, 2.2, () => 'I', 'K');
+  } else if (expression === 'happy') {
+    line(ctx, 22, -21, 25, -20, 'K'); line(ctx, 25, -20, 27, -21, 'K');
+  } else if (expression === 'sad' || expression === 'worried') {
+    line(ctx, 22, -20, 26, -21, 'K');
+  } else {
+    line(ctx, 23, -21, 26, -21, 'K');
+  }
+}
+
+function drawBody(ctx: Canvas2D) {
+  rasterEllipse(ctx, -4, -20, 23, 19, (x, y) => {
+    if (x < -15 && y < -20) return (x + y) % 5 === 0 ? 'E' : 'D';
+    if (y < -27) return (x + y * 2) % 6 === 0 ? 'D' : 'C';
+    if (y > -10) return (x + y) % 6 === 0 ? 'B' : 'A';
+    return (x * 3 + y) % 8 === 0 ? 'C' : 'B';
+  }, 'K');
+  // Broad warm bib blends into the round underside and makes the belly visible beneath the mask.
+  rasterEllipse(ctx, 3, -7, 12, 8, (x, y) => (x + y) % 5 === 0 ? 'F' : 'G', 'B');
+  px(ctx, -3, -7, 2, 4, 'F'); px(ctx, -1, -3, 3, 1, 'F');
+}
+
+function arm(ctx: Canvas2D, ax: number, ay: number, hx: number, hy: number, raised = false) {
+  const elbowX = raised ? ax + (hx - ax) * 0.45 - 2 : (ax + hx) / 2;
+  const elbowY = raised ? Math.min(ay, hy) - 3 : (ay + hy) / 2;
+  line(ctx, ax, ay, elbowX, elbowY, 'K', 2); line(ctx, ax, ay, elbowX, elbowY, 'C', 1);
+  line(ctx, elbowX, elbowY, hx, hy, 'K', 2); line(ctx, elbowX, elbowY, hx, hy, 'D', 1);
+  rasterEllipse(ctx, hx, hy, 2.5, 2.1, () => 'D', 'K');
+  px(ctx, hx - 1, hy - 1, 1, 1, 'E');
+}
+
+function paw(ctx: Canvas2D, x: number, y: number) {
+  rasterEllipse(ctx, x, y, 2.5, 2.1, () => 'D', 'K');
+  px(ctx, x - 1, y - 1, 1, 1, 'E');
+}
+
+function drawProp(ctx: Canvas2D, prop: HedgyProp, x: number, y: number, t: number) {
+  if (prop === 'none') return;
+  const wiggle = Math.round(Math.sin(t * 4) * 0.35);
+  if (prop === 'coin') {
+    rasterEllipse(ctx, x, y + wiggle, 5, 5, () => 'E', 'K');
+    px(ctx, x - 1, y - 3 + wiggle, 1, 6, 'H'); px(ctx, x + 1, y - 2 + wiggle, 1, 5, 'D');
+  } else if (prop === 'sign') {
+    px(ctx, x - 1, y, 2, 10, 'K'); px(ctx, x, y + 1, 1, 8, 'D');
+    px(ctx, x - 8, y - 13, 17, 13, 'K'); px(ctx, x - 7, y - 12, 15, 11, 'S');
+    px(ctx, x - 5, y - 9, 3, 2, 'B'); px(ctx, x, y - 9, 7, 2, 'A'); px(ctx, x - 4, y - 5, 11, 1, 'D');
+  } else if (prop === 'phone') {
+    px(ctx, x - 5, y - 10, 10, 16, 'K'); px(ctx, x - 4, y - 9, 8, 13, 'A');
+    px(ctx, x - 3, y - 8, 6, 10, 'S'); px(ctx, x - 2, y - 7, 4, 2, 'F'); px(ctx, x - 1, y + 4, 2, 1, 'H');
+  } else if (prop === 'umbrella') {
+    px(ctx, x - 10, y - 12, 4, 2, 'A'); px(ctx, x - 6, y - 15, 5, 3, 'B'); px(ctx, x - 1, y - 16, 7, 2, 'D');
+    px(ctx, x + 6, y - 14, 5, 2, 'B'); px(ctx, x + 11, y - 12, 3, 2, 'A');
+    px(ctx, x - 10, y - 10, 23, 1, 'K'); px(ctx, x, y - 9, 1, 13, 'K'); px(ctx, x, y + 4, 4, 2, 'K');
+  } else if (prop === 'briefcase') {
+    px(ctx, x - 10, y - 8, 21, 14, 'K'); px(ctx, x - 8, y - 6, 17, 10, 'A'); px(ctx, x - 7, y - 5, 15, 7, 'D');
+    px(ctx, x - 3, y - 11, 8, 3, 'K'); px(ctx, x - 2, y - 10, 6, 2, 'C'); px(ctx, x - 1, y - 3, 3, 3, 'F');
+  } else if (prop === 'magnifier') {
+    rasterEllipse(ctx, x, y - 8, 6, 6, () => 'S', 'K'); rasterEllipse(ctx, x - 1, y - 9, 3.5, 3.5, () => 'F', 'G');
+    line(ctx, x + 4, y - 2, x + 8, y + 6, 'K', 3); line(ctx, x + 5, y, x + 7, y + 5, 'D', 1);
+  }
+}
+
+function drawBurst(ctx: Canvas2D, amount: number, t: number) {
+  if (amount <= 0.03) return;
+  for (let i = 0; i < 7; i++) {
+    const a = -Math.PI * 0.93 + i * Math.PI * 0.86 / 6;
+    const reach = 31 + Math.round(amount * 5) + (i % 3 === 0 ? 2 : 0);
+    const x = Math.round(Math.cos(a) * reach), y = Math.round(-25 + Math.sin(a) * reach);
+    px(ctx, x, y + Math.round(Math.sin(t * 17 + i) * amount), i % 2 ? 2 : 3, 1, i % 2 ? 'E' : 'H');
+  }
+}
+
+function drawBall(ctx: Canvas2D, t: number, rolling: boolean, outline?: string) {
+  ctx.save();
+  if (rolling) { ctx.translate(0, -21); ctx.rotate(t * TAU / HEDGY_TIMING.roll.revolution); ctx.translate(0, 21); }
+  const cx = -1, cy = -21;
+  for (let a = 0; a < 360; a += 15) {
+    const baseA = edgePoint(cx, cy, 16, 16, a - 4);
+    const baseB = edgePoint(cx, cy, 16, 16, a + 4);
+    const tip = edgePoint(cx, cy, 22 + (a % 4 === 0 ? 1 : 0), 22 + (a % 4 === 0 ? 1 : 0), a);
+    const spike: Point[] = [baseA, tip, baseB];
+    rasterPolygon(ctx, spike, () => 'A');
+    line(ctx, baseA[0], baseA[1], tip[0], tip[1], outline ?? 'K');
+    line(ctx, tip[0], tip[1], baseB[0], baseB[1], outline ?? 'K');
+    const [tx, ty] = tip;
+    const [hx, hy] = edgePoint(cx, cy, 20, 20, a);
+    px(ctx, hx, hy, 1, 1, a % 3 === 0 ? 'H' : 'E');
+    void tx; void ty;
+  }
+  rasterEllipse(ctx, cx, cy, 16, 16, (x, y) => y < -24 ? ((x + y) % 5 === 0 ? 'D' : 'C') : ((x * 2 + y) % 6 === 0 ? 'B' : 'A'), outline ?? 'K');
+  // The nose and folded muzzle peek out just enough to keep the ball unmistakably Hedgy.
+  rasterEllipse(ctx, 10, -20, 7, 5, () => 'G', 'B');
+  rasterEllipse(ctx, 15, -21, 2.3, 2.1, () => 'I', 'K');
+  px(ctx, 14, -23, 1, 1, 'W');
+  line(ctx, 8, -17, 11, -17, 'B');
+  if (rolling && Math.floor(t * 12) % 2 === 0) { px(ctx, -18, -15, 2, 2, 'H'); px(ctx, 17, -29, 2, 2, 'H'); }
+  ctx.restore();
+}
+
+function drawThought(ctx: Canvas2D, t: number) {
+  if (Math.sin(t * TAU / HEDGY_TIMING.think.loop) <= 0.15) return;
+  px(ctx, 15, -48, 2, 2, 'S'); px(ctx, 20, -52, 4, 4, 'S');
+  rasterEllipse(ctx, 31, -58, 7, 5, () => 'F', 'K');
+  px(ctx, 28, -59, 2, 1, 'A'); px(ctx, 32 + Math.floor(t * 3) % 2, -59, 1, 2, 'A');
+}
+
+function drawSweat(ctx: Canvas2D, t: number) {
+  const p = (t % HEDGY_TIMING.sweat.drop) / HEDGY_TIMING.sweat.drop;
+  const y = -43 + Math.floor(p * 8);
+  px(ctx, 31, y, 2, 3, 'S'); px(ctx, 32, y - 1, 1, 1, 'F');
+  px(ctx, 35, -37 + Math.floor(((p + 0.5) % 1) * 6), 1, 2, 'S');
+}
+
+function drawDust(ctx: Canvas2D, t: number) {
+  const p = (t % HEDGY_TIMING.run.loop) / HEDGY_TIMING.run.loop;
+  if (p > 0.34) return;
+  const spread = Math.round(p / 0.34 * 5), fade = Math.round(p / 0.34 * 2);
+  px(ctx, -28 - spread, -1 - fade, 3, 2, 'S'); px(ctx, -26 - spread, -2 - fade, 2, 1, 'G');
+}
+
+function drawSleepMarks(ctx: Canvas2D, t: number) {
+  const shift = Math.floor((t % 2.4) * 1.3), x = 24 + shift, y = -48 - shift;
+  px(ctx, x, y, 5, 1, 'S'); px(ctx, x + 4, y, 1, 3, 'S'); px(ctx, x + 2, y + 2, 3, 1, 'S'); px(ctx, x, y + 4, 5, 1, 'S');
 }
 
 function idleLook(t: number): HedgyLook {
@@ -286,199 +407,60 @@ function idleLook(t: number): HedgyLook {
   return 'forward';
 }
 
-function drawArmLine(ctx: Canvas2D, x: number, y: number, handX: number, handY: number, raised = false) {
-  segment(ctx, x, y, raised ? x - 2 : (x + handX) / 2, raised ? y - 7 : (y + handY) / 2, 'B', 4);
-  segment(ctx, raised ? x - 2 : (x + handX) / 2, raised ? y - 7 : (y + handY) / 2, handX, handY, 'C', 4);
-}
-function drawProp(ctx: Canvas2D, prop: HedgyProp, x: number, y: number, t: number) {
-  if (prop === 'none') return;
-  const wiggle = Math.round(Math.sin(t * 4) * 0.35);
-  if (prop === 'coin') {
-    px(ctx, x - 5, y - 5 + wiggle, 11, 11, 'K'); px(ctx, x - 4, y - 4 + wiggle, 9, 9, 'E');
-    px(ctx, x - 3, y - 3 + wiggle, 7, 7, 'H'); px(ctx, x - 1, y - 2 + wiggle, 1, 5, 'D'); px(ctx, x + 1, y - 2 + wiggle, 1, 5, 'D');
-  } else if (prop === 'sign') {
-    px(ctx, x - 1, y - 1, 2, 11, 'K'); px(ctx, x, y, 1, 9, 'D');
-    px(ctx, x - 8, y - 14, 17, 14, 'K'); px(ctx, x - 7, y - 13, 15, 12, 'S');
-    px(ctx, x - 5, y - 10, 3, 2, 'B'); px(ctx, x, y - 10, 7, 2, 'A'); px(ctx, x - 4, y - 6, 11, 1, 'D');
-  } else if (prop === 'phone') {
-    px(ctx, x - 5, y - 11, 10, 16, 'K'); px(ctx, x - 4, y - 10, 8, 13, 'A');
-    px(ctx, x - 3, y - 9, 6, 10, 'S'); px(ctx, x - 2, y - 8, 4, 2, 'F'); px(ctx, x - 1, y + 3, 2, 1, 'H');
-  } else if (prop === 'umbrella') {
-    px(ctx, x - 11, y - 13, 4, 2, 'A'); px(ctx, x - 7, y - 16, 5, 3, 'B'); px(ctx, x - 2, y - 17, 7, 2, 'D'); px(ctx, x + 5, y - 15, 5, 2, 'B'); px(ctx, x + 10, y - 13, 3, 2, 'A');
-    px(ctx, x - 11, y - 11, 23, 1, 'K'); px(ctx, x, y - 10, 1, 13, 'K'); px(ctx, x, y + 3, 4, 2, 'K');
-  } else if (prop === 'briefcase') {
-    px(ctx, x - 10, y - 9, 21, 14, 'K'); px(ctx, x - 8, y - 7, 17, 10, 'A'); px(ctx, x - 7, y - 6, 15, 7, 'D');
-    px(ctx, x - 3, y - 12, 8, 3, 'K'); px(ctx, x - 2, y - 11, 6, 2, 'C'); px(ctx, x - 1, y - 4, 3, 3, 'F');
-  } else if (prop === 'magnifier') {
-    px(ctx, x - 7, y - 14, 13, 13, 'K'); px(ctx, x - 5, y - 12, 9, 9, 'S'); px(ctx, x - 4, y - 11, 6, 6, 'F');
-    px(ctx, x + 4, y - 1, 3, 3, 'K'); px(ctx, x + 6, y + 1, 3, 8, 'K'); px(ctx, x + 7, y + 2, 1, 6, 'D');
-  }
-}
-
 function motion(pose: HedgyPose, t: number): Motion {
   const m: Motion = { dx: 0, dy: 0, sx: 1, sy: 1, angle: 0, leg: 0, arm: 0, burst: 0, blink: false, eyeWide: false, ball: false, roll: false };
   const phase = (period: number) => (t % period) / period;
   switch (pose) {
-    case 'idle': {
-      m.dy = -Math.sin(t * TAU / 2.4) * 0.7; m.sy = 1 + Math.sin(t * TAU / 2.4) * 0.012;
-      m.blink = (t % 2.4 > 1.66 && t % 2.4 < 1.78) || (t % 2.4 > 0.04 && t % 2.4 < 0.11);
+    case 'idle':
+      m.dy = -Math.sin(t * TAU / HEDGY_TIMING.idle.loop) * 0.45;
+      m.sy = 1 + Math.sin(t * TAU / HEDGY_TIMING.idle.loop) * 0.012;
+      m.blink = (t % HEDGY_TIMING.idle.loop > 1.66 && t % HEDGY_TIMING.idle.loop < 1.78) || (t % HEDGY_TIMING.idle.loop > 0.04 && t % HEDGY_TIMING.idle.loop < 0.11);
       break;
-    }
     case 'walk': {
       const p = phase(HEDGY_TIMING.walk.loop); m.leg = Math.sin(p * TAU); m.arm = m.leg;
-      m.dy = -Math.abs(Math.sin(p * TAU)) * 1.3; m.angle = 0.025 * m.leg; break;
+      m.dy = -Math.abs(Math.sin(p * TAU)) * 0.8; m.angle = 0.018 * m.leg; break;
     }
     case 'run': {
       const p = phase(HEDGY_TIMING.run.loop); m.leg = Math.sin(p * TAU); m.arm = m.leg;
-      m.dy = -2 - Math.abs(Math.sin(p * TAU)) * 3; m.angle = 0.09; m.sx = 1.05; m.sy = 0.96 + Math.abs(Math.sin(p * TAU)) * 0.07; break;
+      m.dy = -1.5 - Math.abs(Math.sin(p * TAU)) * 2; m.angle = 0.035; m.sx = 1.035; m.sy = 0.97 + Math.abs(Math.sin(p * TAU)) * 0.05; break;
     }
     case 'jump': {
       const { anticipate, launch, apex, land, settle } = HEDGY_TIMING.jump;
-      if (t < anticipate) { const p = smooth(t / anticipate); m.sy = 1 - 0.18 * p; m.sx = 1 + 0.13 * p; m.dy = 2 * p; }
-      else if (t < launch) { const p = smooth((t - anticipate) / (launch - anticipate)); m.dy = 2 - 32 * p; m.sy = 1.14; m.sx = 0.92; m.arm = p; }
-      else if (t < apex) { const p = smooth((t - launch) / (apex - launch)); m.dy = -30 - 6 * p; m.sy = 1.14 - 0.04 * p; m.sx = 0.92 + 0.03 * p; m.arm = 1 - 0.15 * p; }
-      else if (t < land) { const p = smooth((t - apex) / (land - apex)); m.dy = -34 + 32 * p; m.sy = 1.1 - 0.1 * p; m.sx = 0.95 + 0.05 * p; m.arm = 1 - p * 0.25; }
-      else { const p = Math.exp(-(t - land) * 8); m.dy = -4 * p * Math.sin((t - land) * 18) - Math.sin((t - settle) * 3) * 0.25; m.sy = 1 - 0.2 * p + Math.sin((t - settle) * 3) * 0.004; m.sx = 1 + 0.14 * p; }
+      if (t < anticipate) { const p = smooth(t / anticipate); m.sy = 1 - 0.16 * p; m.sx = 1 + 0.12 * p; m.dy = 1.4 * p; }
+      else if (t < launch) { const p = smooth((t - anticipate) / (launch - anticipate)); m.dy = 1.4 - 25 * p; m.sy = 1.11; m.sx = 0.94; m.arm = p; }
+      else if (t < apex) { const p = smooth((t - launch) / (apex - launch)); m.dy = -24 - 5 * p; m.sy = 1.11 - 0.03 * p; m.sx = 0.94 + 0.03 * p; m.arm = 1 - 0.15 * p; }
+      else if (t < land) { const p = smooth((t - apex) / (land - apex)); m.dy = -29 + 27 * p; m.sy = 1.08 - 0.08 * p; m.sx = 0.97 + 0.03 * p; m.arm = 1 - p * 0.25; }
+      else { const p = Math.exp(-(t - land) * 8); m.dy = -3 * p * Math.sin((t - land) * 18) - Math.sin((t - settle) * 3) * 0.18; m.sy = 1 - 0.16 * p + Math.sin((t - settle) * 3) * 0.004; m.sx = 1 + 0.11 * p; }
       m.blink = t < anticipate * 0.9 || (t > settle && t < settle + 0.1); break;
     }
     case 'shock': {
-      const p = smooth(t / HEDGY_TIMING.shock.recoil); m.dy = -pulse(t, 0.03, 0.48) * 8; m.dx = -smooth(t / 0.32) * 5;
-      m.sx = 1 + pulse(t, 0.02, 0.28) * 0.12; m.sy = 1 + pulse(t, 0.02, 0.28) * 0.12; m.angle = -0.08 * (1 - p); m.burst = 1 - smooth(t / 0.46); m.eyeWide = t > 0.05; break;
+      const p = smooth(t / HEDGY_TIMING.shock.recoil); m.dy = -pulse(t, 0.03, 0.48) * 5; m.dx = -smooth(t / 0.32) * 2.5;
+      m.sx = 1 + pulse(t, 0.02, 0.28) * 0.08; m.sy = 1 + pulse(t, 0.02, 0.28) * 0.08;
+      m.angle = -0.05 * (1 - p); m.burst = 1 - smooth(t / 0.46); m.eyeWide = t > 0.05; break;
     }
     case 'celebrate': {
-      const p = phase(HEDGY_TIMING.celebrate.loop); m.dy = -Math.abs(Math.sin(p * TAU)) * 4; m.sy = 1 - Math.max(0, Math.sin(p * TAU)) * 0.08;
-      m.sx = 1 + Math.max(0, Math.sin(p * TAU)) * 0.06; m.arm = 1; break;
+      const p = phase(HEDGY_TIMING.celebrate.loop); m.dy = -Math.abs(Math.sin(p * TAU)) * 3;
+      m.sy = 1 - Math.max(0, Math.sin(p * TAU)) * 0.07; m.sx = 1 + Math.max(0, Math.sin(p * TAU)) * 0.05; m.arm = 1; break;
     }
-    case 'point': m.arm = smooth(t / HEDGY_TIMING.point.gesture); m.dy = -Math.sin(t * 3) * 0.45; break;
-    case 'think': m.angle = -0.045; m.arm = 0.4 + 0.08 * Math.sin(t * 3); m.blink = t % 1.8 > 1.58 && t % 1.8 < 1.7; break;
-    case 'push': m.angle = 0.13; m.sx = 1.06; m.sy = 0.94 + 0.04 * Math.sin(t * TAU / 0.9); m.leg = Math.sin(t * TAU / 0.9); m.arm = 0.7 + 0.12 * Math.sin(t * TAU / 0.9); break;
-    case 'carry': m.dy = -Math.abs(Math.sin(t * TAU / 0.84)) * 1.5; m.arm = 1; m.sx = 1 + 0.012 * Math.sin(t * 4); break;
+    case 'point': m.arm = smooth(t / HEDGY_TIMING.point.gesture); m.dy = -Math.sin(t * 3) * 0.3; break;
+    case 'think': m.angle = -0.025; m.arm = 0.4 + 0.08 * Math.sin(t * 3); m.blink = t % HEDGY_TIMING.think.loop > 1.58 && t % HEDGY_TIMING.think.loop < 1.7; break;
+    case 'push': m.angle = 0.08; m.sx = 1.04; m.sy = 0.96 + 0.03 * Math.sin(t * TAU / HEDGY_TIMING.push.loop); m.leg = Math.sin(t * TAU / HEDGY_TIMING.push.loop); m.arm = 0.7 + 0.12 * Math.sin(t * TAU / HEDGY_TIMING.push.loop); break;
+    case 'carry': m.dy = -Math.abs(Math.sin(t * TAU / HEDGY_TIMING.carry.loop)) * 0.8; m.arm = 1; m.sx = 1 + 0.008 * Math.sin(t * 4); break;
     case 'fall': {
-      const p = smooth(t / HEDGY_TIMING.fall.tumble); m.angle = p * Math.PI * 1.65;
-      m.dy = t < HEDGY_TIMING.fall.land ? -Math.sin(Math.PI * clamp01(t / 0.78)) * 8 : 2;
-      m.sx = t > 0.72 && t < 0.95 ? 1.22 : 1; m.sy = t > 0.72 && t < 0.95 ? 0.78 : 1; m.arm = 1; break;
+      const p = smooth(t / HEDGY_TIMING.fall.tumble); m.angle = p * Math.PI * 1.5;
+      m.dy = t < HEDGY_TIMING.fall.land ? -Math.sin(Math.PI * clamp01(t / 0.78)) * 5 : 1;
+      m.sx = t > 0.72 && t < 0.95 ? 1.15 : 1; m.sy = t > 0.72 && t < 0.95 ? 0.84 : 1; m.arm = 1; break;
     }
-    case 'curl': m.ball = t >= HEDGY_TIMING.curl.tuck; m.sx = t < HEDGY_TIMING.curl.tuck ? 1 + smooth(t / 0.3) * 0.1 : 0.9; m.sy = t < HEDGY_TIMING.curl.tuck ? 1 - smooth(t / 0.3) * 0.12 : 0.88; break;
-    case 'roll': m.ball = true; m.roll = true; m.dx = Math.sin(t * TAU / 1.6) * 10; m.dy = -Math.abs(Math.sin(t * TAU / HEDGY_TIMING.roll.loop)) * 1.2; break;
-    case 'peek': m.dy = 15 * (1 - smooth(t / HEDGY_TIMING.peek.rise)) - (t > 0.42 ? Math.sin((t - 0.42) * 8) * 0.55 : 0); m.blink = t < 0.14; break;
-    case 'sweat': m.dx = Math.sin(t * 18) * 0.45; m.dy = -Math.abs(Math.sin(t * 18)) * 0.8; m.angle = Math.sin(t * 9) * 0.025; m.blink = t % 1.1 > 0.9 && t % 1.1 < 0.98; break;
-    case 'sleep': m.sy = 1 + Math.sin(t * TAU / 3.2) * 0.025; m.sx = 1 - Math.sin(t * TAU / 3.2) * 0.015; m.blink = true; break;
-    case 'wave-off': { const p = phase(HEDGY_TIMING['wave-off'].loop); m.arm = Math.sin(p * TAU); m.dy = -Math.abs(Math.sin(p * TAU)) * 1.3; break; }
+    case 'curl': m.ball = t >= HEDGY_TIMING.curl.tuck; m.sx = t < HEDGY_TIMING.curl.tuck ? 1 + smooth(t / 0.3) * 0.08 : 0.94; m.sy = t < HEDGY_TIMING.curl.tuck ? 1 - smooth(t / 0.3) * 0.09 : 0.92; break;
+    case 'roll': m.ball = true; m.roll = true; m.dx = Math.sin(t * TAU / 1.6) * 8; m.dy = -Math.abs(Math.sin(t * TAU / HEDGY_TIMING.roll.loop)) * 0.7; break;
+    case 'peek': m.dy = 10 * (1 - smooth(t / HEDGY_TIMING.peek.rise)) - (t > 0.42 ? Math.sin((t - 0.42) * 8) * 0.35 : 0); m.blink = t < 0.14; break;
+    case 'sweat': m.dx = Math.sin(t * 18) * 0.3; m.dy = -Math.abs(Math.sin(t * 18)) * 0.5; m.angle = Math.sin(t * 9) * 0.018; m.blink = t % HEDGY_TIMING.sweat.loop > 0.9 && t % HEDGY_TIMING.sweat.loop < 0.98; break;
+    case 'sleep': m.sy = 1 + Math.sin(t * TAU / HEDGY_TIMING.sleep.loop) * 0.022; m.sx = 1 - Math.sin(t * TAU / HEDGY_TIMING.sleep.loop) * 0.012; m.blink = true; break;
+    case 'wave-off': { const p = phase(HEDGY_TIMING['wave-off'].loop); m.arm = Math.sin(p * TAU); m.dy = -Math.abs(Math.sin(p * TAU)) * 0.8; break; }
   }
   const blinkClock = t % 3.15;
   if (pose !== 'sleep' && blinkClock > 2.95 && blinkClock < 3.08) m.blink = true;
   return m;
-}
-
-function drawBurst(ctx: Canvas2D, amount: number, t: number) {
-  if (amount <= 0.03) return;
-  const n = 9;
-  for (let i = 0; i < n; i++) {
-    const a = -Math.PI * 0.92 + i * Math.PI * 0.82 / (n - 1);
-    const reach = 25 + Math.round((1 - amount) * 4) + (i % 3 === 0 ? 4 : 0);
-    const x = -6 + Math.round(Math.cos(a) * reach), y = -43 + Math.round(Math.sin(a) * reach);
-    const len = i % 3 === 0 ? 4 : 3;
-    px(ctx, x, y + Math.round(Math.sin(t * 17 + i) * amount), len, 2, i % 2 ? 'A' : 'H');
-  }
-}
-
-function drawThought(ctx: Canvas2D, t: number) {
-  if (Math.sin(t * TAU / HEDGY_TIMING.think.loop) > 0.15) {
-    px(ctx, 29, -54, 3, 3, 'S'); px(ctx, 34, -59, 5, 5, 'S');
-    px(ctx, 35, -60, 3, 1, 'F'); px(ctx, 43, -66, 10, 8, 'K'); px(ctx, 44, -65, 8, 6, 'F');
-    px(ctx, 46, -63, 2, 1, 'A'); px(ctx, 48, -63 + (Math.floor(t * 3) % 2), 1, 2, 'A');
-  }
-}
-
-function drawSweat(ctx: Canvas2D, t: number) {
-  const p = (t % HEDGY_TIMING.sweat.drop) / HEDGY_TIMING.sweat.drop;
-  const y = -45 + Math.floor(p * 8);
-  px(ctx, 43, y, 2, 3, 'S'); px(ctx, 44, y - 1, 1, 1, 'F');
-  px(ctx, 48, -38 + Math.floor(((p + 0.5) % 1) * 7), 1, 2, 'S');
-}
-
-function drawDust(ctx: Canvas2D, t: number) {
-  const phase = (t % HEDGY_TIMING.run.loop) / HEDGY_TIMING.run.loop;
-  if (phase > 0.34) return;
-  const spread = Math.round(phase / 0.34 * 5), fade = Math.round(phase / 0.34 * 2);
-  const x = -18 - spread, y = -2 - fade;
-  px(ctx, x, y, 4, 2, 'S'); px(ctx, x + 2, y - 1, 3, 1, 'G'); px(ctx, x - 2, y + 1, 2, 1, 'D');
-}
-
-function drawSleepMarks(ctx: Canvas2D, t: number) {
-  const shift = Math.floor((t % 2.4) * 1.4);
-  const x = 42 + shift, y = -56 - shift;
-  px(ctx, x, y, 6, 1, 'S'); px(ctx, x + 4, y, 1, 3, 'S'); px(ctx, x + 2, y + 2, 3, 1, 'S'); px(ctx, x, y + 4, 6, 1, 'S');
-}
-
-function drawBall(ctx: Canvas2D, t: number, rolling: boolean, outline?: string) {
-  ctx.save();
-  if (rolling) { ctx.translate(0, -15); ctx.rotate(t * TAU / HEDGY_TIMING.roll.revolution); ctx.translate(0, 15); }
-  drawMap(ctx, BALL, -18, -29, outline);
-  // A folded cream muzzle and a single tucked eye keep the curled silhouette unmistakably Hedgy.
-  px(ctx, 4, -19, 10, 7, 'K'); px(ctx, 5, -18, 8, 5, 'G'); px(ctx, 12, -17, 3, 3, 'F');
-  px(ctx, 2, -24, 2, 2, 'I'); px(ctx, 2, -25, 1, 1, 'W');
-  if (rolling && Math.floor(t * 12) % 2 === 0) { px(ctx, -15, -13, 3, 2, 'H'); px(ctx, 17, -24, 2, 3, 'H'); }
-  ctx.restore();
-}
-
-function drawHog(ctx: Canvas2D, options: HedgyOptions, m: Motion, expression: HedgyExpression, look: HedgyLook, t: number) {
-  const { pose, prop = 'none', outline } = options;
-  const curlMix = pose === 'curl' ? smooth((t - 0.12) / 0.3) : 0;
-  drawLegs(ctx, pose, t, m.leg, m.sy);
-  if (pose === 'roll' || (pose === 'curl' && curlMix >= 1)) {
-    drawBall(ctx, t, m.roll, outline); return;
-  }
-  if (pose === 'curl' && curlMix > 0) { ctx.save(); ctx.globalAlpha *= 1 - curlMix; }
-
-  const frontPaw = pose === 'point'
-    ? { x: look === 'up' ? 22 : look === 'down' ? 31 : 40, y: look === 'up' ? -47 : look === 'down' ? -22 : -33 }
-    : pose === 'jump' && m.arm > 0.25 ? { x: 22, y: -47 }
-    : pose === 'wave-off' ? { x: 26 + m.arm * 4, y: -39 + m.arm * 8 }
-    : pose === 'think' ? { x: 21, y: -31 }
-      : pose === 'celebrate' ? { x: 29, y: -48 }
-        : pose === 'carry' ? { x: 20, y: -59 }
-          : pose === 'push' ? { x: 38, y: -22 }
-            : pose === 'shock' ? { x: 27, y: -34 }
-              : pose === 'fall' ? { x: 25, y: -32 }
-                : { x: 18 + m.arm * 1.5, y: -18 - (pose === 'walk' || pose === 'run' ? m.arm * 4 : 0) };
-  const farPaw = pose === 'celebrate' || (pose === 'jump' && m.arm > 0.25) ? { x: -8, y: -47 }
-    : pose === 'wave-off' ? { x: -8 - m.arm * 2, y: -39 - m.arm * 8 }
-    : pose === 'carry' ? { x: 4, y: -59 }
-      : pose === 'point' ? { x: 2, y: -23 }
-        : { x: -2 - m.arm, y: -23 + m.arm * 2 };
-  const armsRaised = pose === 'celebrate' || pose === 'carry' || (pose === 'jump' && m.arm > 0.25) || (pose === 'wave-off' && m.arm > 0);
-  const drawArms = pose !== 'curl';
-  drawMap(ctx, QUILLS, -31, -59, outline);
-  // Pale, tapered tips catch the light across the dark shell.
-  for (const [x, y] of [[-22, -58], [-16, -57], [-9, -58], [-3, -57]] as const) {
-    px(ctx, x, y + Math.round(Math.sin(t * 4 + x) * 0.5), 2, 1, 'H');
-  }
-  drawMap(ctx, BODY, -11, -39, outline);
-  if (drawArms) {
-    drawArmLine(ctx, -6, -28, farPaw.x, farPaw.y, armsRaised);
-    if (pose !== 'idle' && pose !== 'sleep') drawArmLine(ctx, 12, -25, frontPaw.x, frontPaw.y, armsRaised);
-  }
-  drawMap(ctx, FACE, 1, -46, outline);
-  drawFace(ctx, expression, look, m.blink || pose === 'sleep', m.eyeWide, pose);
-  if (drawArms) {
-    paw(ctx, farPaw.x, farPaw.y, 'D');
-    if (pose !== 'idle' && pose !== 'sleep') paw(ctx, frontPaw.x, frontPaw.y, 'D');
-  }
-  if (pose === 'run') drawDust(ctx, t);
-  if (pose === 'think') drawThought(ctx, t);
-  if (pose === 'sweat' || pose === 'shock') drawSweat(ctx, t);
-  if (pose === 'sleep') drawSleepMarks(ctx, t);
-  if (pose === 'shock') drawBurst(ctx, m.burst, t);
-  if (prop !== 'none') {
-    const overhead = pose === 'carry';
-    const propX = overhead ? 14 : frontPaw.x + 7;
-    const propY = overhead ? -63 : frontPaw.y - 5;
-    drawProp(ctx, prop, propX, propY, t);
-  }
-  if (pose === 'curl' && curlMix > 0) {
-    ctx.restore(); ctx.save(); ctx.globalAlpha *= curlMix; drawBall(ctx, t, false, outline); ctx.restore();
-  }
 }
 
 function defaultExpression(pose: HedgyPose): HedgyExpression {
@@ -487,39 +469,84 @@ function defaultExpression(pose: HedgyPose): HedgyExpression {
   if (pose === 'sleep') return 'neutral';
   if (pose === 'celebrate' || pose === 'wave-off') return 'happy';
   if (pose === 'run') return 'determined';
-  return 'happy';
+  return 'neutral';
 }
 
-/** Draw the expressive, hand-pixeled Hedgy actor. The same inputs always produce the same frame. */
+function drawHog(ctx: Canvas2D, options: HedgyOptions, m: Motion, expression: HedgyExpression, look: HedgyLook, t: number) {
+  const { pose, prop = 'none', outline } = options;
+  const curlMix = pose === 'curl' ? smooth((t - 0.12) / 0.3) : 0;
+  if (pose === 'roll' || (pose === 'curl' && curlMix >= 1)) { drawBall(ctx, t, m.roll, outline); return; }
+  if (pose === 'curl' && curlMix > 0) ctx.globalAlpha *= 1 - curlMix;
+
+  drawFeet(ctx, pose, t, m.leg);
+  drawBody(ctx);
+  drawQuillCoat(ctx, pose === 'shock' ? 3.2 * m.burst : 0, outline);
+  drawEar(ctx);
+
+  let nearHand: Point;
+  if (pose === 'point') nearHand = [look === 'up' ? 27 : look === 'down' ? 29 : 31 + m.arm * 4, look === 'up' ? -40 : look === 'down' ? -18 : -30];
+  else if (pose === 'jump' && m.arm > 0.25) nearHand = [23, -36];
+  else if (pose === 'wave-off') nearHand = [18 + Math.round(Math.abs(m.arm) * 2), -36 - Math.round(m.arm * 2)];
+  else if (pose === 'think') nearHand = [15, -20];
+  else if (pose === 'celebrate') nearHand = [23, -36];
+  else if (pose === 'carry') nearHand = [10, -43];
+  else if (pose === 'push') nearHand = [26, -17];
+  else if (pose === 'shock') nearHand = [19, -25];
+  else if (pose === 'fall') nearHand = [20, -25];
+  else nearHand = [15 + Math.round(m.arm * 1.2), -12 - ((pose === 'walk' || pose === 'run') ? Math.round(m.arm * 2) : 0)];
+
+  const armOrigin: Point = pose === 'jump' || pose === 'celebrate' ? [13, -25]
+    : pose === 'wave-off' ? [13, -22]
+      : pose === 'carry' ? [12, -24]
+        : [12, -17];
+  if (pose !== 'idle' && pose !== 'sleep') arm(ctx, armOrigin[0], armOrigin[1], nearHand[0], nearHand[1]);
+
+  drawFaceMask(ctx);
+  if (pose !== 'idle' && pose !== 'sleep') paw(ctx, nearHand[0], nearHand[1]);
+  if (pose === 'point') line(ctx, nearHand[0] + 2, nearHand[1], nearHand[0] + 6, nearHand[1] - 1, 'E', 1);
+  drawEye(ctx, expression, look, m.blink, m.eyeWide, pose);
+  if (pose === 'run') drawDust(ctx, t);
+  if (pose === 'think') drawThought(ctx, t);
+  if (pose === 'sweat' || pose === 'shock') drawSweat(ctx, t);
+  if (pose === 'sleep') drawSleepMarks(ctx, t);
+  if (pose === 'shock') drawBurst(ctx, m.burst, t);
+  if (prop !== 'none') {
+    if (pose === 'carry') drawProp(ctx, prop, 10, -50, t);
+    else drawProp(ctx, prop, nearHand[0] + 5, nearHand[1] - 5, t);
+  }
+  if (pose === 'curl' && curlMix > 0) {
+    ctx.globalAlpha = Math.max(0, 1 - ctx.globalAlpha);
+    drawBall(ctx, t, false, outline);
+  }
+}
+
+/** Draw the expressive, pixel-grid Hedgy actor. The same inputs always produce the same frame. */
 export function drawHedgy(ctx: Canvas2D, options: HedgyOptions): void {
   const t = Math.max(0, options.t), scale = Math.max(0.1, options.scale), facing = options.facing ?? 1;
-  const m = motion(options.pose, t), expression = options.expression ?? defaultExpression(options.pose), look = options.look ?? (options.pose === 'idle' ? idleLook(t) : 'forward');
+  const m = motion(options.pose, t), expression = options.expression ?? defaultExpression(options.pose);
+  const look = options.look ?? (options.pose === 'idle' ? idleLook(t) : 'forward');
   const extraSquash = Math.max(0.5, Math.min(1.5, options.squash ?? 1));
-  const angle = m.angle + (options.pose === 'push' ? 0 : 0);
   ctx.save();
   ctx.translate(Math.round(options.x + m.dx * scale * facing), Math.round(options.y + m.dy * scale));
   ctx.scale(scale * facing, scale);
-  ctx.rotate(angle);
+  ctx.rotate(m.angle);
   ctx.scale(m.sx / Math.sqrt(extraSquash), m.sy * extraSquash);
-  if (m.roll) {
-    // Keep the moving ball close to its feet baseline while it rolls through its art-pixel orbit.
-    ctx.translate(0, 0);
-  }
   drawHog(ctx, options, m, expression, look, t);
   ctx.restore();
 }
 
 /** Approximate animated bounds for composition and collision-free label placement. */
 export function hedgyBounds(options: HedgyOptions): HedgyBounds {
-  const scale = Math.max(0.1, options.scale), facing = options.facing ?? 1, m = motion(options.pose, Math.max(0, options.t));
+  const scale = Math.max(0.1, options.scale), facing = options.facing ?? 1, t = Math.max(0, options.t);
+  const m = motion(options.pose, t);
   const ball = options.pose === 'roll' || (options.pose === 'curl' && m.ball);
-  let leftArt = ball ? -19 : options.pose === 'fall' ? -82 : -34;
-  let rightArt = ball ? 20 : options.pose === 'fall' ? 82 : 43;
-  let topArt = options.pose === 'roll' ? -44 : options.pose === 'fall' ? -82 : options.pose === 'curl' && m.ball ? -31 : -70;
-  let bottomArt = options.pose === 'roll' ? 13 : options.pose === 'fall' ? 82 : options.pose === 'curl' && m.ball ? 1 : 2;
+  let leftArt = ball ? -24 : options.pose === 'fall' ? -45 : -31;
+  let rightArt = ball ? 24 : options.pose === 'fall' ? 45 : 34;
+  let topArt = ball ? -46 : options.pose === 'fall' ? -51 : options.pose === 'shock' ? -61 : -53;
+  let bottomArt = ball ? 3 : options.pose === 'fall' ? 8 : 3;
   if (options.prop && options.prop !== 'none') {
-    if (options.pose === 'carry') topArt = Math.min(topArt, -82);
-    else rightArt = Math.max(rightArt, 62);
+    if (options.pose === 'carry') topArt = Math.min(topArt, -67);
+    else rightArt = Math.max(rightArt, 58);
   }
   const left = Math.round(options.x + (facing > 0 ? leftArt : -rightArt) * scale + m.dx * scale * facing);
   const right = Math.round(options.x + (facing > 0 ? rightArt : -leftArt) * scale + m.dx * scale * facing);

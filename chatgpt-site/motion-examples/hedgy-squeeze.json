@@ -1,0 +1,266 @@
+{
+ "version": 1,
+ "title": "The ticket that took off",
+ "series": "HEDGY / FINANCE",
+ "mode": "dark",
+ "accent": "mono",
+ "music": "tense",
+ "scenes": [
+  {
+   "type": "shot",
+   "shot": "borrowedasset",
+   "duration": 2.2,
+   "say": "Hedgy sells a concert ticket he borrowed.",
+   "sync": [
+    {
+     "word": "sells",
+     "kind": "sells"
+    },
+    {
+     "word": "borrowed",
+     "kind": "borrowed"
+    }
+   ],
+   "transition": "cut",
+   "mascot": true
+  },
+  {
+   "type": "shot",
+   "shot": "shortsalehandoff",
+   "duration": 2.5,
+   "say": "That's short selling: he promises to return one,",
+   "sync": [
+    {
+     "word": "short",
+     "kind": "short"
+    },
+    {
+     "word": "promises",
+     "kind": "promises"
+    },
+    {
+     "word": "return",
+     "kind": "return"
+    }
+   ],
+   "transition": "slice",
+   "transitionDir": "down"
+  },
+  {
+   "type": "shot",
+   "shot": "pricestair",
+   "duration": 2.2,
+   "say": "betting he can buy it back cheaper.",
+   "sync": [
+    {
+     "word": "betting",
+     "kind": "betting"
+    },
+    {
+     "word": "cheaper",
+     "kind": "cheaper"
+    }
+   ],
+   "transition": "match"
+  },
+  {
+   "type": "shot",
+   "shot": "vaultlock",
+   "duration": 2.5,
+   "say": "His sale money stays locked with the broker",
+   "sync": [
+    {
+     "word": "money",
+     "kind": "money"
+    },
+    {
+     "word": "locked",
+     "kind": "locked"
+    }
+   ],
+   "transition": "zoomthrough"
+  },
+  {
+   "type": "shot",
+   "shot": "waitclock",
+   "duration": 3.0,
+   "say": "as collateral while he waits for hype to fade.",
+   "sync": [
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    },
+    {
+     "word": "waits",
+     "kind": "waits"
+    },
+    {
+     "word": "fade",
+     "kind": "fade"
+    }
+   ],
+   "transition": "iris"
+  },
+  {
+   "type": "shot",
+   "shot": "announcement",
+   "duration": 2.0,
+   "say": "Then the band announces a reunion,",
+   "sync": [
+    {
+     "word": "announces",
+     "kind": "announces"
+    },
+    {
+     "word": "reunion",
+     "kind": "reunion"
+    }
+   ],
+   "transition": "push",
+   "mascot": true,
+   "transitionDir": "up"
+  },
+  {
+   "type": "shot",
+   "shot": "crowdrush",
+   "duration": 2.2,
+   "say": "and fans chase the few tickets left.",
+   "sync": [
+    {
+     "word": "chase",
+     "kind": "chase"
+    },
+    {
+     "word": "few",
+     "kind": "few"
+    }
+   ],
+   "transition": "whip",
+   "transitionDir": "right"
+  },
+  {
+   "type": "shot",
+   "shot": "priceride",
+   "duration": 2.3,
+   "say": "As the price climbs, Hedgy's losses grow;",
+   "sync": [
+    {
+     "word": "climbs",
+     "kind": "climbs"
+    },
+    {
+     "word": "losses",
+     "kind": "losses"
+    }
+   ],
+   "transition": "push",
+   "mascot": true,
+   "transitionDir": "left"
+  },
+  {
+   "type": "shot",
+   "shot": "collateralcall",
+   "duration": 2.0,
+   "say": "his broker asks for more collateral.",
+   "sync": [
+    {
+     "word": "asks",
+     "kind": "asks"
+    },
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    }
+   ],
+   "transition": "whip",
+   "transitionDir": "up"
+  },
+  {
+   "type": "shot",
+   "shot": "forcedbuyback",
+   "duration": 2.6,
+   "say": "He can't cover it, so he must buy",
+   "sync": [
+    {
+     "word": "cover",
+     "kind": "cover"
+    },
+    {
+     "word": "buy",
+     "kind": "buy"
+    }
+   ],
+   "transition": "shutter"
+  },
+  {
+   "type": "shot",
+   "shot": "buybackhandoff",
+   "duration": 2.0,
+   "say": "a ticket back now. That rush",
+   "sync": [
+    {
+     "word": "back",
+     "kind": "back"
+    },
+    {
+     "word": "rush",
+     "kind": "rush"
+    }
+   ],
+   "transition": "zoomthrough"
+  },
+  {
+   "type": "shot",
+   "shot": "minimarket",
+   "duration": 1.5,
+   "say": "adds buyers, lifts prices",
+   "sync": [
+    {
+     "word": "buyers",
+     "kind": "buyers"
+    },
+    {
+     "word": "lifts",
+     "kind": "lifts"
+    }
+   ],
+   "transition": "flip"
+  },
+  {
+   "type": "shot",
+   "shot": "demandfeedback",
+   "duration": 2.3,
+   "say": "and can scare other short sellers into covering.",
+   "sync": [
+    {
+     "word": "scare",
+     "kind": "scare"
+    },
+    {
+     "word": "covering",
+     "kind": "covering"
+    }
+   ],
+   "transition": "push",
+   "transitionDir": "up"
+  },
+  {
+   "type": "shot",
+   "shot": "squeezerocket",
+   "duration": 3.4,
+   "say": "That feedback loop is a short squeeze.",
+   "sync": [
+    {
+     "word": "loop",
+     "kind": "loop"
+    },
+    {
+     "word": "squeeze",
+     "kind": "squeeze"
+    }
+   ],
+   "transition": "match",
+   "mascot": true
+  }
+ ]
+}
