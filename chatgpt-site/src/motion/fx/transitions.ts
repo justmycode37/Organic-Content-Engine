@@ -1,114 +1,62 @@
 import { clamp, hash, type Ctx, type Theme, type TransitionName } from '../core.ts';
 
-/** The cover plus reveal stays within a 0.30 second beat. */
-export const TRANSITION_OUT = 0.15;
-export const TRANSITION_IN = 0.15;
+export const TRANSITION_OUT = 0.13;
+export const TRANSITION_IN = 0.13;
+const W = 1080, H = 1920, CELL = 20;
 
-/** Draw a deterministic full-frame transition overlay around a cut. */
+/** Fine-pixel covers. phase runs -1..0 for outgoing and 0..1 for incoming. */
 export function drawTransition(ctx: Ctx, name: TransitionName, phase: number, theme: Theme, seed: number) {
-  if (name === 'cut' || !Number.isFinite(phase)) return;
-  const cover = phase <= 0;
-  const progress = cover ? clamp(phase + 1) : clamp(phase);
+  if (!Number.isFinite(phase) || name === 'cut') return;
+  const cover = phase <= 0 ? clamp(phase + 1) : clamp(1 - phase);
+  if (cover <= 0) return;
   ctx.save();
-
-  if (phase === 0) {
-    ctx.fillStyle = name === 'flash' ? theme.fg : theme.bg;
-    ctx.fillRect(0, 0, 1080, 1920);
-    ctx.restore();
-    return;
-  }
-
-  if (name === 'blocks') {
-    const size = 120;
-    const cols = Math.ceil(1080 / size), rows = Math.ceil(1920 / size);
-    const cells = Array.from({ length: cols * rows }, (_, index) => index);
-    cells.sort((a, b) => {
-      const ax = a % cols, ay = Math.floor(a / cols);
-      const bx = b % cols, by = Math.floor(b / cols);
-      return (ax + ay + hash(a, seed) * 0.7) - (bx + by + hash(b, seed) * 0.7);
-    });
-    const covered = cover ? progress : 1 - progress;
-    const count = Math.floor(covered * cells.length);
-    ctx.fillStyle = theme.panelAlt;
-    for (let index = 0; index < count; index++) {
-      const cell = cells[cover ? index : cells.length - 1 - index]!;
-      ctx.fillRect((cell % cols) * size, Math.floor(cell / cols) * size, size + 1, size + 1);
+  const bg = name === 'flash' ? theme.fg : theme.panelAlt;
+  const cols = Math.ceil(W / CELL), rows = Math.ceil(H / CELL);
+  const fillPixel = (x: number, y: number, w = CELL, h = CELL) => ctx.fillRect(x, y, w + 1, h + 1);
+  if (name === 'shutter') {
+    const open = 1 - cover;
+    const gap = Math.floor(H * open / CELL) * CELL;
+    const top = Math.floor((H - gap) / 2 / CELL) * CELL;
+    ctx.fillStyle = bg; ctx.fillRect(0, 0, W, top); ctx.fillRect(0, top + gap, W, H - top - gap);
+    for (let x = 0; x < W; x += CELL) {
+      ctx.fillStyle = bg; ctx.fillRect(x, Math.max(0, top - CELL), CELL, CELL);
+      ctx.fillRect(x, Math.min(H - CELL, top + gap), CELL, CELL);
     }
-    if (count > 0 && count < cells.length) {
-      const cell = cells[cover ? count - 1 : cells.length - count]!;
-      const x = (cell % cols) * size, y = Math.floor(cell / cols) * size;
-      ctx.fillStyle = theme.accent;
-      ctx.fillRect(cover ? x + size - 6 : x, y, 6, size);
-    }
+    if (open > 0 && open < 1) { ctx.globalAlpha = .78; ctx.fillStyle = theme.accent; ctx.fillRect(0, top - 2, W, 4); ctx.fillRect(0, top + gap - 2, W, 4); }
   } else if (name === 'wipe') {
-    const step = 48, skew = 0.35;
-    const edgeProgress = progress;
-    ctx.fillStyle = theme.panelAlt;
-    for (let y = 0; y < 1920; y += step) {
-      const edge = edgeProgress * (1080 + 1920 * skew) - y * skew;
-      const width = clamp(edge / 1080, 0, 1) * 1080;
-      if (cover) ctx.fillRect(0, y, width, step + 1);
-      else ctx.fillRect(width, y, 1080 - width, step + 1);
+    const edge = cover * (W + H * .32);
+    ctx.fillStyle = bg;
+    for (let y = 0; y < H; y += CELL) {
+      const xedge = edge - y * .32;
+      const n = Math.ceil(clamp(xedge / CELL, 0, cols));
+      for (let x = 0; x < n; x++) fillPixel(x * CELL, y);
     }
-    const edgeAt = (y: number) => edgeProgress * (1080 + 1920 * skew) - y * skew;
-    ctx.beginPath();
-    ctx.moveTo(edgeAt(0), 0);
-    ctx.lineTo(edgeAt(1920), 1920);
-    ctx.strokeStyle = theme.accent;
-    ctx.lineWidth = 6;
-    ctx.stroke();
+    ctx.globalAlpha = .9; ctx.fillStyle = theme.accent;
+    for (let y = 0; y < H; y += CELL) { const x = Math.floor((edge - y * .32) / CELL) * CELL; if (x >= 0 && x < W) fillPixel(x, y); }
   } else if (name === 'glitch') {
-    const slice = 192, rows = Math.ceil(1920 / slice);
-    const covered = cover ? progress : 1 - progress;
-    ctx.fillStyle = theme.panelAlt;
-    for (let row = 0; row < rows; row++) {
-      const stagger = hash(row, seed) * 0.12;
-      const local = clamp((covered - stagger) / (1 - stagger));
-      const width = local * 1080;
-      const offset = Math.round((hash(row, seed + 1) - 0.5) * 72 * (1 - local));
-      const fromLeft = row % 2 === 0;
-      const x = fromLeft ? -offset : 1080 - width + offset;
-      ctx.fillRect(x, row * slice, width + 1, slice + 1);
-      if (row % 3 === 0 && width > 0 && width < 1080) {
-        ctx.fillStyle = theme.accent;
-        ctx.fillRect(fromLeft ? x + width - 6 : x, row * slice, 6, slice);
-        ctx.fillStyle = theme.panelAlt;
-      }
+    const bandH = CELL * 3;
+    for (let y = 0; y < H; y += bandH) {
+      const row = Math.floor(y / bandH), local = clamp((cover - hash(row, seed) * .13) / .87);
+      const width = Math.floor(local * cols) * CELL;
+      const shift = Math.round((hash(row, seed + 9) - .5) * 9 * CELL * (1 - local));
+      ctx.fillStyle = bg;
+      ctx.fillRect(row % 2 ? W - width + shift : -shift, y, width + CELL, bandH);
+      if (width > 0 && width < W) { ctx.globalAlpha = .88; ctx.fillStyle = theme.accent; ctx.fillRect(row % 2 ? W - width + shift : width - shift, y, CELL, bandH); ctx.globalAlpha = 1; }
     }
-  } else if (name === 'zoom') {
-    const radius = cover ? (1 - progress) * 1200 : progress * 1200;
-    ctx.fillStyle = theme.panelAlt;
-    ctx.beginPath();
-    ctx.rect(0, 0, 1080, 1920);
-    ctx.rect(540 - radius, 960 - radius, radius * 2, radius * 2);
-    ctx.fill('evenodd');
-    if (radius > 10) {
-      ctx.strokeStyle = theme.accent;
-      ctx.lineWidth = 6;
-      ctx.strokeRect(540 - radius, 960 - radius, radius * 2, radius * 2);
-    }
-  } else if (name === 'flash') {
-    const covered = cover ? progress : 1 - progress;
-    const width = 1080 * covered, height = 1920 * covered;
-    const x = (1080 - width) / 2, y = (1920 - height) / 2;
-    ctx.fillStyle = theme.fg;
-    ctx.fillRect(x, y, width, height);
-    if (width > 20 && height > 20 && covered < 0.999) {
-      ctx.strokeStyle = theme.accent;
-      ctx.lineWidth = 6;
-      ctx.strokeRect(x, y, width, height);
-    }
-  } else if (name === 'shutter') {
-    const opening = cover ? 1 - progress : progress;
-    const gapHeight = 1920 * opening;
-    const gapTop = (1920 - gapHeight) / 2;
-    ctx.fillStyle = theme.panelAlt;
-    ctx.fillRect(0, 0, 1080, gapTop);
-    ctx.fillRect(0, gapTop + gapHeight, 1080, 1920 - gapTop - gapHeight);
-    if (opening > 0 && opening < 1) {
-      ctx.fillStyle = theme.accent;
-      ctx.fillRect(0, Math.round(gapTop - 4), 1080, 8);
-      ctx.fillRect(0, Math.round(gapTop + gapHeight - 4), 1080, 8);
+  } else {
+    // Ranked cell mosaic, diagonal except for stepped zoom rings and the crisp flash.
+    const order = (x: number, y: number) => {
+      const n = hash(x * 31 + y * 997, seed);
+      if (name === 'zoom') { const d = Math.hypot((x + .5 - cols / 2) / cols, (y + .5 - rows / 2) / rows); return 1 - d + n * .07; }
+      if (name === 'flash') return 1 - Math.max(Math.abs((x + .5) / cols - .5), Math.abs((y + .5) / rows - .5)) * 1.7 + n * .05;
+      return (x / cols + y / rows) * .5 + n * .09;
+    };
+    const threshold = name === 'flash' ? cover : cover * 1.1;
+    ctx.fillStyle = bg;
+    for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) if (order(x, y) < threshold) fillPixel(x * CELL, y * CELL);
+    if (name !== 'flash' && cover > .02 && cover < .98) {
+      ctx.globalAlpha = .82; ctx.fillStyle = theme.accent;
+      for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) { const o = order(x, y); if (Math.abs(o - threshold) < .035) fillPixel(x * CELL, y * CELL); }
     }
   }
   ctx.restore();

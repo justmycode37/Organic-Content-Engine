@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ACCENTS, ICONS, SCENE_TYPES, TRANSITIONS, type ReelSpec } from './core.ts';
+import { ACCENTS, ICONS, MODELS, MUSIC_MOODS, SCENE_TYPES, TRANSITIONS, type ReelSpec } from './core.ts';
 
 const icon = z.enum(ICONS);
 const short = (max: number) => z.string().min(1).max(max);
@@ -23,10 +23,11 @@ const sceneSchemas = {
  grid:z.object({type:z.literal('grid'),...base,title:short(60).optional(),rows:z.number().int().min(2).max(16),cols:z.number().int().min(2).max(16),pattern:z.enum(['scan','attention','noise','fill']).optional(),highlight:z.array(z.tuple([z.number().int().min(0),z.number().int().min(0)])).max(32).optional(),rowLabels:z.array(short(24)).max(16).optional(),colLabels:z.array(short(24)).max(16).optional()}).strict(),
  kinetic:z.object({type:z.literal('kinetic'),...base,words:z.array(short(24)).min(1).max(8)}).strict(),
  changelog:z.object({type:z.literal('changelog'),...base,version:short(24),product:short(40).optional(),items:z.array(z.object({tag:z.enum(['NEW','FIX','CHG','DEL']),text:short(60),accent:z.boolean().optional()}).strict()).min(1).max(6)}).strict(),
+ object:z.object({type:z.literal('object'),...base,model:z.enum([...MODELS,...ICONS]),label:short(40).optional(),note:short(90).optional(),callouts:z.array(short(24)).max(3).optional()}).strict(),
  outro:z.object({type:z.literal('outro'),...base,cta:short(90),handle:short(40).optional(),sub:short(90).optional()}).strict(),
 };
 const sceneSchema=z.discriminatedUnion('type',SCENE_TYPES.map(t=>sceneSchemas[t]) as [typeof sceneSchemas[keyof typeof sceneSchemas], ...typeof sceneSchemas[keyof typeof sceneSchemas][]]);
-export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
+export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),music:z.enum(MUSIC_MOODS).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
  let total=0; spec.scenes.forEach((s,i)=>{total+=s.duration;(s.hits??[]).forEach((h,j)=>{if(h>s.duration)ctx.addIssue({code:'custom',path:['scenes',i,'hits',j],message:'hit must be within scene duration'});});});
  if(total<5||total>90)ctx.addIssue({code:'custom',path:['scenes'],message:'total duration must be 5 to 90 seconds'});
 });
@@ -51,6 +52,6 @@ const lintRules = [
  ['warn','title length',(s:ReelSpec)=>s.scenes.flatMap((x,i)=>x.type==='title'&&x.text.split(/\s+/).length>9?[{scene:i,message:'title text longer than 9 words'}]:[])],
 ] as const;
 export function lintReel(spec:ReelSpec){return lintRules.flatMap(([level,_name,run])=>run(spec).map((item:{scene?:number;message:string})=>({level,scene:item.scene,message:item.message})));}
-const purposes:Record<string,string>={title:'Hook the viewer with a pixel title.',code:'Show code typing and highlight a change.',diff:'Reveal a before and after code change.',terminal:'Show a command and its output.',flow:'Explain a pipeline or process.',stat:'Land one important number.',bars:'Compare values in a bar race.',compare:'Contrast two options.',list:'Present a rapid stack of points.',tokens:'Explain tokenization and prediction.',chat:'Show a user prompt and AI reply.',layers:'Reveal a system through its layers.',grid:'Visualize a matrix or attention map.',kinetic:'Hit one short phrase per beat.',changelog:'Show tagged release changes.',outro:'Close with a call to action.'};
+const purposes:Record<string,string>={title:'Hook the viewer with a pixel title.',code:'Show code typing and highlight a change.',diff:'Reveal a before and after code change.',terminal:'Show a command and its output.',flow:'Explain a pipeline or process.',stat:'Land one important number.',bars:'Compare values in a bar race.',compare:'Contrast two options.',list:'Present a rapid stack of points.',tokens:'Explain tokenization and prediction.',chat:'Show a user prompt and AI reply.',layers:'Reveal a system through its layers.',grid:'Visualize a matrix or attention map.',kinetic:'Hit one short phrase per beat.',changelog:'Show tagged release changes.',object:'Show one 3D pixel object as the hero of the beat.',outro:'Close with a call to action.'};
 export function reelJsonSchema(){return z.toJSONSchema(reelSpecSchema);}
 export function describeScenes(){return SCENE_TYPES.map(type=>`${type}: ${Object.keys((sceneSchemas[type] as any).shape).filter(k=>k!=='type').join(', ')} — ${purposes[type]}`).join('\n');}

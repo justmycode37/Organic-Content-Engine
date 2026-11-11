@@ -1,264 +1,347 @@
-import { CONTENT_BOTTOM, ease, prog, type Frame, type LayersProps, type SceneDef } from '../core.ts';
-import { fitPixel, pixelHeight, pixelText, pixelWidth, text, textWidth } from '../prim.ts';
+import {
+  clamp,
+  ease,
+  prog,
+  SAFE,
+  type Cue,
+  type Frame,
+  type LayersProps,
+  type SceneDef,
+} from '../core.ts';
+import { fitPixel, pixelBlock, pixelHeight, pixelText, pixelWidth } from '../prim.ts';
+import {
+  box,
+  emptyMesh,
+  merge,
+  place,
+  project,
+  quad,
+  render3d,
+  type Mesh,
+  type Object3D,
+  type View3D,
+} from '../three.ts';
 
-const LABEL_PX = 6;
-const NOTE_SIZE = 30;
+const SLAB_W = 9.5;
+const SLAB_H = 0.72;
+const SLAB_D = 6.7;
+const STACK_Y = 0.74;
+const EXPLODE_Y = 1.55;
+const VIEW_BASE: Omit<View3D, 'yaw' | 'pitch'> = {
+  x: 112,
+  y: 320,
+  w: 856,
+  h: 920,
+  zoom: 70,
+  ortho: true,
+  distance: 10,
+  cell: 4,
+  outline: true,
+};
 
-function pixelWrap(value: string, maxWidth: number, px = LABEL_PX): string[] {
-  const clean = String(value ?? '').replaceAll('*', '').trim().replace(/\s+/g, ' ').toUpperCase();
-  if (!clean) return [''];
-  const lines: string[] = [];
-  let line = '';
-  for (const word of clean.split(' ')) {
-    let parts = [word];
-    if (pixelWidth(word, px) > maxWidth) {
-      parts = [];
-      let part = '';
-      for (const char of Array.from(word)) {
-        if (part && pixelWidth(part + char, px) > maxWidth) { parts.push(part); part = char; }
-        else part += char;
+const meshCache = new Map<string, Mesh>();
+
+interface LayerTiming {
+  start: number;
+  move: number;
+  stagger: number;
+  payoff: number;
+  lastMoveEnd: number;
+}
+
+function timing(dur: number, count: number): LayerTiming {
+  const length = Math.max(0.1, dur);
+  const start = Math.min(0.18, length * 0.06);
+  const move = clamp(length * 0.13, 0.16, 0.35);
+  const staggerSpan = Math.min(length * 0.3, 0.9);
+  const stagger = count > 1 ? staggerSpan / (count - 1) : 0;
+  const lastMoveEnd = start + stagger * Math.max(0, count - 1) + move;
+  const payoff = clamp(length * 0.64, lastMoveEnd + 0.08, length - 0.16);
+  return { start, move, stagger, payoff, lastMoveEnd };
+}
+
+function pushBox(
+  parts: Mesh[],
+  width: number,
+  height: number,
+  depth: number,
+  x: number,
+  y: number,
+  z: number,
+  material: number,
+) {
+  parts.push(place(box(width, height, depth, material), { pos: [x, y, z] }));
+}
+
+function bevelledBase(index: number, accent: boolean): Mesh {
+  const mesh = emptyMesh();
+  const x = SLAB_W / 2;
+  const z = SLAB_D / 2;
+  const bevel = 0.18;
+  const top = SLAB_H / 2;
+  const sideTop = top - bevel;
+  const bottom = -top;
+  const ix = x - bevel;
+  const iz = z - bevel;
+  const topMaterial = accent ? 5 : 1;
+  const sideMaterial = index % 2 === 0 ? 0 : 3;
+
+  // The inset top and four angled strips make the body read as a machined slab.
+  quad(mesh, [-ix, top, -iz], [ix, top, -iz], [ix, top, iz], [-ix, top, iz], topMaterial);
+  quad(mesh, [-ix, top, iz], [ix, top, iz], [x, sideTop, z], [-x, sideTop, z], 2);
+  quad(mesh, [ix, top, -iz], [-ix, top, -iz], [-x, sideTop, -z], [x, sideTop, -z], 2);
+  quad(mesh, [-ix, top, -iz], [-ix, top, iz], [-x, sideTop, z], [-x, sideTop, -z], 2);
+  quad(mesh, [ix, top, iz], [ix, top, -iz], [x, sideTop, -z], [x, sideTop, z], 2);
+
+  quad(mesh, [-x, sideTop, z], [x, sideTop, z], [x, bottom, z], [-x, bottom, z], accent ? 5 : sideMaterial);
+  quad(mesh, [x, sideTop, -z], [-x, sideTop, -z], [-x, bottom, -z], [x, bottom, -z], 0);
+  quad(mesh, [-x, sideTop, -z], [-x, sideTop, z], [-x, bottom, z], [-x, bottom, -z], 3);
+  quad(mesh, [x, sideTop, z], [x, sideTop, -z], [x, bottom, -z], [x, bottom, z], accent ? 5 : 0);
+  quad(mesh, [-x, bottom, -z], [x, bottom, -z], [x, bottom, z], [-x, bottom, z], 3);
+  return mesh;
+}
+
+function surfaceDetails(index: number): Mesh {
+  const parts: Mesh[] = [];
+  const top = SLAB_H / 2;
+  const role = index % 3;
+
+  // Four recessed corner fasteners give every layer a crisp mechanical edge.
+  for (const x of [-4.25, 4.25]) {
+    for (const z of [-2.85, 2.85]) {
+      pushBox(parts, 0.2, 0.055, 0.2, x, top + 0.027, z, 4);
+      pushBox(parts, 0.08, 0.06, 0.08, x, top + 0.06, z, 3);
+    }
+  }
+
+  if (role === 0) {
+    // A field of tiny cells, with a different cadence on each slab.
+    for (let row = 0; row < 5; row++) {
+      for (let col = 0; col < 8; col++) {
+        if ((row * 3 + col * 5 + index) % 4 === 0) continue;
+        const x = -3.55 + col * 1.0;
+        const z = -2.05 + row * 1.0;
+        const material = (row + col + index) % 5 === 0 ? 4 : 3;
+        pushBox(parts, 0.42, 0.055, 0.34, x, top + 0.028, z, material);
+        if ((row + col) % 3 === 0) {
+          pushBox(parts, 0.12, 0.07, 0.12, x + 0.19, top + 0.055, z - 0.12, 1);
+        }
       }
-      if (part) parts.push(part);
     }
-    for (const part of parts) {
-      const candidate = line ? `${line} ${part}` : part;
-      if (line && pixelWidth(candidate, px) > maxWidth) { lines.push(line); line = part; }
-      else line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.length ? lines : [''];
-}
-
-function measuredWrap(ctx: Frame['ctx'], value: string, maxWidth: number, size: number): string[] {
-  const words = String(value ?? '').trim().split(/\s+/).filter(Boolean);
-  if (!words.length) return [];
-  const units: string[] = [];
-  for (const word of words) {
-    if (textWidth(ctx, word, size, 800) <= maxWidth) { units.push(word); continue; }
-    let part = '';
-    for (const char of Array.from(word)) {
-      if (part && textWidth(ctx, part + char, size, 800) > maxWidth) { units.push(part); part = char; }
-      else part += char;
-    }
-    if (part) units.push(part);
-  }
-  const lines: string[] = [];
-  let line = '';
-  for (const unit of units) {
-    const candidate = line ? `${line} ${unit}` : unit;
-    if (line && textWidth(ctx, candidate, size, 800) > maxWidth) { lines.push(line); line = unit; }
-    else line = candidate;
-  }
-  if (line) lines.push(line);
-  return lines;
-}
-
-function drawTopPattern(ctx: Frame['ctx'], theme: Frame['theme'], index: number, x: number, y: number, w: number, depth: number) {
-  ctx.save();
-  ctx.beginPath();
-  ctx.moveTo(x + depth, y); ctx.lineTo(x + depth + w, y); ctx.lineTo(x + w, y + depth); ctx.lineTo(x, y + depth); ctx.closePath();
-  ctx.clip();
-  ctx.globalAlpha *= 0.3;
-  ctx.fillStyle = theme.dim;
-  ctx.strokeStyle = theme.dim;
-  ctx.lineWidth = 4;
-
-  if (index % 4 === 0) {
-    for (let xx = x + 12; xx < x + w + depth; xx += 32) {
-      ctx.beginPath(); ctx.moveTo(xx, y - 2); ctx.lineTo(xx - depth, y + depth + 2); ctx.stroke();
-    }
-    for (let yy = y + 22; yy < y + depth; yy += 28) {
-      ctx.beginPath(); ctx.moveTo(x - 4, yy); ctx.lineTo(x + w + depth + 4, yy); ctx.stroke();
-    }
-  } else if (index % 4 === 1) {
-    for (let row = 0; row < 5; row++) for (let col = 0; col < 16; col++) {
-      if ((row + col) % 2 === 0) ctx.fillRect(x + col * 34 + 8, y + row * 28 + 6, 16, 16);
-    }
-  } else if (index % 4 === 2) {
-    ctx.save();
-    ctx.translate(x + depth + w / 2, y + depth / 2);
-    ctx.rotate(-Math.PI / 4);
-    for (let offset = -320; offset <= 320; offset += 34) ctx.fillRect(-360, offset, 720, 14);
-    ctx.restore();
+  } else if (role === 1) {
+    // Etched traces turn at right angles and terminate in square contacts.
+    const tracks = [
+      { x: -3.25, z: -1.8, w: 2.15, d: 0.09 },
+      { x: 1.95, z: -1.8, w: 2.55, d: 0.09 },
+      { x: -2.35, z: 0.1, w: 3.1, d: 0.09 },
+      { x: 1.7, z: 1.75, w: 2.8, d: 0.09 },
+    ];
+    tracks.forEach((track, line) => {
+      pushBox(parts, track.w, 0.05, track.d, track.x, top + 0.025, track.z, line % 2 ? 3 : 4);
+      const turnX = track.x + track.w * (line % 2 ? -0.32 : 0.31);
+      const turnZ = track.z + (line % 2 ? 0.62 : -0.62);
+      pushBox(parts, 0.09, 0.05, Math.abs(turnZ - track.z), turnX, top + 0.025, (track.z + turnZ) / 2, 3);
+      pushBox(parts, 0.2, 0.06, 0.2, track.x + track.w / 2, top + 0.04, track.z, 4);
+      pushBox(parts, 0.18, 0.06, 0.18, turnX, top + 0.04, turnZ, 1);
+    });
   } else {
-    for (let row = 0; row < 6; row++) for (let col = 0; col < 18; col++) {
-      if ((row + col) % 2 === 0) ctx.fillRect(x + col * 28 + 4, y + row * 24 + 4, 28, 24);
+    // A package, pins and surrounding pads make this layer feel like hardware.
+    pushBox(parts, 2.3, 0.09, 1.72, 0, top + 0.04, 0, 0);
+    pushBox(parts, 1.62, 0.12, 1.08, 0, top + 0.13, 0, 4);
+    pushBox(parts, 0.9, 0.08, 0.5, 0, top + 0.21, 0, 1);
+    for (let pin = 0; pin < 8; pin++) {
+      const offset = -1.1 + pin * 0.31;
+      pushBox(parts, 0.1, 0.055, 0.5, offset, top + 0.04, -1.28, 3);
+      pushBox(parts, 0.1, 0.055, 0.5, offset, top + 0.04, 1.28, 3);
+      if (pin < 5) {
+        pushBox(parts, 0.44, 0.055, 0.28, -3.05 + pin * 1.52, top + 0.03, 2.25, 4);
+      }
     }
+    pushBox(parts, 0.36, 0.07, 0.36, -2.8, top + 0.055, -2.35, 1);
+    pushBox(parts, 0.36, 0.07, 0.36, 2.8, top + 0.055, 2.35, 1);
   }
-  ctx.restore();
+
+  return merge(...parts);
 }
 
-function drawFace(ctx: Frame['ctx'], points: [number, number][], fill: string, stroke: string) {
+function slabMesh(index: number, accent: boolean): Mesh {
+  const key = `${index}:${accent ? 1 : 0}`;
+  let mesh = meshCache.get(key);
+  if (!mesh) {
+    mesh = merge(bevelledBase(index, accent), surfaceDetails(index));
+    meshCache.set(key, mesh);
+  }
+  return mesh;
+}
+
+function shortTitle(value: unknown, px: number, maxWidth: number): string {
+  const words = String(value ?? '').trim().toUpperCase().split(/\s+/).filter(Boolean);
+  let title = '';
+  for (const word of words) {
+    const candidate = title ? `${title} ${word}` : word;
+    if (pixelWidth(candidate, px) <= maxWidth) title = candidate;
+    else if (!title) {
+      title = word;
+      while (title.length > 1 && pixelWidth(title, px) > maxWidth) title = title.slice(0, -1);
+      break;
+    } else break;
+  }
+  return title;
+}
+
+function drawLeader(
+  ctx: Frame['ctx'],
+  x1: number,
+  y1: number,
+  x2: number,
+  y2: number,
+  color: string,
+) {
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 4;
+  ctx.lineCap = 'square';
+  ctx.lineJoin = 'miter';
   ctx.beginPath();
-  points.forEach(([x, y], i) => i ? ctx.lineTo(x, y) : ctx.moveTo(x, y));
-  ctx.closePath();
-  ctx.fillStyle = fill; ctx.fill();
-  ctx.strokeStyle = stroke; ctx.lineWidth = 4; ctx.lineJoin = 'miter'; ctx.stroke();
+  ctx.moveTo(Math.round(x1 / 4) * 4, Math.round(y1 / 4) * 4);
+  ctx.lineTo(Math.round(x2 / 4) * 4, Math.round(y1 / 4) * 4);
+  ctx.lineTo(Math.round(x2 / 4) * 4, Math.round(y2 / 4) * 4);
+  ctx.stroke();
+}
+
+function drawLayerLabel(
+  frame: Frame,
+  label: LayersProps['layers'][number],
+  index: number,
+  view: View3D,
+  worldY: number,
+  alpha: number,
+) {
+  const { ctx, theme } = frame;
+  if (alpha <= 0) return;
+  const side = index % 2 === 0 ? -1 : 1;
+  const anchor = project(view, [side * (SLAB_W / 2), worldY + SLAB_H * 0.48, side * (SLAB_D / 2)]);
+  const raw = String(label.label ?? 'LAYER').trim().toUpperCase().slice(0, 60);
+  const fit = fitPixel(raw || 'LAYER', 220, 2, [8, 7]);
+  const lines = fit.lines.slice(0, 2);
+  const px = Math.max(7, fit.px);
+  const note = String(label.note ?? '').trim().slice(0, 30);
+  const textWidth = Math.max(...lines.map(line => pixelWidth(line.replaceAll('*', ''), px)), 56);
+  const panelW = clamp(textWidth + 32, 138, 250);
+  const panelH = 24 + lines.length * pixelHeight(px) + (lines.length - 1) * 5 + (note ? 30 : 0);
+  const panelX = side < 0 ? SAFE.x + 8 : SAFE.right - panelW - 8;
+  const panelY = clamp(anchor.y - panelH / 2, 344, 1100 - panelH);
+  const railX = side < 0 ? panelX + panelW : panelX;
+  const labelCenterY = panelY + panelH / 2;
+
+  ctx.save();
+  ctx.globalAlpha *= clamp(alpha);
+  drawLeader(ctx, anchor.x, anchor.y, railX, labelCenterY, theme.dim);
+  ctx.fillStyle = theme.panel;
+  ctx.fillRect(panelX, panelY, panelW, panelH);
+  ctx.strokeStyle = theme.line;
+  ctx.lineWidth = 4;
+  ctx.strokeRect(panelX + 2, panelY + 2, panelW - 4, panelH - 4);
+  ctx.fillStyle = label.accent ? theme.accent : theme.fg;
+  pixelBlock(ctx, lines, side < 0 ? panelX + 14 : panelX + panelW - 14, panelY + 12, px, {
+    color: label.accent ? theme.accent : theme.fg,
+    align: side < 0 ? 'left' : 'right',
+    gap: 5,
+  });
+  if (note) {
+    ctx.font = '700 18px sans-serif';
+    ctx.textAlign = side < 0 ? 'left' : 'right';
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillStyle = theme.dim;
+    ctx.fillText(note, side < 0 ? panelX + 14 : panelX + panelW - 14, panelY + panelH - 10, panelW - 28);
+  }
+  const markerX = side < 0 ? panelX + panelW - 4 : panelX;
+  ctx.fillStyle = label.accent ? theme.accent : theme.fg;
+  ctx.fillRect(markerX - 4, labelCenterY - 4, 8, 8);
+  ctx.restore();
 }
 
 export const layersScene: SceneDef<LayersProps> = {
   type: 'layers',
-  render(frame: Frame, props: LayersProps) {
-    const { ctx, theme, t, dur } = frame;
-    const layers = (props.layers ?? []).slice(0, 6);
-    if (layers.length < 2) return;
-    const n = layers.length;
-    const accentIndex = layers.findIndex(layer => layer.accent);
-    if (props.title) {
-      const fitted = fitPixel(props.title.toUpperCase(), 888, 1, [10, 9, 8]);
-      pixelText(ctx, fitted.lines[0] ?? '', 540, 252, fitted.px, { color: theme.fg, align: 'center' });
-    }
 
-    const baseX = 156, slabW = 460, faceDepth = 120, thickness = 28;
-    const slabH = faceDepth + thickness;
-    const explodedGap = n >= 5 ? 36 : 40;
-    const contentTop = props.title ? 340 : 270;
-    const contentBottom = CONTENT_BOTTOM - 16;
-    const centerY = (contentTop + contentBottom) / 2;
-    const collapsedPitch = slabH - 18;
-    const explodedPitch = slabH + explodedGap;
-    const spread = ease.outBack(prog(t, dur * 0.1, Math.min(0.48, dur * 0.24)));
-    const collapsedHeight = slabH + (n - 1) * collapsedPitch;
-    const explodedHeight = slabH + (n - 1) * explodedPitch;
-    const collapsedTop = centerY - collapsedHeight / 2;
-    const explodedTop = centerY - explodedHeight / 2;
-    const calloutX = 768, calloutW = 216;
-    const accentProgress = ease.outCubic(prog(t, dur * 0.56, Math.min(0.28, dur * 0.16)));
-    const labelAlpha = ease.outExpo(prog(t, dur * 0.12, Math.min(0.28, dur * 0.16)));
-    const callouts = layers.map((layer, i) => {
-      const labelPad = i === accentIndex ? 8 : 0;
-      let labelPx = LABEL_PX;
-      let labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-      while (labelPx > 4 && (labelLines.length > 4 || labelLines.some(line => line.length === 1))) {
-        labelPx--;
-        labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-      }
-      let noteSize = NOTE_SIZE;
-      let noteLines = layer.note ? measuredWrap(ctx, layer.note, calloutW, noteSize) : [];
-      while (noteLines.length > 2 && noteSize > 18) {
-        noteSize -= 2;
-        noteLines = measuredWrap(ctx, layer.note ?? '', calloutW, noteSize);
-      }
-      let labelH = labelLines.length * pixelHeight(labelPx) + Math.max(0, labelLines.length - 1) * 8;
-      let noteH = noteLines.length ? noteLines.length * (noteSize + 6) : 0;
-      let height = labelH + labelPad * 2 + (noteLines.length ? 4 + noteH : 0);
-      const maxBlockHeight = Math.max(explodedPitch, (contentBottom - contentTop - 14 * (n - 1)) / n);
-      while (height > maxBlockHeight && (noteSize > 18 || labelPx > 4)) {
-        if (noteSize > 18) {
-          noteSize -= 2;
-          noteLines = measuredWrap(ctx, layer.note ?? '', calloutW, noteSize);
-          noteH = noteLines.length ? noteLines.length * (noteSize + 6) : 0;
-        } else if (labelPx > 4) {
-          labelPx--;
-          labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-          labelH = labelLines.length * pixelHeight(labelPx) + Math.max(0, labelLines.length - 1) * 8;
-        }
-        height = labelH + labelPad * 2 + (noteLines.length ? 4 + noteH : 0);
-      }
-      return { labelPad, labelPx, labelLines, labelH, noteSize, noteLines, noteH, height };
-    });
-    const repackCallouts = callouts.some(callout => callout.height > explodedPitch);
-    let packedCenters: number[] | undefined;
-    if (repackCallouts) {
-      const packedHeight = callouts.reduce((sum, callout) => sum + callout.height, 0) + 14 * (n - 1);
-      let cursor = (contentTop + contentBottom - packedHeight) / 2;
-      packedCenters = callouts.map(callout => {
-        const center = cursor + callout.height / 2;
-        cursor += callout.height + 14;
-        return center;
+  render(frame: Frame, props: LayersProps) {
+    const layers = (Array.isArray(props.layers) ? props.layers : []).slice(0, 6);
+    if (layers.length === 0) return;
+
+    const { ctx, theme, t } = frame;
+    const count = layers.length;
+    const animation = timing(frame.dur, count);
+    const title = String(props.title ?? '').trim();
+    if (title) {
+      pixelText(ctx, shortTitle(title, 12, SAFE.w), SAFE.cx, 246, 12, {
+        color: theme.fg,
+        align: 'center',
       });
     }
 
-    // Paint the lower plates first so the collapsed stack has clear depth order.
-    for (let i = n - 1; i >= 0; i--) {
-      const layer = layers[i]!;
-      const callout = callouts[i]!;
-      const yCollapsed = collapsedTop + i * collapsedPitch;
-      const yExploded = explodedTop + i * explodedPitch;
-      const y = yCollapsed + (yExploded - yCollapsed) * spread;
-      const isAccent = i === accentIndex && t >= dur * 0.56;
-      const slide = isAccent ? -60 * accentProgress : 0;
-      const x = baseX + slide;
-      const mid = y + slabH / 2;
-      const stroke = isAccent ? theme.accent : theme.fg;
-      const alpha = ease.outExpo(prog(t, i * Math.min(0.07, dur * 0.035), Math.min(0.24, dur * 0.18)));
+    // A small, slow orbit changes the silhouette without throwing labels off it.
+    const view: View3D = {
+      ...VIEW_BASE,
+      yaw: 0.55 + Math.sin(t * 0.34) * 0.12,
+      pitch: 0.48 + Math.sin(t * 0.23) * 0.025,
+    };
+    const objects: Object3D[] = [];
+    const worldY: number[] = [];
+    const center = (count - 1) / 2;
 
-      ctx.save();
-      ctx.globalAlpha *= alpha;
-      ctx.translate(0, Math.sin(t * 2.4 + i) * 1.1);
+    layers.forEach((layer, index) => {
+      const releaseAt = animation.start + index * animation.stagger;
+      const release = ease.outBack(prog(t, releaseAt, animation.move));
+      const fusedY = (index - center) * STACK_Y;
+      const explodedY = (index - center) * EXPLODE_Y;
+      const y = fusedY + (explodedY - fusedY) * release;
+      worldY.push(y);
 
-      drawFace(ctx, [
-        [x, y + faceDepth], [x + slabW, y + faceDepth],
-        [x + slabW, y + slabH], [x, y + slabH],
-      ], theme.panelAlt, stroke);
-      drawFace(ctx, [
-        [x + slabW, y + faceDepth], [x + slabW + faceDepth, y],
-        [x + slabW + faceDepth, y + thickness], [x + slabW, y + slabH],
-      ], theme.panelAlt, stroke);
-      drawFace(ctx, [
-        [x + faceDepth, y], [x + faceDepth + slabW, y],
-        [x + slabW, y + faceDepth], [x, y + faceDepth],
-      ], theme.panel, stroke);
-      drawTopPattern(ctx, theme, i, x, y, slabW, faceDepth);
-      // Re-stroke the top edge over the pattern to keep the 4 px silhouette crisp.
-      ctx.beginPath();
-      ctx.moveTo(x + faceDepth, y); ctx.lineTo(x + faceDepth + slabW, y);
-      ctx.lineTo(x + slabW, y + faceDepth); ctx.lineTo(x, y + faceDepth); ctx.closePath();
-      ctx.strokeStyle = stroke; ctx.lineWidth = 4; ctx.stroke();
+      const accent = Boolean(layer.accent);
+      const payoff = clamp(prog(t, animation.payoff, 0.3));
+      const pulse = accent ? Math.max(0, Math.sin((t - animation.payoff) * Math.PI * 3)) * payoff : 0;
+      const scale = accent ? 1 + pulse * 0.045 : 1;
+      objects.push({
+        mesh: slabMesh(index, accent),
+        pos: [0, y, 0],
+        rot: [0, 0, 0],
+        scale: [scale, 1, scale],
+        materials: [
+          { tone: 0.27 },
+          { tone: 0.84 },
+          { tone: 0.92 },
+          { tone: 0.16 },
+          { tone: 1, unlit: true },
+          { accent: true },
+        ],
+        seed: index * 47 + 9,
+      });
+    });
 
-      if (isAccent) {
-        const scan = ((Math.max(0, t - dur * 0.62) * 1.35) % 1) * (slabW - 16);
-        ctx.save();
-        ctx.beginPath();
-        ctx.moveTo(x + faceDepth, y); ctx.lineTo(x + faceDepth + slabW, y);
-        ctx.lineTo(x + slabW, y + faceDepth); ctx.lineTo(x, y + faceDepth); ctx.closePath();
-        ctx.clip();
-        ctx.fillStyle = theme.accent;
-        ctx.globalAlpha *= 0.9;
-        ctx.fillRect(x + faceDepth + scan - 8, y, 16, faceDepth);
-        ctx.restore();
-        // Refresh the accent outline above the moving scan.
-        ctx.beginPath();
-        ctx.moveTo(x + faceDepth, y); ctx.lineTo(x + faceDepth + slabW, y);
-        ctx.lineTo(x + slabW, y + faceDepth); ctx.lineTo(x, y + faceDepth); ctx.closePath();
-        ctx.strokeStyle = theme.accent; ctx.lineWidth = 4; ctx.stroke();
-      }
+    render3d(ctx, theme, view, objects);
 
-      const labelCenter = packedCenters?.[i] ?? mid;
-      const labelTop = labelCenter - callout.height / 2 + callout.labelPad;
-      const longestLine = Math.max(0, ...callout.labelLines.map(line => pixelWidth(line, callout.labelPx)));
+    layers.forEach((layer, index) => {
+      const labelAt = animation.start + index * animation.stagger + 0.04;
+      const visible = ease.outExpo(prog(t, labelAt, 0.17));
+      drawLayerLabel(frame, layer, index, view, worldY[index]!, visible);
+    });
+  },
 
-      // A stepped leader ties each slab to its own measured label block.
-      const edgeX = x + slabW + faceDepth;
-      const elbowX = calloutX - 24;
-      ctx.globalAlpha *= labelAlpha;
-      ctx.strokeStyle = isAccent ? theme.accent : theme.fg;
-      ctx.lineWidth = 8; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
-      ctx.beginPath();
-      ctx.moveTo(edgeX, y + faceDepth / 2);
-      ctx.lineTo(elbowX, y + faceDepth / 2);
-      ctx.lineTo(elbowX, labelCenter);
-      ctx.lineTo(calloutX - 12, labelCenter);
-      ctx.stroke();
-      ctx.fillStyle = isAccent ? theme.accent : theme.fg;
-      ctx.fillRect(edgeX - 6, y + faceDepth / 2 - 6, 12, 12);
-      ctx.fillRect(calloutX - 18, labelCenter - 6, 12, 12);
-
-      if (isAccent) {
-        ctx.fillStyle = theme.accent;
-        ctx.fillRect(calloutX - 6, labelTop - 8, Math.min(calloutW, longestLine + 14), callout.labelH + 16);
-      }
-      callout.labelLines.forEach((line, row) => pixelText(ctx, line, calloutX, labelTop + row * (pixelHeight(callout.labelPx) + 8), callout.labelPx, {
-        color: isAccent ? theme.onAccent : theme.fg,
-      }));
-      if (callout.noteLines.length) {
-        const noteTop = labelTop + callout.labelH + callout.labelPad * 2 + 4;
-        callout.noteLines.forEach((line, row) => text(ctx, line, calloutX, noteTop + callout.noteSize + row * (callout.noteSize + 6), {
-          size: callout.noteSize, color: theme.dim, weight: 800,
-        }));
-      }
-      ctx.restore();
+  cues(props: LayersProps, dur: number): Cue[] {
+    const count = Math.min(6, Array.isArray(props.layers) ? props.layers.length : 0);
+    if (count === 0) return [];
+    const animation = timing(dur, count);
+    const cues: Cue[] = [{ t: animation.start, kind: 'rise', len: animation.move }];
+    for (let index = 0; index < count; index++) {
+      cues.push({
+        t: animation.start + index * animation.stagger,
+        kind: 'pop',
+        step: count < 2 ? 0 : index / (count - 1),
+      });
     }
+    cues.push(
+      { t: animation.lastMoveEnd, kind: 'impact' },
+      { t: animation.payoff, kind: 'shimmer' },
+    );
+    return cues.filter(cue => cue.t >= 0 && cue.t < dur).sort((a, b) => a.t - b.t);
   },
 };

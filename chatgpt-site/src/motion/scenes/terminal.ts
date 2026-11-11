@@ -1,185 +1,361 @@
-import { type Frame, type TerminalProps, type SceneDef, SAFE, CONTENT_BOTTOM, clamp, ease, font, prog, snap } from '../core.ts';
-import { cursor, panel, pixelText, pop, textWidth } from '../prim.ts';
+import {
+  clamp,
+  ease,
+  font,
+  type Cue,
+  type Frame,
+  type SceneDef,
+  type TerminalProps,
+} from '../core.ts';
+import { cursor, textWidth } from '../prim.ts';
+import { drawPixelWindow, makeWindowLayout, WINDOW_HEADER, WINDOW_MAX_HEIGHT } from './window.ts';
 
-const MAX_TEXT = 2400;
-const CMD_SIZE = 44;
-const OUT_SIZE = 38;
-const CMD_STEP = 66;
-const OUT_STEP = 57;
+const MAX_TERMINAL_LINES = 6;
+const MAX_TEXT_CHARS = 768;
+const MIN_TEXT_SIZE = 36;
+const MAX_TEXT_SIZE = 44;
 
-type TerminalRow = {
-  cmd: string[];
-  out: string[];
+type TerminalEntry = {
+  cmd: string;
+  out: string;
   status?: 'ok' | 'fail' | 'info';
-  height: number;
+};
+type TerminalRow = TerminalEntry & { cmdRows: string[]; outRows: string[] };
+type TerminalLayout = { rows: TerminalRow[]; size: number; lineHeight: number; contentHeight: number };
+type TerminalTiming = {
+  build: number;
+  slot: number;
+  cmdStart: (index: number) => number;
+  cmdDuration: number;
+  outputStart: (index: number) => number;
+  outputDuration: number;
+  sweepDuration: number;
 };
 
-function wrap(ctx: Frame['ctx'], value: string, width: number, size: number, weight: number): string[] {
-  const raw = String(value ?? '');
-  const source = raw.length > MAX_TEXT ? raw.slice(0, MAX_TEXT - 1) + '…' : raw;
-  ctx.font = font(size, weight, 'mono');
+function cleanText(value: string): string {
+  const text = String(value ?? '').replace(/\t/g, '    ');
+  const chars = Array.from(text);
+  return chars.length <= MAX_TEXT_CHARS
+    ? text
+    : chars.slice(0, MAX_TEXT_CHARS - 3).join('') + '...';
+}
+
+function wrapText(ctx: Frame['ctx'], value: string, maxWidth: number, size: number): string[] {
   const rows: string[] = [];
-  for (const paragraph of source.split('\n')) {
-    if (!paragraph) { rows.push(''); continue; }
-    let row = '';
-    for (const ch of paragraph) {
-      if (row && ctx.measureText(row + ch).width > width) {
-        rows.push(row);
-        row = '';
-      }
-      row += ch;
+  for (const paragraph of String(value ?? '').split('\n')) {
+    if (!paragraph) {
+      rows.push('');
+      continue;
     }
-    rows.push(row);
+
+    const chars = Array.from(paragraph);
+    let rest = chars;
+    while (rest.length) {
+      let cut = rest.length;
+      while (cut > 1 && textWidth(ctx, rest.slice(0, cut).join(''), size, 600, 'mono') > maxWidth) cut--;
+      if (cut < rest.length) {
+        const space = rest.slice(0, cut).lastIndexOf(' ');
+        if (space > 0) cut = space + 1;
+      }
+      rows.push(rest.slice(0, cut).join(''));
+      rest = rest.slice(cut);
+    }
   }
-  return rows;
+  return rows.length ? rows : [''];
+}
+
+function oneRow(ctx: Frame['ctx'], value: string, maxWidth: number, size: number): string {
+  const chars = Array.from(value.replace(/\s+/g, ' ').trim());
+  while (chars.length && textWidth(ctx, chars.join('') + '...', size, 600, 'mono') > maxWidth) chars.pop();
+  return chars.length < Array.from(value.replace(/\s+/g, ' ').trim()).length
+    ? chars.join('') + '...'
+    : chars.join('');
+}
+
+function contentHeight(rows: TerminalRow[], lineHeight: number): number {
+  return rows.reduce((sum, row) => {
+    const command = row.cmdRows.length * lineHeight;
+    const output = row.outRows.length ? 16 + row.outRows.length * lineHeight : 0;
+    return sum + command + output + 14;
+  }, 0);
+}
+
+function fitTerminal(ctx: Frame['ctx'], entries: TerminalEntry[], contentWidth: number): TerminalLayout {
+  const commandWidth = contentWidth - 58;
+  const outputWidth = contentWidth - 56;
+
+  for (let size = MAX_TEXT_SIZE; size >= MIN_TEXT_SIZE; size--) {
+    const lineHeight = Math.ceil(size * 1.24);
+    const rows = entries.map(entry => ({
+      ...entry,
+      cmdRows: entry.cmd ? wrapText(ctx, entry.cmd, commandWidth, size) : [],
+      outRows: entry.out ? wrapText(ctx, entry.out, outputWidth, size) : (entry.status ? [''] : []),
+    }));
+    const height = contentHeight(rows, lineHeight);
+    if (height <= WINDOW_MAX_HEIGHT - WINDOW_HEADER - 44) {
+      return { rows, size, lineHeight, contentHeight: height };
+    }
+  }
+
+  const size = MIN_TEXT_SIZE;
+  const lineHeight = Math.ceil(size * 1.24);
+  const rows = entries.map(entry => ({
+    ...entry,
+    cmdRows: entry.cmd ? [oneRow(ctx, entry.cmd, commandWidth, size)] : [],
+    outRows: entry.out
+      ? [oneRow(ctx, entry.out, outputWidth, size)]
+      : (entry.status ? [''] : []),
+  }));
+  return { rows, size, lineHeight, contentHeight: contentHeight(rows, lineHeight) };
+}
+
+function timingFor(dur: number, count: number): TerminalTiming {
+  const build = Math.min(0.24, Math.max(0.16, dur * 0.1));
+  const reserve = Math.min(0.5, Math.max(0.22, dur * 0.14));
+  const slot = count > 0 ? Math.max(0.12, (dur - build - reserve) / count) : dur;
+  const cmdStart = (index: number) => build + index * slot + slot * 0.03;
+  const outputStart = (index: number) => build + index * slot + slot * 0.43;
+  const cmdDuration = Math.max(0.08, slot * 0.3);
+  const outputDuration = Math.max(0.08, slot * 0.28);
+  const sweepDuration = Math.min(0.3, Math.max(0.14, dur * 0.07));
+  return { build, slot, cmdStart, cmdDuration, outputStart, outputDuration, sweepDuration };
 }
 
 function visibleRows(rows: string[], count: number): string[] {
   let remaining = Math.max(0, count);
   return rows.map(row => {
-    const visible = [...row].slice(0, remaining).join('');
-    remaining -= [...row].length;
+    const chars = Array.from(row);
+    const visible = chars.slice(0, remaining).join('');
+    remaining -= chars.length;
     return visible;
   });
 }
 
-export const terminalScene: SceneDef<TerminalProps> = {
-  type: 'terminal',
-  render(frame: Frame, props: TerminalProps) {
-    const { ctx, theme } = frame;
-    const t = Math.max(0, frame.t);
-    const rows = (Array.isArray(props?.lines) ? props.lines : []).slice(0, 6);
-    const innerX = SAFE.x + 36;
-    const innerW = SAFE.w - 72;
-    const cmdRowsMax = innerW - 72;
-    const outRowsMax = innerW - 64;
-    const layouts: TerminalRow[] = rows.map(item => {
-      const cmd = wrap(ctx, item?.cmd ?? '', cmdRowsMax, CMD_SIZE, 800);
-      const outText = String(item?.out ?? '');
-      const out = outText ? wrap(ctx, outText, outRowsMax, OUT_SIZE, 700) : [];
-      const height = cmd.length * CMD_STEP + (out.length ? 18 + Math.max(44, out.length * OUT_STEP) : 0);
-      return { cmd, out, status: item?.status, height };
-    });
-    const gap = 30;
-    const contentHeight = layouts.reduce((sum, row) => sum + row.height, 0) + Math.max(0, layouts.length - 1) * gap;
-    const naturalHeight = 84 + 48 + contentHeight;
-    const winH = Math.min(CONTENT_BOTTOM - 240, Math.max(700, naturalHeight));
-    const targetY = 740 - winH / 2;
-    const entrance = ease.outExpo(prog(t, 0, Math.min(.24, frame.dur * .16)));
-    const winY = snap(targetY - (1 - entrance) * 48);
-    const headerH = 84;
-    panel(ctx, SAFE.x, winY, SAFE.w, winH, { fill: theme.panel, stroke: theme.line, lineWidth: 4 });
-    ctx.fillStyle = theme.panelAlt;
-    ctx.fillRect(SAFE.x + 2, winY + 2, SAFE.w - 4, headerH - 2);
-    ctx.fillStyle = theme.line;
-    ctx.fillRect(SAFE.x, winY + headerH, SAFE.w, 4);
-    for (let dot = 0; dot < 3; dot++) {
-      ctx.fillStyle = dot === 0 ? theme.fg : theme.muted;
-      ctx.fillRect(SAFE.x + 28 + dot * 32, winY + 32, 18, 18);
-    }
-    const title = String(props?.title || 'TERMINAL').toUpperCase().slice(0, 24);
-    pixelText(ctx, title, SAFE.right - 30, winY + 25, 5, { color: theme.dim, align: 'right' });
+function drawStatusIcon(
+  ctx: Frame['ctx'],
+  status: 'ok' | 'fail' | 'info' | undefined,
+  x: number,
+  y: number,
+  progress: number,
+  theme: Frame['theme'],
+) {
+  if (!status || progress <= 0) return;
 
-    const innerY = winY + headerH + 24;
-    const innerH = winH - headerH - 48;
-    const contentInset = 18;
-    const viewportH = innerH - contentInset * 2;
-    const slot = rows.length ? frame.dur * .64 / rows.length : frame.dur;
-    const active = rows.length ? Math.min(rows.length - 1, Math.floor(t / Math.max(.001, slot))) : -1;
-    const tops: number[] = [];
-    let measured = 0;
-    layouts.forEach((row, index) => {
-      tops.push(measured);
-      measured += row.height + (index < layouts.length - 1 ? gap : 0);
-    });
-    const targetScroll = active >= 0
-      ? clamp(tops[active]! + layouts[active]!.height - viewportH, 0, Math.max(0, contentHeight - viewportH))
-      : 0;
-    const contentTop = innerY + contentInset + (contentHeight <= viewportH ? (viewportH - contentHeight) / 2 : 0);
-    const scroll = targetScroll;
+  const scale = 0.55 + 0.45 * ease.outBack(progress);
+  const size = 36;
+  ctx.save();
+  ctx.globalAlpha *= ease.outExpo(progress);
+  ctx.translate(x + size / 2, y + size / 2);
+  ctx.scale(scale, scale);
+  ctx.translate(-(x + size / 2), -(y + size / 2));
+
+  ctx.fillStyle = theme.panelAlt;
+  ctx.fillRect(x, y, size, size);
+  ctx.fillStyle = theme.line;
+  ctx.fillRect(x, y, size, 4);
+  ctx.fillRect(x, y + size - 4, size, 4);
+  ctx.fillRect(x, y, 4, size);
+  ctx.fillRect(x + size - 4, y, 4, size);
+
+  const rows = status === 'ok'
+    ? ['0000000', '0000001', '0000011', '1000110', '1101100', '0111000', '0010000']
+    : status === 'fail'
+      ? ['1000001', '1100011', '0110110', '0011100', '0011100', '0110110', '1100011']
+      : ['0000000', '0011100', '0011100', '0011100', '0011100', '0000000', '0000000'];
+  ctx.fillStyle = status === 'ok' ? theme.fg : theme.dim;
+  rows.forEach((row, rowIndex) => {
+    for (let col = 0; col < row.length; col++) {
+      if (row[col] === '1') ctx.fillRect(x + 4 + col * 4, y + 4 + rowIndex * 4, 4, 4);
+    }
+  });
+  ctx.restore();
+}
+
+function drawRainbowOverlay(
+  ctx: Frame['ctx'],
+  value: string,
+  x: number,
+  y: number,
+  size: number,
+  progress: number,
+  theme: Frame['theme'],
+) {
+  if (progress <= 0) return;
+  const width = textWidth(ctx, value, size, 500, 'mono');
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(x, y, width * clamp(progress), size * 1.4);
+  ctx.clip();
+  ctx.font = font(size, 500, 'mono');
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = theme.accent;
+  ctx.fillText(value, x, y);
+  ctx.restore();
+}
+
+function drawStreamLine(
+  ctx: Frame['ctx'],
+  value: string,
+  x: number,
+  y: number,
+  size: number,
+  accentWidth: number,
+  theme: Frame['theme'],
+) {
+  ctx.font = font(size, 500, 'mono');
+  ctx.textBaseline = 'top';
+  ctx.fillStyle = theme.dim;
+  ctx.fillText(value, x, y);
+
+  if (accentWidth > 0) {
     ctx.save();
     ctx.beginPath();
-    ctx.rect(innerX, innerY, innerW, innerH);
+    ctx.rect(x, y, accentWidth, size * 1.4);
     ctx.clip();
-    layouts.forEach((row, index) => {
-      const rowTop = contentTop + tops[index]! - scroll;
-      if (rowTop > innerY + innerH || rowTop + row.height < innerY) return;
-      const local = t - index * slot;
-      if (local < 0) return;
-      const cmdProgress = clamp((local - slot * .02) / Math.max(.06, slot * .48));
-      const cmdCount = Math.floor(row.cmd.reduce((sum, line) => sum + [...line].length, 0) * cmdProgress);
-      const shownCmd = visibleRows(row.cmd, cmdCount);
-      const cmdX = innerX + 68;
-      row.cmd.forEach((line, lineIndex) => {
-        const y = rowTop + lineIndex * CMD_STEP;
-        if (lineIndex === 0) pixelText(ctx, '>', innerX + 4, y + 5, 8, { color: theme.muted });
-        if (!shownCmd[lineIndex]) return;
-        ctx.font = font(CMD_SIZE, 800, 'mono');
-        ctx.fillStyle = theme.fg;
-        ctx.textBaseline = 'top';
-        ctx.fillText(shownCmd[lineIndex]!, cmdX, y);
-      });
-      if (index === active && cmdProgress < 1) {
-        let last = 0;
-        let lineIndex = 0;
-        for (let li = 0; li < row.cmd.length; li++) {
-          const next = last + [...row.cmd[li]!].length;
-          if (cmdCount <= next || li === row.cmd.length - 1) { lineIndex = li; break; }
-          last = next;
-        }
-        const caretText = shownCmd[lineIndex] ?? '';
-        cursor(ctx, cmdX + textWidth(ctx, caretText, CMD_SIZE, 800, 'mono'), rowTop + lineIndex * CMD_STEP + 8, 18, 48, theme.fg, t);
-      }
+    ctx.fillStyle = theme.accent;
+    ctx.fillText(value, x, y);
+    ctx.restore();
+  }
+}
 
-      if (row.out.length) {
-        const outputStart = slot * .54;
-        const outputProgress = clamp((local - outputStart) / Math.max(.06, slot * .44));
-        if (outputProgress <= 0) return;
-        const outY = rowTop + row.cmd.length * CMD_STEP + 12;
-        const isFail = row.status === 'fail';
-        const badgeColor = isFail ? theme.accent : row.status === 'ok' ? theme.fg : theme.panelAlt;
-        const badge = 44;
-        const maxLineWidth = Math.max(0, ...row.out.map(line => textWidth(ctx, line, OUT_SIZE, 700, 'mono')));
-        const hitCenterX = innerX + 4 + (badge + 20 + maxLineWidth) / 2;
-        const outCount = Math.ceil(row.out.reduce((sum, line) => sum + [...line].length, 0) * outputProgress);
-        const shownOut = visibleRows(row.out, outCount);
-        const drawOutput = () => {
-          ctx.fillStyle = badgeColor;
-          ctx.fillRect(innerX + 4, outY, badge, badge);
-          if (isFail) {
-            ctx.strokeStyle = theme.onAccent;
-            ctx.lineWidth = 6;
-            ctx.beginPath();
-            ctx.moveTo(innerX + 15, outY + 11); ctx.lineTo(innerX + 37, outY + 33);
-            ctx.moveTo(innerX + 37, outY + 11); ctx.lineTo(innerX + 15, outY + 33);
-            ctx.stroke();
-          } else if (row.status === 'ok') {
-            ctx.strokeStyle = theme.bg;
-            ctx.lineWidth = 6;
-            ctx.beginPath();
-            ctx.moveTo(innerX + 13, outY + 23); ctx.lineTo(innerX + 21, outY + 31); ctx.lineTo(innerX + 38, outY + 13);
-            ctx.stroke();
-          } else {
-            ctx.fillStyle = theme.dim;
-            ctx.fillRect(innerX + 17, outY + 17, 18, 18);
+export const terminalScene: SceneDef<TerminalProps> = {
+  type: 'terminal',
+
+  render(frame, props) {
+    const { ctx, theme, t, dur } = frame;
+    const entries = (Array.isArray(props?.lines) ? props.lines : []).slice(0, MAX_TERMINAL_LINES).map(entry => ({
+      cmd: cleanText(entry?.cmd ?? ''),
+      out: cleanText(entry?.out ?? ''),
+      status: entry?.status,
+    }));
+    const width = 888 - 72;
+    const fitted = fitTerminal(ctx, entries, width);
+    const layout = makeWindowLayout(fitted.contentHeight);
+    const timing = timingFor(dur, fitted.rows.length);
+    const reveal = ease.outExpo(clamp(t / timing.build));
+
+    let finalSuccess = -1;
+    for (let i = 0; i < fitted.rows.length; i++) {
+      if (fitted.rows[i]!.status === 'ok') finalSuccess = i;
+    }
+    const finalSuccessHasOutput = finalSuccess >= 0 && Boolean(fitted.rows[finalSuccess]!.out);
+    const successSweepAt = finalSuccess < 0
+      ? -1
+      : finalSuccessHasOutput
+        ? timing.outputStart(finalSuccess) + timing.outputDuration + 0.035
+        : timing.cmdStart(finalSuccess) + timing.cmdDuration + 0.035;
+
+    drawPixelWindow(ctx, theme, layout, props.title ?? 'TERMINAL', reveal, content => {
+      let rowTop = content.y;
+      let activeCursorX = -1;
+      let activeCursorY = 0;
+
+      fitted.rows.forEach((row, index) => {
+        const commandStart = timing.cmdStart(index);
+        const commandProgress = clamp((t - commandStart) / timing.cmdDuration);
+        const commandChars = row.cmdRows.reduce((sum, line) => sum + Array.from(line).length, 0);
+        const shownCommand = visibleRows(row.cmdRows, Math.floor(commandChars * commandProgress));
+        const commandX = content.x + 38;
+
+        row.cmdRows.forEach((line, lineIndex) => {
+          const lineY = rowTop + lineIndex * fitted.lineHeight;
+          if (lineIndex === 0 && t >= commandStart) {
+            ctx.font = font(36, 800, 'mono');
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = theme.muted;
+            ctx.fillText('>', content.x + 4, lineY + 5);
           }
-          ctx.font = font(OUT_SIZE, 700, 'mono');
-          ctx.fillStyle = isFail ? theme.accent : theme.dim;
-          ctx.textBaseline = 'top';
-          shownOut.forEach((line, lineIndex) => {
-            if (line) ctx.fillText(line, innerX + 64, outY + lineIndex * OUT_STEP);
+          const visible = shownCommand[lineIndex] ?? '';
+          if (visible) {
+            ctx.font = font(fitted.size, 700, 'mono');
+            ctx.textBaseline = 'top';
+            ctx.fillStyle = theme.fg;
+            ctx.fillText(visible, commandX, lineY);
+          }
+
+          const isCommandPayoff = index === finalSuccess
+            && !finalSuccessHasOutput
+            && lineIndex === row.cmdRows.length - 1;
+          const commandSweep = isCommandPayoff
+            ? clamp((t - successSweepAt) / timing.sweepDuration)
+            : 0;
+          if (isCommandPayoff && visible.length === line.length) {
+            drawRainbowOverlay(ctx, line, commandX, lineY, fitted.size, commandSweep, theme);
+          }
+
+          const prior = row.cmdRows.slice(0, lineIndex).reduce((sum, value) => sum + Array.from(value).length, 0);
+          if (t >= commandStart && commandProgress < 1) {
+            const currentCount = Math.max(0, Math.min(Array.from(line).length, Math.floor(commandChars * commandProgress) - prior));
+            activeCursorX = commandX + textWidth(ctx, Array.from(line).slice(0, currentCount).join(''), fitted.size, 700, 'mono');
+            activeCursorY = lineY + 3;
+          }
+        });
+
+        const commandBlock = row.cmdRows.length * fitted.lineHeight;
+        const outputTop = rowTop + commandBlock + 12;
+        const outputAt = timing.outputStart(index);
+        const outputProgress = clamp((t - outputAt) / timing.outputDuration);
+        const outputChars = row.outRows.reduce((sum, line) => sum + Array.from(line).length, 0);
+        const shownOutput = visibleRows(row.outRows, Math.ceil(outputChars * outputProgress));
+        const outputX = content.x + 52;
+
+        if (row.outRows.length) {
+          drawStatusIcon(ctx, row.status, content.x + 2, outputTop, outputProgress, theme);
+          row.outRows.forEach((line, lineIndex) => {
+            const visible = shownOutput[lineIndex] ?? '';
+            const lineY = outputTop + lineIndex * fitted.lineHeight;
+            const fullWidth = textWidth(ctx, line, fitted.size, 500, 'mono');
+            const isPayoffLine = index === finalSuccess && finalSuccessHasOutput && lineIndex === row.outRows.length - 1;
+            const sweep = isPayoffLine ? clamp((t - successSweepAt) / timing.sweepDuration) : 0;
+            const accentWidth = isPayoffLine && visible.length === line.length
+              ? fullWidth * sweep
+              : 0;
+            drawStreamLine(ctx, visible, outputX, lineY, fitted.size, accentWidth, theme);
           });
-        };
-        if (isFail) {
-          const hit = ease.outBack(prog(local, outputStart, Math.min(.18, slot * .48)));
-          pop(ctx, hitCenterX, outY + Math.max(badge, row.out.length * OUT_STEP) / 2, Math.max(.01, hit), 1, drawOutput);
-        } else drawOutput();
+        }
+        rowTop += commandBlock + (row.outRows.length ? 12 + row.outRows.length * fitted.lineHeight : 0) + 14;
+      });
+
+      if (activeCursorX >= 0) {
+        cursor(ctx, activeCursorX, activeCursorY, 14, fitted.size + 4, theme.fg, t);
+      } else if (fitted.rows.length && t >= timing.cmdStart(fitted.rows.length - 1) + timing.cmdDuration) {
+        const last = fitted.rows.at(-1)!;
+        const commandText = last.cmdRows.at(-1) ?? '';
+        const x = content.x + 38 + textWidth(ctx, commandText, fitted.size, 700, 'mono');
+        cursor(ctx, x, rowTop - fitted.lineHeight + 3, 14, fitted.size + 4, theme.fg, t);
       }
     });
-    if (active >= 0 && t >= rows.length * slot) {
-      const caretY = contentTop + contentHeight - scroll + 6;
-      cursor(ctx, innerX + 4, caretY, 18, 44, theme.fg, t);
+  },
+
+  cues(props, dur): Cue[] {
+    const entries = (Array.isArray(props?.lines) ? props.lines : []).slice(0, MAX_TERMINAL_LINES);
+    const timing = timingFor(dur, entries.length);
+    const cues: Cue[] = [
+      { t: 0, kind: 'rise', len: timing.build },
+      { t: timing.build, kind: 'pop' },
+    ];
+
+    entries.forEach((entry, index) => {
+      const start = timing.cmdStart(index);
+      cues.push({ t: start, kind: 'type', len: timing.cmdDuration });
+      const outputAt = timing.outputStart(index);
+      if (entry?.out || entry?.status) {
+        cues.push({ t: outputAt, kind: entry.status === 'ok' ? 'impact' : 'pop', step: entries.length < 2 ? 1 : index / (entries.length - 1) });
+        if (entry?.out) cues.push({ t: outputAt, kind: 'type', len: timing.outputDuration });
+      }
+    });
+
+    let finalSuccess = -1;
+    for (let i = 0; i < entries.length; i++) {
+      if (entries[i]?.status === 'ok') finalSuccess = i;
     }
-    ctx.restore();
+    if (finalSuccess >= 0) {
+      const at = entries[finalSuccess]?.out
+        ? timing.outputStart(finalSuccess) + timing.outputDuration + 0.035
+        : timing.cmdStart(finalSuccess) + timing.cmdDuration + 0.035;
+      cues.push({ t: at, kind: 'impact' }, { t: at + timing.sweepDuration, kind: 'shimmer' });
+    }
+
+    return cues.filter(cue => cue.t < dur).slice(0, 36);
   },
 };

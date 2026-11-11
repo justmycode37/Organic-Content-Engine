@@ -1,7 +1,8 @@
 // Drawing primitives shared by every scene. Use these instead of raw canvas calls
 // wherever one fits, so type, panels and pixel details look identical across scenes.
 import { GLYPHS } from './glyphs.ts';
-import { FONT, clamp, ease, font, hash, parseMarkup, snap, type Ctx, type Span, type Theme } from './core.ts';
+import { FONT, clamp, ease, font, hash, parseMarkup, snap, type Ctx, type Paint, type Span, type Theme } from './core.ts';
+import { CELL, fillMask, typeMask } from './pix.ts';
 
 // ---------------------------------------------------------------- pixel type (titles, labels, tags, numerals)
 
@@ -9,8 +10,21 @@ const GLYPH_W = 5, GLYPH_H = 7, ADVANCE = 6, SPACE = 4;
 const glyph = (char: string) => GLYPHS[char] ?? GLYPHS[char.toUpperCase()];
 const advance = (char: string) => (char === ' ' ? SPACE : glyph(char) ? ADVANCE : SPACE);
 
-/** Width in canvas pixels of pixel text at module size `px` (one glyph is 5x7 modules; cap height = 7 * px). */
+/**
+ * Pixel type comes in two resolutions that share one API. Small labels
+ * (module size under BIG) use the 5x7 bitmap face. Anything larger is set in a
+ * heavy display face rasterised at CELL-sized pixels, so a title has the same
+ * height as before (7 * px) but several times the pixel detail.
+ */
+const BIG = 5;
+/** Art-pixel size used for type at module size px: titles share the scene's CELL, smaller type uses half of it to stay legible. */
+export const typeCell = (px: number) => (px >= 11 ? CELL : CELL / 2);
+const big = (text: string, px: number) => (px >= BIG ? typeMask(text.toUpperCase(), Math.round((GLYPH_H * px) / typeCell(px))) : null);
+
+/** Width in canvas pixels of pixel text at module size `px` (cap height = 7 * px). */
 export function pixelWidth(text: string, px: number): number {
+  const mask = big(text, px);
+  if (mask) return mask.cols * typeCell(px);
   let modules = 0;
   for (const char of text) modules += advance(char);
   return Math.max(0, modules - 1) * px;
@@ -18,13 +32,13 @@ export function pixelWidth(text: string, px: number): number {
 export const pixelHeight = (px: number) => GLYPH_H * px;
 
 export interface PixelTextOptions {
-  color?: string;
-  /** Colour for `*marked*` spans. Pass theme.accent. Without it markup is drawn in `color`. */
-  accent?: string;
+  color?: Paint;
+  /** Paint for `*marked*` spans. Pass theme.accent. Without it markup is drawn in `color`. */
+  accent?: Paint;
   align?: 'left' | 'center' | 'right';
   /** 0..1 build progress. Omit for fully drawn. */
   reveal?: number;
-  /** blocks: modules pop in random order. type: characters appear left to right. rise: rows fill from the bottom. */
+  /** blocks: pixels pop in random order. type: characters appear left to right. rise: rows fill from the bottom. */
   mode?: 'blocks' | 'type' | 'rise';
   seed?: number;
   alpha?: number;
@@ -42,6 +56,24 @@ export function pixelText(ctx: Ctx, text: string, x: number, y: number, px: numb
   if (reveal <= 0) return width;
   ctx.save();
   ctx.globalAlpha *= alpha;
+  const mask = big(plain, px);
+  if (mask) {
+    // Pixels pop in clusters (2x2) so the build reads as blocks, not as noise.
+    const keep = reveal >= 1 ? undefined
+      : mode === 'blocks' ? (col: number, row: number) => hash((col >> 1) * 13 + (row >> 1) * 7919, seed) <= reveal
+      : mode === 'rise' ? (_col: number, row: number) => (mask.cap - 1 - row) / mask.cap <= reveal
+      : undefined;
+    const shown = mode === 'type' && reveal < 1 ? Math.ceil(reveal * total) : total;
+    let index = 0;
+    for (const span of spans) {
+      const count = [...span.text].length, from = Math.min(index, shown), to = Math.min(index + count, shown);
+      ctx.fillStyle = span.accent && accent ? accent : color;
+      if (to > from) fillMask(ctx, mask, cursor, top, typeCell(px), mask.edges[from]!, mask.edges[to]!, keep);
+      index += count;
+    }
+    ctx.restore();
+    return width;
+  }
   let index = 0;
   for (const span of spans) {
     ctx.fillStyle = span.accent && accent ? accent : color;
@@ -108,7 +140,7 @@ export function pixelBlock(ctx: Ctx, lines: string[], x: number, y: number, px: 
 }
 
 /** Square pixel tag (category chip, version label). Returns its width. Anchor is top-left. */
-export function tag(ctx: Ctx, label: string, x: number, y: number, px: number, colors: { bg: string; fg: string }, reveal = 1): number {
+export function tag(ctx: Ctx, label: string, x: number, y: number, px: number, colors: { bg: Paint; fg: Paint }, reveal = 1): number {
   const pad = px * 2, width = pixelWidth(label.toUpperCase(), px) + pad * 2, height = pixelHeight(px) + pad * 2;
   if (reveal <= 0) return width;
   ctx.fillStyle = colors.bg;
@@ -118,7 +150,7 @@ export function tag(ctx: Ctx, label: string, x: number, y: number, px: number, c
 }
 
 /** Draws a bitmap ('1' = filled) at module size px. Used for icons and sprites. */
-export function bitmap(ctx: Ctx, rows: readonly string[], x: number, y: number, px: number, color: string, reveal = 1, seed = 1) {
+export function bitmap(ctx: Ctx, rows: readonly string[], x: number, y: number, px: number, color: Paint, reveal = 1, seed = 1) {
   if (reveal <= 0) return;
   ctx.fillStyle = color;
   const left = snap(x), top = snap(y);
@@ -131,7 +163,7 @@ export function bitmap(ctx: Ctx, rows: readonly string[], x: number, y: number, 
 
 // ---------------------------------------------------------------- clean type (captions, body, code)
 
-export interface TextOptions { size: number; color: string; weight?: number; family?: keyof typeof FONT; align?: CanvasTextAlign; baseline?: CanvasTextBaseline; alpha?: number }
+export interface TextOptions { size: number; color: Paint; weight?: number; family?: keyof typeof FONT; align?: CanvasTextAlign; baseline?: CanvasTextBaseline; alpha?: number }
 export function text(ctx: Ctx, value: string, x: number, y: number, options: TextOptions): number {
   ctx.save();
   ctx.font = font(options.size, options.weight ?? 800, options.family ?? 'body');
@@ -165,7 +197,7 @@ export function wrapText(ctx: Ctx, value: string, maxWidth: number, size: number
 // ---------------------------------------------------------------- shapes
 
 /** Square-cornered panel. `notch` cuts stepped pixel corners, the brand's frame detail. */
-export function panel(ctx: Ctx, x: number, y: number, w: number, h: number, style: { fill?: string; stroke?: string; lineWidth?: number; notch?: number } = {}) {
+export function panel(ctx: Ctx, x: number, y: number, w: number, h: number, style: { fill?: Paint; stroke?: Paint; lineWidth?: number; notch?: number } = {}) {
   const n = style.notch ?? 0;
   ctx.beginPath();
   if (n > 0) {
@@ -192,7 +224,7 @@ export function windowFrame(ctx: Ctx, theme: Theme, x: number, y: number, w: num
 }
 
 /** Stepped pixel arrow from (x1,y1) to (x2,y2) along one axis, drawn up to `progress`. */
-export function pixelArrow(ctx: Ctx, x1: number, y1: number, x2: number, y2: number, color: string, progress = 1, px = 8) {
+export function pixelArrow(ctx: Ctx, x1: number, y1: number, x2: number, y2: number, color: Paint, progress = 1, px = 8) {
   const p = clamp(progress);
   if (p <= 0) return;
   const horizontal = Math.abs(x2 - x1) >= Math.abs(y2 - y1);
@@ -214,14 +246,14 @@ export function pixelArrow(ctx: Ctx, x1: number, y1: number, x2: number, y2: num
 }
 
 /** Blinking block cursor. */
-export function cursor(ctx: Ctx, x: number, y: number, w: number, h: number, color: string, t: number) {
+export function cursor(ctx: Ctx, x: number, y: number, w: number, h: number, color: Paint, t: number) {
   if (Math.floor(t * 3) % 2 === 1) return;
   ctx.fillStyle = color;
   ctx.fillRect(snap(x), snap(y), w, h);
 }
 
 /** Row of square progress modules, `filled` of `count` lit. */
-export function blocks(ctx: Ctx, x: number, y: number, count: number, filled: number, px: number, on: string, off: string, gap = px / 2) {
+export function blocks(ctx: Ctx, x: number, y: number, count: number, filled: number, px: number, on: Paint, off: Paint, gap = px / 2) {
   for (let index = 0; index < count; index++) {
     ctx.fillStyle = index < filled ? on : off;
     ctx.fillRect(snap(x + index * (px + gap)), snap(y), px, px);

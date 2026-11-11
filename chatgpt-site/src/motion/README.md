@@ -11,16 +11,29 @@ node scripts/motion.mjs render <spec.json> <out.mp4>                    # finish
 
 ## The look
 
-**Black, white, grey, and one aggressive accent.** The accent marks the single
+**Black, white, grey, and the rainbow.** The accent is not one colour: it is a
+moving mosaic of small pixels in diagonal spectrum bands (`theme.accent`, a
+canvas pattern from `pix.ts`). It marks the single
 thing the viewer must look at in the current beat: the key word, the active node,
 the winning bar, the changed line. If two things are accented, neither is.
-Never tint whole panels or backgrounds with the accent; never add a second hue,
-gradient or glow. All colours come from `frame.theme`; no hex literals in scenes.
+Never tint whole panels or backgrounds with the accent. All colours come from
+`frame.theme`; no hex literals in scenes. `theme.accent` is a PAINT: assign it to
+`fillStyle`/`strokeStyle` (rects, paths and text all work), never treat it as a
+string. For single-hue details use `theme.spectrum[i % theme.spectrum.length]`.
+
+**Fine pixels.** One art pixel is `CELL` (4 px). Pixel art is detailed: small
+pixels, dithered shading (`dither`, `bayer`), stepped edges. Use `pixelate()` to
+turn any vector drawing into on-grid pixels, and `three.ts` (`render3d`, `box`,
+`cylinder`, `sphere`, `torus`, `voxels`, `place`, `merge`, `project`) plus
+`icon3d.ts` for real 3D objects rendered as dithered pixel art. No chunky
+8 to 12 px modules except as a deliberate accent.
 
 **Two type systems, never mixed up.**
 
 - Pixel type (`pixelText`, `tag`, `fitPixel`): titles, labels, tags, numerals,
-  node names. Always uppercase. Module sizes: 4 to 5 for labels, 8 to 14 for titles.
+  node names. Always uppercase. Module size `px` sets the cap height (7 * px):
+  4 is the small bitmap label face, 5 and up is a heavy display face rasterised
+  into fine pixels. Labels 4 to 6, titles 10 to 22.
 - Clean sans (`text`, `FONT.body`, weight 800): captions and any sentence a
   viewer reads. Mono (`FONT.mono`) only for code and terminal content.
 - Captions are bold white sans on dark (black on light) with the key word in the
@@ -60,3 +73,10 @@ Fast and decisive. This is the difference between a slideshow and a Reel.
 - Balance `ctx.save()` / `ctx.restore()`.
 - Use `prim.ts` before writing new drawing code. Do not edit `core.ts` or
   `prim.ts` from a scene; ask for an addition instead.
+
+## Sound
+
+Every scene exports `cues(props, dur)`: the moments that should be heard (`pop`
+per element, `tick` per small step, `type` runs, a `rise` into a reveal, the
+`shimmer` payoff, `impact`, `swish`). Compute them with the same timing maths as
+`render` so sound lands exactly on the picture. The audio renderer adds music.

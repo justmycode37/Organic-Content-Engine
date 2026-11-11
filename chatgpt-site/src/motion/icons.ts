@@ -1,4 +1,4 @@
-import { type Ctx, type IconName } from './core.ts';
+import { type Paint, type Ctx, type IconName } from './core.ts';
 import { bitmap } from './prim.ts';
 
 // Each drawing is a 14×14 pixel interior, surrounded here by one empty module.
@@ -576,7 +576,7 @@ export const ICON_BITMAPS: Record<IconName, readonly string[]> = {
 export const iconSize = (px: number) => 16 * px;
 
 /** Draws a pixel icon centred on (cx, cy) at module size px. */
-export function icon(ctx: Ctx, name: IconName, cx: number, cy: number, px: number, color: string, reveal = 1, seed = 1) {
+export function icon(ctx: Ctx, name: IconName, cx: number, cy: number, px: number, color: Paint, reveal = 1, seed = 1) {
   const rows = ICON_BITMAPS[name];
   bitmap(ctx, rows, cx - iconSize(px) / 2, cy - iconSize(px) / 2, px, color, reveal, seed);
 }

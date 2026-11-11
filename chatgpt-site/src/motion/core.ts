@@ -18,7 +18,9 @@ export const U = 12;
 
 // ---------------------------------------------------------------- theme
 
+/** `rainbow` (the default) is the animated spectrum mosaic from pix.ts; the others are solid single hues. */
 export const ACCENTS = {
+  rainbow: '#FF2A2A',
   red: '#FF2B2B',
   lime: '#B8FF1A',
   orange: '#FF5A00',
@@ -28,6 +30,8 @@ export const ACCENTS = {
 } as const;
 export type AccentName = keyof typeof ACCENTS;
 export type Mode = 'dark' | 'light';
+/** Anything a canvas accepts as fillStyle/strokeStyle. The accent is usually a moving rainbow pattern, not a string. */
+export type Paint = string | CanvasPattern | CanvasGradient;
 
 /**
  * The whole palette. Rule: everything is black, white or grey; `accent` is
@@ -42,16 +46,25 @@ export interface Theme {
   line: string;      // hairlines, grid, inactive strokes
   muted: string;     // inactive text, comments, secondary labels
   dim: string;       // secondary text that must still read clearly
-  accent: string;    // the important thing
+  /** The important thing. A PAINT (rainbow pixel mosaic by default): assign it to fillStyle/strokeStyle, never parse it as a colour. */
+  accent: Paint;
+  /** One solid colour standing in for the accent where a string is required (ImageData, colour maths). */
+  accentSolid: string;
+  /** The rainbow, one solid colour per step, for details that take one hue each (use spectrumAt/theme.spectrum[i % n]). */
+  spectrum: readonly string[];
   onAccent: string;  // text placed on an accent fill
+  /** Reel time in seconds: drives the drifting rainbow. */
+  time: number;
 }
 
-export function makeTheme(mode: Mode = 'dark', accent: AccentName = 'red'): Theme {
-  const a = ACCENTS[accent] ?? ACCENTS.red;
-  const dark = ['lime', 'yellow'].includes(accent) ? '#000000' : '#FFFFFF';
+/** Solid-colour theme. The player upgrades `accent` to the live rainbow paint (see frameTheme in pix.ts). */
+export function makeTheme(mode: Mode = 'dark', accent: AccentName = 'rainbow'): Theme {
+  const a = ACCENTS[accent] ?? ACCENTS.rainbow;
+  const dark = ['lime', 'yellow', 'rainbow'].includes(accent) ? '#000000' : '#FFFFFF';
+  const shared = { mode, accent: a, accentSolid: a, spectrum: [a] as readonly string[], onAccent: dark, time: 0 };
   return mode === 'dark'
-    ? { mode, bg: '#000000', fg: '#FFFFFF', panel: '#0D0D0D', panelAlt: '#1A1A1A', line: '#2A2A2A', muted: '#6E6E6E', dim: '#B5B5B5', accent: a, onAccent: dark }
-    : { mode, bg: '#FFFFFF', fg: '#000000', panel: '#F2F2F2', panelAlt: '#E4E4E4', line: '#CFCFCF', muted: '#8A8A8A', dim: '#4A4A4A', accent: a, onAccent: dark };
+    ? { ...shared, bg: '#000000', fg: '#FFFFFF', panel: '#0C0C0E', panelAlt: '#18181B', line: '#2A2A2E', muted: '#6E6E74', dim: '#B5B5BA' }
+    : { ...shared, bg: '#FFFFFF', fg: '#000000', panel: '#F2F2F3', panelAlt: '#E4E4E6', line: '#CFCFD2', muted: '#8A8A8F', dim: '#4A4A4E' };
 }
 
 export const FONT = {
@@ -131,12 +144,31 @@ export interface Frame {
   seed: number;
   /** Position of the scene in the reel. */
   index: number;
+  /** Seconds since the reel started. */
+  time: number;
+}
+
+/** A moment in a scene that should be HEARD. The audio renderer places a matching sound exactly here. */
+export interface Cue {
+  /** Seconds since the scene started. */
+  t: number;
+  /**
+   * pop: one element appears. tick: small step (counter, cell, token). type: typing run (`len` seconds).
+   * rise: build-up before a reveal (`len` seconds, ends at t + len). shimmer: the reveal / payoff sparkle.
+   * impact: the heavy landing. swish: something flies past or slides in.
+   */
+  kind: 'pop' | 'tick' | 'type' | 'rise' | 'shimmer' | 'impact' | 'swish';
+  len?: number;
+  /** 0..1 position in a sequence: later pops are pitched higher so a build climbs. */
+  step?: number;
 }
 
 export interface SceneDef<P> {
   type: string;
   /** Draws the scene content only. The player draws background, camera, transition, captions and chrome. */
   render(frame: Frame, props: P): void;
+  /** Sound moments, computed with the SAME timing maths as render so picture and sound stay locked. */
+  cues?(props: P, dur: number): Cue[];
 }
 
 // ---------------------------------------------------------------- reel spec (what an agent writes)
@@ -193,16 +225,20 @@ export interface GridProps { title?: string; rows: number; cols: number; pattern
 export interface KineticProps { words: string[] }
 /** Release notes card: version header and tagged changes landing one by one. */
 export interface ChangelogProps { version: string; product?: string; items: { tag: 'NEW' | 'FIX' | 'CHG' | 'DEL'; text: string; accent?: boolean }[] }
+/** Hero 3D pixel object turning in space with up to three callouts. `model` is a built model or any icon (extruded into voxels). */
+export const MODELS = ['chip', 'server', 'database', 'globe', 'coin', 'cube', 'monitor', 'phone', 'stack', 'network'] as const;
+export type ModelName = (typeof MODELS)[number] | IconName;
+export interface ObjectProps { model: ModelName; label?: string; note?: string; callouts?: string[] }
 /** Closing card: one action, the wordmark and the handle. */
 export interface OutroProps { cta: string; handle?: string; sub?: string }
 
 export interface SceneProps {
   title: TitleProps; code: CodeProps; diff: DiffProps; terminal: TerminalProps; flow: FlowProps; stat: StatProps;
   bars: BarsProps; compare: CompareProps; list: ListProps; tokens: TokensProps; chat: ChatProps; layers: LayersProps;
-  grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; outro: OutroProps;
+  grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; object: ObjectProps; outro: OutroProps;
 }
 export type SceneType = keyof SceneProps;
-export const SCENE_TYPES = ['title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'outro'] as const satisfies readonly SceneType[];
+export const SCENE_TYPES = ['title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */
@@ -213,12 +249,18 @@ export interface ReelSpec {
   /** Working title; not drawn. */
   title?: string;
   mode?: Mode;
+  /** Default 'rainbow'. */
   accent?: AccentName;
+  /** Background music mood for the audio render. Default 'drive'. 'none' disables music. */
+  music?: MusicMood;
   /** Series name, for example "UNDER THE HOOD". Not drawn by the chrome; use it as the title's kicker. */
   series?: string;
   scenes: SceneSpec[];
   captions?: CaptionSpec[];
 }
+
+export const MUSIC_MOODS = ['drive', 'chill', 'tense', 'bright', 'none'] as const;
+export type MusicMood = (typeof MUSIC_MOODS)[number];
 
 export interface PlacedScene { spec: SceneSpec; start: number; end: number; index: number }
 export function placeScenes(spec: ReelSpec): PlacedScene[] {

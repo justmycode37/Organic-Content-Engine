@@ -1,7 +1,8 @@
 // Renders one frame of a reel. Layer order: background, camera + scene, impact,
 // transition, chrome, caption. Pure function of (spec, time).
-import { H, W, makeTheme, placeScenes, reelDuration, type Ctx, type Frame, type PlacedScene, type ReelSpec, type SceneDef } from './core.ts';
+import { H, W, placeScenes, reelDuration, type Ctx, type Frame, type PlacedScene, type ReelSpec, type SceneDef } from './core.ts';
 import { drawCaption, type ActiveCaption } from './captions.ts';
+import { frameTheme } from './pix.ts';
 import { drawChrome } from './chrome.ts';
 import { drawBackground } from './fx/background.ts';
 import { applyCamera, drawImpact } from './fx/camera.ts';
@@ -21,12 +22,12 @@ export function reelCaptions(spec: ReelSpec, placed: PlacedScene[] = placeScenes
 export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   const placed = placeScenes(spec);
   const duration = reelDuration(spec);
-  const theme = makeTheme(spec.mode, spec.accent);
+  const theme = frameTheme(ctx, spec.mode, spec.accent, time);
   const scene = placed.find(item => time < item.end) ?? placed.at(-1);
   ctx.save();
   ctx.globalAlpha = 1;
   if (!scene) { ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H); ctx.restore(); return; }
-  const frame: Frame = { ctx, t: Math.max(0, time - scene.start), dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index };
+  const frame: Frame = { ctx, t: Math.max(0, time - scene.start), dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
   const hits = scene.spec.hits ?? [];
 
   drawBackground(frame, time);

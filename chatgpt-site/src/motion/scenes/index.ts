@@ -15,6 +15,7 @@ import { layersScene } from './layers.ts';
 import { gridScene } from './grid.ts';
 import { kineticScene } from './kinetic.ts';
 import { changelogScene } from './changelog.ts';
+import { objectScene } from './object.ts';
 import { outroScene } from './outro.ts';
 
 export const SCENES: { [K in SceneType]: SceneDef<SceneProps[K]> } = {
@@ -33,5 +34,6 @@ export const SCENES: { [K in SceneType]: SceneDef<SceneProps[K]> } = {
   grid: gridScene,
   kinetic: kineticScene,
   changelog: changelogScene,
+  object: objectScene,
   outro: outroScene,
 };
