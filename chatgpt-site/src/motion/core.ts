@@ -184,14 +184,19 @@ export interface SceneDef<P> {
 export const ICONS = ['cursor', 'chip', 'brain', 'bolt', 'bug', 'check', 'cross', 'file', 'folder', 'gear', 'lock', 'key', 'cloud', 'database', 'server', 'globe', 'user', 'robot', 'eye', 'clock', 'search', 'star', 'heart', 'warning', 'terminal', 'code', 'image', 'play', 'arrow', 'token', 'money', 'rocket', 'skull', 'fire', 'phone'] as const;
 export type IconName = (typeof ICONS)[number];
 
-export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter'] as const;
+export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter', 'push', 'whip', 'zoomthrough', 'shatter', 'pixelsort', 'melt', 'iris', 'cube', 'flip', 'dissolve', 'slice', 'ink', 'match'] as const;
 export type TransitionName = (typeof TRANSITIONS)[number];
+export type TransitionDirection = 'left' | 'right' | 'up' | 'down';
 
 export interface SceneBase {
   /** Seconds on screen. Most scenes should last 1.5 to 4 seconds. */
   duration: number;
   /** How this scene ENTERS. Default 'cut'. */
   transition?: TransitionName;
+  /** Focus point for zoom/iris transitions, in reel pixels. */
+  transitionAt?: [number, number];
+  /** Incoming scene travel direction for directional transitions. */
+  transitionDir?: TransitionDirection;
   transitionSound?:'swish'|'rise'|'tick'|'pop'|'glitch'|'shimmer'|'none';
   /** Seconds within the scene at which something lands: the player adds a camera punch and shake. */
   hits?: number[];

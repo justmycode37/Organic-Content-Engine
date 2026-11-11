@@ -4,7 +4,7 @@ import { ACCENTS, ICONS, MODELS, MUSIC_MOODS, SCENE_TYPES, TRANSITIONS, type Ree
 const icon = z.enum(ICONS);
 const short = (max: number) => z.string().min(1).max(max);
 const base = {
-  duration: z.number().min(0.8).max(8), transition: z.enum(TRANSITIONS).optional(),transitionSound:z.enum(['swish','rise','tick','pop','glitch','shimmer','none']).optional(),
+  duration: z.number().min(0.8).max(8), transition: z.enum(TRANSITIONS).optional(), transitionAt:z.tuple([z.number().min(0).max(1080),z.number().min(0).max(1920)]).optional(), transitionDir:z.enum(['left','right','up','down']).optional(), transitionSound:z.enum(['swish','rise','tick','pop','glitch','shimmer','none']).optional(),
   hits: z.array(z.number().min(0).max(8)).max(6).optional(), caption: z.union([short(90), z.array(short(90)).max(6)]).optional(), say: short(220).optional(),
 };
 const sceneSchemas = {
