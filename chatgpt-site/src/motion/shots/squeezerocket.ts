@@ -2,7 +2,6 @@ import { clamp, ease, hash, type Cue, type Frame, type ShotProps } from '../core
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawBurst, drawImpactStar, drawShockwave, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { drawTicket2D } from '../sets/ticket.ts';
 import { drawHeroTicketBackground, drawHeroTicketFace, drawHeroTicketFrame, HERO_TICKET_FRAME } from '../sets/heroticket.ts';
 import { box, merge, place, render3d } from '../three.ts';
 import type { ShotDef } from './index.ts';
@@ -65,6 +64,22 @@ function helixPoint(u: number, turns: number, t: number, rise: number, radius = 
     y: Math.round((982 - u * 650 - Math.cos(angle) * 64 - rise) / 4) * 4,
     z, u, angle,
   };
+}
+
+// Keep the tower's orbiting links identical to the tickets bolted onto the feedback rail.
+function drawTicketLink(ctx: Frame['ctx'], x: number, y: number, width: number, rotation: number) {
+  const height = Math.round(width * 0.42), left = -width / 2, top = -height / 2;
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rotation);
+  ctx.fillStyle = INK; ctx.fillRect(left - 3, top - 3, width + 6, height + 6);
+  ctx.fillStyle = RED; ctx.fillRect(left, top, width, height);
+  const stub = Math.round(width * 0.27), body = width - stub;
+  ctx.fillStyle = '#B82E2A'; ctx.fillRect(left + body, top, stub, height);
+  ctx.fillStyle = '#571815'; ctx.fillRect(left + body - 2, top + 2, 4, height - 4);
+  ctx.fillStyle = '#F1F2F3'; ctx.fillRect(left + 8, -2, Math.round(body * 0.45), 4);
+  ctx.fillStyle = '#FFAAA4'; ctx.fillRect(left + 8, top + 5, Math.round(body * 0.24), 3);
+  ctx.fillStyle = '#571815'; ctx.fillRect(left + 4, top + 4, 4, 4); ctx.fillRect(left + width - 8, top + height - 8, 4, 4);
+  ctx.fillStyle = '#F1F2F3'; ctx.fillRect(left + body + 5, top + 6, 3, height - 12);
+  ctx.restore();
 }
 
 function drawVenue(ctx: Frame['ctx'], t: number, seed: number) {
@@ -152,17 +167,14 @@ function drawCrushChain(ctx: Frame['ctx'], t: number, impactAt: number, topY: nu
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.translate(540, y);
-  ctx.scale(1 - crush * 0.22, 1 - crush * 0.6);
+  ctx.scale(1 - crush * 0.34, 1 - crush * 0.6);
   ctx.translate(-540, -y);
   ctx.fillStyle = '#090B0D'; ctx.fillRect(224, y - 29, 632, 58);
   ctx.fillStyle = '#7F211F'; ctx.fillRect(232, y - 22, 616, 44);
-  const left = 252, step = 82, linkW = 72;
+  const left = 248, step = 74, linkW = 80;
   for (let i = 0; i < 8; i++) {
     const x = left + i * step;
-    ctx.fillStyle = '#080A0C'; ctx.fillRect(x - 4, y - 27, linkW + 8, 54);
-    ctx.fillStyle = i % 2 ? '#B82E2A' : '#E43A34'; ctx.fillRect(x, y - 23, linkW, 46);
-    ctx.fillStyle = '#F1F2F3'; ctx.fillRect(x + 12, y - 4, linkW - 24, 8);
-    ctx.fillStyle = '#571815'; ctx.fillRect(x + 5, y - 17, 6, 6); ctx.fillRect(x + linkW - 11, y + 11, 6, 6);
+    drawTicketLink(ctx, x + linkW / 2, y, linkW, i % 2 ? -0.035 : 0.035);
   }
   ctx.restore();
 }
@@ -236,8 +248,9 @@ export const squeezeRocketShot: ShotDef = {
           if (u > progress) continue;
           const index = Math.min(points.length - 1, Math.floor(u * (points.length - 1)));
           const p = points[index]!, next = points[Math.min(points.length - 1, index + 1)]!;
-          const front = p.z < 0, size = front ? 74 : 48;
-          drawTicket2D(ctx, p.x, p.y, size, { rot: Math.atan2(next.y - p.y, next.x - p.x) * 0.24 + (front ? 0 : 0.1) });
+          const front = p.z < 0, size = front ? 72 : 50;
+          const weave = i % 2 ? 0.12 : -0.12;
+          drawTicketLink(ctx, p.x, p.y, size, Math.atan2(next.y - p.y, next.x - p.x) + Math.PI / 2 + weave);
         }
         ctx.restore();
       }

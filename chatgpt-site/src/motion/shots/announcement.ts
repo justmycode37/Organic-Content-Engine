@@ -30,25 +30,58 @@ function drawArena(ctx: Frame['ctx'], t: number, reunionAt: number, count: numbe
   // The concert bowl climbs behind the stage in distinct steel and stone tiers.
   ctx.fillStyle = '#101013'; ctx.fillRect(0, 170, W, 1000);
   ctx.fillStyle = '#39393F'; ctx.fillRect(0, 184, W, 10);
+  const crowdStart = Math.max(0, reunionAt - .16);
+  const riseDuration = .24;
   for (let tier = 0; tier < count; tier++) {
     const y = 250 + tier * 116, half = 284 + tier * 92;
+    const tierDelay = (count - 1 - tier) * .04;
+    const standAt = crowdStart + tierDelay;
+    const rise = ease.outCubic((t - standAt) / riseDuration);
     ctx.fillStyle = tier % 2 ? '#1B1B1F' : '#242429';
     ctx.fillRect(540 - half, y, half * 2, 35);
     ctx.fillStyle = '#74747B'; ctx.fillRect(540 - half, y, half * 2, CELL);
     ctx.fillStyle = '#09090B'; ctx.fillRect(540 - half + 10, y + 38, half * 2 - 20, 20);
-    for (let seat = 0; seat < 16 + tier * 3; seat++) {
-      const x = 540 - half + 24 + seat * (2 * half - 48) / (15 + tier * 3);
-      // Start at the stage-side rail and chase the light up toward the roof.
-      const flash = t >= reunionAt + (count - 1 - tier) * .095;
-      const lit = flash && (seat + tier) % 3 !== 1;
-      ctx.fillStyle = lit ? '#DADAE0' : (seat + tier) % 2 ? '#3C3C42' : '#55555B';
-      ctx.fillRect(Math.round(x / CELL) * CELL, y - 21, CELL * 3, CELL * 2);
-      if (lit && (seat + tier) % 4 === 0) {
-        ctx.fillStyle = '#FFFFFF'; ctx.fillRect(Math.round(x / CELL) * CELL, y - 25, CELL * 3, CELL);
+    const seats = 16 + tier * 3;
+    for (let seat = 0; seat < seats; seat++) {
+      const x = Math.round((540 - half + 24 + seat * (2 * half - 48) / (seats - 1)) / CELL) * CELL;
+      const center = x + CELL / 2;
+      // Keep every little figure wholly in frame, even on the wide outer tiers.
+      if (center < 16 || center > W - 16) continue;
+
+      // Compact seated figures stretch upward in a clean bottom-to-top crowd wave.
+      const headY = y - 16 - Math.round(18 * rise);
+      const torsoTop = headY + CELL;
+      const torsoBottom = y + 12 + Math.round(8 * rise);
+      const torsoWidth = 12 + Math.round(8 * rise);
+      const armWidth = torsoWidth + CELL;
+      const lit = t >= standAt;
+      ctx.fillStyle = lit ? ((seat + tier) % 3 ? '#77777D' : '#929298') : '#4B4B51';
+      ctx.fillRect(center - torsoWidth / 2, torsoTop, torsoWidth, Math.max(CELL, torsoBottom - torsoTop));
+      ctx.fillRect(center - armWidth / 2, torsoTop + CELL, armWidth, CELL);
+      ctx.fillRect(center - CELL * .75, torsoBottom - 2, CELL / 2, y + 35 - torsoBottom + 2);
+      ctx.fillRect(center + CELL * .25, torsoBottom - 2, CELL / 2, y + 35 - torsoBottom + 2);
+      ctx.fillStyle = lit ? '#BFC0C4' : '#74747A';
+      ctx.fillRect(center - CELL / 2, headY, CELL, CELL);
+
+      // A few phones pulse across each tier, then stay as white pixels through the hold.
+      const phone = (seat * 13 + tier * 7) % 17 === 0 || (seat * 13 + tier * 7) % 17 === 7;
+      if (phone) {
+        const phoneAt = standAt + .04 + seat / Math.max(1, seats - 1) * .075;
+        const flashAge = t - phoneAt;
+        if (flashAge >= 0) {
+          const phoneY = headY - 8;
+          ctx.fillStyle = '#F0F0F2'; ctx.fillRect(center - 3, phoneY, 6, 8);
+          if (flashAge < .09) {
+            const spark = 4 + Math.round(4 * (1 - flashAge / .09));
+            ctx.fillStyle = '#FFFFFF';
+            ctx.fillRect(center - spark / 2, phoneY - spark, spark, spark);
+            ctx.fillRect(center - 1, phoneY - 2, 2, 2);
+          }
+        }
       }
     }
     // Each row has a strong horizontal lip, so the light cascade reads at phone size.
-    if (t >= reunionAt + tier * .095) {
+    if (t >= standAt) {
       ctx.fillStyle = '#BABABF'; ctx.fillRect(540 - half, y + 48, half * 2, CELL);
       ctx.fillStyle = '#F0F0F2'; ctx.fillRect(540 - half, y + 48, half * 2, CELL / 2);
     }
@@ -251,7 +284,7 @@ function drawOutgoingPalm(ctx: Frame['ctx'], t: number, dur: number) {
 
 export const announcementShot: ShotDef = {
   name: 'announcement',
-  describe: 'The venue curtains snap open on announces; a REUNION marquee hits with a shock pop as seven balcony tiers and three spotlights ignite on reunion.',
+  describe: 'The venue curtains snap open on announces; a REUNION marquee hits as a pixel crowd rises and phone flashes chase up seven balcony tiers.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, t: rawT, dur, theme, seed } = frame;
     const t = clamp(rawT, 0, Math.max(.01, dur));
@@ -312,6 +345,7 @@ export const announcementShot: ShotDef = {
     const curtainStart = clamp(announcesAt - dur * .276, 0, dur);
     const cues: Cue[] = [
       { t: Number(curtainStart.toFixed(3)), kind: 'swish', pan: 0, gain: .76 },
+      { t: Number(Math.max(0, reunionAt - .16).toFixed(3)), kind: 'build', pan: 0, gain: .96, len: .34 },
       { t: Number(reunionAt.toFixed(3)), kind: 'impact', pan: 0, gain: 1.42 },
       { t: Number(Math.min(dur, reunionAt + .19).toFixed(3)), kind: 'shimmer', pan: .12, gain: .62, len: .22 },
     ];

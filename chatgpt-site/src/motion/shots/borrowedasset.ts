@@ -37,6 +37,14 @@ function polygon(ctx: Frame['ctx'], points: [number, number][], fill: string, st
   ctx.closePath(); ctx.fillStyle = fill; ctx.fill();
   if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = width; ctx.stroke(); }
 }
+function traceTether(ctx: Frame['ctx'], x0: number, y0: number, x1: number, y1: number, sag: number, wave: number, phase: number) {
+  ctx.beginPath(); ctx.moveTo(x0, y0);
+  for (let i = 1; i <= 10; i++) {
+    const u = i / 10, arc = Math.sin(Math.PI * u);
+    const ripple = Math.sin(u * Math.PI * 5 - phase) * wave * arc;
+    ctx.lineTo(mix(x0, x1, u), mix(y0, y1, u) + sag * arc + ripple);
+  }
+}
 
 function drawSkyline(ctx: Frame['ctx'], t: number) {
   const buildings = [
@@ -232,17 +240,17 @@ export const borrowedAssetShot: ShotDef = {
     ctx.fillStyle = '#B9BBC0'; ctx.fillRect(hatchX - hatchW / 2 + 18, Math.round(shutterY / 4) * 4, hatchW - 36, 24);
     ctx.fillStyle = '#70737A'; for (let i = 0; i < 14; i++) ctx.fillRect(hatchX - hatchW / 2 + 32 + i * 25, Math.round(shutterY / 4) * 4 + 5, 4, 15);
 
-    const pawX = 534, pawY = 695, pawWidth = 310, pawRotation = .025;
-    // Clear Hedgy's face quickly, then hold a readable, nearly level ticket through 0.75 s.
-    const readable = ease.outExpo(clamp(activeT / .13));
-    const readableX = mix(HERO_TICKET_FRAME.x, 540, readable), readableY = mix(HERO_TICKET_FRAME.y, 550, readable);
-    const readableWidth = mix(HERO_TICKET_FRAME.width, 660, readable), readableRotation = mix(HERO_TICKET_FRAME.rotation, -.025, readable);
-    const intoPaw = ease.inOutCubic(clamp((activeT - .75) / .4));
-    const toHatch = ease.inOutCubic(clamp((activeT - .86) / .82));
-    const startX = mix(readableX, pawX, intoPaw), startY = mix(readableY, pawY, intoPaw);
-    const startWidth = mix(readableWidth, pawWidth, intoPaw), startRotation = mix(readableRotation, pawRotation, intoPaw);
-    const x = mix(startX, hatchX - 30, toHatch), y = mix(startY, hatchY, toHatch);
-    const width = mix(startWidth, 344, toHatch), rotation = mix(startRotation, -.11, toHatch);
+    // Punch toward the stamp after the exact loop plate, then snap-pull back into the atrium.
+    const punch = ease.outCubic(clamp(activeT / .12));
+    const punchWidth = mix(HERO_TICKET_FRAME.width, 1840, punch);
+    const punchX = mix(HERO_TICKET_FRAME.x, 650, punch), punchY = mix(HERO_TICKET_FRAME.y, 581, punch);
+    const pullBack = ease.outCubic(clamp((activeT - .12) / .16));
+    const framedX = mix(punchX, 540, pullBack), framedY = mix(punchY, 550, pullBack);
+    const framedWidth = mix(punchWidth, 660, pullBack), framedRotation = mix(HERO_TICKET_FRAME.rotation, -.025, pullBack);
+    // The sale sends the ticket toward the hatch; it is almost there when the tether snaps taut.
+    const send = ease.outCubic(clamp((activeT - sells) / .72));
+    const x = mix(framedX, hatchX - 30, send), y = mix(framedY, hatchY, send);
+    const width = mix(framedWidth, 344, send), rotation = mix(framedRotation, -.11, send);
 
     // Hedgy reaches at the left rail, then leans into the one-way sale hatch.
     const hedgyX = 470 + Math.sin(t * 1.2) * 3, hedgyY = 1030 + Math.sin(t * 4.2) * 1.5, hedgyScale = 6.4;
@@ -252,22 +260,47 @@ export const borrowedAssetShot: ShotDef = {
     ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 130, hedgyY + 10, 260, 6);
     drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose, facing: 1, look: activeT < his ? 'forward' : 'down', expression });
 
-    // A straight silver line stays under tension from the lender slot to the ticket stub.
+    // A slack bow travels down the tether, then its wave dies as the line snaps taut.
     const tetherColor = tether.toLowerCase().includes('paper') ? '#D0D1D3' : '#E4E6E8';
     const attachX = x - width * .47, attachY = y + Math.sin(t * 7) * 2;
     const lineStartX = dockX + 34, lineStartY = dockY - 25;
+    const tension = ease.outCubic(clamp((activeT - .54) / .21));
+    const whipWave = activeT >= .54 ? 24 * Math.exp(-(activeT - .54) * 13) : 0;
+    const tetherSag = (1 - tension) * 72;
     ctx.save(); ctx.globalAlpha *= .22; ctx.strokeStyle = '#F2F3F4'; ctx.lineWidth = 14; ctx.beginPath();
-    ctx.moveTo(lineStartX, lineStartY); ctx.lineTo(attachX, attachY); ctx.stroke(); ctx.restore();
+    traceTether(ctx, lineStartX, lineStartY, attachX, attachY, tetherSag, whipWave, (activeT - .54) * 32);
+    ctx.stroke(); ctx.restore();
     ctx.strokeStyle = tetherColor; ctx.lineWidth = 4; ctx.beginPath();
-    ctx.moveTo(lineStartX, lineStartY); ctx.lineTo(attachX, attachY); ctx.stroke();
+    traceTether(ctx, lineStartX, lineStartY, attachX, attachY, tetherSag, whipWave, (activeT - .54) * 32);
+    ctx.stroke();
     ctx.fillStyle = '#F2F3F4'; ctx.fillRect(dockX + 28, dockY - 31, 12, 12);
     ctx.restore();
 
     drawHeroTicket(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp,
       pixelLock: activeT >= .18 && activeT < .78 });
-    if (activeT >= .75 && activeT < 1.15) {
-      // Re-drawing the actor on top puts his paw over the ticket edge during the catch.
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose: 'carry', facing: 1, look: 'forward', expression: 'determined' });
+    // Perforation flecks grow as they rush toward the lens during the pullback.
+    const fleckStarts = [.12, .135, .15, .165, .18, .195];
+    const fleckDx = [-.9, -.62, -.38, -.12, .18, .42], fleckDy = [-.55, .36, -.12, .62, -.78, .2];
+    for (let i = 0; i < fleckStarts.length; i++) {
+      const start = fleckStarts[i]!, age = activeT - start, life = .24;
+      if (age < 0 || age >= life) continue;
+      const startPunch = ease.outCubic(clamp(start / .12));
+      const startPullBack = ease.outCubic(clamp((start - .12) / .16));
+      const startPunchWidth = mix(HERO_TICKET_FRAME.width, 1840, startPunch);
+      const startPunchX = mix(HERO_TICKET_FRAME.x, 650, startPunch), startPunchY = mix(HERO_TICKET_FRAME.y, 581, startPunch);
+      const sourceX = mix(startPunchX, 540, startPullBack), sourceY = mix(startPunchY, 550, startPullBack);
+      const sourceWidth = mix(startPunchWidth, 660, startPullBack);
+      const p = age / life, reach = 168 * p;
+      const px = Math.round((sourceX + sourceWidth * .175 + fleckDx[i]! * reach) / 4) * 4;
+      const py = Math.round((sourceY + fleckDy[i]! * reach - 24 * p) / 4) * 4;
+      const size = Math.max(3, Math.round((3 + 8 * p) / 2) * 2);
+      ctx.fillStyle = '#16181B'; ctx.fillRect(px - 2, py - 2, size + 4, size + 4);
+      ctx.fillStyle = i % 2 ? '#C9CDD1' : '#F1F2F3'; ctx.fillRect(px, py, size, size);
+    }
+    if (activeT < .22) {
+      // Keep Hedgy's face in front of the macro ticket as it clears the lens.
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose, facing: 1,
+        look: activeT < his ? 'forward' : 'down', expression });
     }
     drawBurst(ctx, activeT, { center: { x: hatchX, y: hatchY }, seed: frame.seed + 42, count: 14, kind: 'shard',
       start: Math.max(sells, 1.42), life: .45, speed: 174, gravity: 470, drag: .48, floor: 1190, bounce: .08, spin: 3.4, size: 2, color: '#D8D9DB' });
@@ -282,7 +315,9 @@ export const borrowedAssetShot: ShotDef = {
     const { sells, his } = eventPosition(props, dur);
     const cues: Cue[] = [
       { t: 0, kind: 'bass', gain: .78, pan: 0, len: .18 },
+      { t: .12, kind: 'whoosh', gain: 1.08, pan: .08, len: .16 },
       { t: .15, kind: 'paper', gain: .72, pan: -.12, len: .16 },
+      { t: .63, kind: 'whip', gain: 1.22, pan: .12, len: .14 },
       { t: sells, kind: 'paper', gain: 1.5, pan: .48 },
       { t: sells + .035, kind: 'coin', gain: .66, pan: .5 },
       { t: Math.max(0, his - .035), kind: 'clack', gain: .68, pan: -.15 },

@@ -179,23 +179,33 @@ function drawPixelLine(ctx: Frame['ctx'], a: Point, b: Point, color: string, wid
   ctx.restore();
 }
 
-function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number, amount: number, seed: number) {
-  if (points.length < 2 || amount <= .01) return;
-  const first = points[0]!, head = points.at(-1)!;
-  const top = Math.min(...points.map(point => point.y));
+function drawLossBand(ctx: Frame['ctx'], points: readonly Point[], saleY: number, bloom: number, seed: number) {
+  if (points.length < 2 || bloom <= .01) return;
+  const head = points.at(-1)!;
+  const expand = bloom * bloom * (3 - 2 * bloom);
+  const first = points[0]!;
+  const bloomPoint = (point: Point): Point => ({
+    x: head.x + (point.x - head.x) * expand,
+    y: head.y + (point.y - head.y) * expand,
+  });
+  const expanded = points.map(bloomPoint);
+  const expandedHead = expanded.at(-1)!;
+  const expandedFirst = expanded[0]!;
+  const expandedSaleY = head.y + (saleY - head.y) * expand;
+  const top = Math.min(...expanded.map(point => point.y));
   ctx.save();
   ctx.beginPath();
-  ctx.moveTo(snap(first.x), snap(first.y));
-  for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
-  ctx.lineTo(snap(head.x), snap(saleY));
-  ctx.lineTo(snap(first.x), snap(saleY));
+  ctx.moveTo(snap(expandedFirst.x), snap(expandedFirst.y));
+  for (let i = 1; i < expanded.length; i++) ctx.lineTo(snap(expanded[i]!.x), snap(expanded[i]!.y));
+  ctx.lineTo(snap(expandedHead.x), snap(expandedSaleY));
+  ctx.lineTo(snap(expandedFirst.x), snap(expandedSaleY));
   ctx.closePath();
   ctx.clip();
-  ctx.globalAlpha *= amount;
+  ctx.globalAlpha *= .72 + .28 * bloom;
   ctx.fillStyle = '#511B18';
-  ctx.fillRect(snap(Math.min(first.x, head.x)), snap(top), snap(Math.abs(head.x - first.x)), snap(saleY - top));
-  for (let y = snap(top); y < saleY; y += 8) {
-    for (let x = snap(Math.min(first.x, head.x)); x < Math.max(first.x, head.x); x += 8) {
+  ctx.fillRect(snap(Math.min(expandedFirst.x, expandedHead.x)), snap(top), snap(Math.abs(expandedHead.x - expandedFirst.x)), snap(expandedSaleY - top));
+  for (let y = snap(top); y < expandedSaleY; y += 8) {
+    for (let x = snap(Math.min(expandedFirst.x, expandedHead.x)); x < Math.max(expandedFirst.x, expandedHead.x); x += 8) {
       const value = hash((x / 8) * 4099 + y / 8, seed + 201);
       if (value > .43) {
         ctx.fillStyle = value > .86 ? '#D7473D' : value > .67 ? '#9E2B26' : '#68211D';
@@ -221,6 +231,30 @@ function drawPriceTrack(ctx: Frame['ctx'], points: readonly Point[], headVisible
   ctx.fillRect(snap(head.x - 5), snap(head.y - 5), 10, 10);
 }
 
+function drawJumpAfterimages(ctx: Frame['ctx'], keys: readonly KeyPoint[], time: number, jumpAt: number) {
+  const age = time - jumpAt;
+  if (age < 0 || age > .34) return;
+  const fade = 1 - clamp01(age / .34);
+  const ghosts = [
+    { offset: .12, size: 24, outer: RED_DARK, inner: RED_MID, alpha: .38 },
+    { offset: .08, size: 20, outer: RED_DARK, inner: RED_HOT, alpha: .52 },
+    { offset: .04, size: 16, outer: RED_MID, inner: RED_HOT, alpha: .68 },
+  ];
+  for (const ghost of ghosts) {
+    const point = positionAt(keys, Math.max(jumpAt, time - ghost.offset));
+    const size = snap(ghost.size);
+    ctx.save();
+    ctx.globalAlpha *= ghost.alpha * fade;
+    ctx.fillStyle = ghost.outer;
+    ctx.fillRect(snap(point.x - size / 2), snap(point.y - size / 2), size, size);
+    ctx.fillStyle = ghost.inner;
+    ctx.fillRect(snap(point.x - size / 2 + 4), snap(point.y - size / 2 + 4), size - 8, size - 8);
+    ctx.fillStyle = '#FFD8D4';
+    ctx.fillRect(snap(point.x - 2), snap(point.y - 2), 4, 4);
+    ctx.restore();
+  }
+}
+
 function drawPanHandoff(ctx: Frame['ctx'], chartHead: Point, time: number, startAt: number, dur: number) {
   if (time <= startAt) return;
   const p = easeOut((time - startAt) / Math.max(0.001, dur - startAt));
@@ -235,7 +269,7 @@ function drawPanHandoff(ctx: Frame['ctx'], chartHead: Point, time: number, start
   ctx.fillStyle = '#FFD8D4'; ctx.fillRect(snap(head.x - 2), snap(head.y - 2), 4, 4);
 }
 
-function drawSaleLevel(ctx: Frame['ctx'], saleY: number, markerX: number) {
+function drawSaleLevel(ctx: Frame['ctx'], saleY: number, markerX: number, cameraRotation: number) {
   ctx.fillStyle = '#C0C3C8';
   for (let x = 112; x < 770; x += 34) ctx.fillRect(x, saleY, 20, 5);
   ctx.fillStyle = '#777B82';
@@ -245,7 +279,12 @@ function drawSaleLevel(ctx: Frame['ctx'], saleY: number, markerX: number) {
   ctx.fillRect(markerX - 56, saleY - 26, 112, 36);
   ctx.fillStyle = '#C4C7CC';
   ctx.fillRect(markerX - 56, saleY - 26, 112, 5);
-  pixelText(ctx, 'SALE', markerX, saleY - 21, 3, { color: '#E1E3E6', align: 'center' });
+  // Keep the lettering horizontal while its center stays attached to the sale level.
+  ctx.save();
+  ctx.translate(markerX, saleY - 21);
+  ctx.rotate(-cameraRotation);
+  pixelText(ctx, 'SALE', 0, 0, 3, { color: '#E1E3E6', align: 'center' });
+  ctx.restore();
   ctx.fillStyle = '#D0D3D8';
   ctx.fillRect(markerX - 20, saleY - 5, 28, 20);
   ctx.fillStyle = '#3D4148';
@@ -296,7 +335,7 @@ export const priceRideShot: ShotDef = {
     const lossesTravel = easeOut((t - lossesAt) / .56);
     const scroll = jumpTravel * 258 + lossesTravel * 208 + (t / dur) * 64;
     const scrollX = jumpTravel * 72 + lossesTravel * 92;
-    const bandAmount = t < lossesAt ? 0 : .32 + .68 * easeOut((t - lossesAt) / .26);
+    const bandBloom = t < lossesAt ? 0 : clamp01((t - lossesAt) / .44);
 
     const rig = createCameraRig({
       width: 1080, height: 1290, seed: seed + 83, handheld: 1.5,
@@ -304,6 +343,9 @@ export const priceRideShot: ShotDef = {
       keyframes: [
         { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
         { t: jumpAt, x: 4, y: -8, zoom: 1.018, rot: -.001, ease: 'inOut' },
+        { t: jumpAt + .045, x: -12, y: 8, zoom: 1.045, rot: -.065, ease: 'out' },
+        { t: jumpAt + .105, x: 4, y: -10, zoom: 1.027, rot: .014, ease: 'out' },
+        { t: jumpAt + .22, x: 8, y: -17, zoom: 1.025, rot: .002, ease: 'inOut' },
         { t: lossesAt, x: 9, y: -18, zoom: 1.035, rot: .002, ease: 'inOut' },
         { t: Math.max(lossesAt + .3, dur - .34), x: 12, y: -12, zoom: 1.025, rot: 0, ease: 'out' },
         { t: dur, x: 0, y: 0, zoom: 1, rot: 0, ease: 'out' },
@@ -316,8 +358,8 @@ export const priceRideShot: ShotDef = {
     drawVenue(ctx, t, scroll, scrollX, seed);
 
     // The opening ticket is the final ticket leaving shot 7; its perforation becomes the line's lead.
-    drawLossBand(ctx, points, saleY, bandAmount, seed);
-    drawSaleLevel(ctx, saleY, markerX);
+    drawLossBand(ctx, points, saleY, bandBloom, seed);
+    drawSaleLevel(ctx, saleY, markerX, rig.poseAt(t).rot);
 
     const shocked = t >= lossesAt;
     const tetherSnap = easeOut((t - jumpAt) / .12);
@@ -343,10 +385,11 @@ export const priceRideShot: ShotDef = {
     drawOpeningTicket(ctx, t);
     if (t >= jumpAt && t < jumpAt + .38) {
       drawBurst(ctx, t, {
-        x: head.x, y: head.y, start: jumpAt, life: .38, count: 12, kind: 'spark',
-        seed: seed + 117, speed: 168, gravity: 22, drag: .9, size: 4, color: RED_HOT, cell: CELL,
+        x: head.x, y: head.y, start: jumpAt, life: .3, count: 8, kind: 'spark',
+        seed: seed + 117, speed: 136, gravity: 22, drag: .9, size: 3, color: RED_HOT, cell: CELL,
       });
     }
+    drawJumpAfterimages(ctx, keys, t, jumpAt);
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {

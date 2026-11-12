@@ -96,6 +96,33 @@ function drawTrack(ctx: Frame['ctx'], path: Point[], progress: number, color: st
   }
 }
 
+// A red admission ticket doubles as a small chain link on the price rail.
+function drawTicketLink(ctx: Frame['ctx'], x: number, y: number, width: number, rotation: number, scale = 1) {
+  const height = Math.round(width * 0.42), left = -width / 2, top = -height / 2;
+  ctx.save(); ctx.translate(Math.round(x), Math.round(y)); ctx.rotate(rotation); ctx.scale(scale, scale);
+  ctx.fillStyle = INK; ctx.fillRect(left - 3, top - 3, width + 6, height + 6);
+  ctx.fillStyle = RED; ctx.fillRect(left, top, width, height);
+  const stub = Math.round(width * 0.27), body = width - stub;
+  ctx.fillStyle = '#B82E2A'; ctx.fillRect(left + body, top, stub, height);
+  ctx.fillStyle = '#571815'; ctx.fillRect(left + body - 2, top + 2, 4, height - 4);
+  ctx.fillStyle = '#F1F2F3'; ctx.fillRect(left + 8, -2, Math.round(body * 0.45), 4);
+  ctx.fillStyle = '#FFAAA4'; ctx.fillRect(left + 8, top + 5, Math.round(body * 0.24), 3);
+  ctx.fillStyle = '#571815'; ctx.fillRect(left + 4, top + 4, 4, 4); ctx.fillRect(left + width - 8, top + height - 8, 4, 4);
+  ctx.fillStyle = '#F1F2F3'; ctx.fillRect(left + body + 5, top + 6, 3, height - 12);
+  ctx.restore();
+}
+
+function drawTicketSpark(ctx: Frame['ctx'], x: number, y: number, t: number, at: number) {
+  const age = t - at;
+  if (age < 0 || age >= 0.2) return;
+  const fade = 1 - age / 0.2, reach = 5 + age * 34;
+  ctx.save(); ctx.globalAlpha *= fade; ctx.translate(Math.round(x + 18), Math.round(y - 15));
+  ctx.fillStyle = '#F1F2F3';
+  ctx.fillRect(-2, -reach, 4, reach * 2); ctx.fillRect(-reach, -2, reach * 2, 4);
+  ctx.fillStyle = '#FFAAA4'; ctx.fillRect(-2, -2, 4, 4);
+  ctx.restore();
+}
+
 function drawSeller(ctx: Frame['ctx'], x: number, feetY: number, scale: number, index: number, t: number, recoil: number, buying: number, facing: 1 | -1) {
   ctx.save(); ctx.translate(Math.round(x), Math.round(feetY)); ctx.scale(scale, scale);
   const colors = [
@@ -310,6 +337,18 @@ export const demandFeedbackShot: ShotDef = {
         ctx.fillStyle = '#FFB0AA'; ctx.fillRect(p.x - 9, p.y - 36, 18, 6);
       }
       drawBurst(ctx, t, { x: p.x, y: p.y, seed: seed + 280 + i * 19, count: 12, kind: 'shard', start: at, life: 0.62, speed: 180 + i * 22, gravity: 260, drag: 0.4, floor: 1240, size: 1, color: '#D7DBDE', cell: 4 });
+    });
+
+    // Each BUY cover bolts one lasting ticket link onto its rail anchor.
+    covers.forEach((at, i) => {
+      if (t < at) return;
+      const anchor = anchors[i]!, p = raised[anchor]!, next = raised[anchor + 1]!;
+      const bolt = ease.outBack(clamp((t - at) / 0.13));
+      const dx = next.x - p.x, dy = next.y - p.y, tangent = Math.atan2(dy, dx);
+      const along = Math.min(0.82, 110 / Math.max(1, Math.hypot(dx, dy)));
+      const x = p.x + dx * along, y = p.y + dy * along;
+      drawTicketLink(ctx, x, y, 68, tangent + Math.PI / 2, 0.78 + 0.22 * bolt);
+      drawTicketSpark(ctx, x, y, t, at);
     });
 
     // Close rails and ticket stubs move faster than the booth layer for clear foreground parallax.
