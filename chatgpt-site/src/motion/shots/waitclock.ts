@@ -163,28 +163,30 @@ function drawPriceTrace(ctx: Frame['ctx'], t: number, dur: number, fadeAt: numbe
   }
 }
 
-function drawWristStub(ctx: Frame['ctx'], t: number, check: number) {
-  const sway = Math.sin(t * 5.6) * 5 + check * 16;
-  // The ticket stays clipped to the wrist on a short, taut tether as Hedgy checks its stub.
+function drawWristStub(ctx: Frame['ctx'], t: number, check: number, wristX: number, wristY: number) {
+  const sway = Math.sin(t * 5.6) * 4 + check * 12;
+  const ticketX = 448 + sway, ticketY = 888 - check * 14;
+  // Keep the stub close to Hedgy's checking paw so the glance and tether read as one action.
   drawTrail(ctx, [
-    { x: 382, y: 928, alpha: .94 }, { x: 402 + sway * .35, y: 916, alpha: .9 },
-    { x: 470 + sway, y: 900, alpha: .78 },
+    { x: wristX, y: wristY, alpha: .98 }, { x: wristX + 18 + sway * .25, y: wristY - 7, alpha: .92 },
+    { x: ticketX - 34, y: ticketY + 7, alpha: .82 },
   ], { color: '#B3B3B8', width: CELL * 2 });
-  drawTicket2D(ctx, snap(500 + sway), snap(894 - check * 10), 94, { rot: .08 + Math.sin(t * 3) * .025 + check * .18, tear: .32 });
-  ctx.fillStyle = '#222227'; ctx.fillRect(372, 923, 20, 8);
-  ctx.fillStyle = '#D3D3D7'; ctx.fillRect(380, 920, CELL * 2, CELL);
+  drawTicket2D(ctx, snap(ticketX), snap(ticketY), 112, { rot: -.04 + Math.sin(t * 3) * .025 + check * .16, tear: .32 });
+  ctx.fillStyle = '#222227'; ctx.fillRect(snap(wristX - 8), snap(wristY - 4), 20, 8);
+  ctx.fillStyle = '#D3D3D7'; ctx.fillRect(snap(wristX - 4), snap(wristY - 8), CELL * 2, CELL);
 }
 
-function drawTap(ctx: Frame['ctx'], x: number, y: number, tap: number) {
+function drawTap(ctx: Frame['ctx'], x: number, y: number, scale: number, tap: number) {
   if (tap <= 0) return;
-  const footX = x + 8 * 3.612, footY = y + 4;
-  const spread = 30 + (1 - tap) * 34;
-  ellipseRing(ctx, footX, footY + 2, spread, 8 + (1 - tap) * 5, '#E1E1E4', CELL, Math.round((1 - tap) * 5));
-  pixelLine(ctx, footX - 20, footY - 16, footX - 12, footY - 8, '#F1F1F3', CELL);
-  pixelLine(ctx, footX + 20, footY - 16, footX + 12, footY - 8, '#F1F1F3', CELL);
+  const footX = x + 8 * scale, footY = y + scale;
+  const spread = 48 + (1 - tap) * 24;
+  ellipseRing(ctx, footX, footY + 3, spread, 14 + (1 - tap) * 5, '#E1E1E4', CELL * 2, Math.round((1 - tap) * 5));
+  pixelLine(ctx, footX - 28, footY - 20, footX - 16, footY - 9, '#F1F1F3', CELL * 1.5);
+  pixelLine(ctx, footX + 28, footY - 20, footX + 16, footY - 9, '#F1F1F3', CELL * 1.5);
+  pixelLine(ctx, footX - 16, footY - 5, footX + 16, footY - 5, '#F1F1F3', CELL * 2);
   ctx.fillStyle = '#F1F1F3';
-  ctx.fillRect(snap(footX - 16), snap(footY - 14 - (1 - tap) * 8), CELL, CELL * 2);
-  ctx.fillRect(snap(footX + 16), snap(footY - 14 - (1 - tap) * 8), CELL, CELL * 2);
+  ctx.fillRect(snap(footX - 18), snap(footY - 16 - (1 - tap) * 8), CELL * 1.5, CELL * 2);
+  ctx.fillRect(snap(footX + 18), snap(footY - 16 - (1 - tap) * 8), CELL * 1.5, CELL * 2);
 }
 
 function drawSpotlightTarget(ctx: Frame['ctx'], t: number, dur: number) {
@@ -214,17 +216,20 @@ export const waitclockShot: ShotDef = {
     const speed = numberParam(props.params?.clockSpeed, 1.35, .2, 5);
     const waitAt = eventTime(props, 'waits', dur, dur * .22);
     const fadeAt = eventTime(props, 'fade', dur, dur * .66);
-    const checkAt = Math.min(dur, dur * .548);
-    const tapAge = t - waitAt;
-    const tap = clamp(1 - Math.abs(tapAge) / .075);
+    const tapAt = clamp(waitAt - .018, 0, dur);
+    const checkAt = Math.min(dur, dur * .546);
+    const tapAge = t - tapAt;
+    const tap = clamp(1 - Math.abs(tapAge) / .095);
     const check = ease.outBack((t - checkAt + .04) / .12) * (1 - ease.outCubic((t - checkAt - .12) / .2));
+    const hedgyScale = 3.612 * 1.25;
+    const wristX = 330 + 15 * hedgyScale, wristY = 1000 - 20 * hedgyScale;
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 17, handheld: 1.7,
       keyframes: [
         { t: 0, x: -10, y: 4, zoom: 1.005, rot: -.01, ease: 'linear' },
         { t: dur * .46, x: 6, y: -26, zoom: 1.038, rot: .018, ease: 'inOut' },
         { t: dur, x: 24, y: -86, zoom: 1.095, rot: .064, ease: 'inOut' },
-      ], hits: [waitAt, fadeAt], punch: .009, shake: 1.8,
+      ], hits: [tapAt, fadeAt], punch: .009, shake: 1.8,
     });
     const camera = rig.poseAt(t);
     ctx.save();
@@ -233,12 +238,12 @@ export const waitclockShot: ShotDef = {
     drawVenue(ctx, t, camera.x);
     drawClock(ctx, t, dur, speed);
     drawPriceTrace(ctx, t, dur, fadeAt, seed);
-    drawWristStub(ctx, t, check);
+    drawWristStub(ctx, t, check, wristX, wristY);
 
     const baseline = 1000 + tap * 8;
     ellipseFill(ctx, 330, baseline + 5, 110, 9, '#08080A');
-    drawHedgy(ctx, { x: 330, y: baseline, scale: 3.612, t: Math.max(0, t - waitAt), pose: 'think', facing: 1, look: check > .12 ? 'down' : 'up', expression: 'worried', prop: 'none', squash: 1 + tap * .12 });
-    drawTap(ctx, 330, baseline, tap);
+    drawHedgy(ctx, { x: 330, y: baseline, scale: hedgyScale, t: Math.max(0, t - waitAt), pose: 'think', facing: 1, look: check > .12 ? 'down' : 'up', expression: 'worried', prop: 'none', squash: 1 - tap * .18 });
+    drawTap(ctx, 330, baseline, hedgyScale, tap);
     drawSpotlightTarget(ctx, t, dur);
 
     // Close rail and ticket scraps cross the foreground while the camera pushes in.
@@ -252,9 +257,10 @@ export const waitclockShot: ShotDef = {
     const safeDur = Math.max(0, dur);
     const waitAt = eventTime(props, 'waits', dur, dur * .22);
     const fadeAt = eventTime(props, 'fade', dur, dur * .66);
-    const checkAt = Math.min(safeDur, safeDur * .548);
+    const tapAt = clamp(waitAt - .018, 0, safeDur);
+    const checkAt = Math.min(safeDur, safeDur * .546);
     return [
-      { t: Number(waitAt.toFixed(3)), kind: 'step', pan: -.35, gain: .78 },
+      { t: Number(tapAt.toFixed(3)), kind: 'step', pan: -.35, gain: .78 },
       { t: Number(checkAt.toFixed(3)), kind: 'paper', pan: -.06, gain: .62 },
       { t: Number(fadeAt.toFixed(3)), kind: 'drop', pan: .42, gain: .84 },
     ];

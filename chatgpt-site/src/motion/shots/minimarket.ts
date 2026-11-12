@@ -171,7 +171,7 @@ function drawToken(ctx: Frame['ctx'], x: number, y: number, size: number, bright
   rect(ctx, '#21272A', x - s * 0.1, y - s * 0.08, s * 0.2, s * 0.16);
 }
 
-function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: number, demandAt: number, supply: number, asset: string) {
+function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: number, demandAt: number, departureAt: number, supply: number, asset: string) {
   const x = 338, y = 422, w = 482, h = 318;
   rect(ctx, '#101518', x - 24, y - 24, w + 48, h + 50);
   rect(ctx, '#A5ACAF', x - 12, y - 12, w + 24, h + 24);
@@ -199,7 +199,7 @@ function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: nu
     rect(ctx, '#101518', tx - 36, y + 108, 72, 120);
     rect(ctx, '#737B80', tx - 36, y + 108, 72, 8);
     rect(ctx, '#353D41', tx - 36, y + 220, 72, 8);
-    if (i === soldSlot && t >= demandAt) {
+    if (i === soldSlot && t >= departureAt) {
       rect(ctx, '#242A2E', tx - 23, y + 132, 46, 54);
       rect(ctx, '#565E63', tx - 18, y + 138, 36, 42);
     } else if (i !== entrySlot || transitionT >= 0.24) drawTicket2D(ctx, tx, y + 168, 70, { rot: i % 2 ? 0.018 : -0.018 });
@@ -211,20 +211,31 @@ function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: nu
     const entryYNow = 1310 + ((y + 168) - 1310) * p;
     drawTicket2D(ctx, entryXNow, entryYNow, 86 - 16 * p, { rot: -0.13 * (1 - p) });
   }
-  // On “demand” one ticket lifts clear of its slot before traveling into the waiting buyer's hand.
-  if (t >= demandAt && t < demandAt + 0.55) {
-    const p = progress(t, demandAt, 0.55);
-    const fromX = startX + soldSlot * slotGap;
-    const toX = 846;
-    const ticketX = fromX + (toX - fromX) * p;
-    const ticketY = y + 168 + 220 * p - 270 * Math.sin(Math.PI * p);
-    ctx.save(); ctx.globalAlpha *= Math.max(0.55, 1 - p * 0.2);
-    drawTicket2D(ctx, ticketX, ticketY, 90 - 12 * p, { rot: -0.04 - p * 0.13 });
-    ctx.restore();
-    rect(ctx, '#F1F3F2', ticketX - 50, ticketY + 20, 12, 4);
-    rect(ctx, '#BFC6C9', ticketX + 42, ticketY - 16, 8, 4);
-  } else if (t >= demandAt + 0.55) {
-    drawTicket2D(ctx, 846, y + h + 70, 78, { rot: -0.17 });
+  // One ticket leaves early, lifts into a clear hero beat, then drops into the buyer's hand.
+  const flightEnd = demandAt + 0.58;
+  if (t >= departureAt && t < flightEnd) {
+    const fromX = startX + soldSlot * slotGap, fromY = y + 168;
+    const heroX = 710, heroY = 430, launchEnd = departureAt + 0.22, carryAt = demandAt + 0.12;
+    let ticketX: number, ticketY: number, ticketSize: number, flight: number;
+    if (t < launchEnd) {
+      flight = ease.outCubic(progress(t, departureAt, 0.22));
+      ticketX = fromX + (heroX - fromX) * flight;
+      ticketY = fromY + (heroY - fromY) * flight - Math.sin(flight * Math.PI) * 22;
+      ticketSize = 70 + 68 * flight;
+    } else if (t < carryAt) {
+      flight = 0;
+      ticketX = heroX; ticketY = heroY; ticketSize = 138;
+    } else {
+      flight = ease.outCubic(progress(t, carryAt, 0.46));
+      ticketX = heroX + (846 - heroX) * flight;
+      ticketY = heroY + (y + h + 70 - heroY) * flight;
+      ticketSize = 138 - 56 * flight;
+    }
+    drawTicket2D(ctx, ticketX, ticketY, ticketSize, { rot: -0.03 - flight * 0.14 });
+    rect(ctx, '#F1F3F2', ticketX - ticketSize * 0.52, ticketY + 20, 12, 4);
+    rect(ctx, '#BFC6C9', ticketX + ticketSize * 0.48, ticketY - 16, 8, 4);
+  } else if (t >= flightEnd) {
+    drawTicket2D(ctx, 846, y + h + 70, 82, { rot: -0.17 });
   }
   // Lower lip and vanishing floor line carry the buyer queue into the hall.
   rect(ctx, '#A5ACAF', x - 96, y + h + 24, w + 192, 16);
@@ -233,10 +244,12 @@ function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: nu
   drawToken(ctx, x + 110, y + h + 14, 44);
   drawToken(ctx, x + 188, y + h + 14, 44);
   drawToken(ctx, x + 266, y + h + 14, 44);
-  const joinP = ease.outExpo(progress(t, queueAt, 0.31));
-  const joinX = 1004 - 208 * joinP;
-  const joinY = y + h + 14 - Math.sin(joinP * Math.PI) * 18;
-  if (t >= queueAt - 0.04) drawToken(ctx, joinX, joinY, 58, true);
+  const tokenJoinAt = Math.max(0, queueAt - 0.24);
+  const tokenP = progress(t, tokenJoinAt, 0.22), joinP = ease.outCubic(tokenP);
+  const rowY = y + h + 14;
+  const joinX = 944 - 262 * joinP;
+  const joinY = rowY - (1 - joinP) * 108 - Math.sin(joinP * Math.PI) * 22;
+  if (t >= tokenJoinAt - 0.04) drawToken(ctx, joinX, joinY, 42 + 16 * joinP, true);
 }
 
 function drawCrowdHands(ctx: Frame['ctx'], t: number, queueAt: number) {
@@ -312,6 +325,7 @@ export const miniMarketShot: ShotDef = {
     const demandAt = eventTime(props, 'demand', 0.372, dur);
     const higherAt = eventTime(props, 'higher', 0.742, dur);
     const queueAt = Math.min(0.4, dur * 0.15);
+    const departureAt = Math.max(0, demandAt - 0.28);
     const supply = Math.max(3, Math.min(8, Math.floor(Number(props.params?.supplyCount ?? 5) || 5)));
     const asset = String(props.params?.asset ?? 'TICKET').slice(0, 24);
     const pull = ease.outCubic(progress(t, 0, dur * 0.6));
@@ -330,7 +344,7 @@ export const miniMarketShot: ShotDef = {
 
     ctx.save(); applyPull(ctx, pose.zoom, pose.x, pose.y);
     // Small inventory remains a bright focal island against the giant architecture.
-    drawRack(ctx, t, transitionT, queueAt, demandAt, supply, asset);
+    drawRack(ctx, t, transitionT, queueAt, demandAt, departureAt, supply, asset);
     drawCrowdHands(ctx, t, queueAt);
     const hedgyPose = t < demandAt ? 'carry' : t < higherAt ? 'sweat' : 'shock';
     drawHedgy(ctx, {

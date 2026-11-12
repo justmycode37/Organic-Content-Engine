@@ -236,9 +236,11 @@ export const buybackHandoffShot: ShotDef = {
     const backAt = eventTime(props, 'back', 0.335, dur), nowAt = eventTime(props, 'now', 0.495, dur);
     const moneyAt = Math.min(0.15, dur * 0.14);
     const clipAt = clamp(nowAt + Math.min(0.206, dur * 0.158), 0, dur);
-    const slideEnd = Math.min(dur, Math.max(backAt + 0.09, 0.5));
-    const slide = ease.outCubic(clamp((t - backAt) / Math.max(0.06, slideEnd - backAt)));
-    const ticketX = 800 - 240 * slide;
+    const slideStart = Math.min(backAt, moneyAt);
+    const slideEnd = Math.min(dur, Math.max(backAt + 0.2, 0.64));
+    const slide = ease.outCubic(clamp((t - slideStart) / Math.max(0.06, slideEnd - slideStart)));
+    // Keep the paper in the open gap between Hedgy and the clerk throughout the handoff.
+    const ticketX = 640 - 90 * slide;
     const ticketY = 850 - 4 * slide + Math.sin(slide * Math.PI) * 3;
     const ticketW = 120;
     const hedgyX = 350, hedgyY = 1050;
@@ -272,6 +274,10 @@ export const buybackHandoffShot: ShotDef = {
     drawClerk(ctx, t, moneyAt);
     drawTether(ctx, t, clipAt, ticketX, ticketY, hedgyX, hedgyY, ticketW);
     drawClerkPaw(ctx, t, moneyAt);
+    drawCash(ctx, t, moneyAt);
+    // Paper stays behind Hedgy so his face and eyes remain unobstructed on every frame.
+    const ticketRot = -0.02 - 0.025 * slide + Math.sin(t * 15) * 0.008 * (1 - slide);
+    drawTicket2D(ctx, ticketX, ticketY, ticketW, { rot: ticketRot });
 
     const hedgyPose = t < backAt - 0.02 ? 'push' : 'point';
     drawHedgy(ctx, {
@@ -281,10 +287,7 @@ export const buybackHandoffShot: ShotDef = {
       look: t < backAt ? 'forward' : 'down',
     });
 
-    drawCash(ctx, t, moneyAt);
-    // The shared ticket travels from the clerk's hand into the matching lender-slot aperture.
-    const ticketRot = -0.02 - 0.025 * slide + Math.sin(t * 15) * 0.008 * (1 - slide);
-    drawTicket2D(ctx, ticketX, ticketY, ticketW, { rot: ticketRot });
+    // Hedgy's paw closes over the ticket edge as it reaches the centre of the exchange.
     if (slide > 0.85) {
       const grip = ease.outCubic(clamp((slide - 0.85) / 0.15));
       const pawX = ticketX - 55 + grip * 5;

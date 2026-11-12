@@ -150,7 +150,7 @@ function drawPreDoor(ctx: Ctx, cx: number, cy: number, t: number) {
   ctx.restore();
 }
 
-function drawDoor(ctx: Ctx, cx: number, cy: number, t: number, eventAt: number, progress: number, scale: number, spin: number, label: string) {
+function drawDoor(ctx: Ctx, cx: number, cy: number, t: number, lockAt: number, progress: number, scale: number, spin: number, label: string) {
   if (progress <= 0) { drawPreDoor(ctx, cx, cy, t); return; }
   ctx.save();
   ctx.translate(cx, cy); ctx.scale(scale, scale); ctx.translate(-cx, -cy);
@@ -192,7 +192,7 @@ function drawDoor(ctx: Ctx, cx: number, cy: number, t: number, eventAt: number, 
   ctx.fillRect(-34, -10, 68, 20);
   ctx.restore();
 
-  const lockAmount = clamp((t - eventAt + 0.04) / 0.18);
+  const lockAmount = clamp((t - (lockAt - 0.08)) / 0.08);
   for (let i = 0; i < 8; i++) {
     const angle = i * Math.PI / 4 + Math.PI / 8;
     ctx.save(); ctx.translate(cx + Math.cos(angle) * 252, cy + Math.sin(angle) * 252); ctx.rotate(angle);
@@ -202,13 +202,13 @@ function drawDoor(ctx: Ctx, cx: number, cy: number, t: number, eventAt: number, 
     ctx.restore();
   }
   if (lockAmount > 0.92) {
-    ctx.fillStyle = '#20272B'; ctx.fillRect(722, 221, 284, 58);
-    ctx.fillStyle = '#D8DEE1'; ctx.fillRect(730, 229, 268, 6);
-    pixelText(ctx, label.toUpperCase().slice(0, 13), 864, 242, 4, { color: '#F1F3F4', align: 'center', reveal: clamp((lockAmount - 0.92) / 0.08), mode: 'type' });
+    ctx.fillStyle = '#20272B'; ctx.fillRect(650, 221, 284, 58);
+    ctx.fillStyle = '#D8DEE1'; ctx.fillRect(658, 229, 268, 6);
+    pixelText(ctx, label.toUpperCase().slice(0, 13), 792, 242, 4, { color: '#F1F3F4', align: 'center', reveal: clamp((lockAmount - 0.92) / 0.08), mode: 'type' });
   }
   // Tight impact rays dissipate quickly while the room's moving camera continues the shot.
-  const hit = clamp(1 - (t - eventAt) / 0.16);
-  if (t >= eventAt && hit > 0) {
+  const hit = clamp(1 - (t - lockAt) / 0.16);
+  if (t >= lockAt && hit > 0) {
     ctx.globalAlpha = hit * 0.72; ctx.strokeStyle = '#F0F2F3'; ctx.lineWidth = 8;
     for (let i = 0; i < 12; i++) {
       const a = i * Math.PI / 6;
@@ -232,23 +232,27 @@ export const vaultLockShot: ShotDef = {
     const label = typeof p.label === 'string' ? p.label : 'COLLATERAL';
     const moneyAt = eventTime(props, 'money', dur, 0.46);
     const collateralAt = eventTime(props, 'collateral', dur, 0.64);
+    // The cash lands early enough to read before the door closes; narration events stay intact for cues.
+    const cashLandAt = Math.min(moneyAt, dur * 0.195);
+    const lockAt = Math.min(collateralAt, dur * 0.276);
+    const lockStartAt = Math.max(0, lockAt - 0.08);
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 47, handheld: 1.4,
       keyframes: [
         { t: 0, x: -18, y: 18, zoom: 0.99, rot: -0.014 },
-        { t: Math.max(0.08, moneyAt - 0.12), x: 8, y: 4, zoom: 1.025, rot: -0.008 },
-        { t: Math.min(dur, moneyAt + 0.22), x: 26, y: -30, zoom: 1.082, rot: 0.016 },
-        { t: Math.max(moneyAt + 0.3, collateralAt - 0.08), x: -12, y: -18, zoom: 1.12, rot: 0.034 },
+        { t: Math.max(0.08, cashLandAt - 0.12), x: 8, y: 4, zoom: 1.025, rot: -0.008 },
+        { t: Math.min(dur, cashLandAt + 0.22), x: 26, y: -30, zoom: 1.082, rot: 0.016 },
+        { t: Math.max(cashLandAt + 0.3, lockAt + 0.3), x: -12, y: -18, zoom: 1.12, rot: 0.034 },
         { t: dur, x: 12, y: -58, zoom: 1.1, rot: 0.02 },
       ],
-      hits: [collateralAt], punch: 0.034, shake: 5.2,
+      hits: [lockAt], punch: 0.034, shake: 5.2,
     });
-    const growth = clamp((t - (collateralAt - 0.16)) / 0.16);
-    const settle = Math.exp(-Math.max(0, t - collateralAt) / 0.15);
-    const doorScale = growth < 1 ? 0.24 + 0.86 * (1 - (1 - growth) ** 3) : 1.1 - 0.1 * (1 - settle);
-    const spinStart = (t - moneyAt) * 5.4 + 0.12;
+    const growth = clamp((t - lockStartAt) / 0.08);
+    const settle = Math.exp(-Math.max(0, t - lockAt) / 0.15);
+    const doorScale = growth < 1 ? 0.24 + 0.86 * growth ** 3 : 1.1 - 0.1 * (1 - settle);
+    const spinStart = (t - cashLandAt) * 5.4 + 0.12;
     const spinTarget = Math.round(spinStart / (Math.PI / 3)) * (Math.PI / 3);
-    const spinLock = clamp((t - (collateralAt - 0.08)) / 0.16);
+    const spinLock = clamp((t - lockStartAt) / 0.08);
     const spin = lerp(spinStart, spinTarget, spinLock);
 
     ctx.save();
@@ -259,15 +263,16 @@ export const vaultLockShot: ShotDef = {
 
     // Three readable paper bundles travel from the sale receipt into the chamber.
     const cash = [
-      { start: [948, 435] as Point, end: [540, 554] as Point, delay: 0, angle: -0.14, size: 1.15 },
-      { start: [1002, 527] as Point, end: [556, 646] as Point, delay: 0.075, angle: 0.08, size: 1.34 },
-      { start: [936, 630] as Point, end: [540, 742] as Point, delay: 0.15, angle: -0.1, size: 1.26 },
+      { start: [948, 435] as Point, end: [528, 574] as Point, delay: 0, angle: -0.14, size: 1.12 },
+      { start: [1002, 527] as Point, end: [540, 610] as Point, delay: 0.055, angle: 0.08, size: 1.34 },
+      { start: [936, 630] as Point, end: [552, 646] as Point, delay: 0.11, angle: -0.1, size: 1.16 },
     ];
     cash.forEach((bundle, index) => {
-      // The larger banknote stacks leave the upper-right slot before “money” and settle together inside the vault.
-      const cashStart = Math.max(0, moneyAt - 0.65);
-      const cashSpan = Math.max(0.5, Math.min(0.82, moneyAt + 0.1 - cashStart));
-      const q = clamp((t - cashStart - bundle.delay) / Math.max(0.12, cashSpan - bundle.delay));
+      // The stacks arrive together as a readable bundle, centred around the main cash at (540, 610).
+      const cashStart = Math.max(0, cashLandAt - 0.42);
+      const cashSpan = Math.max(0.24, cashLandAt - cashStart);
+      const delay = Math.min(bundle.delay, cashSpan * 0.35);
+      const q = clamp((t - cashStart - delay) / Math.max(0.12, cashSpan - delay));
       const eased = q * q * (3 - 2 * q);
       const x = lerp(bundle.start[0], bundle.end[0], eased);
       const y = lerp(bundle.start[1], bundle.end[1], eased) - Math.sin(Math.PI * q) * 48;
@@ -276,8 +281,8 @@ export const vaultLockShot: ShotDef = {
         line(ctx, bundle.start, [x, y], '#D3DADF', 7, 0.26 + q * 0.24);
       }
     });
-    drawGlass(ctx, t, moneyAt);
-    drawDoor(ctx, VAULT_CENTER[0], VAULT_CENTER[1], t, collateralAt, growth, doorScale, spin, label);
+    drawGlass(ctx, t, cashLandAt);
+    drawDoor(ctx, VAULT_CENTER[0], VAULT_CENTER[1], t, lockAt, growth, doorScale, spin, label);
     ctx.restore();
 
     // Fixed foreground composition keeps the whole actor between x=120 and x=450 as the camera arcs.
@@ -285,20 +290,20 @@ export const vaultLockShot: ShotDef = {
     ctx.fillStyle = '#606A70'; ctx.fillRect(170, 1160, 240, 6);
     drawHedgy(ctx, {
       x: 280, y: 1160, scale: 4.95,
-      t: Math.max(0, t - moneyAt + 0.12),
-      pose: t < moneyAt ? 'think' : 'push', facing: 1,
-      look: 'forward', expression: t < collateralAt ? 'worried' : 'shocked',
+      t: Math.max(0, t - cashLandAt + 0.12),
+      pose: t < cashLandAt ? 'think' : 'push', facing: 1,
+      look: 'forward', expression: t < lockAt ? 'worried' : 'shocked',
     });
     // The concert ticket remains on Hedgy’s tether outside the glass while the cash enters the chamber.
     const ticketX = 490 + Math.sin(t * 2.4) * 3;
     const ticketY = 1042 + Math.sin(t * 3.2) * 4;
-    const reach = clamp((t - moneyAt + 0.08) / 0.16);
+    const reach = clamp((t - cashLandAt + 0.08) / 0.16);
     const paw: Point = [lerp(354, 409, reach), lerp(1061, 1076, reach)];
     line(ctx, paw, [ticketX - 30, ticketY - 5], '#D8DEE1', 4, 0.92);
     drawTicket2D(ctx, ticketX, ticketY, 82, { rot: -0.16 + Math.sin(t * 2) * 0.025, tear: 0.12 });
 
     // Paw-to-cash-to-wheel glint keeps the camera arc legible while the real camera pushes through the same path.
-    const arc = clamp((t - moneyAt + 0.05) / Math.max(0.28, collateralAt - moneyAt));
+    const arc = clamp((t - cashLandAt + 0.05) / Math.max(0.28, lockAt - cashLandAt));
     if (arc > 0) {
       const q = 1 - (1 - arc) ** 3;
       const x = lerp(paw[0], 540, q), y = lerp(paw[1], 645, q);

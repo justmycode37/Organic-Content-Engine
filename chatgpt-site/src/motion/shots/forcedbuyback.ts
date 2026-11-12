@@ -1,5 +1,5 @@
 import { clamp, type Cue, type Frame, type ShotProps } from '../core.ts';
-import { drawHedgy } from '../actor/hedgy.ts';
+import { drawHedgy, hedgyBounds } from '../actor/hedgy.ts';
 import { drawEnv } from '../env/index.ts';
 import { drawBurst, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
@@ -330,10 +330,18 @@ export const forcedBuybackShot: ShotDef = {
     const actorScale = 5.35 * (1 - exitBlend + exitBlend / portalZoom);
     const targetBodyX = 540 + ((-outerRig.x / outerRig.zoom) - pose.x) / pose.zoom;
     const targetBodyY = 645 + ((-outerRig.y / outerRig.zoom) - pose.y) / pose.zoom;
-    const actorX = pathX * (1 - exitBlend) + (targetBodyX - 1.5 * actorScale) * exitBlend;
+    const unboundedActorX = pathX * (1 - exitBlend) + (targetBodyX - 1.5 * actorScale) * exitBlend;
     const actorY = pathY * (1 - exitBlend) + (targetBodyY + 25 * actorScale) * exitBlend;
     const actorT = Math.max(0, t - runStart);
     const actorPose = t >= runStart ? 'run' : t > payAt ? 'shock' : 'sweat';
+    const actorBounds = hedgyBounds({ x: unboundedActorX, y: actorY, scale: actorScale, t: actorT, pose: actorPose, facing: 1 });
+    const cameraX = Math.round(pose.x / GRID) * GRID, cos = Math.cos(pose.rot), sin = Math.sin(pose.rot);
+    const screenX = (x: number, y: number) => 540 + cameraX + pose.zoom * ((x - 540) * cos - (y - 645) * sin);
+    // Shock flares the quill coat beyond hedgyBounds' resting outline. Include that
+    // extra silhouette before clamping, then keep a 64 px nominal margin for pixels.
+    const quillFlare = actorPose === 'shock' ? actorScale * 10 : 0;
+    const projectedLeft = Math.min(screenX(actorBounds.left - quillFlare, actorBounds.top), screenX(actorBounds.left - quillFlare, actorBounds.bottom));
+    const actorX = unboundedActorX + Math.max(0, 64 - projectedLeft) / pose.zoom;
     drawHedgy(ctx, {
       x: actorX, y: actorY, scale: actorScale, t: t >= runStart ? actorT : Math.max(0, t - payAt),
       pose: actorPose, facing: 1, look: t >= runStart ? 'forward' : 'down',

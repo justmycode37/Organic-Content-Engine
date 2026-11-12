@@ -28,6 +28,12 @@ const progress = (t: number, start: number, end: number) => clamp((t - start) / 
 const easeOut = (value: number) => 1 - (1 - clamp(value)) ** 3;
 const easeInOut = (value: number) => value < 0.5 ? 4 * value ** 3 : 1 - ((-2 * value + 2) ** 3) / 2;
 const snap = (value: number) => Math.round(value / GRID) * GRID;
+function scenePoint(pose: { x: number; y: number; zoom: number; rot: number }, screenX: number, screenY: number): [number, number] {
+  const cx = 540, cy = 645, cameraX = Math.round(pose.x / GRID) * GRID, cameraY = Math.round(pose.y / GRID) * GRID;
+  const dx = (screenX - cx - cameraX) / pose.zoom, dy = (screenY - cy - cameraY) / pose.zoom;
+  const cos = Math.cos(pose.rot), sin = Math.sin(pose.rot);
+  return [cx + cos * dx + sin * dy, cy - sin * dx + cos * dy];
+}
 
 function scaleObjects(sink: number): Object3D[] {
   const unit = 1.42, angle = -0.31 * sink, pivotY = 0.45, centerX = 0.48, depth = -1.15;
@@ -105,8 +111,10 @@ function drawDrawer(ctx: Frame['ctx'], t: number, collateralAt: number) {
   const thrust = easeOut(progress(t, collateralAt - 0.04, collateralAt + 0.23));
   const recoil = Math.exp(-Math.max(0, t - collateralAt - 0.23) * 6);
   const kick = t < collateralAt + 0.24 ? Math.sin(progress(t, collateralAt, collateralAt + 0.24) * Math.PI) * 14 : 0;
-  const x = 500 - 260 * thrust - 24 * recoil + kick;
-  const y = 914 + 92 * thrust + kick * 0.35;
+  const x = 522 - 260 * thrust - 24 * recoil + kick;
+  // The drawer rises off the counter in perspective; at the collateral hit its center
+  // lands near (700, 760) before continuing toward the lens.
+  const y = 650 + 120 * thrust + kick * 0.35;
   const w = 434 + 168 * thrust, h = 104 + 42 * thrust;
   ctx.fillStyle = '#080A0B'; ctx.fillRect(snap(x - 18), snap(y + 8), snap(w + 22), snap(h + 10));
   ctx.fillStyle = '#6F787D'; ctx.fillRect(snap(x - 10), snap(y), snap(w + 12), 10);
@@ -178,24 +186,59 @@ function drawTicketTrace(ctx: Frame['ctx'], t: number, sink: number) {
 function drawEmptyPouch(ctx: Frame['ctx'], x: number, y: number, reveal: number) {
   if (reveal <= 0.01) return;
   const lift = Math.round((1 - easeOut(reveal)) * 34 / GRID) * GRID;
-  const tilt = (1 - easeOut(reveal)) * -0.16;
+  const face = easeOut(reveal), tilt = (1 - face) * -0.3;
   ctx.save();
   ctx.translate(snap(x), snap(y - lift)); ctx.rotate(tilt);
+  // A short edge-on turn opens into a broad front-facing, visibly hollow mouth.
+  ctx.scale((0.56 + face * 0.44) * 1.5, (0.8 + face * 0.2) * 1.5);
   ctx.globalAlpha *= Math.min(1, reveal * 2.4);
   // Soft, tapered cloth body with the pale lining turned outward and an empty mouth.
   ctx.fillStyle = '#111416';
-  ctx.beginPath(); ctx.moveTo(-32, -20); ctx.lineTo(-24, -28); ctx.lineTo(-12, -24); ctx.lineTo(16, -24);
-  ctx.lineTo(28, -28); ctx.lineTo(36, -20); ctx.lineTo(28, 20); ctx.lineTo(20, 32);
-  ctx.lineTo(-20, 32); ctx.lineTo(-28, 20); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-30, -19); ctx.lineTo(-22, -28); ctx.lineTo(-12, -24); ctx.lineTo(14, -24);
+  ctx.lineTo(24, -28); ctx.lineTo(32, -19); ctx.lineTo(28, 12); ctx.lineTo(20, 28); ctx.lineTo(10, 36);
+  ctx.lineTo(-12, 36); ctx.lineTo(-22, 28); ctx.lineTo(-28, 12); ctx.closePath(); ctx.fill();
   ctx.fillStyle = '#8D969A';
-  ctx.fillRect(-28, -16, 16, 40); ctx.fillRect(-12, -20, 28, 48); ctx.fillRect(16, -16, 12, 40);
-  ctx.fillStyle = '#D0D5D7'; ctx.fillRect(-24, -24, 40, 8); ctx.fillRect(-20, 24, 40, 8);
+  ctx.beginPath(); ctx.moveTo(-24, -16); ctx.lineTo(-15, -20); ctx.lineTo(-10, -13); ctx.lineTo(-12, 14);
+  ctx.lineTo(-19, 26); ctx.lineTo(-24, 14); ctx.closePath(); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(-10, -19); ctx.lineTo(14, -19); ctx.lineTo(23, -14); ctx.lineTo(20, 14);
+  ctx.lineTo(12, 29); ctx.lineTo(-10, 30); ctx.lineTo(-16, 15); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#B5BDC0'; ctx.fillRect(-23, -18, 6, 34); ctx.fillRect(17, -15, 6, 29);
+  ctx.fillStyle = '#D0D5D7'; ctx.fillRect(-23, 25, 14, 6); ctx.fillRect(7, 26, 15, 6);
+  // Deep trapezoid and a bright inner lip make the front-facing opening read as empty.
+  ctx.fillStyle = '#080A0B';
+  ctx.beginPath(); ctx.moveTo(-22, -19); ctx.lineTo(22, -19); ctx.lineTo(15, -3); ctx.lineTo(-15, -3); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = '#E1E5E7'; ctx.fillRect(-17, -24, 34, 5);
   ctx.fillStyle = '#202427';
-  ctx.beginPath(); ctx.moveTo(-20, -12); ctx.lineTo(20, -12); ctx.lineTo(14, 0); ctx.lineTo(-14, 0); ctx.closePath(); ctx.fill();
-  ctx.fillStyle = '#B5BDC0'; ctx.fillRect(-24, 0, 8, 20); ctx.fillRect(16, 0, 8, 20);
+  ctx.beginPath(); ctx.moveTo(-14, -5); ctx.lineTo(14, -5); ctx.lineTo(8, 2); ctx.lineTo(-8, 2); ctx.closePath(); ctx.fill();
   ctx.strokeStyle = '#D0D5D7'; ctx.lineWidth = 4;
-  ctx.beginPath(); ctx.moveTo(-28, -20); ctx.lineTo(-40, -32); ctx.moveTo(28, -20); ctx.lineTo(40, -32); ctx.stroke();
-  ctx.fillStyle = '#E4E7E8'; ctx.fillRect(-8, 8, 16, 4);
+  ctx.beginPath(); ctx.moveTo(-28, -21); ctx.lineTo(-42, -34); ctx.moveTo(28, -21); ctx.lineTo(42, -34); ctx.stroke();
+  ctx.fillStyle = '#E4E7E8'; ctx.fillRect(-9, 10, 18, 4);
+  ctx.restore();
+}
+
+function drawPouchDust(ctx: Frame['ctx'], x: number, y: number, t: number, start: number) {
+  const age = t - start;
+  if (age < 0 || age > 0.32) return;
+  const puff = easeOut(progress(age, 0, 0.12));
+  const spreadX = 38 + puff * 12, spreadY = 20 + puff * 8;
+  const shrink = Math.max(0.45, 1 - age * 1.6);
+  ctx.save(); ctx.globalAlpha *= Math.max(0, 1 - age / 0.32);
+  const bloom = easeOut(progress(age, 0, 0.12)) * 18;
+  ctx.fillStyle = '#AAB2B6';
+  ctx.fillRect(snap(x - 26 - bloom), snap(y - 19 - bloom * 0.4), 12, 8);
+  ctx.fillRect(snap(x + 16 + bloom), snap(y - 21 - bloom * 0.35), 12, 8);
+  ctx.fillStyle = '#E1E5E7';
+  ctx.fillRect(snap(x - 4), snap(y - 38 - bloom), 12, 8);
+  const flecks: Array<[number, number, number]> = [
+    [-2, -1, 12], [-1, -2, 8], [0, -3, 10], [1, -2, 10], [2, -1, 12],
+    [-3, -2, 8], [3, -2, 8], [-2, 0, 8], [2, 0, 8], [-1, -4, 6], [1, -4, 6],
+  ];
+  for (let i = 0; i < flecks.length; i++) {
+    const [dx, dy, size] = flecks[i]!;
+    const drift = (i % 2 ? 1 : -1) * age * (42 + i * 5);
+    ctx.fillStyle = i % 3 ? '#E1E5E7' : '#AAB2B6';
+    ctx.fillRect(snap(x + dx * spreadX + drift), snap(y + dy * spreadY - age * (24 + i * 5)), Math.max(GRID, snap(size * shrink)), Math.max(GRID, snap(size * shrink)));
+  }
   ctx.restore();
 }
 
@@ -214,13 +257,13 @@ function drawWarning(ctx: Frame['ctx'], t: number, collateralAt: number) {
 
 export const collateralCallShot: ShotDef = {
   name: 'collateralcall',
-  describe: 'The obligation pan sinks on demands; a marked collateral drawer punches out toward Hedgy as the camera pushes between the counter and the scale.',
+  describe: 'On the collateral call, the obligation pan drops as a marked drawer punches toward Hedgy and he turns his empty pouch to camera.',
   render(frame: Frame, props: ShotProps) {
     const { ctx, theme, seed } = frame, dur = Math.max(0.01, frame.dur), t = clamp(frame.t, 0, dur);
     const demandsAt = eventAt(props, 'demands', dur * 0.31, dur);
     const collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
-    const sinkHit = easeOut(progress(t, demandsAt - 0.22, demandsAt + 0.04));
-    const sinkSettle = t > demandsAt + 0.28 ? 0.1 * Math.sin((t - demandsAt - 0.28) * 18) * Math.exp(-(t - demandsAt - 0.28) * 4.5) : 0;
+    const sinkHit = easeOut(progress(t, collateralAt - 0.04, collateralAt + 0.005));
+    const sinkSettle = t > collateralAt + 0.28 ? 0.1 * Math.sin((t - collateralAt - 0.28) * 18) * Math.exp(-(t - collateralAt - 0.28) * 4.5) : 0;
     const sink = clamp(sinkHit + sinkSettle, 0, 1.14);
     const unfold = progress(t, 0.015, Math.min(dur * 0.22, 0.36));
     const endClose = progress(t, dur - 0.31, dur - 0.025);
@@ -249,18 +292,20 @@ export const collateralCallShot: ShotDef = {
     drawCounterBase(ctx, t, pose.x);
     drawWarning(ctx, t, collateralAt);
     drawDrawer(ctx, t, collateralAt);
-    const recoil = easeOut(progress(t, collateralAt + 0.01, collateralAt + 0.22));
-    const pouchReveal = progress(t, collateralAt + 0.03, collateralAt + 0.22);
+    const actorPoint = scenePoint(pose, 300, 1080);
+    const pouchPoint = scenePoint(pose, 380, 1000);
+    const pouchReveal = progress(t, collateralAt - 0.045, collateralAt + 0.025);
     drawHedgy(ctx, {
-      x: 300 - 20 * recoil, y: 1080, scale: 4.35, t: Math.max(0, t - demandsAt),
-      pose: t < demandsAt ? 'sweat' : t < collateralAt + 0.08 ? 'shock' : 'wave-off', facing: 1,
-      look: 'up', expression: t < demandsAt ? 'worried' : 'shocked', prop: 'none',
+      x: actorPoint[0], y: actorPoint[1], scale: 4.35, t: Math.max(0, t - collateralAt),
+      pose: t < collateralAt - 0.08 ? 'sweat' : t < collateralAt + 0.2 ? 'shock' : 'wave-off', facing: 1,
+      look: t < collateralAt ? 'up' : 'camera', expression: t < collateralAt ? 'worried' : 'shocked', prop: 'none',
     });
-    drawEmptyPouch(ctx, 432 - 12 * recoil, 960 + 8 * recoil, pouchReveal);
     const alarmDustStart = collateralAt + 0.13;
-    if (t >= demandsAt && t < demandsAt + 0.38) {
-      drawBurst(ctx, t, { x: 950, y: 846 + sink * 55, seed: seed + 119, count: 8, kind: 'dust', start: demandsAt, life: 0.36, speed: 48, gravity: 24, drag: 1.3, size: 2, color: '#C7CDD0' });
+    if (t >= collateralAt && t < collateralAt + 0.38) {
+      drawBurst(ctx, t, { x: pouchPoint[0], y: pouchPoint[1] - 18, seed: seed + 119, count: 12, kind: 'dust', start: collateralAt, life: 0.36, speed: 64, spread: Math.PI * 1.35, gravity: 24, drag: 1.3, size: 2, color: '#C7CDD0' });
     }
+    drawEmptyPouch(ctx, pouchPoint[0], pouchPoint[1], pouchReveal);
+    if (t >= collateralAt && t < collateralAt + 0.38) drawPouchDust(ctx, pouchPoint[0], pouchPoint[1] - 24, t, collateralAt);
     drawClosingDrawer(ctx, endClose);
     if (t >= alarmDustStart && t < collateralAt + 0.56) {
       const p = pulsesAt(t, collateralAt);
@@ -273,9 +318,9 @@ export const collateralCallShot: ShotDef = {
     ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const demandsAt = eventAt(props, 'demands', dur * 0.31, dur), collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
+    const collateralAt = eventAt(props, 'collateral', dur * 0.57, dur);
     return ([
-      { t: demandsAt, kind: 'thud', pan: 0.32, gain: 1.28 },
+      { t: collateralAt - 0.03, kind: 'thud', pan: 0.32, gain: 1.28 },
       { t: collateralAt, kind: 'clack', pan: -0.12, gain: 1.42 },
       { t: collateralAt + 0.18, kind: 'alarm', pan: -0.12, gain: 0.62, len: 0.2 },
     ] satisfies Cue[]).filter(cue => cue.t >= 0 && cue.t <= dur);

@@ -497,16 +497,23 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    ].sort((a,b)=>a.at-b.at);
    const airExpression=steppedVolumeExpression(automationPoints.map(point=>({...point,level:Math.max(0.025,point.level)})),0.025);
    const percussionExpression=steppedVolumeExpression(automationPoints.map((point,index)=>({...point,level:[0.12,0.34,0.72][Math.min(index,2)]})),0);
+   // This branch adds to a unity body band, so use the incremental gain for a +3/+4 dB combined lift.
+   const bodyLiftPoints=[
+    ...(musicAutomation.jump?[{at:musicAutomation.jump.at,level:10**(3/20)-1,ramp:0.38}]:[]),
+    ...(musicAutomation.pressure?[{at:Math.max(0,musicAutomation.pressure.at-0.55),level:10**(4/20)-1,ramp:0.55}]:[]),
+   ].sort((a,b)=>a.at-b.at);
+   const bodyLiftExpression=steppedVolumeExpression(bodyLiftPoints,0);
    const pressureGain=musicAutomation.pressure?`if(between(t,${Math.max(0,musicAutomation.pressure.at-0.1).toFixed(3)},${Math.min(duration,musicAutomation.pressure.at+0.3).toFixed(3)}),1.584893,1)`:'1';
    const musicCutFilter=musicCut?`volume='${musicCut}':eval=frame,`:'';
    filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=0.4,afade=t=out:st=${Math.max(0,duration-0.82).toFixed(3)}:d=0.82,extrastereo=m=1.07,${pad}[musicSource]`);
-   // The low band stays grounded; rising high and transient bands open the filter and add percussion
-   // at reveal/jump events. The final event supplies a short +4 dB pressure window.
-   filters.push('[musicSource]asplit=3[musicBodySource][musicAirSource][musicPercSource]');
+   // Keep the low band grounded, then add a narrow body-band lift at the jump and pressure points.
+   // Air and transient bands open at reveal/jump events; voice sidechain still ducks the full bed.
+   filters.push('[musicSource]asplit=4[musicBodySource][musicBodyLiftSource][musicAirSource][musicPercSource]');
    filters.push('[musicBodySource]lowpass=f=3200[musicBody]');
+   filters.push(`[musicBodyLiftSource]highpass=f=150,lowpass=f=2000,volume='${bodyLiftExpression}':eval=frame[musicBodyLift]`);
    filters.push(`[musicAirSource]highpass=f=1950,lowpass=f=11500,volume='${airExpression}':eval=frame[musicAir]`);
    filters.push(`[musicPercSource]highpass=f=3600,acompressor=threshold=0.025:ratio=7:attack=1:release=65,volume='${percussionExpression}':eval=frame[musicPerc]`);
-   filters.push(`[musicBody][musicAir][musicPerc]amix=inputs=3:normalize=0:dropout_transition=0,volume='${pressureGain}':eval=frame,${pad}[bed]`);
+   filters.push(`[musicBody][musicBodyLift][musicAir][musicPerc]amix=inputs=4:normalize=0:dropout_transition=0,volume='${pressureGain}':eval=frame,${pad}[bed]`);
    filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[bed][keyMusic]sidechaincompress=threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2[ducked]','[fx][keyFx]sidechaincompress=threshold=0.12:ratio=1.7:attack=5:release=110:makeup=1[fxduck]');
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]','[ducked]asplit=2[musicMix][musicStem]');buses.push('[fxMix]','[sayMix]','[musicMix]');}
    else buses.push('[fxduck]','[say]','[ducked]');

@@ -2,9 +2,8 @@ import { clamp, ease, hash, type Cue, type Frame, type ShotProps } from '../core
 import { drawHedgy } from '../actor/hedgy.ts';
 import { drawBurst, drawImpactStar, drawShockwave, drawSpeedLines } from '../fx/particles.ts';
 import { createCameraRig } from '../fx/rig.ts';
-import { applyImpactFrame } from '../fx/post.ts';
 import { drawTicket2D } from '../sets/ticket.ts';
-import { drawHeroTicketBackground, drawHeroTicketBody, drawHeroTicketFrame, drawHeroTicketStamp, HERO_TICKET_FRAME } from '../sets/heroticket.ts';
+import { drawHeroTicketBackground, drawHeroTicketFace, drawHeroTicketFrame, HERO_TICKET_FRAME } from '../sets/heroticket.ts';
 import { box, merge, place, render3d } from '../three.ts';
 import type { ShotDef } from './index.ts';
 
@@ -114,10 +113,10 @@ function drawLoop(ctx: Frame['ctx'], points: Point[], progress: number, front: b
 }
 
 function drawPress(ctx: Frame['ctx'], t: number, impactAt: number) {
-  const slam = ease.outCubic(clamp((t - (impactAt - 0.15)) / 0.11));
-  const release = ease.outCubic(clamp((t - (impactAt + 0.13)) / 0.42));
-  const close = slam * (1 - release);
-  const topY = Math.round(204 + close * 308), bottomY = Math.round(1000 - close * 304);
+  const close = ease.inCubic(clamp((t - (impactAt - 0.32)) / 0.32));
+  const release = ease.outCubic(clamp((t - (impactAt + 0.14)) / 0.25));
+  const amount = close * (1 - release);
+  const topY = Math.round(250 + amount * 276), bottomY = Math.round(1030 - amount * 276);
   // Two independent hydraulic carriages and their piston rods make the cause of the crush clear.
   ctx.fillStyle = '#151A1E'; ctx.fillRect(94, 154, 92, 926); ctx.fillRect(894, 154, 92, 926);
   ctx.fillStyle = '#7A8389'; ctx.fillRect(94, 154, 10, 926); ctx.fillRect(976, 154, 10, 926);
@@ -131,15 +130,40 @@ function drawPress(ctx: Frame['ctx'], t: number, impactAt: number) {
   ctx.fillStyle = '#C2C7CA'; ctx.fillRect(150, topY, 780, 12); ctx.fillRect(150, topY, 14, 120);
   ctx.fillStyle = '#434B51'; ctx.fillRect(176, topY + 30, 726, 18);
   for (let tooth = 0; tooth < 22; tooth++) {
-    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, topY + 62, 20, 32);
+    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, topY + 76, 20, 32);
   }
   ctx.fillStyle = '#111519'; ctx.fillRect(150, bottomY, 780, 104);
   ctx.fillStyle = '#C2C7CA'; ctx.fillRect(150, bottomY + 82, 780, 12); ctx.fillRect(916, bottomY, 14, 104);
-  ctx.fillStyle = '#434B51'; ctx.fillRect(176, bottomY + 25, 726, 20);
+  ctx.fillStyle = '#434B51'; ctx.fillRect(176, bottomY + 5, 726, 20);
   for (let tooth = 0; tooth < 22; tooth++) {
-    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, bottomY + 55, 20, 28);
+    ctx.fillStyle = tooth % 2 ? '#15191C' : '#8A9399'; ctx.fillRect(170 + tooth * 34, bottomY + 28, 20, 28);
   }
-  return { topY, bottomY, close };
+  return { topY, bottomY, close: amount };
+}
+
+function drawCrushChain(ctx: Frame['ctx'], t: number, impactAt: number, topY: number, bottomY: number) {
+  const crush = ease.inCubic(clamp((t - (impactAt - 0.32)) / 0.32));
+  const reveal = ease.outCubic(clamp((t - (impactAt - 0.38)) / 0.08));
+  const release = ease.outCubic(clamp((t - (impactAt + 0.14)) / 0.22));
+  const alpha = reveal * (1 - release);
+  if (alpha <= 0.01) return;
+  const y = (topY + 120 + bottomY) / 2;
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.translate(540, y);
+  ctx.scale(1 - crush * 0.22, 1 - crush * 0.78);
+  ctx.translate(-540, -y);
+  ctx.fillStyle = '#090B0D'; ctx.fillRect(224, y - 29, 632, 58);
+  ctx.fillStyle = '#7F211F'; ctx.fillRect(232, y - 22, 616, 44);
+  const left = 252, step = 82, linkW = 72;
+  for (let i = 0; i < 8; i++) {
+    const x = left + i * step;
+    ctx.fillStyle = '#080A0C'; ctx.fillRect(x - 4, y - 27, linkW + 8, 54);
+    ctx.fillStyle = i % 2 ? '#B82E2A' : '#E43A34'; ctx.fillRect(x, y - 23, linkW, 46);
+    ctx.fillStyle = '#F1F2F3'; ctx.fillRect(x + 12, y - 4, linkW - 24, 8);
+    ctx.fillStyle = '#571815'; ctx.fillRect(x + 5, y - 17, 6, 6); ctx.fillRect(x + linkW - 11, y + 11, 6, 6);
+  }
+  ctx.restore();
 }
 
 function drawPressFront(ctx: Frame['ctx'], topY: number, bottomY: number) {
@@ -171,7 +195,7 @@ export const squeezeRocketShot: ShotDef = {
     const rise = Math.max(0, t - loopAt) * 92;
     const points = Array.from({ length: 129 }, (_, i) => helixPoint(i / 128, turns, t, rise));
     const rig = createCameraRig({
-      width: W, height: H, seed: seed + 901, handheld: 0, hits: [squeezeAt], punch: 0.028, shake: 27,
+      width: W, height: H, seed: seed + 901, handheld: 0, hits: [impactAt], punch: 0.014, shake: 13,
       keyframes: [
         { t: 0, x: -26, y: 24, zoom: 1.015, rot: -0.01 },
         { t: loopAt, x: 22, y: -16, zoom: 1.065, rot: 0.014 },
@@ -179,7 +203,6 @@ export const squeezeRocketShot: ShotDef = {
         { t: rushAt, x: 0, y: 0, zoom: 1, rot: 0, ease: 'out' },
         { t: terminalAt, x: 0, y: 0, zoom: 1, rot: 0 },
       ],
-      whip: [{ at: squeezeAt + 0.08, direction: 'up', duration: 0.32, amount: 0.075 }],
     });
 
     ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.imageSmoothingEnabled = false;
@@ -221,6 +244,7 @@ export const squeezeRocketShot: ShotDef = {
       // Hydraulic jaws have a 150 ms anticipation, a held impact, and a clear release.
       const press = drawPress(ctx, t, impactAt);
       drawLoop(ctx, points, progress, true, 12, '#B92E2A');
+      drawCrushChain(ctx, t, impactAt, press.topY, press.bottomY);
 
       // Ledge and Hedgy remain present through the hit, then recoil, land, curl and point.
       ctx.fillStyle = '#0B0E10'; ctx.fillRect(286, 1118, 514, 172);
@@ -235,17 +259,23 @@ export const squeezeRocketShot: ShotDef = {
       else if (reaction < 0.76) drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.42, pose: 'curl', facing: -1, look: 'up', expression: 'shocked' });
       else drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.76, pose: 'point', facing: -1, look: 'up', expression: 'determined' });
 
-      const emerge = ease.outBack(clamp((t - impactAt + 0.02) / 0.25));
-      const ticketWidth = 280 + 210 * ease.outCubic(clamp((t - (impactAt + 0.12)) / Math.max(0.15, rushAt - impactAt - 0.12)));
+      const emerge = ease.outBack(clamp((t - (impactAt + 0.10)) / 0.2));
+      const ticketWidth = 330 + 210 * ease.outCubic(clamp((t - (impactAt + 0.18)) / Math.max(0.15, rushAt - impactAt - 0.18)));
       const pressAlpha = 1 - ease.outCubic(clamp((t - (rushAt - 0.02)) / 0.16));
-      drawImpactStar(ctx, t, { x: 540, y: 646, size: 128, start: impactAt - 0.025, duration: 0.15, color: '#F2F3F4', seed: seed + 79, cell: 4 });
-      drawBurst(ctx, t, { x: 540, y: 648, seed: seed + 91, count: 38, kind: 'confetti', start: impactAt, life: 1.22, speed: 410, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
-      drawShockwave(ctx, t, { x: 540, y: 648, start: impactAt, duration: 0.48, radius: 16, maxRadius: 500, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
-      if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 650 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
+      drawImpactStar(ctx, t, { x: 540, y: 700, size: 64, start: impactAt, duration: 0.1, color: '#F2F3F4', seed: seed + 79, cell: 4 });
+      drawBurst(ctx, t, { x: 540, y: 700, seed: seed + 91, count: 38, kind: 'confetti', start: impactAt, life: 1.22, speed: 330, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
+      drawShockwave(ctx, t, { x: 540, y: 700, start: impactAt, duration: 0.28, radius: 12, maxRadius: 240, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
+      if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 700 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
       if (rushProgress <= 0) {
-        drawHeroTicketBody(ctx, { x: 540, y: 648, width: ticketWidth, rotation: -0.1, opacity: emerge });
-        drawHeroTicketStamp(ctx, { x: 540, y: 648, width: ticketWidth, rotation: -0.1, stamp, opacity: emerge });
+        drawHeroTicketFace(ctx, { x: 540, y: 700, width: ticketWidth, rotation: -0.018, stamp, opacity: emerge });
         if (pressAlpha > 0.01) drawPressFront(ctx, press.topY, press.bottomY);
+      }
+      const impactPulse = Math.max(0, 1 - Math.abs(t - impactAt) / 0.06);
+      if (impactPulse > 0) {
+        ctx.save(); ctx.globalAlpha *= impactPulse * 0.62; ctx.strokeStyle = '#F2F3F4'; ctx.lineWidth = 4;
+        ctx.strokeRect(452, 666, 176, 68);
+        ctx.fillStyle = '#F2F3F4'; ctx.globalAlpha *= 0.18; ctx.fillRect(484, 691, 112, 18);
+        ctx.restore();
       }
       ctx.restore();
     }
@@ -254,22 +284,15 @@ export const squeezeRocketShot: ShotDef = {
     if (rushProgress > 0) {
       const scaleP = ease.inOutCubic(rushProgress);
       const x = HERO_TICKET_FRAME.x;
-      const y = 648 + (HERO_TICKET_FRAME.y - 648) * scaleP;
-      const width = 490 + (HERO_TICKET_FRAME.width - 490) * scaleP;
-      const rotation = -0.1 + (HERO_TICKET_FRAME.rotation + 0.1) * scaleP;
+      const y = 700 + (HERO_TICKET_FRAME.y - 700) * scaleP;
+      const width = 540 + (HERO_TICKET_FRAME.width - 540) * scaleP;
+      const rotation = -0.018 + (HERO_TICKET_FRAME.rotation + 0.018) * scaleP;
       const revealBorrowed = ease.inOutCubic(clamp((rushProgress - 0.72) / 0.28));
-      drawHeroTicketBody(ctx, { x, y, width, rotation });
-      drawHeroTicketStamp(ctx, { x, y, width, rotation, stamp, opacity: 1 - revealBorrowed });
-      drawHeroTicketStamp(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp, opacity: revealBorrowed });
+      drawHeroTicketFace(ctx, { x, y, width, rotation, stamp, stampOpacity: 1 - revealBorrowed,
+        secondaryStamp: HERO_TICKET_FRAME.stamp, secondaryStampOpacity: revealBorrowed });
     }
 
     ctx.restore();
-    // Quantize the post hit to an actual 30 fps frame so the impact treatment never misses the event.
-    applyImpactFrame(ctx, { x: 0, y: 0, w: W, h: H, cell: 8, t, at: impactAt, fps: 30, seed: seed + 119, threshold: 126 });
-    const flash = Math.max(0, 1 - Math.abs(t - impactAt) / 0.038) * 0.14;
-    if (flash > 0.01) {
-      ctx.save(); ctx.beginPath(); ctx.rect(0, 0, W, H); ctx.clip(); ctx.fillStyle = '#FFFFFF'; ctx.globalAlpha = flash; ctx.fillRect(0, 0, W, H); ctx.restore();
-    }
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const loopAt = eventAt(props, 'loop', dur * 0.22, dur), squeezeAt = eventAt(props, 'squeeze', dur * 0.43, dur);

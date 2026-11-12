@@ -168,13 +168,13 @@ export const priceStairShot: ShotDef = {
       { x: 648, y: 490, w: 370, d: 70, h: 38 },
       { x: 612, y: 582, w: 430, d: 78, h: 40 },
       { x: 576, y: 678, w: 490, d: 86, h: 42 },
-      { x: 540, y: 778, w: 530, d: 92, h: 44 },
+      { x: 660, y: 778, w: 530, d: 92, h: 44 },
     ];
     const landing = steps.at(-1)!;
     const focusX = landing.x;
     const focusY = landing.y + landing.d * 0.5;
     const finalZoom = 1.05;
-    const finalCameraY = -(focusY - H / 2) * finalZoom;
+    const finalCameraY = 760 - H / 2 - (focusY - H / 2) * finalZoom;
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 17, handheld: 0.9,
       keyframes: [
@@ -189,7 +189,7 @@ export const priceStairShot: ShotDef = {
     const trace: Point[] = [
       [884, 270], [826, 314], [750, 330], [730, 382], [718, 402], [700, 454],
       [684, 490], [666, 542], [648, 582], [630, 634], [612, 678], [594, 730],
-      [576, 778], [540, 824],
+      [576, 778], [660, 824],
     ];
     const flightStart = cheaperAt - Math.min(0.5, dur * 0.24);
     const flight = clamp((t - flightStart) / Math.max(0.12, cheaperAt - flightStart));
@@ -231,9 +231,15 @@ export const priceStairShot: ShotDef = {
     if (t >= flightStart) {
       ctx.save();
       ctx.globalAlpha = lerp(0.56, 0.94, flight);
-      const settled = clamp((t - cheaperAt) / 0.22);
+      const landingAge = t - cheaperAt;
+      const squash = landingAge < 0 ? 0 : landingAge < 0.04
+        ? ease.outCubic(landingAge / 0.04)
+        : landingAge < 0.18 ? 1 - ease.outCubic((landingAge - 0.04) / 0.14) : 0;
+      const settled = clamp(landingAge / 0.22);
       const bob = settled > 0 ? Math.sin(t * 8) * (1 - settled) * 3 : 0;
-      drawTicket2D(ctx, ghostX, ghostY - bob, lerp(152, 124, flightEase), { rot: lerp(-0.28, -0.035, flightEase), dark: true });
+      ctx.translate(ghostX, ghostY - bob);
+      ctx.scale(1 + squash * 0.16, 1 - squash * 0.25);
+      drawTicket2D(ctx, 0, 0, lerp(152, 124, flightEase), { rot: lerp(-0.28, -0.035, flightEase), dark: true });
       ctx.restore();
     }
     if (t >= cheaperAt && t < cheaperAt + 0.72) {

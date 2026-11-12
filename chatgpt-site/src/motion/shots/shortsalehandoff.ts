@@ -10,6 +10,24 @@ import type { ShotDef } from './index.ts';
 const W = 1080, H = 1290;
 const ink = '#08090B', deep = '#15171B', steel = '#6D7076', bright = '#D5D7DA', paper = '#EDEDED';
 const mix = (a: number, b: number, p: number) => a + (b - a) * clamp(p);
+type Point = { x: number; y: number };
+
+function screenToLocal(rig: ReturnType<typeof createCameraRig>, point: Point, t: number): Point {
+  const pose = rig.poseAt(t), cx = W / 2, cy = H / 2;
+  const dx = (point.x - (cx + Math.round(pose.x / 4) * 4)) / pose.zoom;
+  const dy = (point.y - (cy + Math.round(pose.y / 4) * 4)) / pose.zoom;
+  const cos = Math.cos(pose.rot), sin = Math.sin(pose.rot);
+  return { x: cx + dx * cos + dy * sin, y: cy - dx * sin + dy * cos };
+}
+
+function localToScreen(rig: ReturnType<typeof createCameraRig>, point: Point, t: number): Point {
+  const pose = rig.poseAt(t), cx = W / 2, cy = H / 2;
+  const dx = point.x - cx, dy = point.y - cy, cos = Math.cos(pose.rot), sin = Math.sin(pose.rot);
+  return {
+    x: cx + Math.round(pose.x / 4) * 4 + pose.zoom * (dx * cos - dy * sin),
+    y: cy + Math.round(pose.y / 4) * 4 + pose.zoom * (dx * sin + dy * cos),
+  };
+}
 
 function eventAt(props: ShotProps, names: string[], fallback: number, dur: number) {
   const wanted = names.map(name => name.toLowerCase());
@@ -155,7 +173,9 @@ export const shortSaleHandoffShot: ShotDef = {
     const beforeLoan = activeT < handoffStart;
     const handoff = ease.outCubic(clamp((activeT - handoffStart) / .44));
     const saleOpen = ease.outCubic(clamp((activeT - sells + .13) / .19));
-    const cashP = ease.outCubic(clamp((activeT - sells) / .42));
+    const payoutLead = Math.min(.14, Math.max(.07, (sells - borrows) * .3));
+    const payoutFlight = Math.min(.24, Math.max(.18, (owes - sells) * .38));
+    const cashP = ease.outCubic(clamp((activeT - (sells - payoutLead)) / payoutFlight));
     const stubP = ease.outCubic(clamp((activeT - (owes - .32)) / .32));
     const pinned = ease.outBack(clamp((activeT - (owes - .035)) / .09));
     const tetherPulse = .68 + .32 * (0.5 + .5 * Math.sin((activeT - owes) * 15));
@@ -212,9 +232,17 @@ export const shortSaleHandoffShot: ShotDef = {
       ctx.fillStyle = i % 2 ? '#4A4D52' : '#999CA2'; ctx.fillRect(saleX - 118 + i * 23, saleY + 129, 4, 32);
     }
 
-    const wristX = 520 + Math.sin(t * 2.2) * 2, wristY = 1040 + Math.sin(t * 5.2) * 2;
-    const stubX = mix(saleX + 68, wristX, stubP), stubY = mix(saleY + 12, wristY, stubP);
-    const pawTicketX = 518, pawTicketY = 1110;
+    const loanTicketScreen = { x: 350, y: 650 };
+    const loanTicketTarget = screenToLocal(rig, loanTicketScreen, activeT);
+    const wristScreen = { x: 520 + Math.sin(t * 2.2) * 2, y: 1040 + Math.sin(t * 5.2) * 2 };
+    const wrist = screenToLocal(rig, wristScreen, activeT);
+    const stubStartScreen = localToScreen(rig, { x: saleX + 68, y: saleY + 12 }, activeT);
+    const stubXy = screenToLocal(rig, {
+      x: mix(stubStartScreen.x, wristScreen.x, stubP),
+      y: mix(stubStartScreen.y, wristScreen.y, stubP),
+    }, activeT);
+    const stubX = stubXy.x, stubY = stubXy.y;
+    const pawTicketX = loanTicketTarget.x, pawTicketY = loanTicketTarget.y;
     const loanTicketX = mix(lenderX + 22, pawTicketX, handoff);
     const loanTicketY = mix(lenderY - 8, pawTicketY, handoff);
     const saleTravel = ease.inOutCubic(clamp((activeT - afterBorrow) / Math.max(.1, beforeSale - afterBorrow)));
@@ -224,8 +252,12 @@ export const shortSaleHandoffShot: ShotDef = {
     } else if (activeT < afterBorrow) {
       ticketX = loanTicketX; ticketY = loanTicketY; ticketRot = mix(-.02, -.055, handoff); ticketSize = 252;
     } else if (activeT < sells) {
-      ticketX = mix(pawTicketX, saleX - 8, saleTravel);
-      ticketY = mix(pawTicketY, saleY - 6, saleTravel);
+      const saleSlotScreen = localToScreen(rig, { x: saleX - 8, y: saleY - 6 }, activeT);
+      const ticketTarget = screenToLocal(rig, {
+        x: mix(loanTicketScreen.x, saleSlotScreen.x, saleTravel),
+        y: mix(loanTicketScreen.y, saleSlotScreen.y, saleTravel),
+      }, activeT);
+      ticketX = ticketTarget.x; ticketY = ticketTarget.y;
       ticketRot = mix(-.055, -.11, saleTravel) + Math.sin(t * 13) * .012; ticketSize = mix(252, 280, saleTravel);
     } else {
       const feed = ease.inOutCubic(clamp((activeT - sells) / .16));
@@ -265,7 +297,7 @@ export const shortSaleHandoffShot: ShotDef = {
       ctx.restore();
     }
 
-    const hedgyX = 690 + Math.sin(t * 1.6) * 3, hedgyY = 1175 + Math.sin(t * 5.3) * 2;
+    const hedgyX = 690 + Math.sin(t * 1.6) * 3, hedgyY = 1145 + Math.sin(t * 5.3) * 2;
     const heroPose = activeT < handoffStart ? 'think' : activeT < handoffStart + .35 ? 'jump' : activeT < sells - .04 ? 'carry' : activeT < sells + .18 ? 'push' : activeT < owes - .05 ? 'carry' : 'shock';
     const facing: 1 | -1 = activeT < sells - .08 ? -1 : 1;
     const expression = activeT < borrows ? 'worried' : activeT < sells ? 'determined' : activeT < owes ? 'smug' : 'shocked';
@@ -293,7 +325,13 @@ export const shortSaleHandoffShot: ShotDef = {
         facing, look: activeT < borrows ? 'up' : 'forward', expression });
     }
     // The payout exits its own drawer and reaches Hedgy's open paw on the sale beat.
-    const cashX = mix(saleX + 22, 590, cashP), cashY = mix(saleY + 164, 917, cashP);
+    const payoutStartScreen = localToScreen(rig, { x: saleX + 22, y: saleY + 164 }, activeT);
+    const payoutScreen = { x: 622, y: 900 };
+    const cashPoint = screenToLocal(rig, {
+      x: mix(payoutStartScreen.x, payoutScreen.x, cashP),
+      y: mix(payoutStartScreen.y, payoutScreen.y, cashP),
+    }, activeT);
+    const cashX = cashPoint.x, cashY = cashPoint.y;
     drawCash(ctx, cashX, cashY, cashP, t);
     if (activeT >= sells + .18 && activeT < owes - .05) {
       drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: 'carry',
@@ -304,8 +342,8 @@ export const shortSaleHandoffShot: ShotDef = {
     if (activeT >= owes - .22) {
       drawReturnStub(ctx, stubX, stubY, 162, t, stubP, pinned);
       if (pinned > .5) {
-        ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wristX - 8, wristY - 12, 8, 30);
-        ctx.fillStyle = '#4F5258'; ctx.fillRect(wristX, wristY - 12, 9, 30);
+        ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wrist.x - 8, wrist.y - 12, 8, 30);
+        ctx.fillStyle = '#4F5258'; ctx.fillRect(wrist.x, wrist.y - 12, 9, 30);
       }
     }
 

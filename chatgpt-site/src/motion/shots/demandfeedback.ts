@@ -247,7 +247,7 @@ export const demandFeedbackShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx, seed } = frame, dur = Math.max(0.25, frame.dur), t = clamp(frame.t, 0, dur);
     const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), covers = buyTimes(dur);
-    const impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.115), 0, dur);
+    const impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.1125), 0, dur);
     const reactions = [impactAt, covers[0]! + 0.16, covers[1]! + 0.16];
     const path: Point[] = [
       { x: 518, y: 1240 }, { x: 518, y: 1102 }, { x: 456, y: 1046 }, { x: 300, y: 950 },
@@ -259,14 +259,19 @@ export const demandFeedbackShot: ShotDef = {
     const anchors = [3, 8, 12];
     const raised = path.map((point, pointIndex) => {
       let lift = 0;
-      for (let i = 0; i < covers.length; i++) if (pointIndex > anchors[i]!) lift += ease.outCubic(clamp((t - covers[i]!) / 0.12)) * 48;
+      for (let i = 0; i < covers.length; i++) if (pointIndex > anchors[i]!) {
+        lift += ease.outCubic(clamp((t - (covers[i]! - 0.1)) / 0.16)) * 64;
+      }
       return { x: point.x, y: point.y - lift };
     });
     const fractions = anchors.map(anchor => anchor / (path.length - 1));
     let lineProgress = lerp(0, fractions[0]!, ease.outCubic(clamp((t - scareAt) / Math.max(0.08, impactAt - scareAt))));
-    if (t >= covers[0]!) lineProgress = lerp(fractions[0]!, fractions[1]!, ease.outCubic(clamp((t - covers[0]!) / 0.27)));
-    if (t >= covers[1]!) lineProgress = lerp(fractions[1]!, fractions[2]!, ease.outCubic(clamp((t - covers[1]!) / 0.27)));
-    if (t >= covers[2]!) lineProgress = lerp(fractions[2]!, 1, ease.outCubic(clamp((t - covers[2]!) / 0.55)));
+    // Each cover advances to the next physical track segment on its own impact beat.
+    covers.forEach((at, index) => {
+      const from = fractions[index]!, to = fractions[index + 1] ?? 1;
+      const p = ease.outBack(clamp((t - (at - 0.04)) / 0.13));
+      if (t >= at - 0.04) lineProgress = lerp(from, to, Math.min(1, p));
+    });
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 121, handheld: 0.75, hits: [impactAt, ...covers], punch: 0.02, shake: 12,
       keyframes: [
@@ -322,11 +327,11 @@ export const demandFeedbackShot: ShotDef = {
       drawTicket2D(ctx, x, 1142 + i * 30, 82 + i * 8, { rot: -0.1 + Math.sin(t * 5 + i) * 0.06 });
     }
     const hedgyX = 800 + 8 * Math.sin(t * 5);
-    drawHedgy(ctx, { x: hedgyX, y: 1060, scale: 4.6, t, pose: 'run', facing: 1, look: t < impactAt ? 'forward' : 'up', expression: t < impactAt ? 'determined' : 'shocked' });
+    drawHedgy(ctx, { x: hedgyX, y: 1050, scale: 4.6, t, pose: 'run', facing: 1, look: t < impactAt ? 'forward' : 'up', expression: t < impactAt ? 'determined' : 'shocked' });
     ctx.restore(); ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.115), 0, dur), covers = buyTimes(dur);
+    const scareAt = eventAt(props, 'scaring', dur * 0.12, dur), impactAt = clamp(Math.max(scareAt + 0.26, dur * 0.1125), 0, dur), covers = buyTimes(dur);
     const cues: Cue[] = [
       { t: scareAt, kind: 'whoosh', gain: 0.68, pan: 0.02, len: 0.2 },
       { t: impactAt, kind: 'thud', gain: 1.24, pan: -0.18 },

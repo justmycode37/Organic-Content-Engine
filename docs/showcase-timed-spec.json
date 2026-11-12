@@ -409,9 +409,9 @@
  ],
  "captions": [
   {
-   "text": "Hedgy sells a concert ticket that",
+   "text": "Hedgy sells a concert",
    "start": 0.04,
-   "end": 1.375,
+   "end": 0.946,
    "words": [
     {
      "start": 0.04,
@@ -428,7 +428,14 @@
     {
      "start": 0.62,
      "end": 0.922
-    },
+    }
+   ]
+  },
+  {
+   "text": "ticket that isn't his.",
+   "start": 0.946,
+   "end": 2.407,
+   "words": [
     {
      "start": 0.946,
      "end": 1.155
@@ -436,14 +443,7 @@
     {
      "start": 1.189,
      "end": 1.317
-    }
-   ]
-  },
-  {
-   "text": "isn't his.",
-   "start": 1.375,
-   "end": 2.367,
-   "words": [
+    },
     {
      "start": 1.375,
      "end": 1.584
@@ -455,9 +455,9 @@
    ]
   },
   {
-   "text": "That's short selling: he borrows it",
+   "text": "That's short selling",
    "start": 2.407,
-   "end": 4.079,
+   "end": 3.533,
    "words": [
     {
      "start": 2.407,
@@ -470,7 +470,14 @@
     {
      "start": 2.976,
      "end": 3.417
-    },
+    }
+   ]
+  },
+  {
+   "text": "he borrows it, sells it",
+   "start": 3.533,
+   "end": 4.474,
+   "words": [
     {
      "start": 3.533,
      "end": 3.591
@@ -482,14 +489,7 @@
     {
      "start": 3.928,
      "end": 4.044
-    }
-   ]
-  },
-  {
-   "text": "sells it, and owes the lender",
-   "start": 4.079,
-   "end": 5.193,
-   "words": [
+    },
     {
      "start": 4.079,
      "end": 4.311
@@ -497,7 +497,14 @@
     {
      "start": 4.346,
      "end": 4.45
-    },
+    }
+   ]
+  },
+  {
+   "text": "and owes the lender a ticket back.",
+   "start": 4.474,
+   "end": 6.24,
+   "words": [
     {
      "start": 4.474,
      "end": 4.578
@@ -513,14 +520,7 @@
     {
      "start": 4.961,
      "end": 5.159
-    }
-   ]
-  },
-  {
-   "text": "a ticket back.",
-   "start": 5.193,
-   "end": 6.2,
-   "words": [
+    },
     {
      "start": 5.193,
      "end": 5.217
@@ -536,9 +536,9 @@
    ]
   },
   {
-   "text": "He bets prices will fall, so",
+   "text": "He bets prices will fall",
    "start": 6.24,
-   "end": 7.459,
+   "end": 7.331,
    "words": [
     {
      "start": 6.24,
@@ -559,18 +559,18 @@
     {
      "start": 7.041,
      "end": 7.308
-    },
-    {
-     "start": 7.331,
-     "end": 7.401
     }
    ]
   },
   {
-   "text": "he can buy it back cheaper.",
-   "start": 7.459,
-   "end": 8.767,
+   "text": "so he can buy it back cheaper.",
+   "start": 7.331,
+   "end": 8.807,
    "words": [
+    {
+     "start": 7.331,
+     "end": 7.401
+    },
     {
      "start": 7.459,
      "end": 7.517
@@ -629,9 +629,9 @@
    ]
   },
   {
-   "text": "as collateral",
+   "text": "as collateral while he waits",
    "start": 10.131,
-   "end": 11.233,
+   "end": 11.795,
    "words": [
     {
      "start": 10.131,
@@ -640,14 +640,7 @@
     {
      "start": 10.328,
      "end": 11.083
-    }
-   ]
-  },
-  {
-   "text": "while he waits for the hype",
-   "start": 11.273,
-   "end": 12.237,
-   "words": [
+    },
     {
      "start": 11.273,
      "end": 11.494
@@ -659,7 +652,14 @@
     {
      "start": 11.598,
      "end": 11.772
-    },
+    }
+   ]
+  },
+  {
+   "text": "for the hype to fade.",
+   "start": 11.795,
+   "end": 13.007,
+   "words": [
     {
      "start": 11.795,
      "end": 11.888
@@ -671,14 +671,7 @@
     {
      "start": 12.028,
      "end": 12.202
-    }
-   ]
-  },
-  {
-   "text": "to fade.",
-   "start": 12.237,
-   "end": 12.967,
-   "words": [
+    },
     {
      "start": 12.237,
      "end": 12.306
@@ -692,7 +685,7 @@
   {
    "text": "Then the band announces a reunion",
    "start": 13.007,
-   "end": 14.933,
+   "end": 14.973,
    "words": [
     {
      "start": 13.007,
@@ -721,9 +714,9 @@
    ]
   },
   {
-   "text": "and fans rush for the last",
+   "text": "and fans rush for",
    "start": 14.973,
-   "end": 16.064,
+   "end": 15.739,
    "words": [
     {
      "start": 14.973,
@@ -740,7 +733,14 @@
     {
      "start": 15.623,
      "end": 15.704
-    },
+    }
+   ]
+  },
+  {
+   "text": "the last tickets.",
+   "start": 15.739,
+   "end": 16.94,
+   "words": [
     {
      "start": 15.739,
      "end": 15.809
@@ -748,14 +748,7 @@
     {
      "start": 15.855,
      "end": 16.03
-    }
-   ]
-  },
-  {
-   "text": "tickets.",
-   "start": 16.064,
-   "end": 16.9,
-   "words": [
+    },
     {
      "start": 16.064,
      "end": 16.738
@@ -778,9 +771,9 @@
    ]
   },
   {
-   "text": "Hedgy's losses grow",
+   "text": "Hedgy's losses grow, so the",
    "start": 17.706,
-   "end": 19.033,
+   "end": 19.352,
    "words": [
     {
      "start": 17.706,
@@ -793,14 +786,7 @@
     {
      "start": 18.333,
      "end": 18.89
-    }
-   ]
-  },
-  {
-   "text": "so the broker demands more collateral.",
-   "start": 19.073,
-   "end": 20.867,
-   "words": [
+    },
     {
      "start": 19.073,
      "end": 19.201
@@ -808,7 +794,14 @@
     {
      "start": 19.247,
      "end": 19.317
-    },
+    }
+   ]
+  },
+  {
+   "text": "broker demands more collateral.",
+   "start": 19.352,
+   "end": 20.907,
+   "words": [
     {
      "start": 19.352,
      "end": 19.572
@@ -859,21 +852,14 @@
    ]
   },
   {
-   "text": "buy",
+   "text": "buy a ticket back now.",
    "start": 21.94,
-   "end": 22.6,
+   "end": 23.94,
    "words": [
     {
      "start": 21.94,
      "end": 22.44
-    }
-   ]
-  },
-  {
-   "text": "a ticket back now.",
-   "start": 22.64,
-   "end": 23.9,
-   "words": [
+    },
     {
      "start": 22.64,
      "end": 22.71
@@ -924,9 +910,9 @@
    ]
   },
   {
-   "text": "push prices higher",
+   "text": "push prices higher, scaring other short",
    "start": 25.345,
-   "end": 26.6,
+   "end": 27.418,
    "words": [
     {
      "start": 25.345,
@@ -939,14 +925,7 @@
     {
      "start": 25.902,
      "end": 26.448
-    }
-   ]
-  },
-  {
-   "text": "scaring other short sellers into buying",
-   "start": 26.64,
-   "end": 28.323,
-   "words": [
+    },
     {
      "start": 26.64,
      "end": 26.965
@@ -958,7 +937,14 @@
     {
      "start": 27.197,
      "end": 27.383
-    },
+    }
+   ]
+  },
+  {
+   "text": "sellers into buying back too.",
+   "start": 27.418,
+   "end": 29.307,
+   "words": [
     {
      "start": 27.418,
      "end": 27.72
@@ -970,14 +956,7 @@
     {
      "start": 28.033,
      "end": 28.265
-    }
-   ]
-  },
-  {
-   "text": "back too.",
-   "start": 28.323,
-   "end": 29.267,
-   "words": [
+    },
     {
      "start": 28.323,
      "end": 28.498
@@ -989,9 +968,9 @@
    ]
   },
   {
-   "text": "That feedback loop is a short",
+   "text": "That feedback loop is",
    "start": 29.307,
-   "end": 30.526,
+   "end": 30.236,
    "words": [
     {
      "start": 29.307,
@@ -1008,7 +987,14 @@
     {
      "start": 30.108,
      "end": 30.201
-    },
+    }
+   ]
+  },
+  {
+   "text": "a short squeeze.",
+   "start": 30.236,
+   "end": 31.465,
+   "words": [
     {
      "start": 30.236,
      "end": 30.271
@@ -1016,14 +1002,7 @@
     {
      "start": 30.305,
      "end": 30.491
-    }
-   ]
-  },
-  {
-   "text": "squeeze.",
-   "start": 30.526,
-   "end": 31.465,
-   "words": [
+    },
     {
      "start": 30.526,
      "end": 31.165

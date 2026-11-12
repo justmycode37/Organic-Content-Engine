@@ -306,7 +306,8 @@ function drawHand(ctx: Frame['ctx'], x: number, y: number, scale: number, angle:
 function drawLastTicketDeparture(ctx: Frame['ctx'], time: number, lastAt: number, dur: number, centerX: number, ticketY: number) {
   const age = time - lastAt;
   if (age < 0) return;
-  const p = ease.outCubic(clamp(age / Math.max(.2, dur - lastAt)));
+  const departureHold = 3 / 30;
+  const p = ease.outCubic(clamp((age - departureHold) / Math.max(.2, dur - lastAt - departureHold)));
   const start = { x: centerX, y: ticketY }, control = { x: 356, y: 680 }, end = { x: 214, y: 704 };
   const pointAt = (u: number) => {
     const inv = 1 - u;

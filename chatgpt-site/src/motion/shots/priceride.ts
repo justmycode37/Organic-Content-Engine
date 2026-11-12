@@ -253,17 +253,17 @@ function drawSaleLevel(ctx: Frame['ctx'], saleY: number, markerX: number) {
 }
 
 function drawTether(ctx: Frame['ctx'], from: Point, to: Point, tension: number) {
-  const sag = (1 - tension) * 20;
+  const sag = (1 - tension) * 40;
   const points = [from, { x: from.x + (to.x - from.x) * 0.34, y: from.y + (to.y - from.y) * 0.34 + sag },
     { x: from.x + (to.x - from.x) * 0.68, y: from.y + (to.y - from.y) * 0.68 + sag * 0.45 }, to];
   ctx.save();
   ctx.strokeStyle = '#101216';
-  ctx.lineWidth = 9;
+  ctx.lineWidth = 12;
   ctx.beginPath(); ctx.moveTo(snap(points[0]!.x), snap(points[0]!.y));
   for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
   ctx.stroke();
   ctx.strokeStyle = '#D6D8DC';
-  ctx.lineWidth = 4;
+  ctx.lineWidth = 6;
   ctx.beginPath(); ctx.moveTo(snap(points[0]!.x), snap(points[0]!.y));
   for (let i = 1; i < points.length; i++) ctx.lineTo(snap(points[i]!.x), snap(points[i]!.y));
   ctx.stroke();
@@ -320,11 +320,12 @@ export const priceRideShot: ShotDef = {
     drawSaleLevel(ctx, saleY, markerX);
 
     const shocked = t >= lossesAt;
-    const lossPull = easeOut((t - lossesAt) / .24);
-    const hedgyX = 780 - 42 * lossPull, hedgyY = 1080 + 16 * lossPull;
+    const tetherSnap = easeOut((t - jumpAt) / .12);
+    const lossPull = easeOut((t - lossesAt) / .12);
+    const hedgyX = 780 + 40 * lossPull, hedgyY = 1080 + 30 * lossPull;
     const tetherStart = { x: hedgyX - 56, y: hedgyY - 88 };
     const saleMarker = { x: markerX - 28, y: saleY - 4 };
-    drawTether(ctx, tetherStart, saleMarker, lossPull);
+    drawTether(ctx, tetherStart, saleMarker, tetherSnap);
 
     // The grey dashed trace stays attached to Hedgy while the camera chases the rising market.
     drawHedgy(ctx, {

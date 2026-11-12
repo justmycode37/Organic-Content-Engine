@@ -284,8 +284,8 @@ export const announcementShot: ShotDef = {
     drawCurtains(ctx, open, t, curtainStart);
 
     // Hedgy starts low in the front balcony, then pops upright in a clear shock pose.
-    const pop = ease.outBack(clamp((t - reunionAt) / .17));
-    const feet = 1190 - pop * 44;
+    const pop = ease.outBack(clamp((t - reunionAt) / .12));
+    const feet = 1150 - pop * 60;
     const pose = t < reunionAt ? 'peek' : 'shock';
     const poseT = Math.max(0, t - reunionAt);
     ctx.fillStyle = '#08080A'; ctx.fillRect(104, 1218, 310, 20);
