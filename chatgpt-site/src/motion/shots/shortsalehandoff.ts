@@ -176,7 +176,7 @@ export const shortSaleHandoffShot: ShotDef = {
     const payoutLead = Math.min(.14, Math.max(.07, (sells - borrows) * .3));
     const payoutFlight = Math.min(.24, Math.max(.18, (owes - sells) * .38));
     const cashP = ease.outCubic(clamp((activeT - (sells - payoutLead)) / payoutFlight));
-    const stubP = ease.outCubic(clamp((activeT - (owes - .32)) / .32));
+    const stubP = clamp((activeT - (owes - .42)) / .42);
     const pinned = ease.outBack(clamp((activeT - (owes - .035)) / .09));
     const tetherPulse = .68 + .32 * (0.5 + .5 * Math.sin((activeT - owes) * 15));
 
@@ -234,12 +234,15 @@ export const shortSaleHandoffShot: ShotDef = {
 
     const loanTicketScreen = { x: 350, y: 650 };
     const loanTicketTarget = screenToLocal(rig, loanTicketScreen, activeT);
-    const wristScreen = { x: 520 + Math.sin(t * 2.2) * 2, y: 1040 + Math.sin(t * 5.2) * 2 };
+    const wristScreen = { x: 650 + Math.sin(t * 2.2) * 2, y: 1210 + Math.sin(t * 5.2) * 2 };
     const wrist = screenToLocal(rig, wristScreen, activeT);
     const stubStartScreen = localToScreen(rig, { x: saleX + 68, y: saleY + 12 }, activeT);
+    const dropP = ease.inOutCubic(clamp(stubP / .72));
+    const returnP = ease.inOutCubic(clamp((stubP - .72) / .28));
     const stubXy = screenToLocal(rig, {
-      x: mix(stubStartScreen.x, wristScreen.x, stubP),
-      y: mix(stubStartScreen.y, wristScreen.y, stubP),
+      // Drop down the clear right edge first, then slide across below Hedgy's face to his paw.
+      x: mix(stubStartScreen.x, wristScreen.x, returnP),
+      y: mix(mix(stubStartScreen.y, wristScreen.y + 45, dropP), wristScreen.y, returnP),
     }, activeT);
     const stubX = stubXy.x, stubY = stubXy.y;
     const pawTicketX = loanTicketTarget.x, pawTicketY = loanTicketTarget.y;
@@ -267,7 +270,7 @@ export const shortSaleHandoffShot: ShotDef = {
 
     // Loan origin, continuous tether, and perforation clip are drawn behind the ticket.
     const tetherSourceX = lenderX - 104, tetherSourceY = lenderY + 9;
-    let tetherEndX = beforeLoan ? ticketX + ticketSize * .34 : activeT < sells ? ticketX + ticketSize * .34 : stubX - 116;
+    let tetherEndX = beforeLoan ? ticketX + ticketSize * .34 : activeT < sells ? ticketX + ticketSize * .34 : stubX + 84;
     let tetherEndY = beforeLoan ? ticketY : activeT < sells ? ticketY : stubY;
     ctx.save(); ctx.globalAlpha *= activeT < borrows ? .26 : 1;
     ctx.strokeStyle = '#F0F2F4'; ctx.lineWidth = activeT >= owes ? 14 : 9; ctx.beginPath();
@@ -275,7 +278,7 @@ export const shortSaleHandoffShot: ShotDef = {
     if (activeT < sells) ctx.bezierCurveTo(lenderX + 90, lenderY + 74, ticketX - 130, ticketY - 70, tetherEndX, tetherEndY);
     else {
       ctx.bezierCurveTo(lenderX + 154, lenderY + 88, saleX - 200, saleY - 114, saleX - 16, saleY - 8);
-      ctx.bezierCurveTo(saleX + 132, saleY + 94, stubX - 154, stubY - 130, tetherEndX, tetherEndY);
+      ctx.bezierCurveTo(saleX + 160, saleY + 150, tetherEndX + 120, stubY - 100, tetherEndX, tetherEndY);
     }
     ctx.stroke(); ctx.restore();
     ctx.strokeStyle = activeT >= owes ? '#FFFFFF' : '#C8CACE'; ctx.lineWidth = activeT >= owes ? 4 + tetherPulse * 2 : 3;
@@ -283,7 +286,7 @@ export const shortSaleHandoffShot: ShotDef = {
     if (activeT < sells) ctx.bezierCurveTo(lenderX + 90, lenderY + 74, ticketX - 130, ticketY - 70, tetherEndX, tetherEndY);
     else {
       ctx.bezierCurveTo(lenderX + 154, lenderY + 88, saleX - 200, saleY - 114, saleX - 16, saleY - 8);
-      ctx.bezierCurveTo(saleX + 132, saleY + 94, stubX - 154, stubY - 130, tetherEndX, tetherEndY);
+      ctx.bezierCurveTo(saleX + 160, saleY + 150, tetherEndX + 120, stubY - 100, tetherEndX, tetherEndY);
     }
     ctx.stroke();
     ctx.fillStyle = '#E8EAEC'; ctx.fillRect(tetherSourceX - 5, tetherSourceY - 6, 12, 12);
@@ -297,13 +300,15 @@ export const shortSaleHandoffShot: ShotDef = {
       ctx.restore();
     }
 
-    const hedgyX = 690 + Math.sin(t * 1.6) * 3, hedgyY = 1145 + Math.sin(t * 5.3) * 2;
-    const heroPose = activeT < handoffStart ? 'think' : activeT < handoffStart + .35 ? 'jump' : activeT < sells - .04 ? 'carry' : activeT < sells + .18 ? 'push' : activeT < owes - .05 ? 'carry' : 'shock';
+    // Keep the lower-right exchange clear: the raised paw lands beside the return stub,
+    // while the payout stays above and to the right of Hedgy's face.
+    const hedgyX = 460 + Math.sin(t * 1.6) * 3, hedgyY = 1240 + Math.sin(t * 5.3) * 2;
+    const heroPose = activeT < handoffStart ? 'think' : activeT < handoffStart + .35 ? 'jump' : activeT < sells - .04 ? 'carry' : activeT < sells + .18 ? 'push' : activeT < owes - .05 ? 'carry' : 'push';
     const facing: 1 | -1 = activeT < sells - .08 ? -1 : 1;
     const expression = activeT < borrows ? 'worried' : activeT < sells ? 'determined' : activeT < owes ? 'smug' : 'shocked';
-    ctx.fillStyle = '#0B0C0E'; ctx.fillRect(hedgyX - 206, hedgyY + 6, 412, 18);
-    ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 151, hedgyY + 10, 302, 7);
-    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: heroPose, facing,
+    ctx.fillStyle = '#0B0C0E'; ctx.fillRect(hedgyX - 174, hedgyY + 6, 348, 18);
+    ctx.fillStyle = '#4C4F55'; ctx.fillRect(hedgyX - 127, hedgyY + 10, 254, 7);
+    drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 5, t: Math.max(0, activeT - handoffStart), pose: heroPose, facing,
       look: activeT < borrows ? 'up' : activeT < owes ? 'forward' : 'down', expression });
 
     if (!beforeLoan && activeT < sells + .17) {
@@ -321,12 +326,12 @@ export const shortSaleHandoffShot: ShotDef = {
     }
     if (!beforeLoan && activeT < borrows + .12) {
       // The near paw crosses the tether clip, completing the lender-to-Hedgy handoff.
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: heroPose,
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 5, t: Math.max(0, activeT - handoffStart), pose: heroPose,
         facing, look: activeT < borrows ? 'up' : 'forward', expression });
     }
     // The payout exits its own drawer and reaches Hedgy's open paw on the sale beat.
     const payoutStartScreen = localToScreen(rig, { x: saleX + 22, y: saleY + 164 }, activeT);
-    const payoutScreen = { x: 622, y: 900 };
+    const payoutScreen = { x: 650, y: 900 };
     const cashPoint = screenToLocal(rig, {
       x: mix(payoutStartScreen.x, payoutScreen.x, cashP),
       y: mix(payoutStartScreen.y, payoutScreen.y, cashP),
@@ -334,12 +339,12 @@ export const shortSaleHandoffShot: ShotDef = {
     const cashX = cashPoint.x, cashY = cashPoint.y;
     drawCash(ctx, cashX, cashY, cashP, t);
     if (activeT >= sells + .18 && activeT < owes - .05) {
-      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 6, t: Math.max(0, activeT - handoffStart), pose: 'carry',
+      drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: 5, t: Math.max(0, activeT - handoffStart), pose: 'carry',
         facing: 1, look: 'forward', expression: 'smug' });
     }
 
     // The perforated RETURN 1 half travels back from the sale slot and pins to Hedgy's wrist on “owes”.
-    if (activeT >= owes - .22) {
+    if (activeT >= owes - .42) {
       drawReturnStub(ctx, stubX, stubY, 162, t, stubP, pinned);
       if (pinned > .5) {
         ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wrist.x - 8, wrist.y - 12, 8, 30);

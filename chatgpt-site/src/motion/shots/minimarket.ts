@@ -211,27 +211,32 @@ function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: nu
     const entryYNow = 1310 + ((y + 168) - 1310) * p;
     drawTicket2D(ctx, entryXNow, entryYNow, 86 - 16 * p, { rot: -0.13 * (1 - p) });
   }
-  // One ticket leaves early, lifts into a clear hero beat, then drops into the buyer's hand.
+  // One ticket leaves early, arcs clear of the rack, then drops into the buyer's hand.
   const flightEnd = demandAt + 0.58;
   if (t >= departureAt && t < flightEnd) {
     const fromX = startX + soldSlot * slotGap, fromY = y + 168;
-    const heroX = 710, heroY = 430, launchEnd = departureAt + 0.22, carryAt = demandAt + 0.12;
+    const heroX = 862, heroY = 392, launchEnd = departureAt + 0.34, carryAt = demandAt + 0.12;
     let ticketX: number, ticketY: number, ticketSize: number, flight: number;
     if (t < launchEnd) {
-      flight = ease.outCubic(progress(t, departureAt, 0.22));
+      flight = ease.outCubic(progress(t, departureAt, 0.34));
       ticketX = fromX + (heroX - fromX) * flight;
-      ticketY = fromY + (heroY - fromY) * flight - Math.sin(flight * Math.PI) * 22;
-      ticketSize = 70 + 68 * flight;
+      ticketY = fromY + (heroY - fromY) * flight - Math.sin(flight * Math.PI) * 34;
+      ticketSize = 78 + 94 * flight;
     } else if (t < carryAt) {
-      flight = 0;
-      ticketX = heroX; ticketY = heroY; ticketSize = 138;
+      flight = 1;
+      ticketX = heroX; ticketY = heroY; ticketSize = 172;
     } else {
       flight = ease.outCubic(progress(t, carryAt, 0.46));
       ticketX = heroX + (846 - heroX) * flight;
       ticketY = heroY + (y + h + 70 - heroY) * flight;
-      ticketSize = 138 - 56 * flight;
+      ticketSize = 172 - 90 * flight;
     }
     drawTicket2D(ctx, ticketX, ticketY, ticketSize, { rot: -0.03 - flight * 0.14 });
+    // The glint straddles the ticket's upper-left edge so it stays distinct against the paper.
+    const glint = Math.max(20, ticketSize * 0.24), glintX = ticketX - ticketSize * 0.52, glintY = ticketY - ticketSize * 0.22;
+    rect(ctx, '#DDE1E2', glintX - glint / 2, glintY - 4, glint, 8);
+    rect(ctx, '#DDE1E2', glintX - 4, glintY - glint / 2, 8, glint);
+    rect(ctx, '#FFFFFF', glintX - 6, glintY - 6, 12, 12);
     rect(ctx, '#F1F3F2', ticketX - ticketSize * 0.52, ticketY + 20, 12, 4);
     rect(ctx, '#BFC6C9', ticketX + ticketSize * 0.48, ticketY - 16, 8, 4);
   } else if (t >= flightEnd) {
@@ -244,12 +249,12 @@ function drawRack(ctx: Frame['ctx'], t: number, transitionT: number, queueAt: nu
   drawToken(ctx, x + 110, y + h + 14, 44);
   drawToken(ctx, x + 188, y + h + 14, 44);
   drawToken(ctx, x + 266, y + h + 14, 44);
-  const tokenJoinAt = Math.max(0, queueAt - 0.24);
-  const tokenP = progress(t, tokenJoinAt, 0.22), joinP = ease.outCubic(tokenP);
+  const tokenJoinAt = queueAt;
+  const tokenP = progress(t, tokenJoinAt, 0.32), joinP = ease.outCubic(tokenP);
   const rowY = y + h + 14;
-  const joinX = 944 - 262 * joinP;
-  const joinY = rowY - (1 - joinP) * 108 - Math.sin(joinP * Math.PI) * 22;
-  if (t >= tokenJoinAt - 0.04) drawToken(ctx, joinX, joinY, 42 + 16 * joinP, true);
+  const joinX = 956 - 282 * joinP;
+  const joinY = rowY - (1 - joinP) * 126 - Math.sin(joinP * Math.PI) * 28;
+  if (t >= tokenJoinAt - 0.04) drawToken(ctx, joinX, joinY, 48 + 28 * joinP, true);
 }
 
 function drawCrowdHands(ctx: Frame['ctx'], t: number, queueAt: number) {

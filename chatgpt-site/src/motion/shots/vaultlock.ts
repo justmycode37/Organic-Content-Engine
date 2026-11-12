@@ -234,7 +234,8 @@ export const vaultLockShot: ShotDef = {
     const collateralAt = eventTime(props, 'collateral', dur, 0.64);
     // The cash lands early enough to read before the door closes; narration events stay intact for cues.
     const cashLandAt = Math.min(moneyAt, dur * 0.195);
-    const lockAt = Math.min(collateralAt, dur * 0.276);
+    // Let the landed cash read in the open chamber before the wheel starts to cover it.
+    const lockAt = Math.max(Math.min(collateralAt, dur * 0.276), cashLandAt + 0.36);
     const lockStartAt = Math.max(0, lockAt - 0.08);
     const rig = createCameraRig({
       width: W, height: H, seed: seed + 47, handheld: 1.4,
@@ -263,12 +264,12 @@ export const vaultLockShot: ShotDef = {
 
     // Three readable paper bundles travel from the sale receipt into the chamber.
     const cash = [
-      { start: [948, 435] as Point, end: [528, 574] as Point, delay: 0, angle: -0.14, size: 1.12 },
-      { start: [1002, 527] as Point, end: [540, 610] as Point, delay: 0.055, angle: 0.08, size: 1.34 },
-      { start: [936, 630] as Point, end: [552, 646] as Point, delay: 0.11, angle: -0.1, size: 1.16 },
+      { start: [948, 435] as Point, end: [520, 594] as Point, delay: 0, angle: -0.14, size: 1.75 },
+      { start: [1002, 527] as Point, end: [540, 610] as Point, delay: 0.055, angle: 0.08, size: 2.0 },
+      { start: [936, 630] as Point, end: [560, 626] as Point, delay: 0.11, angle: -0.1, size: 1.8 },
     ];
     cash.forEach((bundle, index) => {
-      // The stacks arrive together as a readable bundle, centred around the main cash at (540, 610).
+      // The enlarged stacks overlap into one clear cash bundle centred near (540, 610).
       const cashStart = Math.max(0, cashLandAt - 0.42);
       const cashSpan = Math.max(0.24, cashLandAt - cashStart);
       const delay = Math.min(bundle.delay, cashSpan * 0.35);

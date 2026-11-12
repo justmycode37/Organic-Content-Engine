@@ -9,6 +9,7 @@ import type { ShotDef } from './index.ts';
 
 const W = 1080, H = 1290, RED = '#E43A34', INK = '#090B0D', PAPER = '#E5E7E9';
 const TAU = Math.PI * 2;
+const IMPACT_HOLD = 3 / 30;
 type Point = { x: number; y: number; z: number; u: number; angle: number };
 
 function makeTower() {
@@ -114,7 +115,7 @@ function drawLoop(ctx: Frame['ctx'], points: Point[], progress: number, front: b
 
 function drawPress(ctx: Frame['ctx'], t: number, impactAt: number) {
   const close = ease.inCubic(clamp((t - (impactAt - 0.32)) / 0.32));
-  const release = ease.outCubic(clamp((t - (impactAt + 0.14)) / 0.25));
+  const release = ease.outCubic(clamp((t - (impactAt + IMPACT_HOLD)) / 0.25));
   const amount = close * (1 - release);
   const topY = Math.round(250 + amount * 276), bottomY = Math.round(1030 - amount * 276);
   // Two independent hydraulic carriages and their piston rods make the cause of the crush clear.
@@ -144,14 +145,14 @@ function drawPress(ctx: Frame['ctx'], t: number, impactAt: number) {
 function drawCrushChain(ctx: Frame['ctx'], t: number, impactAt: number, topY: number, bottomY: number) {
   const crush = ease.inCubic(clamp((t - (impactAt - 0.32)) / 0.32));
   const reveal = ease.outCubic(clamp((t - (impactAt - 0.38)) / 0.08));
-  const release = ease.outCubic(clamp((t - (impactAt + 0.14)) / 0.22));
+  const release = ease.outCubic(clamp((t - (impactAt + IMPACT_HOLD)) / 0.22));
   const alpha = reveal * (1 - release);
   if (alpha <= 0.01) return;
   const y = (topY + 120 + bottomY) / 2;
   ctx.save();
   ctx.globalAlpha *= alpha;
   ctx.translate(540, y);
-  ctx.scale(1 - crush * 0.22, 1 - crush * 0.78);
+  ctx.scale(1 - crush * 0.22, 1 - crush * 0.6);
   ctx.translate(-540, -y);
   ctx.fillStyle = '#090B0D'; ctx.fillRect(224, y - 29, 632, 58);
   ctx.fillStyle = '#7F211F'; ctx.fillRect(232, y - 22, 616, 44);
@@ -226,7 +227,7 @@ export const squeezeRocketShot: ShotDef = {
       ]);
       drawLoop(ctx, points, progress, true, 25, RED);
 
-      const chainAlpha = 1 - clamp((t - impactAt + 0.025) / 0.2);
+      const chainAlpha = 1 - ease.outCubic(clamp((t - (impactAt + IMPACT_HOLD)) / 0.16));
       if (chainAlpha > 0) {
         ctx.save(); ctx.globalAlpha *= chainAlpha;
         const chainCount = 10, offset = (t * 0.22) % 1;
@@ -260,21 +261,25 @@ export const squeezeRocketShot: ShotDef = {
       else drawHedgy(ctx, { x: hedgyX, y: 1118, scale: 6.15, t: reaction - 0.76, pose: 'point', facing: -1, look: 'up', expression: 'determined' });
 
       const emerge = ease.outBack(clamp((t - (impactAt + 0.10)) / 0.2));
-      const ticketWidth = 330 + 210 * ease.outCubic(clamp((t - (impactAt + 0.18)) / Math.max(0.15, rushAt - impactAt - 0.18)));
+      const settleProgress = ease.outCubic(clamp((t - (impactAt + 0.1)) / 0.2));
+      const ticketHoldWidth = 432 + 228 * settleProgress;
+      const ticketGrowAt = Math.max(impactAt + 0.3, rushAt - 0.36);
+      const flightScale = ease.inOutCubic(clamp((t - ticketGrowAt) / Math.max(0.1, rushAt - ticketGrowAt)));
+      const ticketWidth = Math.round((ticketHoldWidth + (720 - 660) * flightScale) / 12) * 12;
       const pressAlpha = 1 - ease.outCubic(clamp((t - (rushAt - 0.02)) / 0.16));
-      drawImpactStar(ctx, t, { x: 540, y: 700, size: 64, start: impactAt, duration: 0.1, color: '#F2F3F4', seed: seed + 79, cell: 4 });
+      drawImpactStar(ctx, t, { x: 540, y: 700, size: 32, start: impactAt, duration: 0.1, color: '#F2F3F4', seed: seed + 79, cell: 4 });
       drawBurst(ctx, t, { x: 540, y: 700, seed: seed + 91, count: 38, kind: 'confetti', start: impactAt, life: 1.22, speed: 330, spread: TAU, gravity: 285, drag: 0.34, floor: 1210, bounce: 0.14, spin: 7, size: 2, color: PAPER, cell: 4 });
       drawShockwave(ctx, t, { x: 540, y: 700, start: impactAt, duration: 0.28, radius: 12, maxRadius: 240, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
       if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 700 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
       if (rushProgress <= 0) {
-        drawHeroTicketFace(ctx, { x: 540, y: 700, width: ticketWidth, rotation: -0.018, stamp, opacity: emerge });
+        drawHeroTicketFace(ctx, { x: 540, y: 700, width: ticketWidth, rotation: -0.018, stamp, opacity: emerge,
+          pixelLock: t >= impactAt + IMPACT_HOLD && rushProgress <= 0 });
         if (pressAlpha > 0.01) drawPressFront(ctx, press.topY, press.bottomY);
       }
       const impactPulse = Math.max(0, 1 - Math.abs(t - impactAt) / 0.06);
       if (impactPulse > 0) {
         ctx.save(); ctx.globalAlpha *= impactPulse * 0.62; ctx.strokeStyle = '#F2F3F4'; ctx.lineWidth = 4;
         ctx.strokeRect(452, 666, 176, 68);
-        ctx.fillStyle = '#F2F3F4'; ctx.globalAlpha *= 0.18; ctx.fillRect(484, 691, 112, 18);
         ctx.restore();
       }
       ctx.restore();

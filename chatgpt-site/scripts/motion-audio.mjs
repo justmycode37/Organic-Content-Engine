@@ -397,7 +397,7 @@ export function arrange(spec,spoken,defs=sceneDefs){
  });
  // A warm two-note button begins 0.9 s before the reel ends and uses a 460 ms natural ring.
  const reelEnd=placed.at(-1)?.end??0;
- if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:5.6,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
+ if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:8,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
  const musicAutomation=deriveMusicAutomation(placed);
  const governed=governCues(cues,reelEnd,placed),voiceCues=cues.filter(cue=>!cue.sfx);
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
@@ -499,6 +499,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    const percussionExpression=steppedVolumeExpression(automationPoints.map((point,index)=>({...point,level:[0.12,0.34,0.72][Math.min(index,2)]})),0);
    // This branch adds to a unity body band, so use the incremental gain for a +3/+4 dB combined lift.
    const bodyLiftPoints=[
+    ...(musicAutomation.announcement?[{at:musicAutomation.announcement.at,level:10**(1.5/20)-1,ramp:0.3}]:[]),
     ...(musicAutomation.jump?[{at:musicAutomation.jump.at,level:10**(3/20)-1,ramp:0.38}]:[]),
     ...(musicAutomation.pressure?[{at:Math.max(0,musicAutomation.pressure.at-0.55),level:10**(4/20)-1,ramp:0.55}]:[]),
    ].sort((a,b)=>a.at-b.at);

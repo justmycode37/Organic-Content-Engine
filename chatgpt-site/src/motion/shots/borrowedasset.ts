@@ -192,11 +192,12 @@ export const borrowedAssetShot: ShotDef = {
     const sellFlash = Math.max(0, 1 - Math.abs(activeT - sells) / .07);
     const borrowedHit = Math.max(0, 1 - Math.abs(activeT - his) / .07);
     const intro = ease.outCubic(clamp(activeT / .18));
-    const rig = createCameraRig({ width: W, height: H, seed: frame.seed + 101, handheld: .55, punch: .04, shake: 5,
-      hits: [sells, his],
+    const rig = createCameraRig({ width: W, height: H, seed: frame.seed + 101, handheld: 0, punch: .04, shake: 5,
+      hits: [his],
       keyframes: [
         { t: 0, x: 0, y: 0, zoom: 1, rot: 0 },
-        { t: .42, x: 10, y: -10, zoom: 1.035, rot: .004, ease: 'inOut' },
+        { t: .18, x: 0, y: 0, zoom: 1, rot: 0, ease: 'inOut' },
+        { t: .78, x: 0, y: 0, zoom: 1, rot: 0, ease: 'inOut' },
         { t: .92, x: -18, y: 12, zoom: 1.065, rot: -.008, ease: 'inOut' },
         { t: 1.56, x: 12, y: -8, zoom: 1.08, rot: .005, ease: 'inOut' },
         { t: dur, x: -8, y: -4, zoom: 1.07, rot: 0, ease: 'inOut' },
@@ -231,16 +232,16 @@ export const borrowedAssetShot: ShotDef = {
     ctx.fillStyle = '#70737A'; for (let i = 0; i < 14; i++) ctx.fillRect(hatchX - hatchW / 2 + 32 + i * 25, Math.round(shutterY / 4) * 4 + 5, 4, 15);
 
     const pawX = 534, pawY = 695, pawWidth = 310, pawRotation = .025;
-    // Clear Hedgy's face quickly, then hold a readable, nearly level ticket through 0.5 s.
+    // Clear Hedgy's face quickly, then hold a readable, nearly level ticket through 0.75 s.
     const readable = ease.outExpo(clamp(activeT / .13));
     const readableX = mix(HERO_TICKET_FRAME.x, 540, readable), readableY = mix(HERO_TICKET_FRAME.y, 550, readable);
     const readableWidth = mix(HERO_TICKET_FRAME.width, 660, readable), readableRotation = mix(HERO_TICKET_FRAME.rotation, -.025, readable);
-    const intoPaw = ease.inOutCubic(clamp((activeT - .48) / .4));
+    const intoPaw = ease.inOutCubic(clamp((activeT - .75) / .4));
     const toHatch = ease.inOutCubic(clamp((activeT - .86) / .82));
     const startX = mix(readableX, pawX, intoPaw), startY = mix(readableY, pawY, intoPaw);
     const startWidth = mix(readableWidth, pawWidth, intoPaw), startRotation = mix(readableRotation, pawRotation, intoPaw);
     const x = mix(startX, hatchX - 30, toHatch), y = mix(startY, hatchY, toHatch);
-    const width = mix(startWidth, 344, toHatch), rotation = mix(startRotation, -.11, toHatch) + Math.sin(activeT * 9) * .008;
+    const width = mix(startWidth, 344, toHatch), rotation = mix(startRotation, -.11, toHatch);
 
     // Hedgy reaches at the left rail, then leans into the one-way sale hatch.
     const hedgyX = 470 + Math.sin(t * 1.2) * 3, hedgyY = 1030 + Math.sin(t * 4.2) * 1.5, hedgyScale = 6.4;
@@ -261,14 +262,15 @@ export const borrowedAssetShot: ShotDef = {
     ctx.fillStyle = '#F2F3F4'; ctx.fillRect(dockX + 28, dockY - 31, 12, 12);
     ctx.restore();
 
-    drawHeroTicket(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp });
-    if (activeT >= .12 && activeT < .58) {
+    drawHeroTicket(ctx, { x, y, width, rotation, stamp: HERO_TICKET_FRAME.stamp,
+      pixelLock: activeT >= .18 && activeT < .78 });
+    if (activeT >= .75 && activeT < 1.15) {
       // Re-drawing the actor on top puts his paw over the ticket edge during the catch.
       drawHedgy(ctx, { x: hedgyX, y: hedgyY, scale: hedgyScale, t: activeT, pose: 'carry', facing: 1, look: 'forward', expression: 'determined' });
     }
     drawBurst(ctx, activeT, { center: { x: hatchX, y: hatchY }, seed: frame.seed + 42, count: 14, kind: 'shard',
       start: Math.max(sells, 1.42), life: .45, speed: 174, gravity: 470, drag: .48, floor: 1190, bounce: .08, spin: 3.4, size: 2, color: '#D8D9DB' });
-    drawImpactStar(ctx, activeT, { x: 540, y: 550, size: 54, start: sells, duration: .1, color: '#F4F4F5', seed: frame.seed + 12 });
+    drawImpactStar(ctx, activeT, { x: hatchX, y: hatchY, size: 54, start: sells, duration: .1, color: '#F4F4F5', seed: frame.seed + 12 });
     if (sellFlash > 0) { ctx.save(); ctx.fillStyle = '#F1F1F2'; ctx.globalAlpha *= sellFlash * .09; ctx.fillRect(0, 0, W, H); ctx.restore(); }
     if (borrowedHit > 0) {
       ctx.strokeStyle = '#F2F3F5'; ctx.lineWidth = 4; ctx.beginPath(); ctx.moveTo(dockX + 30, dockY - 25); ctx.lineTo(dockX + 64, dockY - 61); ctx.lineTo(dockX + 99, dockY - 22); ctx.stroke();
