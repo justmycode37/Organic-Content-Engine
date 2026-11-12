@@ -397,7 +397,7 @@ export function arrange(spec,spoken,defs=sceneDefs){
  });
  // A warm two-note button begins 0.9 s before the reel ends and uses a 460 ms natural ring.
  const reelEnd=placed.at(-1)?.end??0;
- if(reelEnd>0.9)cues.push({sfx:'ding',at:reelEnd-0.9,length:0.9,gain:8,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
+ if(reelEnd>1.4)cues.push({sfx:'ding',at:reelEnd-1.35,length:1.35,gain:12,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
  const musicAutomation=deriveMusicAutomation(placed);
  const governed=governCues(cues,reelEnd,placed),voiceCues=cues.filter(cue=>!cue.sfx);
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
