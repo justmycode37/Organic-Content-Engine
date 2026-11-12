@@ -6,7 +6,7 @@
 //   MOTION_AUDIO_STEMS=1 exports <out>.stems.mka; MOTION_AUDIO_ONLY=1 skips video rendering.
 //
 // Needs ELEVENLABS_API_KEY (text to speech, sound effects, music). Optional:
-// ELEVENLABS_VOICE_ID (default: Arthur), ELEVENLABS_MODEL. Every generated clip is cached in
+// ELEVENLABS_VOICE_ID (default: Adam - Engaging, Friendly and Bright), ELEVENLABS_MODEL. Every generated clip is cached in
 // .motion-cache by content hash, so re-rendering an unchanged line costs nothing.
 import {createHash} from 'node:crypto';
 import {spawn,execFileSync} from 'node:child_process';
@@ -104,8 +104,10 @@ async function eleven(path,body,key){
  throw new Error(`ElevenLabs ${path.split('?')[0]} failed: ${reason}`);
 }
 
-/** The brand narrator: ElevenLabs "Arthur - Energetic American Male Narrator". ELEVENLABS_VOICE_ID overrides it. */
-const VOICE_ID='TtRFBnwQdH1k01vR0hMz';
+/** The brand narrator: ElevenLabs "Adam - Engaging, Friendly and Bright" (library voice), used with the voice's own
+ *  default settings. ELEVENLABS_VOICE_ID overrides the voice; MOTION_VOICE_SPEED / MOTION_VOICE_SETTINGS=custom
+ *  switch back to explicit settings. (Previous narrator: Arthur, TtRFBnwQdH1k01vR0hMz.) */
+const VOICE_ID='s3TPKV1kjDlVtZbl4Ksh';
 const pickVoice=()=>process.env.ELEVENLABS_VOICE_ID?.trim()||VOICE_ID;
 
 let CONTINUOUS=false;
@@ -131,10 +133,18 @@ async function speakContinuous(lines,voice,key){
 /** One narration line: cached MP3 plus the time each word is spoken. */
 async function speak(text,voice,key){
  const model=process.env.ELEVENLABS_MODEL??'eleven_multilingual_v2';
- const settings={stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:Number(process.env.MOTION_VOICE_SPEED)||1.0};
- const id=hash({text,voice,model,settings}),audio=join(CACHE,`voice-${id}.mp3`),meta=join(CACHE,`voice-${id}.json`);
+ const custom=process.env.MOTION_VOICE_SETTINGS==='custom'||Boolean(process.env.MOTION_VOICE_SPEED);
+ const settings=custom?{stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:Number(process.env.MOTION_VOICE_SPEED)||1.0}:'voice-defaults';
+ const id=hash({text,voice,model,settings,quality:'studio-v1'}),audio=join(CACHE,`voice-${id}.wav`),meta=join(CACHE,`voice-${id}.json`);
  if(!(await exists(audio))||!(await exists(meta))){
-  const data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`,{text,model_id:model,voice_settings:settings},key)).json();
+  // Highest quality: uncompressed 44.1 kHz PCM (studio master). Falls back to 192, then 128 kbps MP3, depending on the ElevenLabs plan.
+  const body={text,model_id:model,...(typeof settings==='object'?{voice_settings:settings}:{})};
+  let data,pcm=true;
+  try{data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=pcm_44100`,body,key)).json();}
+  catch{pcm=false;
+   try{data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_192`,body,key)).json();}
+   catch{data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`,body,key)).json();}}
+  data.pcm=pcm;
   const a=data.alignment??data.normalized_alignment;
   if(!data.audio_base64||!a)throw new Error('ElevenLabs returned no audio or timing');
   const words=[];let current=null;
@@ -144,7 +154,9 @@ async function speak(text,voice,key){
    current.text+=char;current.end=a.character_end_times_seconds[index];
   });
   if(current)words.push(current);
-  await writeFile(audio,Buffer.from(data.audio_base64,'base64'));
+  const raw=Buffer.from(data.audio_base64,'base64');
+  if(data.pcm){const tmp=`${audio}.pcm`;await writeFile(tmp,raw);await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','s16le','-ar','44100','-ac','1','-i',tmp,audio]);await rm(tmp,{force:true});}
+  else await writeFile(audio,raw);
   await writeFile(meta,JSON.stringify({words}));
  }
  const words=JSON.parse(await readFile(meta,'utf8')).words,tempo=Number(process.env.MOTION_SPEECH_TEMPO)||1;
@@ -553,7 +565,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  ACTIVE_STYLE=process.env.MOTION_SFX_STYLE?.trim()||(parsed.spec.series?.startsWith('HEDGY')?'cinematic':'foley');
  if(!['cinematic','foley'].includes(ACTIVE_STYLE))throw new Error('MOTION_SFX_STYLE must be cinematic or foley');
 
- if(parsed.spec.series?.startsWith('HEDGY')&&!process.env.MOTION_VOICE_SPEED)process.env.MOTION_VOICE_SPEED='1.0';
+ 
  const voice=pickVoice();
  const spoken=[];
  // HEDGY: one continuous take of the whole paragraph (natural prosody, no gaps where a sentence continues
@@ -621,10 +633,11 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   });
   const sum=(labels,out)=>labels.length?`${labels.join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0,${pad}[${out}]`:`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${total}[${out}]`;
   filters.push(sum(voice,'voice_raw'),sum(fx,'fx_raw'));
-  filters.push(`[voice_raw]highpass=f=72,equalizer=f=240:t=q:w=1.2:g=-1.5,${ACTIVE_STYLE==='cinematic'?'equalizer=f=1500:t=q:w=1:g=2.8,':''}equalizer=f=3300:t=q:w=1:g=${ACTIVE_STYLE==='cinematic'?'3.0':'1.1'},deesser=i=0.14:m=0.3:f=0.56,${ACTIVE_STYLE==='cinematic'?'lowpass=f=6200,highshelf=f=6000:g=-4,':''}acompressor=threshold=0.13:ratio=2.3:attack=12:release=140:makeup=1.35[voice]`);
+  // Transparent 'studio' voice chain: rumble filter, gentle de-ess, light levelling. No reverb, no low-pass.
+  filters.push(`[voice_raw]highpass=f=70,equalizer=f=220:t=q:w=1.1:g=-1,equalizer=f=4200:t=q:w=1.2:g=1.2,deesser=i=0.1:m=0.25:f=0.55,acompressor=threshold=0.16:ratio=2:attack=10:release=160:makeup=1.25[voice]`);
   if(ACTIVE_STYLE==='cinematic'){
    filters.push('[fx_raw]asplit=2[fxDry][fxReverbInput]');
-   filters.push('[fxReverbInput]aecho=0.78:0.27:43|79|127|181|251|337:0.30|0.24|0.19|0.15|0.11|0.08,lowpass=f=5000,volume=0.62[fxWet]');
+   filters.push('[fxReverbInput]aecho=0.78:0.27:43|79|127|181|251|337:0.30|0.24|0.19|0.15|0.11|0.08,lowpass=f=5000,volume=0.3[fxWet]');
    filters.push('[fxDry][fxWet]amix=inputs=2:normalize=0:dropout_transition=0,lowpass=f=7600,acompressor=threshold=0.18:ratio=1.7:attack=12:release=190:makeup=1.08,extrastereo=m=1.035,volume=2.5[fx]');
   }else filters.push('[fx_raw]acompressor=threshold=0.24:ratio=1.65:attack=6:release=130:makeup=1.2,extrastereo=m=1.08,volume=1.35[fx]');
   const buses=[];
@@ -665,7 +678,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   }
   filters.push(`${buses.join('')}amix=inputs=${buses.length}:normalize=0:dropout_transition=0,${pad},acompressor=threshold=0.42:ratio=2:attack=4:release=100:makeup=1,alimiter=limit=0.841:attack=5:release=80:level=disabled,loudnorm=I=-14:TP=-1.5:LRA=8[out]`);
   await writeFile(graph,filters.join(';\n'));
-  const mixArgs=['-hide_banner','-loglevel','error','-y',...inputs,'-filter_complex_script',graph,'-map','[out]','-c:a','aac','-b:a','192k','-ar','48000',mix];
+  const mixArgs=['-hide_banner','-loglevel','error','-y',...inputs,'-filter_complex_script',graph,'-map','[out]','-c:a','aac','-b:a','320k','-ar','48000',mix];
   if(exportStems)mixArgs.push('-map','[voiceStem]','-map','[fxStem]',...(bed?['-map','[musicStem]']:[]),'-c:a','pcm_s16le','-ar','48000','-metadata:s:a:0','title=Voice','-metadata:s:a:1','title=SFX',...(bed?['-metadata:s:a:2','title=Music']:[]),'-f','matroska',stems);
   await run('ffmpeg',mixArgs);
   if(audioOnly)await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',mix,'-c:a','copy','-t',duration.toFixed(3),'-movflags','+faststart',outPath]);
