@@ -56,6 +56,8 @@ export interface Theme {
   onAccent: string;  // text placed on an accent fill
   /** Reel time in seconds: drives the drifting rainbow. */
   time: number;
+  /** Optional renderer hint; clean HEDGY frames use stable, undithered 3D shading. */
+  renderMode?: 'pixel' | 'smooth';
 }
 
 /** Solid-colour theme. The player upgrades `accent` to the live rainbow paint (see frameTheme in pix.ts). */
@@ -150,6 +152,9 @@ export interface Frame {
 }
 
 /** A moment in a scene that should be HEARD. The audio renderer places a matching sound exactly here. */
+/** Every sound a scene or transition can ask for. The audio renderer maps each kind to a designed sound. */
+export const CUE_KINDS = ['pop', 'tick', 'type', 'rise', 'shimmer', 'impact', 'swish', 'whoosh', 'whip', 'coin', 'coins', 'cash', 'thud', 'crack', 'shatter', 'click', 'clack', 'servo', 'boing', 'sparkle', 'drop', 'bass', 'glass', 'paper', 'stamp', 'alarm', 'heartbeat', 'zap', 'rumble', 'snap', 'beep', 'step', 'land', 'squeak', 'build', 'reverse', 'tape', 'ding', 'thump', 'knock', 'whump', 'sub', 'rustle', 'creak', 'clunk', 'slide', 'footfall', 'pluck', 'gulp', 'hum'] as const;
+export type CueKind = (typeof CUE_KINDS)[number];
 export interface Cue {
   /** Seconds since the scene started. */
   t: number;
@@ -158,8 +163,12 @@ export interface Cue {
    * rise: build-up before a reveal (`len` seconds, ends at t + len). shimmer: the reveal / payoff sparkle.
    * impact: the heavy landing. swish: something flies past or slides in.
    */
-  kind: 'pop' | 'tick' | 'type' | 'rise' | 'shimmer' | 'impact' | 'swish';
+  kind: CueKind;
   len?: number;
+  /** Stereo position -1 (left) .. 1 (right). Derive from the on-screen x of the thing making the sound. */
+  pan?: number;
+  /** Relative loudness multiplier, default 1. */
+  gain?: number;
   /** 0..1 position in a sequence: later pops are pitched higher so a build climbs. */
   step?: number;
 }
@@ -177,14 +186,19 @@ export interface SceneDef<P> {
 export const ICONS = ['cursor', 'chip', 'brain', 'bolt', 'bug', 'check', 'cross', 'file', 'folder', 'gear', 'lock', 'key', 'cloud', 'database', 'server', 'globe', 'user', 'robot', 'eye', 'clock', 'search', 'star', 'heart', 'warning', 'terminal', 'code', 'image', 'play', 'arrow', 'token', 'money', 'rocket', 'skull', 'fire', 'phone'] as const;
 export type IconName = (typeof ICONS)[number];
 
-export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter'] as const;
+export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter', 'push', 'whip', 'zoomthrough', 'shatter', 'pixelsort', 'melt', 'iris', 'cube', 'flip', 'dissolve', 'slice', 'ink', 'match'] as const;
 export type TransitionName = (typeof TRANSITIONS)[number];
+export type TransitionDirection = 'left' | 'right' | 'up' | 'down';
 
 export interface SceneBase {
   /** Seconds on screen. Most scenes should last 1.5 to 4 seconds. */
   duration: number;
   /** How this scene ENTERS. Default 'cut'. */
   transition?: TransitionName;
+  /** Focus point for zoom/iris transitions, in reel pixels. */
+  transitionAt?: [number, number];
+  /** Incoming scene travel direction for directional transitions. */
+  transitionDir?: TransitionDirection;
   transitionSound?:'swish'|'rise'|'tick'|'pop'|'glitch'|'shimmer'|'none';
   /** Seconds within the scene at which something lands: the player adds a camera punch and shake. */
   hits?: number[];
@@ -235,18 +249,20 @@ export interface ObjectProps { model: ModelName; label?: string; note?: string; 
 export interface OutroProps { cta: string; handle?: string; sub?: string }
 
 export interface HedgyProps { beat:'risk'|'drop'|'hedge'|'offset'|'cost'|'lesson'; headline:string; label?:string; secondary?:string; mascot?:boolean; action?:'buy'|'crash'|'contract'|'expiry'|'payout'|'net'|'upside'|'premium'|'story'; story?:'phone'|'worry'|'put'|'cushion'|'gain'|'backup'; sync?:{word:string;kind:string}[]; events?:{at:number;kind:string}[] }
+/** A choreographed shot from the shot library (src/motion/shots). `shot` names it; `params` are shot-specific. */
+export interface ShotProps { shot: string; params?: Record<string, unknown>; mascot?: boolean; sync?: { word: string; kind: string }[]; events?: { at: number; kind: string }[] }
 export interface SceneProps {
-  hedgy: HedgyProps;
+  hedgy: HedgyProps; shot: ShotProps;
   title: TitleProps; code: CodeProps; diff: DiffProps; terminal: TerminalProps; flow: FlowProps; stat: StatProps;
   bars: BarsProps; compare: CompareProps; list: ListProps; tokens: TokensProps; chat: ChatProps; layers: LayersProps;
   grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; object: ObjectProps; outro: OutroProps;
 }
 export type SceneType = keyof SceneProps;
-export const SCENE_TYPES = ['hedgy', 'title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
+export const SCENE_TYPES = ['hedgy', 'shot', 'title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'object', 'outro'] as const satisfies readonly SceneType[];
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */
-export interface CaptionSpec { text: string; start: number; end: number }
+export interface CaptionSpec { text: string; start: number; end: number; /** Absolute reel-time bounds of each spoken word, for word-by-word captions. */ words?: { start: number; end: number }[] }
 
 export interface ReelSpec {
   version: 1;

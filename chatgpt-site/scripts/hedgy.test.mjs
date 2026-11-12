@@ -44,5 +44,7 @@ test('financial animation actions follow actual narrated word timestamps',()=>{
 test('transition audio respects explicit silence and different authored cues',()=>{
  const scenes=[{type:'hedgy',beat:'risk',headline:'First',duration:2,transition:'cut',transitionSound:'none'},{type:'hedgy',beat:'hedge',headline:'Second',duration:2,transition:'wipe',transitionSound:'shimmer'},{type:'hedgy',beat:'lesson',headline:'Third',duration:2,transition:'zoom',transitionSound:'none'}];
  const r=arrange({version:1,scenes},[null,null,null],{});
- assert.deepEqual(r.cues.filter(c=>c.sfx).map(c=>c.sfx),['shimmer']);
+ const sfx=r.cues.filter(c=>c.sfx);
+ assert.deepEqual(sfx.filter(c=>!c.ending).map(c=>c.sfx),['shimmer']);
+ assert.deepEqual(sfx.filter(c=>c.ending).map(c=>c.sfx),['ding']);
 });

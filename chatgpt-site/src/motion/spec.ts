@@ -4,11 +4,12 @@ import { ACCENTS, ICONS, MODELS, MUSIC_MOODS, SCENE_TYPES, TRANSITIONS, type Ree
 const icon = z.enum(ICONS);
 const short = (max: number) => z.string().min(1).max(max);
 const base = {
-  duration: z.number().min(0.8).max(8), transition: z.enum(TRANSITIONS).optional(),transitionSound:z.enum(['swish','rise','tick','pop','glitch','shimmer','none']).optional(),
+  duration: z.number().min(0.8).max(8), transition: z.enum(TRANSITIONS).optional(), transitionAt:z.tuple([z.number().min(0).max(1080),z.number().min(0).max(1920)]).optional(), transitionDir:z.enum(['left','right','up','down']).optional(), transitionSound:z.enum(['swish','rise','tick','pop','glitch','shimmer','none']).optional(),
   hits: z.array(z.number().min(0).max(8)).max(6).optional(), caption: z.union([short(90), z.array(short(90)).max(6)]).optional(), say: short(220).optional(),
 };
 const sceneSchemas = {
  hedgy:z.object({type:z.literal('hedgy'),...base,beat:z.enum(['risk','drop','hedge','offset','cost','lesson']),headline:short(28),label:short(24).optional(),secondary:short(24).optional(),mascot:z.boolean().optional(),action:z.enum(['buy','crash','contract','expiry','payout','net','upside','premium','story']).optional(),story:z.enum(['phone','worry','put','cushion','gain','backup']).optional(),sync:z.array(z.object({word:short(30),kind:short(30)}).strict()).max(8).optional(),events:z.array(z.object({at:z.number().min(0),kind:short(30)}).strict()).max(8).optional()}).strict(),
+ shot:z.object({type:z.literal('shot'),...base,shot:short(40),params:z.record(z.string(),z.unknown()).optional(),mascot:z.boolean().optional(),sync:z.array(z.object({word:short(30),kind:short(30)}).strict()).max(12).optional(),events:z.array(z.object({at:z.number().min(0),kind:short(30)}).strict()).max(12).optional()}).strict(),
  title: z.object({ type:z.literal('title'),...base,text:short(90),kicker:short(60).optional(),sub:short(90).optional(),icon:icon.optional() }).strict(),
  code: z.object({ type:z.literal('code'),...base,code:z.string().max(1200).refine(s=>s.split('\n').length<=14,'at most 14 lines'),filename:short(80).optional(),typing:z.boolean().optional(),highlight:z.array(z.number().int().min(1).max(14)).max(14).optional(),note:short(90).optional() }).strict(),
  diff: z.object({ type:z.literal('diff'),...base,filename:short(80).optional(),removed:z.array(short(120)).max(14),added:z.array(short(120)).max(14),context:z.array(short(120)).max(14).optional() }).strict(),
@@ -28,11 +29,11 @@ const sceneSchemas = {
  outro:z.object({type:z.literal('outro'),...base,cta:short(90),handle:short(40).optional(),sub:short(90).optional()}).strict(),
 };
 const sceneSchema=z.discriminatedUnion('type',SCENE_TYPES.map(t=>sceneSchemas[t]) as [typeof sceneSchemas[keyof typeof sceneSchemas], ...typeof sceneSchemas[keyof typeof sceneSchemas][]]);
-export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),music:z.enum(MUSIC_MOODS).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
+export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),music:z.enum(MUSIC_MOODS).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive(),words:z.array(z.object({start:z.number(),end:z.number()}).strict()).max(40).optional()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
  if(spec.series?.startsWith('HEDGY')){
  if(spec.accent!=='mono')ctx.addIssue({code:'custom',message:'Hedgy requires monochrome palette'});
  for(const scene of spec.scenes){
- if(scene.type!=='hedgy')ctx.addIssue({code:'custom',message:'Hedgy requires sparse semantic scenes'});
+ if(scene.type!=='hedgy'&&scene.type!=='shot')ctx.addIssue({code:'custom',message:'Hedgy requires sparse semantic scenes'});
  const copy=JSON.stringify(scene);
  if(/meet hedgy|not (?:financial|investment) advice|education(?:al)? only|follow for/i.test(copy))ctx.addIssue({code:'custom',message:'Hedgy disallows greetings, disclaimers and generic end cards'});
  }
@@ -62,6 +63,6 @@ const lintRules = [
  ['warn','title length',(s:ReelSpec)=>s.scenes.flatMap((x,i)=>x.type==='title'&&x.text.split(/\s+/).length>9?[{scene:i,message:'title text longer than 9 words'}]:[])],
 ] as const;
 export function lintReel(spec:ReelSpec){return lintRules.flatMap(([level,_name,run])=>run(spec).map((item:{scene?:number;message:string})=>({level,scene:item.scene,message:item.message})));}
-const purposes:Record<string,string>={hedgy:'Sparse monochrome finance mechanism; optional mascot as actor.',title:'Hook the viewer with a pixel title.',code:'Show code typing and highlight a change.',diff:'Reveal a before and after code change.',terminal:'Show a command and its output.',flow:'Explain a pipeline or process.',stat:'Land one important number.',bars:'Compare values in a bar race.',compare:'Contrast two options.',list:'Present a rapid stack of points.',tokens:'Explain tokenization and prediction.',chat:'Show a user prompt and AI reply.',layers:'Reveal a system through its layers.',grid:'Visualize a matrix or attention map.',kinetic:'Hit one short phrase per beat.',changelog:'Show tagged release changes.',object:'Show one 3D pixel object as the hero of the beat.',outro:'Close with a call to action.'};
+const purposes:Record<string,string>={shot:'Choreographed 3D pixel-art shot from the shot library.',hedgy:'Sparse monochrome finance mechanism; optional mascot as actor.',title:'Hook the viewer with a pixel title.',code:'Show code typing and highlight a change.',diff:'Reveal a before and after code change.',terminal:'Show a command and its output.',flow:'Explain a pipeline or process.',stat:'Land one important number.',bars:'Compare values in a bar race.',compare:'Contrast two options.',list:'Present a rapid stack of points.',tokens:'Explain tokenization and prediction.',chat:'Show a user prompt and AI reply.',layers:'Reveal a system through its layers.',grid:'Visualize a matrix or attention map.',kinetic:'Hit one short phrase per beat.',changelog:'Show tagged release changes.',object:'Show one 3D pixel object as the hero of the beat.',outro:'Close with a call to action.'};
 export function reelJsonSchema(){return z.toJSONSchema(reelSpecSchema);}
 export function describeScenes(){return SCENE_TYPES.map(type=>`${type}: ${Object.keys((sceneSchemas[type] as any).shape).filter(k=>k!=='type').join(', ')} — ${purposes[type]}`).join('\n');}
