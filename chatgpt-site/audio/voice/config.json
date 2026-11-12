@@ -1,0 +1,55 @@
+{
+  "schemaVersion": 1,
+  "activeProvider": "elevenlabs",
+  "activeVoice": "narrator",
+  "providers": {
+    "elevenlabs": {
+      "enabled": true,
+      "disabledReason": null
+    },
+    "cartesia": {
+      "enabled": false,
+      "disabledReason": "API credentials, paid-tier rights evidence, and word-alignment behavior are not configured.",
+      "apiKeyEnv": "CARTESIA_API_KEY"
+    },
+    "google": {
+      "enabled": false,
+      "disabledReason": "Cloud project credentials, production voice selection, terms snapshot, and word alignment are not configured.",
+      "apiKeyEnv": "GOOGLE_APPLICATION_CREDENTIALS"
+    },
+    "kokoro": {
+      "enabled": false,
+      "disabledReason": "The exact Kokoro checkpoint, voice lineage, local runtime, and alignment model have not been audited.",
+      "modelPath": null
+    }
+  },
+  "voices": {
+    "narrator": {
+      "provider": "elevenlabs",
+      "voiceId": "TtRFBnwQdH1k01vR0hMz",
+      "voiceSource": "library",
+      "owner": "ElevenLabs Voice Library (shared professional voice)",
+      "model": "eleven_multilingual_v2",
+      "modelVersion": "eleven_multilingual_v2",
+      "nonBeta": true,
+      "planTier": "creator",
+      "termsSnapshotRef": "elevenlabs-eu-terms-2026-11-11",
+      "relatedTermsSnapshotRefs": [
+        "elevenlabs-commercial-help-2026-11-11",
+        "elevenlabs-service-terms-2026-11-11",
+        "elevenapi-terms-2026-11-11",
+        "elevenlabs-voice-library-2026-11-11"
+      ],
+      "permittedUses": ["commercial", "instagram", "tiktok", "youtube"],
+      "presets": {
+        "default": {"pace": 1.08, "stability": 0.45, "similarityBoost": 0.75, "style": 0.3, "speakerBoost": true},
+        "patch": {"pace": 1.12, "stability": 0.4, "similarityBoost": 0.75, "style": 0.35, "speakerBoost": true},
+        "breaking": {"pace": 1.1, "stability": 0.5, "similarityBoost": 0.75, "style": 0.2, "speakerBoost": true},
+        "proof": {"pace": 1.02, "stability": 0.55, "similarityBoost": 0.75, "style": 0.1, "speakerBoost": true},
+        "system": {"pace": 1.04, "stability": 0.45, "similarityBoost": 0.75, "style": 0.2, "speakerBoost": true},
+        "bigidea": {"pace": 0.98, "stability": 0.55, "similarityBoost": 0.75, "style": 0.3, "speakerBoost": true},
+        "miniworld": {"pace": 1.0, "stability": 0.4, "similarityBoost": 0.75, "style": 0.4, "speakerBoost": true}
+      }
+    }
+  }
+}

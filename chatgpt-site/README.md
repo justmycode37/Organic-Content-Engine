@@ -88,6 +88,37 @@ The Platforms screen offers account authorization, connection state, and disconn
 
 Each post is bound to the reviewed account ID. Replacing an account requires reviewing its queued posts again. Media referenced by queued/in-progress posts cannot be deleted. Durable delivery state prevents repeated container/session creation while checking processing. An ambiguous final publish is marked `needs_attention` for a person; the engine does not guess or blindly publish again. The pause control stops new delivery work, but cannot revoke a request already accepted by a provider.
 
+### AI audio disclosure and rights
+
+Video publishing maps the post's `synthetic` metadata to Instagram Graph API
+`is_ai_generated`, TikTok Direct Post `post_info.is_aigc`, and YouTube
+`status.containsSyntheticMedia`. When `synthetic` is true, the caption must also
+include a clear AI-generated narration/content disclosure. Publishing stops if
+the platform has no verified native field, the caption disclosure is missing,
+or the caption and `synthetic` metadata disagree. The fields were checked
+against the [Meta API solution](https://github.com/facebookincubator/catalogue-of-api-solutions/blob/main/solutions/creators/organic-content-creation.md), [TikTok Direct Post reference](https://developers.tiktok.com/docs/en/content-posting-api-reference-direct-post), and [YouTube videos API](https://developers.google.com/youtube/v3/docs/videos) on 11 November 2026.
+
+Motion audio stores provenance and SHA-256 hashes for every voice and SFX
+file in `audio/rights/ledger.jsonl`; unknown plan, terms, voice-owner or beta
+status stays on HOLD. Use `node scripts/audio/rights/check.mjs <timed-spec-or-render-manifest>`
+before publication, and `npm run audio:rights -- packet <post-id>` to export a
+claims packet. Legacy Arthur cache audio is unverified until the owner supplies
+a paid-plan attestation and the applicable voice terms snapshot. Voice
+availability/model health and the audio kill switch are documented in
+`src/motion/README.md`.
+
+### Instagram analytics and learning ledger
+
+The Worker creates idempotent lifetime-insight snapshots for published Reels at **+1 hour, +24 hours, +72 hours, +7 days and +28 days**. The last bucket is optional for other deployments, but enabled here. These jobs run through the authenticated `/api/jobs/tick` background route, including when Autopilot is paused. Apply `0006_instagram_analytics.sql` after the existing migrations. The raw Graph API JSON, normalized metric values, capture time, scheduled time and any error are stored in D1. Missing or unsupported metrics stay `null`; a returned zero remains zero.
+
+As checked on **11 November 2026**, Meta's current media-insights reference lists Reels metrics including `views`, `reach`, `likes`, `comments`, `saved`, `shares`, `total_interactions`, `ig_reels_avg_watch_time`, and `ig_reels_video_view_total_time`. The reference also lists `reels_skip_rate`, `reposts`, `crossposted_views`, and `facebook_views` where applicable; the current ledger collects the first group. `follows` and `profile_visits` are documented for feed posts and Stories, not Reels, so Reel snapshots retain them as unknown. Meta says insight data can be delayed by up to 48 hours, so the 1-hour and 24-hour captures may be provisional. [Meta media insights reference](https://developers.facebook.com/documentation/instagram-platform/reference/instagram-media/insights) · [Meta Instagram Insights guide](https://developers.facebook.com/documentation/instagram-platform/insights)
+
+The hosted connection uses **Instagram Login** and requests `instagram_business_basic`, `instagram_business_content_publish`, and `instagram_business_manage_insights`. Meta's Facebook Login path instead requires `instagram_basic`, `instagram_manage_insights`, and `pages_read_engagement`; if the Page role is supplied through Business Manager, Meta also lists `ads_management` and `ads_read`. Existing Instagram connections need to reconnect after the app has the Insights permission. App Review and account eligibility remain controlled by Meta. [Meta Instagram Insights permissions](https://developers.facebook.com/documentation/instagram-platform/insights)
+
+The Graph API v22.0 changelog added `views` and deprecated `clips_replays_count`, `ig_reels_aggregated_all_plays_count`, `impressions`, and `plays` for Insights. Those deprecations applied to v22.0+ and then all versions by April 21, 2025. The changelog keeps `impressions` for pre-July 2, 2024 media only on v21.0 and older; current Reels should use `views`. This implementation requests `views`, not the deprecated fields. The existing default API version is `v25.0` and can be set with `INSTAGRAM_API_VERSION`; check Meta's version changelog before changing it. [Meta Graph API v22.0 changelog](https://developers.facebook.com/documentation/development/graph-api/changelog/version22.0) · [Meta Graph API v25.0 changelog](https://developers.facebook.com/documentation/development/graph-api/changelog/version25.0)
+
+Open **Feedback** to label each post with its format preset (for example `under-the-hood`), style (`patch`, `breaking`, `proof`, `system`, `bigidea`, or `miniworld`), hook variant, and claims-ledger file. The same screen shows each post's snapshot metrics and a comparison table grouped by both format/style and age bucket. It derives likes, shares, and saves per reach plus average watch time; it never averages different age buckets together. These compact, bucket-labeled summaries are included in future idea and draft generation context. Rate limits are retried and shown with their error; expired tokens and missing permissions stay visible until reconnect/retry. The Feedback screen can requeue failed snapshots after fixing the account connection.
+
 ## Background work
 
 There is no persistent timer in a Worker. The owner-authenticated MCP tools `prepare_autopilot` and `process_due_posts` let a linked ChatGPT task prepare bounded requests and process approved scheduled posts while the Site is closed. Autopilot drafts always wait for review; TikTok requires its per-post creator settings and consent. The authenticated `/api/jobs/tick` route remains available for machine callers with `JOB_TOKEN`. A saved schedule is not evidence that an update ran; verify the writer and persisted result after deployment.

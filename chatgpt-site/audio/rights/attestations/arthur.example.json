@@ -1,0 +1,22 @@
+{
+  "provider": "elevenlabs",
+  "voiceId": "TtRFBnwQdH1k01vR0hMz",
+  "who": "Owner name",
+  "when": "YYYY-MM-DDTHH:mm:ss.sssZ",
+  "outputs": [
+    {
+      "outputHash": "Replace with one exact SHA-256 hash from the cache audit",
+      "generatedAt": "Confirm this file's generation time from retained evidence",
+      "plan": "Confirm the paid plan active for this file",
+      "model": "eleven_multilingual_v2",
+      "modelVersion": "eleven_multilingual_v2",
+      "nonBeta": true,
+      "voiceOwner": "Confirm the actual Arthur voice owner from the account evidence",
+      "termsSnapshotRef": "elevenlabs-eu-terms-2026-11-11",
+      "relatedTermsSnapshotRefs": ["elevenlabs-voice-library-2026-11-11", "elevenapi-terms-2026-11-11"],
+      "permittedUses": ["commercial", "instagram", "tiktok", "youtube"],
+      "requestHash": null,
+      "evidence": ["Invoice or subscription evidence path/URL", "Arthur voice terms or account evidence path/URL"]
+    }
+  ]
+}
