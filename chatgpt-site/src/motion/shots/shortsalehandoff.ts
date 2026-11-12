@@ -148,7 +148,10 @@ function drawReturnStub(ctx: Frame['ctx'], x: number, y: number, width: number, 
   ctx.fillStyle = '#E7E8EA'; ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.fillStyle = '#676A70'; ctx.fillRect(-w / 2 + 7, -h / 2 + 6, w - 14, 6);
   ctx.fillStyle = '#1A1C20'; ctx.fillRect(-w / 2 + 7, -h / 2 + 16, w - 14, 38);
-  pixelText(ctx, 'RETURN 1', 0, -h / 2 + 27, 2, { color: '#FFFFFF', align: 'center' });
+  // Heavy sans survives the stub's small rotation; 2 px pixel type aliased into noise here.
+  ctx.fillStyle = '#FFFFFF'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.font = `900 ${Math.min(30, Math.floor((w - 24) / 4.6))}px 'Anton', 'Impact', 'Arial Narrow Bold', 'Arial Black', sans-serif`;
+  ctx.fillText('RETURN 1', 0, -h / 2 + 35);
   ctx.fillStyle = '#C5C7CB';
   for (let i = 0; i < 6; i++) ctx.fillRect(w / 2 - 30 + i * 4, -h * .33, 2, h * .66);
   ctx.fillStyle = '#0C0D0F'; ctx.fillRect(w / 2 - 22, h / 2 - 11, 34, 19);

@@ -272,7 +272,7 @@ export const squeezeRocketShot: ShotDef = {
       drawShockwave(ctx, t, { x: 540, y: 700, start: impactAt, duration: 0.28, radius: 12, maxRadius: 240, width: 2, color: '#E0E3E5', seed: seed + 111, cell: 4 });
       if (rushProgress > 0) drawSpeedLines(ctx, t, { center: { x: 540, y: 700 }, count: 48, reach: 760, start: rushAt, duration: Math.max(0.12, dur - rushAt), color: '#D6DADD', seed: seed + 69, strength: 0.66, cell: 4 });
       if (rushProgress <= 0) {
-        drawHeroTicketFace(ctx, { x: 540, y: 700, width: ticketWidth, rotation: -0.018, stamp, opacity: emerge,
+        drawHeroTicketFace(ctx, { x: 540, y: 700 - 70 * settleProgress, width: ticketWidth, rotation: -0.018, stamp, opacity: emerge,
           pixelLock: t >= impactAt + IMPACT_HOLD && rushProgress <= 0 });
         if (pressAlpha > 0.01) drawPressFront(ctx, press.topY, press.bottomY);
       }
