@@ -1,6 +1,7 @@
 // Developer tool for code-animated Reels.
 //   node scripts/motion.mjs shot <spec.json> <out.png> <time> [more times...]   stills (several times make a contact sheet)
 //   node scripts/motion.mjs render <spec.json> <out.mp4>                        finished 1080x1920 H.264 video
+// Optional temporal supersampling: MOTION_SUBFRAMES=3 MOTION_SHUTTER=0.4
 // Set MOTION_DIR=<folder> to render a private copy of src/motion instead of the checkout.
 //   node scripts/motion.mjs icons <out.png>                                     sheet of every pixel icon at module sizes 6 and 3
 import {build} from 'esbuild';
@@ -12,6 +13,10 @@ import {fileURLToPath} from 'node:url';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const CHROME=process.env.CHROME_PATH?.trim()||(process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/chromium');
+const FPS=30;
+
+function boundedEnvInt(value,fallback,min,max){const parsed=Number.parseInt(value??'',10);return Number.isFinite(parsed)?Math.max(min,Math.min(max,parsed)):fallback;}
+function boundedEnvNumber(value,fallback,min,max){const parsed=Number(value);return Number.isFinite(parsed)?Math.max(min,Math.min(max,parsed)):fallback;}
 
 export async function openMotionPage(entry='src/motion/page.ts'){
  const bundle=(await build({entryPoints:[process.env.MOTION_DIR?join(process.env.MOTION_DIR,entry.split('/').at(-1)):join(ROOT,entry)],bundle:true,write:false,format:'iife',target:'es2022'})).outputFiles[0].text;
@@ -49,12 +54,39 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    }
    console.log(`Wrote ${outPath}`);
   }else{
-   const encoder=spawn('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','image2pipe','-framerate','30','-i','pipe:0','-f','lavfi','-i','anullsrc=channel_layout=stereo:sample_rate=48000','-shortest','-c:v','libx264','-preset','medium','-crf','17','-pix_fmt','yuv420p','-c:a','aac','-b:a','128k','-movflags','+faststart',outPath],{stdio:['pipe','inherit','inherit']});
+   const encoder=spawn('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','image2pipe','-framerate',String(FPS),'-i','pipe:0','-f','lavfi','-i','anullsrc=channel_layout=stereo:sample_rate=48000','-shortest','-c:v','libx264','-preset','slow','-crf','15','-pix_fmt','yuv420p','-r',String(FPS),'-fps_mode','cfr','-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-color_range','tv','-x264-params','colorprim=bt709:transfer=bt709:colormatrix=bt709','-c:a','aac','-b:a','128k','-movflags','+faststart',outPath],{stdio:['pipe','inherit','inherit']});
    const done=new Promise((resolve,reject)=>{encoder.once('error',reject);encoder.once('close',code=>code===0?resolve():reject(new Error(`ffmpeg exited with ${code}`)));});
    await page.exposeFunction('emitFrame',encoded=>new Promise((resolve,reject)=>encoder.stdin.write(Buffer.from(encoded,'base64'),error=>error?reject(error):resolve())));
-   const frames=await page.evaluate(s=>window.motion.render(s),spec);
+   // Keep the browser's intermediate JPEG from becoming the limiting encode.
+   await page.evaluate(()=>{const original=HTMLCanvasElement.prototype.toDataURL;HTMLCanvasElement.prototype.toDataURL=function(type,quality){return original.call(this,type,type==='image/jpeg'?0.99:quality);};});
+   const subframes=boundedEnvInt(process.env.MOTION_SUBFRAMES,1,1,9);
+   const shutter=boundedEnvNumber(process.env.MOTION_SHUTTER,0.4,0,1);
+   const frames=subframes>1
+    ? await page.evaluate(async({s,n,shutter,fps})=>{
+       const frameCount=window.motion.frames(s),width=1080,height=1920,stageBottom=1290;
+       const output=document.createElement('canvas');output.width=width;output.height=height;
+       const ctx=output.getContext('2d',{alpha:false});if(!ctx)throw new Error('Could not create supersample target');
+       for(let index=0;index<frameCount;index++){
+        ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;ctx.fillStyle='#000000';ctx.fillRect(0,0,width,height);
+        ctx.globalCompositeOperation='lighter';let centerImage;
+        for(let sample=0;sample<n;sample++){
+         const offset=((sample+0.5)/n-0.5)*shutter;
+         const time=Math.max(0,Math.min((frameCount-1)/fps,index/fps+offset/fps));
+         const encoded=window.motion.shot(s,time),image=new Image();image.src=`data:image/png;base64,${encoded}`;await image.decode();
+         ctx.globalAlpha=1/n;ctx.drawImage(image,0,0);
+         if(sample===Math.floor(n/2)&&n%2===1)centerImage=image;
+        }
+        if(n%2===0){const encoded=window.motion.shot(s,index/fps),image=new Image();image.src=`data:image/png;base64,${encoded}`;await image.decode();centerImage=image;}
+        // Keep caption text crisp at the center output time while the stage gets shutter averaging.
+        if(centerImage){ctx.save();ctx.globalCompositeOperation='source-over';ctx.globalAlpha=1;ctx.beginPath();ctx.rect(0,stageBottom,width,height-stageBottom);ctx.clip();ctx.drawImage(centerImage,0,0);ctx.restore();}
+        ctx.globalAlpha=1;ctx.globalCompositeOperation='source-over';
+        await window.emitFrame(output.toDataURL('image/jpeg',0.99).split(',')[1]);
+       }
+       return frameCount;
+      },{s:spec,n:subframes,shutter,fps:FPS})
+    : await page.evaluate(s=>window.motion.render(s),spec);
    encoder.stdin.end();await done;
-   console.log(`Wrote ${outPath} (${frames} frames, ${(frames/30).toFixed(1)} s)`);
+   console.log(`Wrote ${outPath} (${frames} frames, ${(frames/FPS).toFixed(1)} s${subframes>1?`, ${subframes} subframes / ${shutter} frame shutter`:''})`);
   }
  }finally{await browser.close();}
 }

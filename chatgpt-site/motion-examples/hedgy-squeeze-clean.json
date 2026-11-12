@@ -1,0 +1,386 @@
+{
+ "version": 1,
+ "title": "The ticket that took off",
+ "series": "HEDGY / FINANCE",
+ "mode": "dark",
+ "accent": "mono",
+ "music": "tense",
+ "scenes": [
+  {
+   "type": "shot",
+   "shot": "handoff",
+   "duration": 2.2,
+   "say": "Hedgy sells a concert ticket that isn't his.",
+   "sync": [
+    {
+     "word": "sells",
+     "kind": "sells"
+    },
+    {
+     "word": "his",
+     "kind": "his"
+    }
+   ],
+   "params": {
+    "from": "hedgy",
+    "to": "buyer",
+    "item": "ticket",
+    "back": "cash",
+    "tag": "borrowed"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "handoff",
+   "duration": 2.5,
+   "say": "That's short selling: he borrows it, sells it, and owes the lender a ticket back.",
+   "sync": [
+    {
+     "word": "borrows",
+     "kind": "borrows"
+    },
+    {
+     "word": "owes",
+     "kind": "owes"
+    }
+   ],
+   "params": {
+    "from": "lender",
+    "to": "hedgy",
+    "item": "ticket",
+    "back": "iou",
+    "fromLabel": "lender",
+    "tag": "borrowed"
+   },
+   "transition": "push",
+   "transitionDir": "left"
+  },
+  {
+   "type": "shot",
+   "shot": "price",
+   "duration": 2.2,
+   "say": "He bets prices will fall, so he can buy it back cheaper.",
+   "sync": [
+    {
+     "word": "fall",
+     "kind": "fall"
+    },
+    {
+     "word": "cheaper",
+     "kind": "cheaper"
+    }
+   ],
+   "params": {
+    "item": "ticket",
+    "dir": "down",
+    "tone": "gain",
+    "who": "hedgy",
+    "mood": "smug",
+    "bar": false
+   },
+   "transition": "push",
+   "transitionDir": "up"
+  },
+  {
+   "type": "shot",
+   "shot": "store",
+   "duration": 2.2,
+   "say": "His broker holds the sale money as collateral",
+   "sync": [
+    {
+     "word": "money",
+     "kind": "money"
+    },
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    }
+   ],
+   "params": {
+    "container": "safe",
+    "item": "cash",
+    "who": "broker",
+    "label": "collateral"
+   },
+   "transition": "push",
+   "transitionDir": "left"
+  },
+  {
+   "type": "shot",
+   "shot": "wait",
+   "duration": 1.6,
+   "say": "while he waits for the hype to fade.",
+   "sync": [
+    {
+     "word": "waits",
+     "kind": "waits"
+    },
+    {
+     "word": "fade",
+     "kind": "fade"
+    }
+   ],
+   "params": {
+    "timer": "clock",
+    "who": "hedgy",
+    "mood": "neutral",
+    "item": "iou",
+    "fade": "hype"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "news",
+   "duration": 1.8,
+   "say": "Then the band announces a reunion,",
+   "sync": [
+    {
+     "word": "announces",
+     "kind": "announces"
+    },
+    {
+     "word": "reunion",
+     "kind": "reunion"
+    }
+   ],
+   "params": {
+    "medium": "poster",
+    "word": "reunion",
+    "art": "band",
+    "who": "hedgy",
+    "mood": "shocked"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "rush",
+   "duration": 1.8,
+   "say": "and fans rush for the last tickets.",
+   "sync": [
+    {
+     "word": "rush",
+     "kind": "rush"
+    },
+    {
+     "word": "last",
+     "kind": "last"
+    }
+   ],
+   "params": {
+    "crowd": [
+     "fan1",
+     "fan2",
+     "fan3"
+    ],
+    "place": "booth",
+    "item": "ticket",
+    "sign": "tickets",
+    "endSign": "sold out"
+   },
+   "transition": "push",
+   "transitionDir": "left"
+  },
+  {
+   "type": "shot",
+   "shot": "price",
+   "duration": 1.9,
+   "say": "Prices jump. Hedgy's losses grow,",
+   "sync": [
+    {
+     "word": "jump",
+     "kind": "jump"
+    },
+    {
+     "word": "losses",
+     "kind": "losses"
+    }
+   ],
+   "params": {
+    "item": "ticket",
+    "dir": "up",
+    "tone": "loss",
+    "who": "hedgy",
+    "mood": "worried",
+    "bar": true
+   },
+   "transition": "push",
+   "transitionDir": "down"
+  },
+  {
+   "type": "shot",
+   "shot": "demand",
+   "duration": 1.8,
+   "say": "so the broker demands more collateral.",
+   "sync": [
+    {
+     "word": "demands",
+     "kind": "demands"
+    },
+    {
+     "word": "collateral",
+     "kind": "collateral"
+    }
+   ],
+   "params": {
+    "from": "broker",
+    "to": "hedgy",
+    "want": "cash",
+    "word": "more",
+    "outcome": "empty"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "runto",
+   "duration": 1.7,
+   "say": "He can't pay, so he must buy",
+   "sync": [
+    {
+     "word": "pay",
+     "kind": "pay"
+    },
+    {
+     "word": "buy",
+     "kind": "buy"
+    }
+   ],
+   "params": {
+    "who": "hedgy",
+    "place": "booth",
+    "sign": "buy",
+    "mood": "panic"
+   },
+   "transition": "push",
+   "transitionDir": "left"
+  },
+  {
+   "type": "shot",
+   "shot": "trade",
+   "duration": 1.3,
+   "say": "a ticket back now.",
+   "sync": [
+    {
+     "word": "back",
+     "kind": "back"
+    },
+    {
+     "word": "now",
+     "kind": "now"
+    }
+   ],
+   "params": {
+    "who": "hedgy",
+    "place": "booth",
+    "sign": "buy",
+    "item": "ticket",
+    "mode": "buy",
+    "price": "high"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "queue",
+   "duration": 2.6,
+   "say": "Those forced buys add demand and push prices higher,",
+   "sync": [
+    {
+     "word": "buys",
+     "kind": "buys"
+    },
+    {
+     "word": "demand",
+     "kind": "demand"
+    },
+    {
+     "word": "higher",
+     "kind": "higher"
+    }
+   ],
+   "params": {
+    "crowd": [
+     "seller1",
+     "seller2",
+     "trader"
+    ],
+    "place": "booth",
+    "sign": "buy",
+    "item": "ticket",
+    "dir": "up"
+   },
+   "transition": "cut"
+  },
+  {
+   "type": "shot",
+   "shot": "loop",
+   "duration": 2.6,
+   "say": "scaring other short sellers into buying back too.",
+   "sync": [
+    {
+     "word": "scaring",
+     "kind": "scaring"
+    },
+    {
+     "word": "buying",
+     "kind": "buying"
+    }
+   ],
+   "params": {
+    "nodes": [
+     {
+      "item": "priceTag",
+      "label": "price up"
+     },
+     {
+      "item": "warning",
+      "label": "panic"
+     },
+     {
+      "item": "ticket",
+      "label": "buy back"
+     }
+    ],
+    "who": "seller1",
+    "mood": "worried"
+   },
+   "transition": "push",
+   "transitionDir": "up"
+  },
+  {
+   "type": "shot",
+   "shot": "squeeze",
+   "duration": 3.2,
+   "say": "That feedback loop is a short squeeze.",
+   "sync": [
+    {
+     "word": "feedback",
+     "kind": "feedback"
+    },
+    {
+     "word": "loop",
+     "kind": "loop"
+    },
+    {
+     "word": "squeeze",
+     "kind": "squeeze"
+    }
+   ],
+   "params": {
+    "victim": [
+     "seller1",
+     "hedgy",
+     "seller2"
+    ],
+    "who": "none",
+    "word": "short squeeze",
+    "mode": "vise",
+    "steps": 3
+   },
+   "transition": "cut"
+  }
+ ]
+}

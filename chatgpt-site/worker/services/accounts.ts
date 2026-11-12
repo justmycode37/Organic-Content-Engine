@@ -1,4 +1,5 @@
 import {HEDGY_POLICY} from '../hedgy-policy.ts';
+import {ACRYLLEX_POLICY} from '../acryllex-policy.ts';
 import {z} from 'zod';
 import type {Db} from '../db/database.ts';
 import {AppError} from '../errors.ts';
@@ -7,7 +8,9 @@ export const accountCreate=z.object({name:z.string().trim().min(1).max(80),platf
 interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;brand?:unknown}
 export async function listAccounts(db:Db){
 const seed={id:'hedgy',name:'hedgy',platform:'instagram',topic:'Simple quantitative finance and market explainers with relatable analogies',postsPerDay:1,postingTime:'18:00',timezone:'Europe/Zurich',enabled:true,brand:HEDGY_POLICY};
-await db.prepare('INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(seed.id,JSON.stringify(seed),new Date().toISOString(),new Date().toISOString()).run();const rows=await db.prepare('SELECT value FROM accounts ORDER BY created_at,id').all<{value:string}>();return rows.results.map(row=>present(JSON.parse(row.value) as Account));}
+// ACRYLLEX: a separate account (own history, schedule, pipeline, look); only the narrator voice is shared with Hedgy.
+const acryllex={id:'acryllex',name:'acryllex',platform:'instagram',topic:ACRYLLEX_POLICY.topic,postsPerDay:1,postingTime:'19:00',timezone:'Europe/Zurich',enabled:true,brand:ACRYLLEX_POLICY};
+for(const [i,a] of [seed,acryllex].entries())await db.prepare('INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(a.id,JSON.stringify(a),new Date(Date.now()+i).toISOString(),new Date().toISOString()).run();const rows=await db.prepare('SELECT value FROM accounts ORDER BY created_at,id').all<{value:string}>();return rows.results.map(row=>present(JSON.parse(row.value) as Account));}
 function present(a:Account){
  const issues=['Connect this account'];
  if(!a.enabled)issues.unshift('Automation paused');
@@ -20,7 +23,7 @@ function present(a:Account){
  let utc=target;for(let n=0;n<3;n++){const parts=new Intl.DateTimeFormat('en-CA',{timeZone:a.timezone,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(new Date(utc));const p=Object.fromEntries(parts.map(v=>[v.type,v.value]));const represented=Date.parse(`${p.year}-${p.month}-${p.day}T${p.hour}:${p.minute}:${p.second}Z`);utc+=target-represented;}
  if(utc>Date.now())schedule.push({date:dateText,scheduledAt:new Date(utc).toISOString(),status:'blocked'});
  }
- return {...a,...(a.id==='hedgy'?{brand:HEDGY_POLICY}:{}),health:{state:'blocked' as const,issues},schedule};
+ return {...a,...(a.id==='hedgy'?{brand:HEDGY_POLICY}:a.id==='acryllex'?{brand:ACRYLLEX_POLICY}:{}),health:{state:'blocked' as const,issues},schedule};
 }
 export async function addAccount(db:Db,input:z.infer<typeof accountCreate>){const a:Account={...input,id:crypto.randomUUID(),postsPerDay:1,postingTime:'18:00',timezone:'Europe/Zurich',enabled:true};await db.prepare('INSERT INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(a.id,JSON.stringify(a),new Date().toISOString(),new Date().toISOString()).run();return present(a);}
 export async function updateAccount(db:Db,id:string,patch:z.infer<typeof accountPatch>){const row=await db.prepare('SELECT value FROM accounts WHERE id=?').bind(id).first<{value:string}>();if(!row)throw new AppError(404,'not_found','Account not found');const a={...JSON.parse(row.value),...patch,id} as Account;await db.prepare('UPDATE accounts SET value=?,updated_at=? WHERE id=?').bind(JSON.stringify(a),new Date().toISOString(),id).run();return present(a);}
