@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "id": "send-this-to-your",
+  "name": "SEND THIS TO YOUR… — the role-specific briefing",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A specific recipient and reason to forward are proposed sources of utility, not a guaranteed multiplier."
+  },
+  "lengthBandSeconds": {
+    "min": 25,
+    "max": 38,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "DM sends/reach when available",
+  "diagnostics": [
+    "Share rate as a proxy only when sends are unavailable"
+  ],
+  "evidenceRequirements": [
+    "Name a real audience role and a concrete consequence supported by evidence.",
+    "For security stories, state prerequisites, affected scope, and practical remediation.",
+    "Do not imply every viewer is affected or compromised."
+  ],
+  "recommendedStyles": [
+    "breaking",
+    "patch",
+    "miniworld",
+    "system"
+  ],
+  "beatStructure": [
+    {
+      "id": "role-consequence",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Name the role and the consequence that matters to them.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "list"
+      ]
+    },
+    {
+      "id": "affected-not-affected",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 8
+      },
+      "purpose": "Separate who is affected from who is not.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "compare",
+        "list"
+      ]
+    },
+    {
+      "id": "mechanism-evidence",
+      "timeRangeSeconds": {
+        "start": 8,
+        "end": 22
+      },
+      "purpose": "Explain the mechanism and attach source-backed evidence.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "flow",
+        "layers",
+        "list"
+      ]
+    },
+    {
+      "id": "practical-next-check",
+      "timeRangeSeconds": {
+        "start": 22,
+        "end": 30
+      },
+      "purpose": "Give one practical check or remediation step.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "flow",
+        "list"
+      ]
+    },
+    {
+      "id": "send-cue",
+      "timeRangeSeconds": {
+        "start": 30,
+        "end": 33
+      },
+      "purpose": "Earn one relevant send cue by naming its recipient.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "outro",
+        "title"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "alert",
+        "headline"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "claim",
+        "verdict"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "update",
+        "process"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "statement",
+        "object"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "consequence",
+        "place"
+      ]
+    }
+  },
+  "metricCaveat": "Label share rate as a proxy; do not report it as DM sends."
+}

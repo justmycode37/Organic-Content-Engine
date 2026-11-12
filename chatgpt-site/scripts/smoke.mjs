@@ -207,7 +207,7 @@ test('background work runs only through the authenticated job endpoint', async (
   const off = (await call('POST', '/api/jobs/tick', { headers: { authorization: `Bearer ${JOB_TOKEN}` } })).body;
   assert.equal(off.paused, true);
   assert.equal((await call('GET', `/api/posts/${due.id}`)).body.status, 'scheduled');
-  assert.equal((await call('GET', '/api/status')).body.scheduler.lastTickAt, null);
+  assert.ok((await call('GET', '/api/status')).body.scheduler.lastTickAt, 'a tick is recorded while analytics-only background work remains enabled');
   await call('PATCH', '/api/settings', { json: { autonomyEnabled: true, publishingPaused: true } });
   const held = (await call('POST', '/api/jobs/tick', { headers: { authorization: `Bearer ${JOB_TOKEN}` } })).body;
   assert.deepEqual([held.publish.skippedPaused, held.publish.processed], [true, 0]);
@@ -740,9 +740,89 @@ test('Instagram uploads a private Reel directly and publishes its container exac
  }});
  await connectFixture(instance,'instagram');const file=await storeFile(instance);
  const post=(await instance.call('POST','/api/posts',{json:{platform:'instagram',body:'Caption',mediaUrls:[`storage:${file.id}`],publishOptions:{accountId:'account-1'}}})).body;
- const started=await instance.call('POST',`/api/posts/${post.id}/publish-now`);assert.equal(started.body.status,'processing',JSON.stringify(started.body));
- await processAgain(instance,post.id);const result=(await instance.call('GET',`/api/posts/${post.id}`)).body;assert.equal(result.status,'published');assert.equal(result.externalId,'ig-post-1');
- await processAgain(instance,post.id);assert.deepEqual([containers,uploads,publications],[1,1,1]);await instance.stop();
+  const started=await instance.call('POST',`/api/posts/${post.id}/publish-now`);assert.equal(started.body.status,'processing',JSON.stringify(started.body));
+  await processAgain(instance,post.id);const result=(await instance.call('GET',`/api/posts/${post.id}`)).body;assert.equal(result.status,'published');assert.equal(result.externalId,'ig-post-1');
+  const snapshots=await instance.db.prepare('SELECT age_bucket FROM instagram_insight_snapshots WHERE post_id=? ORDER BY scheduled_at').bind(post.id).all();
+  assert.deepEqual(snapshots.results.map(row=>row.age_bucket),['1h','24h','72h','7d','28d'],'a successful Instagram publish creates its fixed snapshot schedule');
+  await processAgain(instance,post.id);assert.deepEqual([containers,uploads,publications],[1,1,1]);await instance.stop();
+});
+
+test('Instagram insights preserve unknown metrics, normalize rates, and enter future generation context',async()=>{
+ let insightsCalls=0;
+ const instance=await start({JOB_TOKEN,CONTENT_GENERATOR:'chatgpt-plan'}, {persist:'instagram-insights',outboundService:async request=>{
+  const url=new URL(request.url);
+  assert.equal(url.hostname,'graph.instagram.com');
+  assert.equal(request.headers.get('authorization'),'Bearer instagram-access');
+  assert.equal(url.searchParams.has('access_token'),false,'the access token stays in the authorization header');
+  assert.equal(url.pathname,'/v25.0/ig-insights-post/insights');
+  insightsCalls++;
+  return Response.json({data:[
+   {name:'views',values:[{value:400}]},
+   {name:'reach',values:[{value:200}]},
+   {name:'likes',values:[{value:12}]},
+   {name:'comments',values:[{value:4}]},
+   {name:'saved',values:[{value:5}]},
+   {name:'total_interactions',values:[{value:21}]},
+   {name:'ig_reels_avg_watch_time',values:[{value:7600}]},
+   {name:'ig_reels_video_view_total_time',values:[{value:152000}]},
+  ]});
+ }});
+ await connectFixture(instance,'instagram');
+ const pillar=(await instance.call('POST','/api/pillars',{json:{name:'Useful systems',platforms:['instagram']}})).body;
+ const publishedAt=new Date(Date.now()-2*60*60_000).toISOString();
+ const post=(await instance.call('POST','/api/posts',{json:{platform:'instagram',body:'Reel about a useful system',pillarId:pillar.id}})).body;
+ await instance.db.prepare("UPDATE posts SET status='published',published_at=?,external_id=?,external_url=?,publish_options=? WHERE id=?")
+  .bind(publishedAt,'ig-insights-post','https://www.instagram.com/reel/example/',JSON.stringify({accountId:'account-1'}),post.id).run();
+ const saved=await instance.call('PUT',`/api/posts/${post.id}/feedback`,{json:{format:'under-the-hood',style:'patch',hookVariant:'hook-a',claimsLedgerFile:'claims.json',verdict:null,notes:''}});
+ assert.deepEqual([saved.status,saved.body.format,saved.body.style,saved.body.hookVariant,saved.body.claimsLedgerFile],[200,'under-the-hood','patch','hook-a','claims.json']);
+ const headers={authorization:`Bearer ${JOB_TOKEN}`};
+ const tick=await instance.call('POST','/api/jobs/tick',{headers});
+ assert.equal(tick.status,200,JSON.stringify(tick.body));assert.equal(tick.body.paused,true);assert.equal(tick.body.instagramAnalytics.processed,1);
+ assert.equal(tick.body.instagramAnalytics.partial,1,JSON.stringify(tick.body));assert.equal(tick.body.ok,false,JSON.stringify(tick.body));assert.match(tick.body.errors[0],/shares/);
+ const page=(await instance.call('GET','/api/analytics/instagram')).body;
+ const ledgerPost=page.posts.find(item=>item.postId===post.id);assert.ok(ledgerPost);
+ assert.deepEqual([ledgerPost.format,ledgerPost.style,ledgerPost.hookVariant,ledgerPost.claimsLedgerFile],['under-the-hood','patch','hook-a','claims.json']);
+ const first=ledgerPost.snapshots.find(item=>item.ageBucket==='1h');assert.equal(first.status,'partial');
+ assert.deepEqual([first.metrics.views,first.metrics.reach,first.metrics.likes,first.metrics.shares,first.metrics.likesPerReach,first.metrics.savesPerReach,first.metrics.sharesPerReach,first.metrics.averageWatchTimeMs],[400,200,12,null,.06,.025,null,7600]);
+ assert.equal(first.unknownMetrics.shares,'not_returned');assert.equal(first.metrics.follows,null);assert.match(first.unknownMetrics.profile_visits,/not_applicable/);
+ assert.ok(page.comparisons.some(item=>item.ageBucket==='1h'&&item.format==='under-the-hood'&&item.style==='patch'&&item.likesPerReach===.06));
+ const raw=await instance.db.prepare('SELECT raw_json FROM instagram_insight_snapshots WHERE post_id=? AND age_bucket=\'1h\'').bind(post.id).first();
+ assert.match(raw.raw_json,/total_interactions/);assert.equal(insightsCalls,1);
+ await instance.call('POST','/api/jobs/tick',{headers});
+ assert.equal((await instance.db.prepare('SELECT COUNT(*) AS n FROM instagram_insight_snapshots WHERE post_id=?').bind(post.id).first()).n,5,'repeat ticks do not create duplicate jobs');
+
+ const generation=(await instance.call('POST','/api/generation',{json:{kind:'ideas',pillarId:pillar.id,count:1}})).body;
+ const context=JSON.parse((await mcp(instance,'get_generation_context',{jobId:generation.id})).result.content[0].text);
+ assert.ok(context.source.feedbackAnalytics.some(item=>item.ageBucket==='1h'&&item.format==='under-the-hood'&&item.style==='patch'&&item.likesPerReach===.06));
+ assert.match(context.instructions,/same ageBucket/);
+ await instance.stop();
+});
+
+test('Instagram insights surface rate limits, token expiry and permission gaps',async()=>{
+ const instance=await start({JOB_TOKEN}, {persist:'instagram-insight-errors',outboundService:async request=>{
+  const url=new URL(request.url);const mediaId=url.pathname.split('/').at(-2);
+  if(mediaId==='ig-rate-limit')return Response.json({error:{message:'Rate limit reached',code:4,is_transient:true}},{status:429,headers:{'retry-after':'120'}});
+  if(mediaId==='ig-expired')return Response.json({error:{message:'Invalid OAuth access token',type:'OAuthException',code:190,fbtrace_id:'expiry-test'}},{status:400});
+  if(mediaId==='ig-no-permission')return Response.json({error:{message:'Missing permission instagram_business_manage_insights',type:'OAuthException',code:10,fbtrace_id:'permission-test'}},{status:400});
+  throw new Error(`Unexpected Instagram request ${request.url}`);
+ }});
+ await connectFixture(instance,'instagram');
+ const publishedAt=new Date(Date.now()-2*60*60_000).toISOString();
+ for(const externalId of ['ig-rate-limit','ig-expired','ig-no-permission']){
+  const post=(await instance.call('POST','/api/posts',{json:{platform:'instagram',body:externalId,publishOptions:{accountId:'account-1'}}})).body;
+  await instance.db.prepare("UPDATE posts SET status='published',published_at=?,external_id=? WHERE id=?").bind(publishedAt,externalId,post.id).run();
+ }
+ const tick=await instance.call('POST','/api/jobs/tick',{headers:{authorization:`Bearer ${JOB_TOKEN}`}});
+ assert.equal(tick.body.instagramAnalytics.processed,3,JSON.stringify(tick.body));assert.equal(tick.body.instagramAnalytics.retryScheduled,1,JSON.stringify(tick.body));assert.equal(tick.body.instagramAnalytics.failed,2,JSON.stringify(tick.body));
+ const rows=await instance.db.prepare("SELECT p.external_id,s.status,s.error_code,s.error_message,s.next_attempt_at,s.raw_json,s.metrics_json FROM instagram_insight_snapshots s JOIN posts p ON p.id=s.post_id WHERE s.age_bucket='1h'").all();
+ const byMedia=new Map(rows.results.map(row=>[row.external_id,row]));
+ const limited=byMedia.get('ig-rate-limit');assert.equal(limited.status,'pending');assert.equal(limited.error_code,'rate_limited');assert.ok(Date.parse(limited.next_attempt_at)>Date.now()+10_000);assert.match(limited.raw_json,/Rate limit reached/);
+ const expired=byMedia.get('ig-expired');assert.equal(expired.status,'failed');assert.equal(expired.error_code,'token_expired');assert.match(expired.error_message,/Reconnect Instagram/);assert.equal(JSON.parse(expired.metrics_json).metrics.views,null);
+ const permission=byMedia.get('ig-no-permission');assert.equal(permission.status,'failed');assert.equal(permission.error_code,'permission_required');assert.match(permission.error_message,/instagram_business_manage_insights/);assert.match(permission.raw_json,/permission-test/);
+ const page=(await instance.call('GET','/api/analytics/instagram')).body;
+ assert.ok(page.posts.flatMap(item=>item.snapshots).some(item=>item.errorCode==='permission_required'));
+ assert.deepEqual((await instance.call('POST','/api/analytics/instagram/retry')).body,{requeued:2});
+ await instance.stop();
 });
 
 test('connected X and LinkedIn accounts publish text with their own tokens and reviewed identity',async()=>{

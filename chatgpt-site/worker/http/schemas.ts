@@ -102,11 +102,15 @@ export const postSchedule = z.strictObject({ scheduledAt: instant });
 export const postApprove = z.strictObject({ scheduledAt: instant.optional() });
 export const postResolve = z.strictObject({
   outcome: z.enum(['published', 'not_published']),
+  externalId: z.string().min(1).max(200).optional(),
   externalUrl: httpsUrl.optional(),
 });
 
 export const feedbackBody = z.strictObject({
   format: text(120).min(1),
+  style: text(40).nullable().optional(),
+  hookVariant: text(120).nullable().optional(),
+  claimsLedgerFile: text(500).nullable().optional(),
   verdict: z.enum(['successful','iterate','discard']).nullable(),
   notes: text(4000),
   impressions: z.number().int().min(0).max(2_000_000_000).optional(),

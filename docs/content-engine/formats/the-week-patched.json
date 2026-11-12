@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "the-week-patched",
+  "name": "THE WEEK, PATCHED — an editorial digest with a reason to return",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A selective recurring briefing is an editorial adaptation to test, not a validated digest format."
+  },
+  "lengthBandSeconds": {
+    "min": 35,
+    "max": 45,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Attributable follow conversion",
+  "diagnostics": [
+    "Returning viewers only when the platform exposes a usable measure"
+  ],
+  "evidenceRequirements": [
+    "Every item needs its own source, date, status, and concrete consequence.",
+    "Distinguish a shipped capability from a promise, watchlist item, or disputed claim.",
+    "If three items cannot be explained clearly in the band, split them into separate Reels and a companion carousel."
+  ],
+  "recommendedStyles": [
+    "breaking",
+    "patch",
+    "system",
+    "proof"
+  ],
+  "beatStructure": [
+    {
+      "id": "selection-promise",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Explain the selection rule and promise one useful distinction.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "list"
+      ]
+    },
+    {
+      "id": "usable-update",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 13
+      },
+      "purpose": "Give one usable update with verified availability.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "changelog",
+        "list",
+        "flow"
+      ]
+    },
+    {
+      "id": "watchlist-status",
+      "timeRangeSeconds": {
+        "start": 13,
+        "end": 23
+      },
+      "purpose": "Present one watchlist item and its actual status.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "changelog",
+        "list",
+        "list"
+      ]
+    },
+    {
+      "id": "hype-evidence",
+      "timeRangeSeconds": {
+        "start": 23,
+        "end": 33
+      },
+      "purpose": "Separate a repeated claim from the evidence that supports it.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "compare",
+        "list",
+        "title"
+      ]
+    },
+    {
+      "id": "takeaway-next-edition",
+      "timeRangeSeconds": {
+        "start": 33,
+        "end": 40
+      },
+      "purpose": "Give one takeaway and a natural return cue.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "outro",
+        "list",
+        "title"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "compare"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "title"
+      ],
+      "specialScenes": [
+        "ticker",
+        "verdict"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "compare"
+      ],
+      "specialScenes": [
+        "timeline",
+        "board"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "flow"
+      ],
+      "specialScenes": [
+        "update",
+        "log"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "cover",
+        "statement"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "list",
+        "changelog",
+        "flow"
+      ],
+      "specialScenes": [
+        "journey",
+        "versus"
+      ]
+    }
+  }
+}

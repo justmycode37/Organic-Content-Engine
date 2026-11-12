@@ -1,0 +1,164 @@
+{
+  "schemaVersion": 1,
+  "id": "one-question-one-diagram",
+  "name": "ONE QUESTION, ONE DIAGRAM — audience confusion becomes a franchise",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A repeatable promise of understanding may support follows; that is an editorial hypothesis to measure."
+  },
+  "lengthBandSeconds": {
+    "min": 24,
+    "max": 38,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Attributable follows/accounts reached",
+  "diagnostics": [
+    "Retention as a guardrail"
+  ],
+  "evidenceRequirements": [
+    "Use a real viewer question only when documented; otherwise label it as an editorial question.",
+    "Research the actual mechanism before drawing it; label simplifications and metaphors.",
+    "Do not invent a viewer quote, comment, or screenshot."
+  ],
+  "recommendedStyles": [
+    "patch",
+    "miniworld",
+    "proof",
+    "bigidea"
+  ],
+  "beatStructure": [
+    {
+      "id": "question",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "State a real question or clearly framed editorial question.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "kinetic"
+      ]
+    },
+    {
+      "id": "first-answer",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 9
+      },
+      "purpose": "Answer the first part before adding background.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "flow"
+      ]
+    },
+    {
+      "id": "diagram-counterexample",
+      "timeRangeSeconds": {
+        "start": 9,
+        "end": 23
+      },
+      "purpose": "Build the diagram and use a counterexample to test it.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "flow",
+        "layers",
+        "grid"
+      ]
+    },
+    {
+      "id": "corrected-model",
+      "timeRangeSeconds": {
+        "start": 23,
+        "end": 30
+      },
+      "purpose": "State the corrected mental model in one useful sentence.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "kinetic"
+      ]
+    },
+    {
+      "id": "follow-up",
+      "timeRangeSeconds": {
+        "start": 30,
+        "end": 34
+      },
+      "purpose": "Ask one useful follow-up question that can guide another explainer.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "outro",
+        "title"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "layers"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "headline"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "layers"
+      ],
+      "specialScenes": [
+        "claim",
+        "board"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "layers"
+      ],
+      "specialScenes": [
+        "process",
+        "network"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "statement",
+        "object"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "layers"
+      ],
+      "specialScenes": [
+        "place",
+        "journey"
+      ]
+    }
+  }
+}

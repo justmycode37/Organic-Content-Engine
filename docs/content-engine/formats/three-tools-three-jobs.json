@@ -1,0 +1,152 @@
+{
+  "schemaVersion": 1,
+  "id": "three-tools-three-jobs",
+  "name": "THREE TOOLS, THREE JOBS — not another giant list",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "Task-to-tool retrieval is the proposed utility; it is not evidence that lists outperform other formats."
+  },
+  "lengthBandSeconds": {
+    "min": 28,
+    "max": 40,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Saves/accounts reached",
+  "diagnostics": [
+    "Average watch time"
+  ],
+  "evidenceRequirements": [
+    "Verify the tool, version, access, and price at publication.",
+    "For each tool, give one concrete job, a verified output, and a limitation.",
+    "Disclose sponsorship or affiliate interest and provide a readable companion when useful."
+  ],
+  "recommendedStyles": [
+    "patch",
+    "proof",
+    "system",
+    "breaking"
+  ],
+  "beatStructure": [
+    {
+      "id": "three-concrete-jobs",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Name three concrete jobs so viewers know the selection rule.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "list"
+      ]
+    },
+    {
+      "id": "one-tool-per-job",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 24
+      },
+      "purpose": "Show one verified tool, output, and limitation for each job.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "list",
+        "compare",
+        "chat"
+      ]
+    },
+    {
+      "id": "task-tool-decision",
+      "timeRangeSeconds": {
+        "start": 24,
+        "end": 32
+      },
+      "purpose": "Map each job to one suitable tool with a clear decision rule.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "compare",
+        "list"
+      ]
+    },
+    {
+      "id": "date-and-save",
+      "timeRangeSeconds": {
+        "start": 32,
+        "end": 35
+      },
+      "purpose": "Date the information and offer one save cue.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "outro",
+        "title"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "chat"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "title"
+      ],
+      "specialScenes": [
+        "ticker",
+        "headline"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "flow"
+      ],
+      "specialScenes": [
+        "board",
+        "exhibit"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "bars"
+      ],
+      "specialScenes": [
+        "benchmark",
+        "dashboard"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "contrast",
+        "cover"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "list",
+        "compare",
+        "bars"
+      ],
+      "specialScenes": [
+        "stack",
+        "versus"
+      ]
+    }
+  }
+}

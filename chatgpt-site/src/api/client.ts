@@ -1,7 +1,7 @@
 import type { EditPlan, Voice } from '../studio/plan';
 import type {
   ActivityEvent, Autopilot, Brand, CycleResult, Idea, IdeaStatus, Page, Pillar, PillarInput, PlatformId,
-  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight,
+  PlatformStatus, Post, PostCreate, PostDetail, PostQuery, PublishMode, PublishRunResult, Session, Settings, Status, FeedbackEntry, FormatInsight, InstagramAnalyticsPage,
 } from './types';
 
 const BASE = '/api';
@@ -169,11 +169,13 @@ export const api = {
     unschedule: (id: string) => post<Post>(`/posts/${at(id)}/unschedule`),
     cancel: (id: string) => post<Post>(`/posts/${at(id)}/cancel`),
     publishNow: (id: string) => post<Post>(`/posts/${at(id)}/publish-now`),
-    resolve: (id: string, input: { outcome: 'published' | 'not_published'; externalUrl?: string }) => post<Post>(`/posts/${at(id)}/resolve`, input),
-    feedback: (id: string, input: { format: string; verdict: 'successful' | 'iterate' | 'discard' | null; notes: string; impressions?: number; engagements?: number; conversions?: number }) => request<FeedbackEntry>(`/posts/${at(id)}/feedback`, { method: 'PUT', json: input }),
+    resolve: (id: string, input: { outcome: 'published' | 'not_published'; externalId?: string; externalUrl?: string }) => post<Post>(`/posts/${at(id)}/resolve`, input),
+    feedback: (id: string, input: { format: string; style?: string | null; hookVariant?: string | null; claimsLedgerFile?: string | null; verdict: 'successful' | 'iterate' | 'discard' | null; notes: string; impressions?: number; engagements?: number; conversions?: number }) => request<FeedbackEntry>(`/posts/${at(id)}/feedback`, { method: 'PUT', json: input }),
     revise: (id: string) => post<Post | { id: string; kind: 'draft'; status: 'pending' }>(`/posts/${at(id)}/revise`),
   },
   feedback: () => request<{ entries: FeedbackEntry[]; formats: FormatInsight[] }>('/feedback'),
+  instagramAnalytics: () => request<InstagramAnalyticsPage>('/analytics/instagram'),
+  retryInstagramAnalytics: () => post<{ requeued: number }>('/analytics/instagram/retry'),
   scheduler: {
     runPublish: () => post<{ job: 'publish'; result: PublishRunResult }>('/scheduler/run', { job: 'publish' }),
     runCycle: () => post<{ job: 'autonomy'; result: CycleResult }>('/scheduler/run', { job: 'autonomy' }),

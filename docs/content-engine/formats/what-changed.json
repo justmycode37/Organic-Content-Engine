@@ -1,0 +1,167 @@
+{
+  "schemaVersion": 1,
+  "id": "what-changed",
+  "name": "WHAT CHANGED — one release, one consequence",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "Timely, recipient-specific utility is a proposed reason to test this format; no result is established."
+  },
+  "lengthBandSeconds": {
+    "min": 22,
+    "max": 35,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Shares/accounts reached",
+  "diagnostics": [
+    "Average watch time"
+  ],
+  "evidenceRequirements": [
+    "Verify whether the change is announced, available, generally shipped, or limited to a preview.",
+    "Name the old workflow and the precise new step; do not imply a broader job replacement.",
+    "Check date, eligibility, price, geography, and rollout caveats at publication."
+  ],
+  "recommendedStyles": [
+    "breaking",
+    "patch",
+    "system",
+    "bigidea"
+  ],
+  "beatStructure": [
+    {
+      "id": "old-new-contrast",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 2
+      },
+      "purpose": "Show the old and new state together.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "compare",
+        "title"
+      ]
+    },
+    {
+      "id": "shipped-change",
+      "timeRangeSeconds": {
+        "start": 2,
+        "end": 7
+      },
+      "purpose": "State exactly what changed and its release status.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "changelog",
+        "diff"
+      ]
+    },
+    {
+      "id": "mechanism-demo",
+      "timeRangeSeconds": {
+        "start": 7,
+        "end": 19
+      },
+      "purpose": "Demonstrate the mechanism or workflow in meaningful steps.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "flow",
+        "chat",
+        "terminal"
+      ]
+    },
+    {
+      "id": "availability-limit",
+      "timeRangeSeconds": {
+        "start": 19,
+        "end": 25
+      },
+      "purpose": "State access conditions, limitations, and what remains unchanged.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "compare"
+      ]
+    },
+    {
+      "id": "who-cares",
+      "timeRangeSeconds": {
+        "start": 25,
+        "end": 30
+      },
+      "purpose": "Identify who should care and why.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "changelog",
+        "diff",
+        "compare"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "changelog",
+        "diff",
+        "title"
+      ],
+      "specialScenes": [
+        "alert",
+        "headline",
+        "verdict"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "changelog",
+        "diff",
+        "list"
+      ],
+      "specialScenes": [
+        "exhibit",
+        "timeline"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "changelog",
+        "flow",
+        "list"
+      ],
+      "specialScenes": [
+        "update",
+        "process"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "changelog",
+        "compare",
+        "title"
+      ],
+      "specialScenes": [
+        "contrast",
+        "cover"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "changelog",
+        "flow",
+        "compare"
+      ],
+      "specialScenes": [
+        "journey",
+        "versus"
+      ]
+    }
+  },
+  "metricCaveat": "Use this as an explicit proxy when DM sends are unavailable."
+}

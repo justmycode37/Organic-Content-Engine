@@ -1,0 +1,170 @@
+{
+  "schemaVersion": 1,
+  "id": "under-the-hood",
+  "name": "UNDER THE HOOD — the invisible step",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "Visual explanation is a practitioner-inspired adaptation to test; it is not a replicated Instagram performance mechanism."
+  },
+  "lengthBandSeconds": {
+    "min": 28,
+    "max": 40,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Average watch time",
+  "diagnostics": [
+    "available retention",
+    "normalized watch"
+  ],
+  "evidenceRequirements": [
+    "Attribute internal product details to the named source; do not infer undocumented internals.",
+    "Ledger every number and keep model status, scan scope, and known limitations close to the claim.",
+    "If only secondary reports are accessible, label them and record primary-source access as unavailable."
+  ],
+  "recommendedStyles": [
+    "patch",
+    "system",
+    "miniworld",
+    "proof"
+  ],
+  "beatStructure": [
+    {
+      "id": "result",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 2
+      },
+      "purpose": "Show a recognizable result and name the tension.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "stat"
+      ]
+    },
+    {
+      "id": "question-first-answer",
+      "timeRangeSeconds": {
+        "start": 2,
+        "end": 6
+      },
+      "purpose": "Ask the question and deliver the first useful answer.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "flow"
+      ]
+    },
+    {
+      "id": "causal-layers",
+      "timeRangeSeconds": {
+        "start": 6,
+        "end": 22
+      },
+      "purpose": "Reveal three causal layers, one understandable step at a time.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "flow",
+        "layers",
+        "code"
+      ]
+    },
+    {
+      "id": "recombine",
+      "timeRangeSeconds": {
+        "start": 22,
+        "end": 30
+      },
+      "purpose": "Recombine the parts into the opening result.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "flow",
+        "compare",
+        "layers"
+      ]
+    },
+    {
+      "id": "implication-cta",
+      "timeRangeSeconds": {
+        "start": 30,
+        "end": 34
+      },
+      "purpose": "Give one useful implication and, if earned, one follow cue.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "flow",
+        "layers",
+        "code",
+        "terminal"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "title",
+        "flow",
+        "layers"
+      ],
+      "specialScenes": [
+        "headline",
+        "verdict"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "flow",
+        "layers",
+        "list"
+      ],
+      "specialScenes": [
+        "claim",
+        "exhibit",
+        "board"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "flow",
+        "layers",
+        "terminal"
+      ],
+      "specialScenes": [
+        "process",
+        "network",
+        "log"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "flow",
+        "layers",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "object",
+        "contrast"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "flow",
+        "layers",
+        "list"
+      ],
+      "specialScenes": [
+        "journey",
+        "consequence"
+      ]
+    }
+  }
+}

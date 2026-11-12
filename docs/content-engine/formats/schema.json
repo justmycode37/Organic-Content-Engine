@@ -1,0 +1,263 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:patch-notes:reel-format-preset-v1",
+  "title": "PATCH NOTES Reel format preset",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "id",
+    "name",
+    "evidence",
+    "lengthBandSeconds",
+    "primaryMetric",
+    "diagnostics",
+    "evidenceRequirements",
+    "recommendedStyles",
+    "beatStructure",
+    "sceneRecommendationsByStyle"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": 1
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "label",
+        "basis",
+        "source",
+        "note",
+        "rationale"
+      ],
+      "properties": {
+        "label": {
+          "const": "hypothesis"
+        },
+        "basis": {
+          "const": "Inference"
+        },
+        "source": {
+          "const": "output/ecosystem/04-viral-strategies.md §12"
+        },
+        "note": {
+          "type": "string",
+          "minLength": 1
+        },
+        "rationale": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "lengthBandSeconds": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "min",
+        "max",
+        "basis"
+      ],
+      "properties": {
+        "min": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 90
+        },
+        "max": {
+          "type": "number",
+          "minimum": 5,
+          "maximum": 90
+        },
+        "basis": {
+          "const": "initial production/test band"
+        }
+      }
+    },
+    "primaryMetric": {
+      "type": "string",
+      "minLength": 1
+    },
+    "diagnostics": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "metricCaveat": {
+      "type": "string"
+    },
+    "evidenceRequirements": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "recommendedStyles": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "$ref": "#/$defs/style"
+      }
+    },
+    "beatStructure": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/beat"
+      }
+    },
+    "sceneRecommendationsByStyle": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "patch",
+        "breaking",
+        "proof",
+        "system",
+        "bigidea",
+        "miniworld"
+      ],
+      "properties": {
+        "patch": {
+          "$ref": "#/$defs/styleScenes"
+        },
+        "breaking": {
+          "$ref": "#/$defs/styleScenes"
+        },
+        "proof": {
+          "$ref": "#/$defs/styleScenes"
+        },
+        "system": {
+          "$ref": "#/$defs/styleScenes"
+        },
+        "bigidea": {
+          "$ref": "#/$defs/styleScenes"
+        },
+        "miniworld": {
+          "$ref": "#/$defs/styleScenes"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "style": {
+      "enum": [
+        "patch",
+        "breaking",
+        "proof",
+        "system",
+        "bigidea",
+        "miniworld"
+      ]
+    },
+    "sceneType": {
+      "enum": [
+        "title",
+        "code",
+        "diff",
+        "terminal",
+        "flow",
+        "stat",
+        "bars",
+        "compare",
+        "list",
+        "tokens",
+        "chat",
+        "layers",
+        "grid",
+        "kinetic",
+        "changelog",
+        "outro",
+        "special"
+      ]
+    },
+    "styleScenes": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "sceneTypes",
+        "specialScenes"
+      ],
+      "properties": {
+        "sceneTypes": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sceneType"
+          }
+        },
+        "specialScenes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*$"
+          }
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "timeRangeSeconds",
+        "purpose",
+        "sceneCount",
+        "recommendedSceneTypes"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+        },
+        "timeRangeSeconds": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "start",
+            "end"
+          ],
+          "properties": {
+            "start": {
+              "type": "number",
+              "minimum": 0
+            },
+            "end": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            }
+          }
+        },
+        "purpose": {
+          "type": "string",
+          "minLength": 1
+        },
+        "sceneCount": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "recommendedSceneTypes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/sceneType"
+          }
+        }
+      }
+    }
+  }
+}

@@ -122,6 +122,9 @@ export const generationJobs=sqliteTable('generation_jobs',{id:text('id').primary
 export const postFeedback = sqliteTable('post_feedback', {
   postId: text('post_id').primaryKey().references(() => posts.id, { onDelete: 'cascade' }),
   format: text('format').notNull(),
+  style: text('style'),
+  hookVariant: text('hook_variant'),
+  claimsLedgerFile: text('claims_ledger_file'),
   verdict: text('verdict'),
   notes: text('notes').notNull().default(''),
   impressions: integer('impressions'),
@@ -129,5 +132,26 @@ export const postFeedback = sqliteTable('post_feedback', {
   conversions: integer('conversions'),
   updatedAt: text('updated_at').notNull(),
 }, (t) => [check('post_feedback_verdict', sql`${t.verdict} IS NULL OR ${t.verdict} IN ('successful','iterate','discard')`), index('feedback_by_format').on(t.format)]);
+
+export const instagramInsightSnapshots = sqliteTable('instagram_insight_snapshots', {
+  id: text('id').primaryKey(),
+  postId: text('post_id').notNull().references(() => posts.id, { onDelete: 'cascade' }),
+  ageBucket: text('age_bucket').notNull(),
+  scheduledAt: text('scheduled_at').notNull(),
+  capturedAt: text('captured_at'),
+  status: text('status').notNull().default('pending'),
+  attemptCount: integer('attempt_count').notNull().default(0),
+  nextAttemptAt: text('next_attempt_at'),
+  leaseId: text('lease_id'),
+  leaseUntil: text('lease_until'),
+  rawJson: text('raw_json'),
+  metricsJson: text('metrics_json'),
+  errorCode: text('error_code'),
+  errorMessage: text('error_message'),
+  updatedAt: text('updated_at').notNull(),
+}, (t) => [
+  uniqueIndex('instagram_snapshot_post_age').on(t.postId, t.ageBucket),
+  index('instagram_snapshots_due').on(t.status, t.scheduledAt, t.nextAttemptAt),
+]);
 
 export const videoRenders=sqliteTable('video_renders',{jobId:text('job_id').primaryKey().references(()=>generationJobs.id,{onDelete:'cascade'}),status:text('status').notNull().default('queued'),leaseId:text('lease_id'),leaseUntil:text('lease_until'),attempts:integer('attempts').notNull().default(0),repairs:integer('repairs').notNull().default(0),nextAttemptAt:text('next_attempt_at').notNull(),outputMaterialId:text('output_material_id'),errorCode:text('error_code'),errorMessage:text('error_message'),updatedAt:text('updated_at').notNull()},t=>[index('video_renders_due').on(t.status,t.nextAttemptAt)]);

@@ -1,0 +1,166 @@
+{
+  "schemaVersion": 1,
+  "id": "the-number-that-matters",
+  "name": "THE NUMBER THAT MATTERS — expose the denominator",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A concise correction may be useful to share; no universal number-first effect is established."
+  },
+  "lengthBandSeconds": {
+    "min": 25,
+    "max": 40,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Share rate",
+  "diagnostics": [
+    "Average watch time"
+  ],
+  "evidenceRequirements": [
+    "Show the original number, unit, denominator, date, and source together.",
+    "Only compare compatible benchmarks with matching definitions and conditions.",
+    "Distinguish provider-reported results from independent measurement and retain uncertainty."
+  ],
+  "recommendedStyles": [
+    "proof",
+    "system",
+    "patch",
+    "bigidea"
+  ],
+  "beatStructure": [
+    {
+      "id": "headline-number",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Open with the number being repeated, attributed where needed.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "stat",
+        "title"
+      ]
+    },
+    {
+      "id": "unit-and-denominator",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 10
+      },
+      "purpose": "Reveal what the number counts and its denominator.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "stat",
+        "list"
+      ]
+    },
+    {
+      "id": "matched-comparison",
+      "timeRangeSeconds": {
+        "start": 10,
+        "end": 23
+      },
+      "purpose": "Compare only compatible measures under matched conditions.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "bars",
+        "compare",
+        "stat"
+      ]
+    },
+    {
+      "id": "implication",
+      "timeRangeSeconds": {
+        "start": 23,
+        "end": 31
+      },
+      "purpose": "Explain what the bounded comparison changes for the viewer.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "compare",
+        "flow",
+        "list"
+      ]
+    },
+    {
+      "id": "caveat-source",
+      "timeRangeSeconds": {
+        "start": 31,
+        "end": 35
+      },
+      "purpose": "Keep the caveat and source visible in the final beat.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "compare"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "title"
+      ],
+      "specialScenes": [
+        "bignumber",
+        "verdict"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "compare"
+      ],
+      "specialScenes": [
+        "exhibit",
+        "quote"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "list"
+      ],
+      "specialScenes": [
+        "benchmark",
+        "dashboard"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "numeral",
+        "contrast"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "stat",
+        "bars",
+        "compare"
+      ],
+      "specialScenes": [
+        "stack",
+        "versus"
+      ]
+    }
+  }
+}

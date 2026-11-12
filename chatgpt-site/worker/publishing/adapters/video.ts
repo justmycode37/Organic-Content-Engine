@@ -5,6 +5,17 @@ import { PublishError,type PublishingAdapter,type PublishRequest,type PublishRes
 export interface PublishOptions {title?:string;privacy?:string;madeForKids?:boolean;synthetic?:boolean;allowComment?:boolean;allowDuet?:boolean;allowStitch?:boolean;commercial?:boolean;ownBrand?:boolean;branded?:boolean;consent?:boolean;accountId?:string;duration?:number}
 interface Job {key:string;platform:string;account_id:string;stage:string;data:string;updated_at:string}
 const pending=():PublishResult=>({pending:true});
+const AI_DISCLOSURE_FIELDS={instagram:'is_ai_generated',tiktok:'is_aigc',youtube:'containsSyntheticMedia'} as const;
+
+export function nativeAiDisclosure(platform:string,synthetic:boolean){
+ const field=AI_DISCLOSURE_FIELDS[platform as keyof typeof AI_DISCLOSURE_FIELDS];
+ return field?{field,value:Boolean(synthetic)}:null;
+}
+
+export function captionDisclosesSynthetic(text:string){
+ return /\bAI[- ]generated\b.{0,48}\b(?:narration|voice(?:over)?|audio|content|media|music)\b|\bsynthetic\s+(?:narration|voice(?:over)?|audio|content|media)\b/i.test(text);
+}
+
 export class VideoPublisher {
   db:Db;social:SocialAccounts;materials:Materials;network:typeof fetch;
   constructor(db:Db,social:SocialAccounts,materials:Materials,network:typeof fetch=fetch){this.db=db;this.social=social;this.materials=materials;this.network=(input,init)=>network(input,init);}
@@ -32,6 +43,10 @@ export class VideoPublisher {
     const {account,access}=await this.social.token(platform);
     const options=(r.options??{}) as PublishOptions;
     if(options.accountId!==account.account_id)throw new PublishError('permanent','account_changed','Review this post for the currently connected account before publishing');
+    const disclosure=nativeAiDisclosure(platform,Boolean(options.synthetic));
+    if(!disclosure)throw new PublishError('permanent','ai_disclosure_unsupported','This video publisher has no verified native AI-content field for this platform');
+    if(options.synthetic&&!captionDisclosesSynthetic(r.text))throw new PublishError('permanent','ai_disclosure_required','Add a clear AI-generated narration/content disclosure to the caption before publishing');
+    if(!options.synthetic&&captionDisclosesSynthetic(r.text))throw new PublishError('permanent','ai_metadata_mismatch','The caption identifies synthetic content but the post metadata does not. Mark synthetic content before publishing');
     if(r.mediaUrls.length!==1||!r.mediaUrls[0]?.startsWith('storage:'))throw new PublishError('permanent','select_media','Select exactly one file from Storage for this platform');
     const id=r.mediaUrls[0].slice(8),file=await this.materials.get(id);
     const video=file.mime==='video/mp4'||file.mime==='video/quicktime';
@@ -46,7 +61,7 @@ export class VideoPublisher {
     if(platform==='instagram') {
       const graph=`https://graph.instagram.com/${this.social.env.INSTAGRAM_API_VERSION??'v25.0'}`;
       if(!stage) {
-        const result=await this.json(`${graph}/${account.account_id}/media`,{method:'POST',headers:{Authorization:`Bearer ${access}`},body:new URLSearchParams({media_type:'REELS',upload_type:'resumable',caption:r.text,share_to_feed:'true'})});
+        const result=await this.json(`${graph}/${account.account_id}/media`,{method:'POST',headers:{Authorization:`Bearer ${access}`},body:new URLSearchParams({media_type:'REELS',upload_type:'resumable',caption:r.text,share_to_feed:'true',[disclosure!.field]:String(disclosure!.value)})});
         if(!result.id||!result.uri)throw new PublishError('ambiguous','missing_container','Instagram returned no resumable media container');
         const upload=new URL(result.uri);if(upload.protocol!=='https:'||!['rupload.facebook.com','rupload.instagram.com'].includes(upload.hostname))throw new PublishError('permanent','unexpected_upload_host','Instagram returned an unexpected upload host');
         data={container:result.id};await this.save(r.idempotencyKey,platform,account.account_id,'uploading',data);
@@ -75,7 +90,7 @@ export class VideoPublisher {
         if(options.branded&&options.privacy==='SELF_ONLY')throw new PublishError('permanent','branded_privacy','Paid partnership content cannot be private');
         if(options.commercial&&!options.ownBrand&&!options.branded)throw new PublishError('permanent','disclosure_required','Choose your brand or branded content');
         const chunkSize=Math.min(file.size,10*1024*1024),chunks=Math.floor(file.size/chunkSize);
-        const init=await this.json('https://open.tiktokapis.com/v2/post/publish/video/init/',{method:'POST',headers,body:JSON.stringify({post_info:{title:r.text,privacy_level:options.privacy,disable_comment:!options.allowComment||creator.comment_disabled,disable_duet:!options.allowDuet||creator.duet_disabled,disable_stitch:!options.allowStitch||creator.stitch_disabled,brand_content_toggle:Boolean(options.commercial&&options.branded),brand_organic_toggle:Boolean(options.commercial&&options.ownBrand),is_aigc:Boolean(options.synthetic)},source_info:{source:'FILE_UPLOAD',video_size:file.size,chunk_size:chunkSize,total_chunk_count:chunks}})});
+        const init=await this.json('https://open.tiktokapis.com/v2/post/publish/video/init/',{method:'POST',headers,body:JSON.stringify({post_info:{title:r.text,privacy_level:options.privacy,disable_comment:!options.allowComment||creator.comment_disabled,disable_duet:!options.allowDuet||creator.duet_disabled,disable_stitch:!options.allowStitch||creator.stitch_disabled,brand_content_toggle:Boolean(options.commercial&&options.branded),brand_organic_toggle:Boolean(options.commercial&&options.ownBrand),[disclosure!.field]:disclosure!.value},source_info:{source:'FILE_UPLOAD',video_size:file.size,chunk_size:chunkSize,total_chunk_count:chunks}})});
         if(!init.data?.publish_id||!init.data?.upload_url)throw new PublishError('ambiguous','missing_upload','TikTok returned no upload session');
         const target=new URL(init.data.upload_url);if(target.protocol!=='https:'||!(target.hostname.endsWith('.tiktokapis.com')||target.hostname.endsWith('.tiktokcdn.com')))throw new PublishError('permanent','invalid_upload_host','TikTok returned an unexpected upload host');
         data={publishId:init.data.publish_id,uploadUrl:init.data.upload_url,chunkSize,chunks,username:creator.creator_username};
@@ -96,7 +111,7 @@ export class VideoPublisher {
     }
     if(!options.title?.trim()||!['public','unlisted','private'].includes(options.privacy??''))throw new PublishError('permanent','youtube_details','Enter a YouTube title and choose visibility');
     if(!stage) {
-      const response=await this.request('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',{method:'POST',headers:{...headers,'X-Upload-Content-Length':String(file.size),'X-Upload-Content-Type':file.mime},body:JSON.stringify({snippet:{title:options.title,description:r.text,categoryId:'22'},status:{privacyStatus:options.privacy,selfDeclaredMadeForKids:Boolean(options.madeForKids),containsSyntheticMedia:Boolean(options.synthetic)}})});
+      const response=await this.request('https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status',{method:'POST',headers:{...headers,'X-Upload-Content-Length':String(file.size),'X-Upload-Content-Type':file.mime},body:JSON.stringify({snippet:{title:options.title,description:r.text,categoryId:'22'},status:{privacyStatus:options.privacy,selfDeclaredMadeForKids:Boolean(options.madeForKids),[disclosure!.field]:disclosure!.value}})});
       const location=response.headers.get('location');
       if(!location||new URL(location).protocol!=='https:'||!new URL(location).hostname.endsWith('.googleapis.com'))throw new PublishError('ambiguous','missing_upload','YouTube returned no valid upload session');
       data={uploadUrl:location};await this.save(r.idempotencyKey,platform,account.account_id,'uploading',data);

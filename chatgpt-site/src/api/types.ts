@@ -229,6 +229,9 @@ export interface FeedbackEntry {
   platform: PlatformId;
   pillarId: string | null;
   format: string;
+  style: string | null;
+  hookVariant: string | null;
+  claimsLedgerFile: string | null;
   verdict: FeedbackVerdict;
   notes: string;
   impressions?: number;
@@ -244,4 +247,59 @@ export interface FormatInsight {
   iterations: number;
   discards: number;
   recommendation: 'explore' | 'reuse' | 'iterate' | 'retire';
+}
+
+export type InstagramAgeBucket = '1h' | '24h' | '72h' | '7d' | '28d';
+export interface InstagramMetrics {
+  views: number | null;
+  reach: number | null;
+  likes: number | null;
+  comments: number | null;
+  saves: number | null;
+  shares: number | null;
+  totalInteractions: number | null;
+  averageWatchTimeMs: number | null;
+  totalWatchTimeMs: number | null;
+  likesPerReach: number | null;
+  sharesPerReach: number | null;
+  savesPerReach: number | null;
+  follows: number | null;
+  profileVisits: number | null;
+}
+export interface InstagramSnapshot {
+  ageBucket: InstagramAgeBucket;
+  scheduledAt: string;
+  capturedAt: string | null;
+  status: 'pending' | 'collecting' | 'complete' | 'partial' | 'failed';
+  attemptCount: number;
+  nextAttemptAt: string | null;
+  metrics: InstagramMetrics | null;
+  unknownMetrics: Record<string, string>;
+  errorCode: string | null;
+  errorMessage: string | null;
+}
+export interface InstagramPostAnalytics {
+  postId: string;
+  body: string;
+  publishedAt: string;
+  externalUrl: string | null;
+  format: string | null;
+  style: string | null;
+  hookVariant: string | null;
+  claimsLedgerFile: string | null;
+  snapshots: InstagramSnapshot[];
+}
+export interface InstagramComparison {
+  ageBucket: InstagramAgeBucket;
+  format: string;
+  style: string;
+  samples: number;
+  likesPerReach: number | null;
+  sharesPerReach: number | null;
+  savesPerReach: number | null;
+  averageWatchTimeMs: number | null;
+}
+export interface InstagramAnalyticsPage {
+  posts: InstagramPostAnalytics[];
+  comparisons: InstagramComparison[];
 }

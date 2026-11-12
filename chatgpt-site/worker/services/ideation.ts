@@ -8,6 +8,7 @@ import type { IdeasRepository } from '../repositories/ideas.ts';
 import type { PillarsRepository } from '../repositories/pillars.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
 import type { FeedbackRepository } from '../repositories/feedback.ts';
+import type { InstagramAnalyticsService } from './instagram-analytics.ts';
 
 const AVOID_TITLES_LIMIT = 100;
 
@@ -19,6 +20,7 @@ export class IdeationService {
   private readonly gateway: PublishingGateway;
   private readonly now: () => Date;
   private readonly feedback: FeedbackRepository;
+  private readonly analytics: InstagramAnalyticsService;
 
   constructor(deps: {
     ideas: IdeasRepository;
@@ -28,6 +30,7 @@ export class IdeationService {
     gateway: PublishingGateway;
     now: () => Date;
     feedback: FeedbackRepository;
+    analytics: InstagramAnalyticsService;
   }) {
     this.ideas = deps.ideas;
     this.pillars = deps.pillars;
@@ -36,6 +39,7 @@ export class IdeationService {
     this.gateway = deps.gateway;
     this.now = deps.now;
     this.feedback = deps.feedback;
+    this.analytics = deps.analytics;
   }
 
   async addManual(input: { pillarId: string; title: string; angle: string }): Promise<Idea> {
@@ -48,6 +52,7 @@ export class IdeationService {
   /** Stores new ideas, skipping duplicates, so the result can be shorter than `count`. */
   async generate(pillar: Pillar, count: number, prompt?: string): Promise<Idea[]> {
     const feedbackLearning=await Promise.all(pillar.platforms.map(platform=>this.feedback.learning(platform,pillar.id)));
+    const feedbackAnalytics=await Promise.all(pillar.platforms.map(platform=>this.analytics.learning(platform,pillar.id)));
     const candidates = await this.generator.generateIdeas({
       brand: await this.settings.getBrand(),
       pillar,
@@ -57,6 +62,7 @@ export class IdeationService {
       feedback: feedbackLearning.flatMap(x=>x.formats),
       feedbackNotes: feedbackLearning.flatMap(x=>x.notes),
       feedbackExamples: feedbackLearning.flatMap(x=>x.examples),
+      feedbackAnalytics: feedbackAnalytics.flat(),
     });
     const created: Idea[] = [];
     for (const candidate of candidates) {
@@ -72,7 +78,8 @@ export class IdeationService {
   async draft(pillar: Pillar, idea: Idea, platform: PlatformId, revisionNote?: string): Promise<string> {
     const maxChars = this.gateway.maxChars(platform);
     const learning=await this.feedback.learning(platform,pillar.id);
-    const input = { brand: await this.settings.getBrand(), pillar, idea, platform, maxChars, feedback:learning.formats, feedbackNotes:learning.notes, feedbackExamples:learning.examples, ...(revisionNote ? { revisionNote } : {}) };
+    const feedbackAnalytics=await this.analytics.learning(platform,pillar.id);
+    const input = { brand: await this.settings.getBrand(), pillar, idea, platform, maxChars, feedback:learning.formats, feedbackNotes:learning.notes, feedbackExamples:learning.examples, feedbackAnalytics, ...(revisionNote ? { revisionNote } : {}) };
     let body = await this.generator.draftPost(input);
     if (countChars(body) > maxChars) {
       body = await this.generator.draftPost({

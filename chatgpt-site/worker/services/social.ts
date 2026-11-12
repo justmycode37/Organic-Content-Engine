@@ -23,7 +23,7 @@ export class SocialAccounts {
     await this.db.prepare('DELETE FROM oauth_pending WHERE expires<?').bind(Date.now()).run();
     await this.db.prepare('INSERT INTO oauth_pending (state,platform,verifier,expires,browser_hash) VALUES (?,?,?,?,?)').bind(state,platform,verifier,Date.now()+600000,await digest(browser)).run();
     const params=new URLSearchParams({redirect_uri:c.callback,response_type:'code',state});let base='';
-    if(platform==='instagram'){base='https://www.instagram.com/oauth/authorize';params.set('client_id',c.id);params.set('scope','instagram_business_basic,instagram_business_content_publish');params.set('enable_fb_login','0');params.set('force_authentication','1');}
+    if(platform==='instagram'){base='https://www.instagram.com/oauth/authorize';params.set('client_id',c.id);params.set('scope','instagram_business_basic,instagram_business_content_publish,instagram_business_manage_insights');params.set('enable_fb_login','0');params.set('force_authentication','1');}
     if(platform==='tiktok'){base='https://www.tiktok.com/v2/auth/authorize/';params.set('client_key',c.id);params.set('scope','user.info.basic,video.publish');}
     if(platform==='linkedin'){base='https://www.linkedin.com/oauth/v2/authorization';params.set('client_id',c.id);params.set('scope','openid profile email w_member_social');}
     if(platform==='x'){base='https://x.com/i/oauth2/authorize';params.set('client_id',c.id);params.set('scope','tweet.read tweet.write users.read offline.access');params.set('code_challenge',btoa(String.fromCharCode(...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(verifier))))).replaceAll('+','-').replaceAll('/','_').replaceAll('=',''));params.set('code_challenge_method','S256');}

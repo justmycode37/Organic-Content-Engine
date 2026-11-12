@@ -5,6 +5,7 @@ import type { PublishOutcome, PublishingGateway } from '../publishing/gateway.ts
 import type { ActivityRepository } from '../repositories/activity.ts';
 import type { FinishFields, PostsRepository } from '../repositories/posts.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
+import { instagramSnapshotSchedule } from '../repositories/instagram-analytics.ts';
 
 export const MAX_ATTEMPTS = 3;
 const BACKOFF_MS = [60_000, 5 * 60_000, 15 * 60_000];
@@ -165,8 +166,12 @@ export class PublisherService {
     const now = this.now();
     const iso = now.toISOString();
     const { attempt, activity, fields } = this.describe(post, outcome, now);
+    const snapshots = outcome.kind === 'published' && post.platform === 'instagram'
+      ? instagramSnapshotSchedule(this.db, post.id, iso, iso)
+      : [];
     await this.db.batch([
       this.posts.finishStatement(post.id, fields, iso),
+      ...snapshots,
       this.posts.insertAttemptStatement({
         id: crypto.randomUUID(),
         postId: post.id,

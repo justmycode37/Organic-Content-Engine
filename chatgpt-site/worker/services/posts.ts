@@ -10,6 +10,7 @@ import type { IdeasRepository } from '../repositories/ideas.ts';
 import type { PillarsRepository } from '../repositories/pillars.ts';
 import type { PostsRepository } from '../repositories/posts.ts';
 import type { SettingsRepository } from '../repositories/settings.ts';
+import { instagramSnapshotSchedule } from '../repositories/instagram-analytics.ts';
 import type { IdeationService } from './ideation.ts';
 import { enumerateSlots } from './slots.ts';
 
@@ -188,7 +189,7 @@ export class PostService {
    * Resolves a post whose outcome could not be determined. A person checks the
    * platform; the server never guesses, because a wrong guess means a duplicate post.
    */
-  async resolve(id: string, input: { outcome: 'published' | 'not_published'; externalUrl?: string }): Promise<Post> {
+  async resolve(id: string, input: { outcome: 'published' | 'not_published'; externalId?: string; externalUrl?: string }): Promise<Post> {
     const post = await this.require(id);
     if (post.status !== 'needs_attention') throw invalidTransition(post.status, 'resolve');
     const now = this.iso();
@@ -196,10 +197,13 @@ export class PostService {
       this.posts.finishStatement(
         id,
         input.outcome === 'published'
-          ? { status: 'published', publishedAt: now, externalUrl: input.externalUrl ?? null }
+          ? { status: 'published', publishedAt: now, externalId: input.externalId ?? null, externalUrl: input.externalUrl ?? null }
           : { status: 'failed', errorCode: 'confirmed_not_published', errorMessage: 'Confirmed not published by operator' },
         now,
       ),
+      ...(input.outcome === 'published' && post.platform === 'instagram'
+        ? instagramSnapshotSchedule(this.db, post.id, now, now)
+        : []),
       this.activity.addStatement({ type: 'post.resolved', message: `Resolved as ${input.outcome}`, postId: id }, now),
     ]);
     return this.require(id);

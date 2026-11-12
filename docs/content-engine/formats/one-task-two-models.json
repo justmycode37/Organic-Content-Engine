@@ -1,0 +1,165 @@
+{
+  "schemaVersion": 1,
+  "id": "one-task-two-models",
+  "name": "ONE TASK, TWO MODELS — the fair comparison",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A fair, task-specific choice may be useful to save; the format remains unvalidated."
+  },
+  "lengthBandSeconds": {
+    "min": 30,
+    "max": 45,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Saves/accounts reached",
+  "diagnostics": [
+    "Average watch time"
+  ],
+  "evidenceRequirements": [
+    "Name both model/product versions, date, tools, budget, and sample size.",
+    "Use the same input, instructions, environment, and evaluation rubric for both sides.",
+    "Treat one task or run as an example, not a global model ranking."
+  ],
+  "recommendedStyles": [
+    "proof",
+    "patch",
+    "system"
+  ],
+  "beatStructure": [
+    {
+      "id": "task",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Name one concrete task and the decision a viewer needs to make.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "compare"
+      ]
+    },
+    {
+      "id": "common-conditions",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 8
+      },
+      "purpose": "Show the shared input and rules before the result.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "chat"
+      ]
+    },
+    {
+      "id": "outputs",
+      "timeRangeSeconds": {
+        "start": 8,
+        "end": 22
+      },
+      "purpose": "Show both outputs under matching conditions.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "compare",
+        "chat",
+        "code"
+      ]
+    },
+    {
+      "id": "decisive-difference",
+      "timeRangeSeconds": {
+        "start": 22,
+        "end": 31
+      },
+      "purpose": "Evaluate the specific difference that affects the task.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "compare",
+        "bars",
+        "list"
+      ]
+    },
+    {
+      "id": "limit-and-choice",
+      "timeRangeSeconds": {
+        "start": 31,
+        "end": 36
+      },
+      "purpose": "Give a task-specific choice and name the limitation.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "compare",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "chat"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "title"
+      ],
+      "specialScenes": [
+        "bignumber",
+        "headline"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "list"
+      ],
+      "specialScenes": [
+        "exhibit",
+        "board"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "list"
+      ],
+      "specialScenes": [
+        "benchmark",
+        "dashboard"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "contrast",
+        "numeral"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "compare",
+        "bars",
+        "list"
+      ],
+      "specialScenes": [
+        "versus",
+        "stack"
+      ]
+    }
+  }
+}

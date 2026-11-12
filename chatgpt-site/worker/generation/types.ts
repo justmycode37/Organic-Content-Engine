@@ -1,6 +1,7 @@
 import type { PlatformId } from '../domain/platforms.ts';
 import type { Brand, Idea, Pillar } from '../domain/types.ts';
 import type { FormatInsight } from '../repositories/feedback.ts';
+import type { InstagramLearningSummary } from '../repositories/instagram-analytics.ts';
 
 export interface IdeaCandidate {
   title: string;
@@ -21,6 +22,7 @@ export interface ContentGenerator {
     feedback?: FormatInsight[];
     feedbackNotes?: Array<{format:string;verdict:string|null;notes:string}>;
     feedbackExamples?: Array<{format:string;verdict:string|null;body:string}>;
+    feedbackAnalytics?: InstagramLearningSummary[];
   }): Promise<IdeaCandidate[]>;
   draftPost(input: {
     brand: Brand;
@@ -32,6 +34,7 @@ export interface ContentGenerator {
     feedback?: FormatInsight[];
     feedbackNotes?: Array<{format:string;verdict:string|null;notes:string}>;
     feedbackExamples?: Array<{format:string;verdict:string|null;body:string}>;
+    feedbackAnalytics?: InstagramLearningSummary[];
   }): Promise<string>;
 }
 

@@ -14,3 +14,8 @@ coverage/
 
 chatgpt-credentials.json
 chatgpt-credentials.json.*.tmp
+
+# Local renders, research drafts and agent briefs
+/output/
+/outputs/
+/chatgpt-site/output/

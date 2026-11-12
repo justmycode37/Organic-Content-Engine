@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "demo-not-deployed",
+  "name": "DEMO ≠ DEPLOYED — the reality check",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A scoped reality check may be useful to send; this is an editorial hypothesis, with corrections as a guardrail."
+  },
+  "lengthBandSeconds": {
+    "min": 28,
+    "max": 40,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Share rate",
+  "diagnostics": [
+    "Correction rate as a quality guardrail"
+  ],
+  "evidenceRequirements": [
+    "Use authentic demo media or label a reconstruction and explanatory animation as illustration.",
+    "Record task, prompt/input, version, settings, repetitions, and what the result does not test.",
+    "Do not invent a failure, quote, capability, or deployment state."
+  ],
+  "recommendedStyles": [
+    "proof",
+    "breaking",
+    "patch",
+    "system"
+  ],
+  "beatStructure": [
+    {
+      "id": "demo-hook",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 3
+      },
+      "purpose": "Open with an authentic excerpt or an explicitly labelled reconstruction.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "chat",
+        "terminal"
+      ]
+    },
+    {
+      "id": "claimed-task",
+      "timeRangeSeconds": {
+        "start": 3,
+        "end": 9
+      },
+      "purpose": "Name the task the demo claims to perform.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "list"
+      ]
+    },
+    {
+      "id": "test-conditions",
+      "timeRangeSeconds": {
+        "start": 9,
+        "end": 22
+      },
+      "purpose": "Show the input, conditions, output, and test limits.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "compare",
+        "flow",
+        "list"
+      ]
+    },
+    {
+      "id": "not-proven",
+      "timeRangeSeconds": {
+        "start": 22,
+        "end": 31
+      },
+      "purpose": "Separate what the demonstration shows from what remains unproved.",
+      "sceneCount": 2,
+      "recommendedSceneTypes": [
+        "list",
+        "compare"
+      ]
+    },
+    {
+      "id": "bounded-verdict",
+      "timeRangeSeconds": {
+        "start": 31,
+        "end": 35
+      },
+      "purpose": "Give a verdict bounded by the evidence and its source.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "flow",
+        "chat"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "title"
+      ],
+      "specialScenes": [
+        "verdict",
+        "cutout"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "flow"
+      ],
+      "specialScenes": [
+        "claim",
+        "exhibit",
+        "verdict"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "flow"
+      ],
+      "specialScenes": [
+        "log",
+        "benchmark"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "quote",
+        "contrast"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "compare",
+        "list",
+        "flow"
+      ],
+      "specialScenes": [
+        "versus",
+        "consequence"
+      ]
+    }
+  }
+}

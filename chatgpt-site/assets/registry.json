@@ -1,0 +1,44 @@
+{
+  "version": 1,
+  "assets": [
+    {
+      "id": "securityweek-948-root-bugs",
+      "file": "files/securityweek-948-root-bugs.png",
+      "kind": "screenshot",
+      "sourceUrl": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/",
+      "creator": "Eduard Kovacs",
+      "licence": "Copyright remains with the source rights holder; no open licence is asserted.",
+      "attribution": "Screenshot of “AI Agents Got Root on Linux via 948 Kernel Flaws in OpenAI Research” by Eduard Kovacs; https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/ (captured 11 Nov 2026, 16:19 UTC).",
+      "rightsStatus": "fair-use-news",
+      "restrictions": "Editorial news reporting/commentary only with the listed attribution; no standalone redistribution or stock use. Fair-use status is a case-specific assessment, not a grant from the source.",
+      "createdAt": "2026-11-11T16:19:56.991Z",
+      "sha256": "68f5a3e2579cfa8efa95f4e8ef01b10c01f74ad3587fc8cf65acb9f13b2bcb72"
+    },
+    {
+      "id": "securityweek-948-root-bugs-phone",
+      "file": "files/securityweek-948-root-bugs-phone.png",
+      "kind": "screenshot",
+      "sourceUrl": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/",
+      "creator": "Eduard Kovacs",
+      "licence": "Copyright remains with the source rights holder; no open licence is asserted.",
+      "attribution": "Phone-frame presentation of Screenshot of “AI Agents Got Root on Linux via 948 Kernel Flaws in OpenAI Research” by Eduard Kovacs; https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/ (captured 11 Nov 2026, 16:19 UTC).",
+      "rightsStatus": "fair-use-news",
+      "restrictions": "Editorial news reporting/commentary only with the listed attribution; no standalone redistribution or stock use. Fair-use status is a case-specific assessment, not a grant from the source. The source capture is displayed without content editing inside a neutral phone frame.",
+      "createdAt": "2026-11-11T16:21:03.968Z",
+      "sha256": "7023849d8628c338e5f24bf8b551f7c31b98efabca6c23bfb0a92738e857a905"
+    },
+    {
+      "id": "securityweek-948-root-bugs-scroll",
+      "file": "files/securityweek-948-root-bugs-scroll.mp4",
+      "kind": "video",
+      "sourceUrl": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/",
+      "creator": "Eduard Kovacs",
+      "licence": "Copyright remains with the source rights holder; no open licence is asserted.",
+      "attribution": "Scroll recording of “AI Agents Got Root on Linux via 948 Kernel Flaws in OpenAI Research” by Eduard Kovacs; https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/ (captured 11 Nov 2026, 16:24 UTC).",
+      "rightsStatus": "fair-use-news",
+      "restrictions": "Editorial news reporting/commentary only with the listed attribution; no standalone redistribution or stock use. Fair-use status is a case-specific assessment, not a grant from the source. Generated as 60 scroll frames at 30 fps.",
+      "createdAt": "2026-11-11T16:24:52.661Z",
+      "sha256": "36ef1b1397aeb7ffed97bd9d1989b681a6511cbddb44f6a9de68eafe18a6cffb"
+    }
+  ]
+}

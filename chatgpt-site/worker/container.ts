@@ -24,6 +24,7 @@ import { AutonomyService } from './services/autonomy.ts';
 import { IdeationService } from './services/ideation.ts';
 import { PostService } from './services/posts.ts';
 import { PublisherService } from './services/publisher.ts';
+import { InstagramAnalyticsService } from './services/instagram-analytics.ts';
 
 export interface Env {
   DB?: D1Database;
@@ -51,6 +52,7 @@ export interface Container {
   postService: PostService;
   publisher: PublisherService;
   autonomy: AutonomyService;
+  analytics: InstagramAnalyticsService;
 }
 
 /** Built per request: isolates hold no state, and everything durable is in D1. */
@@ -67,6 +69,7 @@ export async function createContainer(env: Env): Promise<Container> {
   const runtime=Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
   const materials = new Materials(db,env.BUCKET,runtime);
   const social = new SocialAccounts(db,runtime);
+  const analytics = new InstagramAnalyticsService(db,social,runtime);
   const video = new VideoPublisher(db,social,materials);
   const statuses=await social.statuses();
   const http=createHttpClient(fetch,config.publishHttpTimeoutMs);
@@ -86,10 +89,10 @@ export async function createContainer(env: Env): Promise<Container> {
   const feedback = new FeedbackRepository(db);
   const activity = new ActivityRepository(db);
 
-  const ideation = new IdeationService({ ideas, pillars, settings, generator, gateway, now, feedback });
+  const ideation = new IdeationService({ ideas, pillars, settings, generator, gateway, now, feedback, analytics });
   const postService = new PostService({ db, posts, ideas, pillars, settings, activity, ideation, generator, gateway, now });
   const publisher = new PublisherService({ db, posts, settings, activity, gateway, now });
   const autonomy = new AutonomyService({ db, posts, ideas, pillars, settings, activity, ideation, postService, generator, gateway, logger, now });
 
-  return { config, materials, social, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, feedback, activity, ideation, postService, publisher, autonomy };
+  return { config, materials, social, db, logger, redact, now, gateway, generator, settings, pillars, ideas, posts, feedback, activity, ideation, postService, publisher, autonomy, analytics };
 }

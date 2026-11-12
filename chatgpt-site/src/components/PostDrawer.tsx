@@ -58,6 +58,7 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [liveUrl, setLiveUrl] = useState('');
+  const [liveMediaId, setLiveMediaId] = useState('');
 
   const adopt = useCallback((detail: PostDetail) => {
     setPost(detail);
@@ -198,7 +199,11 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
   const resolve = (outcome: 'published' | 'not_published') => run(`resolve-${outcome}`, async () => {
     if (!post) return;
     const url = liveUrl.trim();
-    const next = await api.posts.resolve(post.id, { outcome, externalUrl: outcome === 'published' && url ? url : undefined });
+    const next = await api.posts.resolve(post.id, {
+      outcome,
+      externalId: outcome === 'published' && post.platform === 'instagram' && liveMediaId.trim() ? liveMediaId.trim() : undefined,
+      externalUrl: outcome === 'published' && url ? url : undefined,
+    });
     await settle(next.id);
     ws.toast(outcome === 'published' ? 'Recorded as published.' : 'Recorded as not published.');
   });
@@ -264,6 +269,9 @@ export function PostDrawer({ target, onClose }: { target: PostTarget; onClose: (
               <Field label="Link to the live post (optional)">
                 <input type="url" value={liveUrl} placeholder="https://" onChange={e => setLiveUrl(e.target.value)} />
               </Field>
+              {post.platform === 'instagram' && <Field label="Instagram media ID (optional)" hint="Without the Graph API media ID, Reel analytics cannot be collected.">
+                <input value={liveMediaId} onChange={e => setLiveMediaId(e.target.value)} placeholder="Instagram media ID" />
+              </Field>}
               <div className="row">
                 <Button variant="primary" busy={busy === 'resolve-published'} disabled={!!busy} onClick={() => void resolve('published')}>It went live</Button>
                 <Button busy={busy === 'resolve-not_published'} disabled={!!busy} onClick={() => void resolve('not_published')}>It did not post</Button>

@@ -1,0 +1,160 @@
+{
+  "schemaVersion": 1,
+  "id": "steal-this-workflow",
+  "name": "STEAL THIS WORKFLOW — a complete small win",
+  "evidence": {
+    "label": "hypothesis",
+    "basis": "Inference",
+    "source": "output/ecosystem/04-viral-strategies.md §12",
+    "note": "Original PATCH NOTES adaptation to test. Zero new Instagram examples qualified under the report's strict viral-reference gate; this format is not validated. The length band is an initial production/test band, not a proven algorithm sweet spot.",
+    "rationale": "A practical reference may remain useful after the news cycle; this is a proposed save-worthy treatment."
+  },
+  "lengthBandSeconds": {
+    "min": 25,
+    "max": 40,
+    "basis": "initial production/test band"
+  },
+  "primaryMetric": "Saves/accounts reached",
+  "diagnostics": [
+    "Average watch time"
+  ],
+  "evidenceRequirements": [
+    "Verify the prerequisite, tool/version, and each step against a reproducible workflow.",
+    "Show the finished result and a quality check; disclose failure cases or access limits.",
+    "Keep the useful steps in the Reel; never gate them behind a comment or DM."
+  ],
+  "recommendedStyles": [
+    "patch",
+    "system",
+    "miniworld"
+  ],
+  "beatStructure": [
+    {
+      "id": "finished-result",
+      "timeRangeSeconds": {
+        "start": 0,
+        "end": 2
+      },
+      "purpose": "Show the useful completed result immediately.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "title",
+        "chat",
+        "code"
+      ]
+    },
+    {
+      "id": "prerequisite",
+      "timeRangeSeconds": {
+        "start": 2,
+        "end": 6
+      },
+      "purpose": "State the one prerequisite viewers need before starting.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "title"
+      ]
+    },
+    {
+      "id": "three-steps",
+      "timeRangeSeconds": {
+        "start": 6,
+        "end": 25
+      },
+      "purpose": "Demonstrate three distinct steps with one visible action per beat.",
+      "sceneCount": 3,
+      "recommendedSceneTypes": [
+        "flow",
+        "code",
+        "chat"
+      ]
+    },
+    {
+      "id": "quality-check-limit",
+      "timeRangeSeconds": {
+        "start": 25,
+        "end": 32
+      },
+      "purpose": "Check the output and state one meaningful limitation.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "compare",
+        "list"
+      ]
+    },
+    {
+      "id": "reference-card",
+      "timeRangeSeconds": {
+        "start": 32,
+        "end": 36
+      },
+      "purpose": "Summarize the sequence as a useful save cue.",
+      "sceneCount": 1,
+      "recommendedSceneTypes": [
+        "list",
+        "outro"
+      ]
+    }
+  ],
+  "sceneRecommendationsByStyle": {
+    "patch": {
+      "sceneTypes": [
+        "flow",
+        "code",
+        "list"
+      ],
+      "specialScenes": []
+    },
+    "breaking": {
+      "sceneTypes": [
+        "flow",
+        "list",
+        "title"
+      ],
+      "specialScenes": [
+        "headline"
+      ]
+    },
+    "proof": {
+      "sceneTypes": [
+        "flow",
+        "list",
+        "layers"
+      ],
+      "specialScenes": [
+        "board"
+      ]
+    },
+    "system": {
+      "sceneTypes": [
+        "flow",
+        "list",
+        "changelog"
+      ],
+      "specialScenes": [
+        "process"
+      ]
+    },
+    "bigidea": {
+      "sceneTypes": [
+        "flow",
+        "list",
+        "kinetic"
+      ],
+      "specialScenes": [
+        "object"
+      ]
+    },
+    "miniworld": {
+      "sceneTypes": [
+        "flow",
+        "list",
+        "layers"
+      ],
+      "specialScenes": [
+        "journey"
+      ]
+    }
+  }
+}

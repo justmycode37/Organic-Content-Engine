@@ -43,6 +43,13 @@
       "when": 1794310000000,
       "tag": "0005_video_renders",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1794413632958,
+      "tag": "0006_instagram_analytics",
+      "breakpoints": true
     }
   ]
 }

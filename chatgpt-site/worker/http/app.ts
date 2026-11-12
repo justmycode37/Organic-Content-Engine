@@ -142,9 +142,9 @@ export function createApp(): Hono<AppEnv> {
 
   /** The only way background work advances on this host. Call it from a Site schedule. */
   app.post(JOB_PATH, async (c) => {
-    const { config, publisher, autonomy, settings, now, redact } = c.get('container');
+    const { config, publisher, autonomy, analytics, settings, now, redact } = c.get('container');
     await assertJobCaller(c, config, c.get('access'));
-    if (!(await settings.get()).autonomyEnabled) return c.json({ ok: true, paused: true, publish: null, autonomy: null, errors: [] });
+    const automation = await settings.get();
     const ranAt = now().toISOString();
     const errors: string[] = [];
     const describe = (error: unknown) => redact(error instanceof Error ? error.message : String(error));
@@ -152,6 +152,18 @@ export function createApp(): Hono<AppEnv> {
     const work = (async () => {
       let publish: PublishRunResult | null = null;
       let cycle: CycleResult | null = null;
+      let instagramAnalytics: Awaited<ReturnType<typeof analytics.runDue>> | null = null;
+      try {
+        instagramAnalytics = await analytics.runDue();
+        errors.push(...instagramAnalytics.errors.map((message) => `instagram analytics: ${message}`));
+      } catch (error) {
+        errors.push(`instagram analytics: ${describe(error)}`);
+      }
+      if (!automation.autonomyEnabled) {
+        const lastError = errors.join('; ') || null;
+        await settings.setJob(TICK_JOB, ranAt, { error: lastError });
+        return { ok: lastError === null, paused: true, ranAt, publish, autonomy: cycle, instagramAnalytics, errors };
+      }
       try {
         publish = await publisher.publishDue();
       } catch (error) {
@@ -164,7 +176,7 @@ export function createApp(): Hono<AppEnv> {
       }
       const lastError = errors.join('; ') || null;
       await settings.setJob(TICK_JOB, ranAt, { error: lastError });
-      return { ok: lastError === null, ranAt, publish, autonomy: cycle, errors };
+      return { ok: lastError === null, paused: false, ranAt, publish, autonomy: cycle, instagramAnalytics, errors };
     })();
     return c.json(await keepAlive(c, work));
   });
@@ -287,6 +299,8 @@ export function createApp(): Hono<AppEnv> {
   api.post('/social/:platform/connect',async c=>{const browser=randomHex(32);const url=await c.get('container').social.start(platformOf(c.req.param('platform')),browser);setCookie(c,'oce_oauth',browser,{httpOnly:true,secure:true,sameSite:'Lax',path:'/api/social',maxAge:600});return c.json({url});});
   api.delete('/social/:platform',async c=>c.json(await c.get('container').social.disconnect(platformOf(c.req.param('platform')))));
   api.get('/social/tiktok/creator',async c=>c.json(await c.get('container').social.creator()));
+  api.get('/analytics/instagram',async c=>c.json(await c.get('container').analytics.page()));
+  api.post('/analytics/instagram/retry',async c=>c.json({requeued:await c.get('container').analytics.retryFailed()}));
   api.get('/materials',async c=>c.json({items:await c.get('container').materials.list()}));
   api.post('/materials',async c=>c.json(await c.get('container').materials.init(await readBody(c,validator.object({name:validator.string().min(1).max(255),mime:validator.string().max(150),size:validator.number().int().positive().max(100*1024*1024),kind:validator.enum(['source','finished']).optional()}).strict())),201));
   api.put('/materials/:id/content',async c=>{if(!c.req.raw.body)throw new AppError(400,'file_missing','Choose a file');return c.json(await c.get('container').materials.upload(c.req.param('id'),c.req.raw.body,Number(c.req.header('content-length'))));});
@@ -389,7 +403,7 @@ export function createApp(): Hono<AppEnv> {
   api.put('/posts/:id/feedback', async (c) => {
     const container=c.get('container'), id=c.req.param('id'), post=await container.postService.require(id), input=await readBody(c,schemas.feedbackBody);
     if ((input.impressions!==undefined||input.engagements!==undefined||input.conversions!==undefined) && post.status!=='published') throw new AppError(422,'metrics_require_published_post','Performance metrics can only be recorded for a published post');
-    await container.feedback.save({postId:id,...input,updatedAt:container.now().toISOString()});
+    await container.feedback.save({postId:id,...input,style:input.style??null,hookVariant:input.hookVariant??null,claimsLedgerFile:input.claimsLedgerFile??null,updatedAt:container.now().toISOString()});
     return c.json(await container.feedback.get(id));
   });
   api.post('/posts/:id/revise', async c => {
