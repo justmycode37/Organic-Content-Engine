@@ -1,0 +1,296 @@
+{
+  "version": 1,
+  "spec": "patch-notes-948-linux-root-bugs.json",
+  "claims": [
+    {
+      "id": "openai-publication-day",
+      "statement": "OpenAI published the Linux kernel research on November 4, 2026.",
+      "value": 4,
+      "unit": "day of month",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.howtogeek.com/openai-cyber-model-gained-linux-root-access/", "type": "secondary", "publisher": "How-To Geek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI's publication date as relayed by secondary reports.",
+      "caveats": ["The OpenAI primary page returned HTTP 403 during research and was not read."],
+      "notes": []
+    },
+    {
+      "id": "openai-publication-year",
+      "statement": "The OpenAI Linux kernel research was published in 2026.",
+      "value": 2026,
+      "unit": "year",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.howtogeek.com/openai-cyber-model-gained-linux-root-access/", "type": "secondary", "publisher": "How-To Geek", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI's publication date as relayed by secondary reports.",
+      "caveats": ["The OpenAI primary page returned HTTP 403 during research and was not read."],
+      "notes": []
+    },
+    {
+      "id": "one-october-run",
+      "statement": "The October scan is described as one run.",
+      "value": 1,
+      "unit": "run",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI-reported run details relayed by secondary reporting.",
+      "caveats": ["The report avoids stating a run duration because coverage gives inconsistent durations."],
+      "notes": []
+    },
+    {
+      "id": "october-api-cost",
+      "statement": "The October run's reported API cost was $1,213,430.",
+      "value": 1213430,
+      "unit": "USD",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI-reported API credits, relayed by secondary reports.",
+      "caveats": ["This is a reported credit cost, not an independently audited invoice."],
+      "notes": ["The OpenAI primary page returned HTTP 403 during research; the amount was checked against secondary reporting."]
+    },
+    {
+      "id": "candidate-findings",
+      "statement": "The scan produced 2,308 candidate findings.",
+      "value": 2308,
+      "unit": "candidates",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI-reported finding count, relayed by secondary reports.",
+      "caveats": ["The OpenAI primary page returned HTTP 403 during research and was not read."],
+      "notes": []
+    },
+    {
+      "id": "reproduced-findings",
+      "statement": "1,724 candidate findings were reproduced or confirmed in virtual machines.",
+      "value": 1724,
+      "unit": "confirmed findings",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI-reported reproduction count, relayed by secondary reports.",
+      "caveats": ["The OpenAI primary page returned HTTP 403 during research and was not read."],
+      "notes": []
+    },
+    {
+      "id": "working-root-exploits",
+      "statement": "OpenAI's October run reported 1,169 working local privilege-escalation exploits that reached root.",
+      "value": 1169,
+      "unit": "root exploits",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.howtogeek.com/openai-cyber-model-gained-linux-root-access/", "type": "secondary", "publisher": "How-To Geek", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI says (reported by SecurityWeek, Interesting Engineering and iTnews)",
+      "caveats": ["SecurityWeek, Interesting Engineering and CSA report 1,169 working exploits; How-To Geek instead describes 948 as the exploit count. The primary source was not readable during research."],
+      "notes": ["Resolved 2026-11-11: the live SecurityWeek article (captured 2026-11-11T16:13:37Z, motion-examples/assets/proof/securityweek-948.png) states that OpenAI says 948 is the number of separate patches created for the bugs behind the 1,169 working exploits. Three outlets agree; How-To Geek's wording is treated as an outlier. The OpenAI primary page still returned HTTP 403, so the figure stays attributed to OpenAI."]
+    },
+    {
+      "id": "distinct-root-bugs",
+      "statement": "The 1,169 working exploits were grouped by root cause into 948 distinct root-level kernel bugs.",
+      "value": 948,
+      "unit": "bugs",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://www.howtogeek.com/openai-cyber-model-gained-linux-root-access/", "type": "secondary", "publisher": "How-To Geek", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI says (reported by SecurityWeek, Interesting Engineering and iTnews)",
+      "caveats": ["The research brief favors the distinct-bug interpretation because SecurityWeek, Interesting Engineering and iTnews agree, but How-To Geek uses a conflicting definition. The primary source returned HTTP 403 and was not read."],
+      "notes": ["Resolved 2026-11-11: the live SecurityWeek article (captured 2026-11-11T16:13:37Z, motion-examples/assets/proof/securityweek-948.png) states that OpenAI says 948 is the number of separate patches created for the bugs behind the 1,169 working exploits. Three outlets agree; How-To Geek's wording is treated as an outlier. The OpenAI primary page still returned HTTP 403, so the figure stays attributed to OpenAI."]
+    },
+    {
+      "id": "july-root-exploits",
+      "statement": "A late-July comparison run found 166 unique root exploits.",
+      "value": 166,
+      "unit": "root exploits",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "The July comparison is reported by secondary outlets.",
+      "caveats": ["The sources describe this as unique root exploits; they do not establish that the 166 are 166 distinct bugs."],
+      "notes": ["The reel's visible label '166 BUGS' has no unit-matched support in the research; the spoken number alone is supported as root exploits."]
+    },
+    {
+      "id": "july-api-cost",
+      "statement": "The July comparison run cost $513,690 in reported API credits.",
+      "value": 513690,
+      "unit": "USD",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "The comparison cost is relayed by secondary outlets.",
+      "caveats": ["This is a reported credit cost, not an independently audited invoice."],
+      "notes": []
+    },
+    {
+      "id": "july-cost-per-exploit",
+      "statement": "The July comparison cost about $3,094 per unique root exploit.",
+      "value": 3094,
+      "unit": "USD per root exploit",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "The per-finding cost is reported by secondary outlets.",
+      "caveats": ["The reel labels the denominator as BUG; the source fact sheet describes 166 unique root exploits."],
+      "notes": []
+    },
+    {
+      "id": "october-cost-per-bug",
+      "statement": "OpenAI's reported October cost was about $1,279 per distinct bug, commonly rounded to about $1,280.",
+      "value": 1279,
+      "unit": "USD per bug",
+      "sources": [
+        { "url": "https://openai.com/index/a-thousand-fewer-paths-to-root/", "type": "primary", "publisher": "OpenAI", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "OpenAI's reported upper-bound estimate as relayed by secondary outlets.",
+      "caveats": ["OpenAI calls $1,279 an upper bound; secondary outlets round to approximately $1,280. The primary page was not readable during research."],
+      "notes": []
+    },
+    {
+      "id": "bug-count-growth-ratio",
+      "statement": "The research brief computes approximately 5.7 times as many from 948 divided by 166.",
+      "value": 5.7108433735,
+      "unit": "multiplier",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "contested",
+      "attribution": "Derived from two OpenAI-reported figures relayed by secondary outlets.",
+      "caveats": ["The arithmetic is correct, but the source wording differs: 948 is usually described as distinct bugs, while 166 is described as unique root exploits. The primary source was not read."],
+      "notes": ["The research brief presents this as a trend; the denominator labels are not fully like-for-like."]
+    },
+    {
+      "id": "per-bug-cost-ratio",
+      "statement": "The numeric ratio of October's reported per-distinct-bug cost to July's per-unique-root-exploit cost is about 0.414, below one half.",
+      "value": 0.4137,
+      "unit": "ratio",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "contested",
+      "attribution": "Derived from reported October and July values relayed by secondary outlets.",
+      "caveats": ["This is a calculation from rounded figures with differently worded denominators, not an independently measured like-for-like cost ratio."],
+      "notes": ["The narration says 'cost per bug'; the July source summary specifies cost per unique root exploit."]
+    },
+    {
+      "id": "comparison-gap",
+      "statement": "The July comparison preceded the October scan by about three months.",
+      "value": 3,
+      "unit": "months",
+      "sources": [
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" },
+        { "url": "https://interestingengineering.com/ai-robotics/openai-agents-linux-kernel-vulnerabilities-exploits", "type": "secondary", "publisher": "Interesting Engineering", "retrieved": "2026-11-11" },
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "The comparison dates are relayed by secondary outlets.",
+      "caveats": ["The run dates are described as late July and mid-October; three months is an approximation."],
+      "notes": []
+    },
+    {
+      "id": "upstream-fixes",
+      "statement": "At the research brief's roughly ten-day snapshot, 61 fixes were patched upstream.",
+      "value": 61,
+      "unit": "fixes",
+      "sources": [
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "Kernel status counts reported by secondary outlets.",
+      "caveats": ["This is a dated snapshot after the scan, not a current patch count."],
+      "notes": []
+    },
+    {
+      "id": "staged-fixes",
+      "statement": "At the research brief's roughly ten-day snapshot, 43 fixes had staging patches.",
+      "value": 43,
+      "unit": "fixes",
+      "sources": [
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "Kernel status counts reported by secondary outlets.",
+      "caveats": ["This is a dated snapshot after the scan, not a current patch count."],
+      "notes": []
+    },
+    {
+      "id": "discussion-fixes",
+      "statement": "At the research brief's roughly ten-day snapshot, 299 reports were under public discussion.",
+      "value": 299,
+      "unit": "fixes",
+      "sources": [
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "Kernel status counts reported by secondary outlets.",
+      "caveats": ["This is a dated snapshot after the scan, not a current discussion count."],
+      "notes": []
+    },
+    {
+      "id": "landed-or-staged-fixes",
+      "statement": "The 61 upstream fixes plus 43 staged patches total 104, which the reel rounds to about 100.",
+      "value": 104,
+      "unit": "fixes",
+      "sources": [
+        { "url": "https://www.itnews.com.au/news/low-privileged-accounts-on-unpatched-systems-as-good-as-root-openai-630145", "type": "secondary", "publisher": "iTnews", "retrieved": "2026-11-11" },
+        { "url": "https://labs.cloudsecurityalliance.org/research/csa-research-note-ai-industrialized-linux-lpe-exploit-genera/", "type": "secondary", "publisher": "Cloud Security Alliance", "retrieved": "2026-11-11" },
+        { "url": "https://www.securityweek.com/ai-agents-got-root-on-linux-via-948-kernel-flaws-in-openai-research/", "type": "secondary", "publisher": "SecurityWeek", "retrieved": "2026-11-11" }
+      ],
+      "status": "attributed",
+      "attribution": "Derived from secondary reports of 61 upstream and 43 staged fixes.",
+      "caveats": ["The fixes were made by other contributors after the scan; they should not be attributed to OpenAI."],
+      "notes": ["About 100 is rounded wording for 104."]
+    }
+  ]
+}

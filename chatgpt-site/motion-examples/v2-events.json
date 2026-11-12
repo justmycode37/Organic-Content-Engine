@@ -1,0 +1,93 @@
+{
+  "version": 1,
+  "title": "Semantic events and rewards",
+  "style": "patch",
+  "scenes": [
+    {
+      "type": "title",
+      "duration": 2,
+      "text": "ROUTE IN *LONG* HOP",
+      "say": "The packet takes the *long* route.",
+      "caption": "The packet takes the long route",
+      "reward": "mechanism",
+      "events": [
+        { "at": 0.28, "kind": "contact", "target": "packet" },
+        { "word": "takes", "kind": "transform", "target": "route" }
+      ]
+    },
+    {
+      "type": "flow",
+      "duration": 2,
+      "transition": "wipe",
+      "nodes": [
+        { "label": "PACKET", "icon": "arrow", "accent": true },
+        { "label": "NODE A", "icon": "chip" },
+        { "label": "NODE B", "icon": "chip" }
+      ],
+      "direction": "right",
+      "say": "Three hops reveal the *delay*.",
+      "caption": "Three hops expose the delay",
+      "reward": "evidence",
+      "events": [
+        { "word": "hops", "kind": "connect", "target": "route" },
+        { "word": "reveal", "kind": "highlight", "target": "packet" }
+      ]
+    },
+    {
+      "type": "compare",
+      "duration": 2,
+      "title": "Two routes",
+      "left": { "label": "OLD", "points": ["3 hops"] },
+      "right": { "label": "SHORT", "points": ["2 hops"] },
+      "winner": "right",
+      "hits": [1],
+      "say": "The shorter route saves *one* hop.",
+      "caption": "The shorter route saves one hop",
+      "reward": "comparison",
+      "events": [
+        { "word": "saves", "kind": "compare", "target": "short-route" }
+      ]
+    },
+    {
+      "type": "stat",
+      "duration": 2,
+      "value": 1,
+      "label": "handoff saved",
+      "say": "The route saves one *handoff*.",
+      "caption": "One less hop in this route",
+      "reward": "consequence",
+      "events": [
+        { "at": 0.4, "kind": "contact", "target": "packet" },
+        { "word": "saves", "kind": "resolve", "target": "packet" }
+      ]
+    },
+    {
+      "type": "layers",
+      "duration": 2,
+      "title": "INSIDE ONE HOP",
+      "layers": [
+        { "label": "PACKET", "accent": true },
+        { "label": "SHORT ROUTE" },
+        { "label": "DESTINATION" }
+      ],
+      "say": "A shorter path needs fewer handoffs.",
+      "caption": "Fewer handoffs keep the trip short",
+      "reward": "mechanism",
+      "events": [
+        { "word": "shorter", "kind": "reveal", "target": "route" },
+        { "word": "fewer", "kind": "connect", "target": "route" }
+      ]
+    },
+    {
+      "type": "outro",
+      "duration": 2,
+      "cta": "Follow the next packet",
+      "say": "Watch the packet cross the *network*.",
+      "caption": "Follow for another mechanism",
+      "reward": "consequence",
+      "events": [
+        { "word": "Watch", "kind": "resolve", "target": "packet" }
+      ]
+    }
+  ]
+}

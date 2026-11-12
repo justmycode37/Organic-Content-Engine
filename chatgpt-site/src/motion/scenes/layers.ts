@@ -1,33 +1,15 @@
 import { CONTENT_BOTTOM, ease, prog, type Frame, type LayersProps, type SceneDef } from '../core.ts';
-import { fitPixel, pixelHeight, pixelText, pixelWidth, text, textWidth } from '../prim.ts';
+import { fitPixel, pixelText, text, textWidth } from '../prim.ts';
+import { drawBody } from './semantic.ts';
 
-const LABEL_PX = 6;
-const NOTE_SIZE = 30;
+const LABEL_SIZE = 64;
+const NOTE_SIZE = 48;
 
-function pixelWrap(value: string, maxWidth: number, px = LABEL_PX): string[] {
-  const clean = String(value ?? '').replaceAll('*', '').trim().replace(/\s+/g, ' ').toUpperCase();
-  if (!clean) return [''];
-  const lines: string[] = [];
-  let line = '';
-  for (const word of clean.split(' ')) {
-    let parts = [word];
-    if (pixelWidth(word, px) > maxWidth) {
-      parts = [];
-      let part = '';
-      for (const char of Array.from(word)) {
-        if (part && pixelWidth(part + char, px) > maxWidth) { parts.push(part); part = char; }
-        else part += char;
-      }
-      if (part) parts.push(part);
-    }
-    for (const part of parts) {
-      const candidate = line ? `${line} ${part}` : part;
-      if (line && pixelWidth(candidate, px) > maxWidth) { lines.push(line); line = part; }
-      else line = candidate;
-    }
-  }
-  if (line) lines.push(line);
-  return lines.length ? lines : [''];
+function layerBeatTimes(frame: Frame) {
+  // Explosion, focus, and reassembly use one replaceable duration-derived schedule.
+  const step = Math.max(0.4, Math.min(0.8, frame.dur / 4));
+  const endHold = Math.min(0.3, frame.dur * 0.15);
+  return { explode: step, focus: step * 2, reassemble: Math.min(step * 3, frame.dur - endHold) };
 }
 
 function measuredWrap(ctx: Frame['ctx'], value: string, maxWidth: number, size: number): string[] {
@@ -101,62 +83,58 @@ export const layersScene: SceneDef<LayersProps> = {
   type: 'layers',
   render(frame: Frame, props: LayersProps) {
     const { ctx, theme, t, dur } = frame;
+    const beats = layerBeatTimes(frame);
     const layers = (props.layers ?? []).slice(0, 6);
     if (layers.length < 2) return;
     const n = layers.length;
     const accentIndex = layers.findIndex(layer => layer.accent);
+    const focusIndex = Math.max(0, Math.min(n - 1, props.focus ?? Math.max(0, accentIndex)));
     if (props.title) {
-      const fitted = fitPixel(props.title.toUpperCase(), 888, 1, [10, 9, 8]);
-      pixelText(ctx, fitted.lines[0] ?? '', 540, 252, fitted.px, { color: theme.fg, align: 'center' });
+      const fitted = fitPixel(props.title.toUpperCase(), 888, 1, [9, 8]);
+      pixelText(ctx, fitted.lines[0] ?? '', 540, 370, fitted.px, { color: theme.fg, align: 'center' });
     }
 
-    const baseX = 156, slabW = 460, faceDepth = 120, thickness = 28;
+    const baseX = 96, slabW = 420, faceDepth = n >= 6 ? 72 : 108, thickness = 28;
     const slabH = faceDepth + thickness;
-    const explodedGap = n >= 5 ? 36 : 40;
-    const contentTop = props.title ? 340 : 270;
+    const explodedGap = n >= 6 ? 24 : n === 5 ? 8 : 40;
+    const contentTop = props.title ? 500 : 350;
     const contentBottom = CONTENT_BOTTOM - 16;
     const centerY = (contentTop + contentBottom) / 2;
     const collapsedPitch = slabH - 18;
     const explodedPitch = slabH + explodedGap;
-    const spread = ease.outBack(prog(t, dur * 0.1, Math.min(0.48, dur * 0.24)));
+    const explode = ease.outBack(prog(t, beats.explode, Math.min(0.48, dur * 0.24)));
+    const focusStart = beats.focus;
+    const reassembleStart = beats.reassemble;
+    const reassemble = ease.inOutCubic(prog(t, reassembleStart, Math.min(0.42, dur * 0.16)));
+    const spread = explode * (1 - reassemble);
     const collapsedHeight = slabH + (n - 1) * collapsedPitch;
     const explodedHeight = slabH + (n - 1) * explodedPitch;
     const collapsedTop = centerY - collapsedHeight / 2;
     const explodedTop = centerY - explodedHeight / 2;
-    const calloutX = 768, calloutW = 216;
-    const accentProgress = ease.outCubic(prog(t, dur * 0.56, Math.min(0.28, dur * 0.16)));
-    const labelAlpha = ease.outExpo(prog(t, dur * 0.12, Math.min(0.28, dur * 0.16)));
+    const calloutX = 648, calloutW = 336;
+    const accentProgress = ease.outCubic(prog(t, focusStart, Math.min(0.28, dur * 0.16)));
+    const labelAlpha = ease.outExpo(prog(t, beats.explode + 0.15, Math.min(0.3, dur * 0.16)));
     const callouts = layers.map((layer, i) => {
-      const labelPad = i === accentIndex ? 8 : 0;
-      let labelPx = LABEL_PX;
-      let labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-      while (labelPx > 4 && (labelLines.length > 4 || labelLines.some(line => line.length === 1))) {
-        labelPx--;
-        labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-      }
+      const focused = i === focusIndex;
+      const labelPad = focused ? 8 : 0;
+      const labelLines = measuredWrap(ctx, layer.label ?? '', calloutW - 24, LABEL_SIZE);
       let noteSize = NOTE_SIZE;
       let noteLines = layer.note ? measuredWrap(ctx, layer.note, calloutW, noteSize) : [];
       while (noteLines.length > 2 && noteSize > 18) {
         noteSize -= 2;
         noteLines = measuredWrap(ctx, layer.note ?? '', calloutW, noteSize);
       }
-      let labelH = labelLines.length * pixelHeight(labelPx) + Math.max(0, labelLines.length - 1) * 8;
+      const labelH = labelLines.length * (LABEL_SIZE + 8);
       let noteH = noteLines.length ? noteLines.length * (noteSize + 6) : 0;
       let height = labelH + labelPad * 2 + (noteLines.length ? 4 + noteH : 0);
       const maxBlockHeight = Math.max(explodedPitch, (contentBottom - contentTop - 14 * (n - 1)) / n);
-      while (height > maxBlockHeight && (noteSize > 18 || labelPx > 4)) {
-        if (noteSize > 18) {
-          noteSize -= 2;
-          noteLines = measuredWrap(ctx, layer.note ?? '', calloutW, noteSize);
-          noteH = noteLines.length ? noteLines.length * (noteSize + 6) : 0;
-        } else if (labelPx > 4) {
-          labelPx--;
-          labelLines = pixelWrap(layer.label ?? '', calloutW - 24, labelPx);
-          labelH = labelLines.length * pixelHeight(labelPx) + Math.max(0, labelLines.length - 1) * 8;
-        }
+      while (height > maxBlockHeight && noteSize > 18) {
+        noteSize -= 2;
+        noteLines = measuredWrap(ctx, layer.note ?? '', calloutW, noteSize);
+        noteH = noteLines.length ? noteLines.length * (noteSize + 6) : 0;
         height = labelH + labelPad * 2 + (noteLines.length ? 4 + noteH : 0);
       }
-      return { labelPad, labelPx, labelLines, labelH, noteSize, noteLines, noteH, height };
+      return { labelPad, labelLines, labelH, noteSize, noteLines, noteH, height };
     });
     const repackCallouts = callouts.some(callout => callout.height > explodedPitch);
     let packedCenters: number[] | undefined;
@@ -177,12 +155,12 @@ export const layersScene: SceneDef<LayersProps> = {
       const yCollapsed = collapsedTop + i * collapsedPitch;
       const yExploded = explodedTop + i * explodedPitch;
       const y = yCollapsed + (yExploded - yCollapsed) * spread;
-      const isAccent = i === accentIndex && t >= dur * 0.56;
+      const isAccent = i === focusIndex;
       const slide = isAccent ? -60 * accentProgress : 0;
       const x = baseX + slide;
       const mid = y + slabH / 2;
       const stroke = isAccent ? theme.accent : theme.fg;
-      const alpha = ease.outExpo(prog(t, i * Math.min(0.07, dur * 0.035), Math.min(0.24, dur * 0.18)));
+      const alpha = i === focusIndex ? 1 : 0.24;
 
       ctx.save();
       ctx.globalAlpha *= alpha;
@@ -227,12 +205,12 @@ export const layersScene: SceneDef<LayersProps> = {
 
       const labelCenter = packedCenters?.[i] ?? mid;
       const labelTop = labelCenter - callout.height / 2 + callout.labelPad;
-      const longestLine = Math.max(0, ...callout.labelLines.map(line => pixelWidth(line, callout.labelPx)));
+      const longestLine = Math.max(0, ...callout.labelLines.map(line => textWidth(ctx, line, LABEL_SIZE, 800)));
 
       // A stepped leader ties each slab to its own measured label block.
       const edgeX = x + slabW + faceDepth;
       const elbowX = calloutX - 24;
-      ctx.globalAlpha *= labelAlpha;
+      ctx.globalAlpha *= isAccent ? 1 : labelAlpha;
       ctx.strokeStyle = isAccent ? theme.accent : theme.fg;
       ctx.lineWidth = 8; ctx.lineJoin = 'miter'; ctx.lineCap = 'square';
       ctx.beginPath();
@@ -249,9 +227,15 @@ export const layersScene: SceneDef<LayersProps> = {
         ctx.fillStyle = theme.accent;
         ctx.fillRect(calloutX - 6, labelTop - 8, Math.min(calloutW, longestLine + 14), callout.labelH + 16);
       }
-      callout.labelLines.forEach((line, row) => pixelText(ctx, line, calloutX, labelTop + row * (pixelHeight(callout.labelPx) + 8), callout.labelPx, {
-        color: isAccent ? theme.onAccent : theme.fg,
-      }));
+      if (isAccent) {
+        drawBody(ctx, layer.label.toUpperCase(), calloutX + calloutW / 2, labelTop, calloutW - 24, callout.labelH + 8, {
+          color: theme.onAccent, align: 'center', maxSize: LABEL_SIZE, minSize: LABEL_SIZE, maxLines: 3,
+        });
+      } else {
+        callout.labelLines.forEach((line, row) => text(ctx, line, calloutX, labelTop + LABEL_SIZE + row * (LABEL_SIZE + 8), {
+          size: LABEL_SIZE, color: theme.fg, weight: 800,
+        }));
+      }
       if (callout.noteLines.length) {
         const noteTop = labelTop + callout.labelH + callout.labelPad * 2 + 4;
         callout.noteLines.forEach((line, row) => text(ctx, line, calloutX, noteTop + callout.noteSize + row * (callout.noteSize + 6), {

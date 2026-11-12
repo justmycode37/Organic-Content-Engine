@@ -1,0 +1,119 @@
+{
+  "version": 1,
+  "title": "948 distinct Linux kernel bugs",
+  "style": "patch",
+  "mode": "dark",
+  "accent": "red",
+  "series": "PATCH NOTES",
+  "scenes": [
+    {
+      "type": "title",
+      "duration": 2.4,
+      "text": "948 DISTINCT BUGS",
+      "kicker": "OPENAI-REPORTED · NOV 4",
+      "caption": "Bugs differ from exploits; model unreleased.",
+      "hits": [0.8]
+    },
+    {
+      "type": "demo",
+      "duration": 2.8,
+      "actor": "USER",
+      "action": "EXPLOITS",
+      "target": "LINUX",
+      "before": "USER",
+      "after": "ROOT",
+      "contrast": "REMOTE FAILS",
+      "caption": "Unpatched local access required.",
+      "hits": [1.4]
+    },
+    {
+      "type": "predict",
+      "duration": 2.8,
+      "question": "948 COUNTS WHAT?",
+      "guesses": ["EXPLOITS", "BUGS", "TARGETS"],
+      "answer": "BUGS",
+      "comparison": { "label": "WORKING EXPLOITS", "value": "1,169" },
+      "correction": "NOT EXPLOITS",
+      "caption": "How-To Geek differs.",
+      "hits": [1.4]
+    },
+    {
+      "type": "quantity",
+      "duration": 3,
+      "quantity": 2308,
+      "subset": 584,
+      "scale": 250,
+      "unit": "CANDIDATES",
+      "comparator": { "label": "REPRODUCED", "value": 1724 },
+      "caption": "OpenAI-reported funnel.",
+      "hits": [1.5]
+    },
+    {
+      "type": "evidence",
+      "duration": 3,
+      "claim": "UNPATCHED ACCOUNT",
+      "quote": "root access for a well-resourced threat actor",
+      "source": "iTnews",
+      "date": "Nov 6 2026",
+      "caption": "Primary post inaccessible.",
+      "hits": [1.5]
+    },
+    {
+      "type": "scale",
+      "duration": 3,
+      "reference": "BUG",
+      "unit": "ROOT-LEVEL COUNTS",
+      "levels": [
+        { "label": "JULY", "value": 166 },
+        { "label": "OCTOBER", "value": 948 }
+      ],
+      "caption": "Categories differ.",
+      "hits": [1.5]
+    },
+    {
+      "type": "split",
+      "duration": 3.2,
+      "baseline": "RUNS",
+      "axis": "COST / BUG",
+      "left": { "label": "JULY", "value": "$3,094" },
+      "right": { "label": "OCTOBER", "value": "$1,279" },
+      "answer": "UNDER HALF",
+      "caption": "Upper bound; labels differ.",
+      "hits": [1.6]
+    },
+    {
+      "type": "layers",
+      "duration": 3.6,
+      "title": "SIMPLIFIED DIAGRAM",
+      "focus": 2,
+      "layers": [
+        { "label": "SCOUT" },
+        { "label": "VM CHECK" },
+        { "label": "EXPLOIT CHECK", "accent": true },
+        { "label": "PATCH" },
+        { "label": "HUMAN REVIEW" }
+      ],
+      "caption": "OpenAI-reported stages.",
+      "hits": [1.8]
+    },
+    {
+      "type": "stat",
+      "duration": 2.6,
+      "value": 948,
+      "from": 0,
+      "label": "DISTINCT BUGS",
+      "versus": { "value": 1169, "label": "WORKING ROOT EXPLOITS" },
+      "slam": true,
+      "caption": "OpenAI reported both.",
+      "hits": [0.6]
+    },
+    {
+      "type": "outro",
+      "duration": 2.2,
+      "cta": "PATCH KERNELS",
+      "sub": "TECHNIQUES WITHHELD",
+      "caption": "Attackers need a local foothold.",
+      "transition": "wipe"
+    }
+  ]
+}

@@ -4,8 +4,8 @@ import { textWidth } from './prim.ts';
 export interface ActiveCaption { text: string; start: number; end: number }
 type CaptionWord = Span & { joinPrevious?: boolean };
 
-const MAX_WIDTH = 860;
-const WORD_SIZES = [72, 64, 56, 52, 48, 44, 40, 36, 32];
+const MAX_WIDTH = 792;
+const WORD_SIZES = [76, 72, 68, 64];
 const slotScale = (_word: CaptionWord) => 1;
 
 function rowWidth(ctx: Frame['ctx'], words: CaptionWord[], size: number, weight: number) {
@@ -93,24 +93,20 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
   const { ctx, theme } = frame;
   const weight = 850;
   let lines: CaptionWord[][] = [];
-  let size = 52;
+  let size = 64;
   for (const candidateSize of WORD_SIZES) {
     const fitWords = splitOversizedWords(ctx, words, candidateSize, weight);
     const balanced = balancedLines(ctx, fitWords, candidateSize, weight);
-    if (balanced) {
+    if (balanced && balanced.length <= 2) {
       size = candidateSize;
       lines = balanced;
       break;
     }
-    if (candidateSize === 52) {
-      size = candidateSize;
-      lines = greedyLines(ctx, fitWords, candidateSize, weight);
-      break;
-    }
   }
   if (!lines.length) {
-    size = 32;
-    lines = greedyLines(ctx, splitOversizedWords(ctx, words, size, weight), size, weight);
+    size = WORD_SIZES.at(-1)!;
+    const wrapped = greedyLines(ctx, splitOversizedWords(ctx, words, size, weight), size, weight);
+    lines = wrapped.length <= 2 ? wrapped : [wrapped[0]!, wrapped.slice(1).flat()];
   }
 
   const lineHeight = size * 1.08;
@@ -119,14 +115,15 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
   const enterWindow = Math.min(span * 0.45, words.length * 0.09);
   const wordDelay = words.length > 1 ? enterWindow / (words.length - 1) : 0;
   const popMs = Math.max(0.12, Math.min(0.18, wordDelay * 1.5 || 0.16));
-  const elapsed = time - start;
+  const elapsed = frame.opening ? Math.max(time - start, enterWindow + popMs) : time - start;
   const exit = clamp((end - time) / 0.1);
   let globalIndex = 0;
 
   for (let row = 0; row < lines.length; row++) {
     const rowWords = lines[row]!;
     const width = rowWidth(ctx, rowWords, size, weight);
-    let x = 540 - width / 2;
+    const horizontalScale = Math.min(1, MAX_WIDTH / Math.max(1, width));
+    let x = 504 - width * horizontalScale / 2;
     for (let col = 0; col < rowWords.length; col++) {
       const word = rowWords[col]!;
       const index = globalIndex++;
@@ -135,9 +132,9 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
       const slotWidth = measuredWidth * slotScale(word);
       const nextWord = rowWords[col + 1];
       const gap = nextWord && !nextWord.joinPrevious ? textWidth(ctx, ' ', size, weight) : 0;
-      const textX = x + (slotWidth - measuredWidth) / 2;
+      const textX = x + (slotWidth - measuredWidth) * horizontalScale / 2;
       if (local <= 0 || exit <= 0) {
-        x += slotWidth + gap;
+        x += (slotWidth + gap) * horizontalScale;
         continue;
       }
       const progress = clamp(local);
@@ -148,9 +145,9 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
       const y = top + row * lineHeight + (1 - overshoot) * 10;
       ctx.save();
       ctx.globalAlpha *= Math.min(1, progress * 1.5) * exit;
-      ctx.translate(textX + measuredWidth / 2, y);
-      ctx.scale(scale, scale);
-      ctx.translate(-(textX + measuredWidth / 2), -y);
+      ctx.translate(textX + measuredWidth * horizontalScale / 2, y);
+      ctx.scale(scale * horizontalScale, scale);
+      ctx.translate(-(textX + measuredWidth * horizontalScale / 2), -y);
       ctx.font = font(size, weight, 'body');
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
@@ -161,7 +158,7 @@ export function drawCaption(frame: Frame, caption: ActiveCaption, time: number) 
       ctx.strokeText(word.text, textX, y);
       ctx.fillText(word.text, textX, y);
       ctx.restore();
-      x += slotWidth + gap;
+      x += (slotWidth + gap) * horizontalScale;
     }
   }
 }

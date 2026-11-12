@@ -1,0 +1,465 @@
+{
+  "version": 1,
+  "title": "MINI WORLD — access, evidence, repair",
+  "style": "miniworld",
+  "scenes": [
+    {
+      "type": "title",
+      "duration": 2.5,
+      "say": "OpenAI says agents found 948 Linux root bugs.",
+      "caption": "OpenAI reports *948* root bugs.",
+      "events": [
+        {
+          "word": "found",
+          "kind": "contact",
+          "target": "cargo"
+        },
+        {
+          "word": "root",
+          "kind": "connect",
+          "target": "connect"
+        }
+      ],
+      "reward": "evidence",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "push",
+      "text": "948 ROOT BUGS",
+      "hits": [
+        1.4
+      ]
+    },
+    {
+      "type": "demo",
+      "duration": 2.5,
+      "actor": "BIT",
+      "action": "ENTER",
+      "target": "CITY",
+      "before": "LOCAL FIRST",
+      "after": "GATE OPEN",
+      "say": "BIT hits. Local foothold opens access.",
+      "caption": "Local access comes *first*.",
+      "events": [
+        {
+          "word": "hits",
+          "kind": "contact",
+          "target": "wall"
+        },
+        {
+          "word": "Local",
+          "kind": "reveal",
+          "target": "key"
+        },
+        {
+          "word": "opens",
+          "kind": "transform",
+          "target": "gate"
+        },
+        {
+          "word": "access",
+          "kind": "connect",
+          "target": "travel"
+        }
+      ],
+      "reward": "mechanism",
+      "camera": {
+        "move": "fly",
+        "target": "place"
+      },
+      "transition": "cut"
+    },
+    {
+      "type": "bars",
+      "duration": 2.5,
+      "say": "OpenAI's numbers: candidates. Reproduced. Exploits. Distinct bugs.",
+      "caption": "The funnel ends at *948*.",
+      "events": [
+        {
+          "word": "Reproduced",
+          "kind": "transform",
+          "target": "level-1"
+        },
+        {
+          "word": "Exploits",
+          "kind": "transform",
+          "target": "level-2"
+        },
+        {
+          "word": "Distinct",
+          "kind": "resolve",
+          "target": "level-3"
+        }
+      ],
+      "reward": "comparison",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "whip",
+      "title": "FUNNEL",
+      "items": [
+        {
+          "label": "CANDIDATES",
+          "value": 2308
+        },
+        {
+          "label": "REPRODUCED",
+          "value": 1724
+        },
+        {
+          "label": "EXPLOITS",
+          "value": 1169
+        },
+        {
+          "label": "BUGS",
+          "value": 948
+        }
+      ]
+    },
+    {
+      "type": "flow",
+      "duration": 2.5,
+      "say": "Scout. Reproduce. Draft patches. Humans review.",
+      "caption": "Drafts still need *human review*.",
+      "events": [
+        {
+          "word": "Reproduce",
+          "kind": "connect",
+          "target": "station-1"
+        },
+        {
+          "word": "Draft",
+          "kind": "transform",
+          "target": "station-2"
+        },
+        {
+          "word": "Humans",
+          "kind": "resolve",
+          "target": "station-3"
+        }
+      ],
+      "reward": "mechanism",
+      "camera": {
+        "move": "fly",
+        "target": "place"
+      },
+      "transition": "cut",
+      "nodes": [
+        {
+          "label": "SCOUT"
+        },
+        {
+          "label": "REPRODUCE"
+        },
+        {
+          "label": "PATCH"
+        },
+        {
+          "label": "REVIEW"
+        }
+      ]
+    },
+    {
+      "type": "scale",
+      "duration": 2.5,
+      "say": "OpenAI says July found 166 root exploits. October reached 1,169.",
+      "caption": "Root exploits: *166 to 1,169*, via SecurityWeek.",
+      "events": [
+        {
+          "word": "October",
+          "kind": "compare",
+          "target": "level-1"
+        },
+        {
+          "word": "reached",
+          "kind": "resolve",
+          "target": "connect"
+        }
+      ],
+      "reward": "comparison",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "push",
+      "reference": "JULY/OCTOBER",
+      "unit": "ROOT EXPLOITS",
+      "levels": [
+        {
+          "label": "JULY",
+          "value": 166
+        },
+        {
+          "label": "OCTOBER",
+          "value": 1169
+        }
+      ]
+    },
+    {
+      "type": "evidence",
+      "duration": 2.5,
+      "claim": "OPENAI REPORTED",
+      "quote": "SELF-REPORTED",
+      "source": "OPENAI",
+      "date": "NOV 4, 2026",
+      "say": "Remember, these are OpenAI’s own numbers.",
+      "caption": "*OpenAI’s own* reported numbers.",
+      "events": [
+        {
+          "word": "OpenAI’s",
+          "kind": "reveal",
+          "target": "evidence"
+        },
+        {
+          "word": "own",
+          "kind": "connect",
+          "target": "connect"
+        }
+      ],
+      "reward": "evidence",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "cut"
+    },
+    {
+      "type": "predict",
+      "duration": 2.5,
+      "question": "PUBLIC?",
+      "guesses": [
+        "YES",
+        "UNRELEASED"
+      ],
+      "answer": "UNRELEASED",
+      "comparison": {
+        "label": "MODEL",
+        "value": "PRIVATE"
+      },
+      "say": "Can you use this? No. Still unreleased.",
+      "caption": "Still an *unreleased* model.",
+      "events": [
+        {
+          "word": "this",
+          "kind": "reveal",
+          "target": "cargo"
+        },
+        {
+          "word": "No",
+          "kind": "resolve",
+          "target": "answer"
+        },
+        {
+          "word": "unreleased",
+          "kind": "connect",
+          "target": "connect"
+        }
+      ],
+      "reward": "prediction",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "whip"
+    },
+    {
+      "type": "demo",
+      "duration": 2.5,
+      "say": "No remote entry. A foothold unlocks the gate.",
+      "caption": "Local foothold is *required*.",
+      "events": [
+        {
+          "word": "remote",
+          "kind": "contact",
+          "target": "wall"
+        },
+        {
+          "word": "foothold",
+          "kind": "reveal",
+          "target": "key"
+        },
+        {
+          "word": "unlocks",
+          "kind": "transform",
+          "target": "gate"
+        },
+        {
+          "word": "gate",
+          "kind": "connect",
+          "target": "travel"
+        }
+      ],
+      "reward": "consequence",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "cut",
+      "actor": "BIT",
+      "action": "ENTER",
+      "target": "CITY",
+      "before": "NO REMOTE ENTRY",
+      "after": "LOCAL ACCESS"
+    },
+    {
+      "type": "diff",
+      "duration": 2.5,
+      "say": "ADA installs a patch. Red lights settle.",
+      "caption": "A patch changes the *system*.",
+      "events": [
+        {
+          "word": "installs",
+          "kind": "contact",
+          "target": "patch"
+        },
+        {
+          "word": "Red",
+          "kind": "transform",
+          "target": "lights"
+        },
+        {
+          "word": "settle",
+          "kind": "resolve",
+          "target": "travel"
+        }
+      ],
+      "reward": "consequence",
+      "camera": {
+        "move": "fly",
+        "target": "place"
+      },
+      "transition": "push",
+      "filename": "ADA PATCHES",
+      "removed": [
+        "UNPATCHED"
+      ],
+      "added": [
+        "PATCHED"
+      ]
+    },
+    {
+      "type": "quantity",
+      "duration": 2.5,
+      "quantity": 948,
+      "subset": 61,
+      "unit": "UPSTREAM",
+      "scale": 128,
+      "comparator": {
+        "label": "STAGED",
+        "value": 43
+      },
+      "say": "Sixty-one upstream patches. Forty-three more staged.",
+      "caption": "*61 upstream*, 43 staged, via iTnews.",
+      "events": [
+        {
+          "word": "upstream",
+          "kind": "transform",
+          "target": "subset"
+        },
+        {
+          "word": "more",
+          "kind": "resolve",
+          "target": "connect"
+        }
+      ],
+      "reward": "comparison",
+      "camera": {
+        "move": "track",
+        "target": "place"
+      },
+      "transition": "cut"
+    },
+    {
+      "type": "split",
+      "duration": 2.5,
+      "baseline": "STATUS",
+      "axis": "REPAIR",
+      "left": {
+        "label": "FOUND",
+        "value": "948"
+      },
+      "right": {
+        "label": "UPSTREAM",
+        "value": "61"
+      },
+      "answer": "NOT ALL FIXED",
+      "say": "Found. Then reviewed. Not all fixed.",
+      "caption": "Found isn’t *fixed*.",
+      "events": [
+        {
+          "word": "reviewed",
+          "kind": "compare",
+          "target": "compare"
+        },
+        {
+          "word": "Not",
+          "kind": "resolve",
+          "target": "answer"
+        }
+      ],
+      "reward": "comparison",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "whip"
+    },
+    {
+      "type": "stat",
+      "duration": 2.5,
+      "value": 1.21,
+      "decimals": 2,
+      "prefix": "$",
+      "suffix": "M",
+      "label": "API CREDITS",
+      "slam": true,
+      "say": "OpenAI says the run cost 1.21 million dollars.",
+      "caption": "About *$1.21 million* in credits.",
+      "events": [
+        {
+          "word": "cost",
+          "kind": "contact",
+          "target": "amount"
+        },
+        {
+          "word": "million",
+          "kind": "connect",
+          "target": "connect"
+        }
+      ],
+      "reward": "evidence",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "push"
+    },
+    {
+      "type": "outro",
+      "duration": 2.5,
+      "cta": "PATCH YOUR KERNEL",
+      "say": "Patch your kernel. Protect your crowd.",
+      "caption": "Send this to your *sysadmin*.",
+      "events": [
+        {
+          "word": "Patch",
+          "kind": "contact",
+          "target": "cargo"
+        },
+        {
+          "word": "Protect",
+          "kind": "connect",
+          "target": "connect"
+        }
+      ],
+      "reward": "consequence",
+      "camera": {
+        "move": "track",
+        "target": "BIT"
+      },
+      "transition": "cut"
+    }
+  ]
+}

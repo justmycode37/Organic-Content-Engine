@@ -1,0 +1,405 @@
+{
+  "version": 1,
+  "title": "948 ways to root Linux? Read the fine print",
+  "style": "proof",
+  "mode": "light",
+  "accent": "yellow",
+  "series": "PROOF ROOM",
+  "assets": {
+    "sw-count": "assets/proof/securityweek-948.png",
+    "sw-quote": "assets/proof/securityweek-quote.png"
+  },
+  "scenes": [
+    {
+      "type": "title",
+      "duration": 2.6,
+      "reward": "evidence",
+      "text": "*948* ways to root Linux?",
+      "say": "AI found 948 ways to root Linux, OpenAI says.",
+      "caption": "Read the fine print.",
+      "events": [
+        {
+          "word": "948",
+          "kind": "highlight"
+        },
+        {
+          "word": "root",
+          "kind": "resolve"
+        }
+      ]
+    },
+    {
+      "type": "special",
+      "kind": "exhibit",
+      "duration": 2.6,
+      "reward": "evidence",
+      "transition": "cut",
+      "say": "OpenAI says 948 counts separate patches.",
+      "caption": "948 counts patches.",
+      "events": [
+        {
+          "word": "948",
+          "kind": "connect"
+        },
+        {
+          "word": "separate",
+          "kind": "highlight"
+        }
+      ],
+      "data": {
+        "asset": "sw-count",
+        "source": "securityweek.com",
+        "date": "captured 11 Nov 2026",
+        "clauses": [
+          [
+            [
+              3,
+              19,
+              244,
+              46
+            ]
+          ],
+          [
+            [
+              339,
+              19,
+              77,
+              46
+            ]
+          ],
+          [
+            [
+              2,
+              94,
+              343,
+              46
+            ]
+          ]
+        ],
+        "held": 1
+      }
+    },
+    {
+      "type": "stat",
+      "duration": 2.6,
+      "reward": "comparison",
+      "value": 1169,
+      "label": "working exploits",
+      "versus": {
+        "value": 948,
+        "label": "bugs behind them"
+      },
+      "slam": true,
+      "say": "OpenAI's figures: 1,169 exploits, but only 948 bugs.",
+      "caption": "More exploits than bugs.",
+      "events": [
+        {
+          "word": "exploits",
+          "kind": "highlight"
+        },
+        {
+          "word": "only",
+          "kind": "compare"
+        }
+      ]
+    },
+    {
+      "type": "special",
+      "kind": "exhibit",
+      "duration": 2.4,
+      "reward": "evidence",
+      "transition": "cut",
+      "say": "First, researchers checked the exploits and fixes.",
+      "caption": "Humans checked it first.",
+      "events": [
+        {
+          "word": "checked",
+          "kind": "highlight"
+        },
+        {
+          "word": "exploits",
+          "kind": "resolve"
+        }
+      ],
+      "data": {
+        "asset": "sw-count",
+        "source": "securityweek.com",
+        "date": "captured 11 Nov 2026",
+        "clauses": [
+          [
+            [
+              174,
+              244,
+              405,
+              46
+            ]
+          ],
+          [
+            [
+              594,
+              244,
+              431,
+              46
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "predict",
+      "duration": 2.4,
+      "reward": "prediction",
+      "transition": "cut",
+      "question": "Remote takeover?",
+      "guesses": [
+        "Remote",
+        "Local only"
+      ],
+      "answer": "Local only",
+      "comparison": {
+        "label": "Needs",
+        "value": "an account"
+      },
+      "say": "Remote takeover? Only with an account first.",
+      "caption": "A foothold comes first.",
+      "events": [
+        {
+          "word": "takeover",
+          "kind": "reveal"
+        },
+        {
+          "word": "only",
+          "kind": "resolve"
+        },
+        {
+          "word": "account",
+          "kind": "compare"
+        }
+      ]
+    },
+    {
+      "type": "special",
+      "kind": "exhibit",
+      "duration": 2.6,
+      "reward": "evidence",
+      "transition": "wipe",
+      "say": "OpenAI warned: a low-privileged account, missing patches,",
+      "caption": "An account, unpatched,",
+      "events": [
+        {
+          "word": "low",
+          "kind": "highlight"
+        },
+        {
+          "word": "missing",
+          "kind": "highlight"
+        }
+      ],
+      "data": {
+        "asset": "sw-quote",
+        "source": "securityweek.com",
+        "date": "captured 11 Nov 2026",
+        "clauses": [
+          [
+            [
+              675,
+              94,
+              282,
+              46
+            ]
+          ],
+          [
+            [
+              126,
+              244,
+              466,
+              46
+            ]
+          ]
+        ]
+      }
+    },
+    {
+      "type": "special",
+      "kind": "exhibit",
+      "duration": 2.8,
+      "reward": "consequence",
+      "say": "equals root access, for a well-resourced attacker.",
+      "caption": [
+        "is root access,",
+        "for capable attackers."
+      ],
+      "events": [
+        {
+          "word": "access",
+          "kind": "resolve"
+        },
+        {
+          "word": "well",
+          "kind": "highlight"
+        }
+      ],
+      "data": {
+        "asset": "sw-quote",
+        "source": "securityweek.com",
+        "date": "captured 11 Nov 2026",
+        "clauses": [
+          [
+            [
+              675,
+              94,
+              282,
+              46
+            ]
+          ],
+          [
+            [
+              126,
+              244,
+              466,
+              46
+            ]
+          ],
+          [
+            [
+              1,
+              319,
+              455,
+              46
+            ]
+          ],
+          [
+            [
+              469,
+              319,
+              277,
+              46
+            ]
+          ],
+          [
+            [
+              863,
+              319,
+              99,
+              46
+            ],
+            [
+              3,
+              394,
+              463,
+              46
+            ]
+          ]
+        ],
+        "held": 2
+      }
+    },
+    {
+      "type": "stat",
+      "duration": 2.4,
+      "reward": "evidence",
+      "value": 1.21,
+      "prefix": "$",
+      "suffix": "M",
+      "decimals": 2,
+      "label": "API credits",
+      "slam": true,
+      "say": "OpenAI reports 1.21 million dollars in API credits.",
+      "caption": "As reported by OpenAI.",
+      "events": [
+        {
+          "word": "million",
+          "kind": "highlight"
+        },
+        {
+          "word": "credits",
+          "kind": "resolve"
+        }
+      ]
+    },
+    {
+      "type": "kinetic",
+      "duration": 2.0,
+      "reward": "evidence",
+      "words": [
+        "Unreleased model",
+        "OpenAI’s own numbers"
+      ],
+      "transition": "cut",
+      "say": "Unreleased model. OpenAI’s own numbers.",
+      "caption": "No independent check yet.",
+      "events": [
+        {
+          "word": "model",
+          "kind": "reveal"
+        },
+        {
+          "word": "own",
+          "kind": "transform"
+        }
+      ]
+    },
+    {
+      "type": "title",
+      "duration": 2.2,
+      "reward": "evidence",
+      "text": "Primary post *unread*",
+      "say": "We could not open OpenAI’s primary post.",
+      "caption": "So we could not check it.",
+      "events": [
+        {
+          "word": "open",
+          "kind": "highlight"
+        },
+        {
+          "word": "post",
+          "kind": "resolve"
+        }
+      ]
+    },
+    {
+      "type": "special",
+      "kind": "verdict",
+      "duration": 2.4,
+      "reward": "consequence",
+      "transition": "wipe",
+      "say": "Verdict: partly true. Reported, not independently verified.",
+      "caption": "Real risk, smaller claim.",
+      "events": [
+        {
+          "word": "partly",
+          "kind": "resolve"
+        },
+        {
+          "word": "not",
+          "kind": "transform"
+        }
+      ],
+      "hits": [
+        0.6
+      ],
+      "data": {
+        "status": "PARTLY TRUE",
+        "reason": "Local root, reported, not verified"
+      }
+    },
+    {
+      "type": "outro",
+      "duration": 2.2,
+      "reward": "consequence",
+      "cta": "Patch your kernel.",
+      "say": "Patch your kernel. Keep the caveats attached.",
+      "caption": "Keep the caveats.",
+      "events": [
+        {
+          "word": "kernel",
+          "kind": "highlight"
+        },
+        {
+          "word": "caveats",
+          "kind": "resolve"
+        }
+      ]
+    }
+  ]
+}

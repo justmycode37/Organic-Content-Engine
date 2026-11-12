@@ -1,5 +1,6 @@
 import { SAFE, clamp, ease, parseMarkup, type Frame, type KineticProps, type SceneDef } from '../core.ts';
 import { blocks, pixelBlock, pixelHeight, pixelText, pixelWidth } from '../prim.ts';
+import { activeStep } from './semantic.ts';
 
 type Piece = { text: string; accent: boolean; spaceBefore: boolean };
 type Layout = { px: number; lines: string[]; truncated: boolean };
@@ -101,12 +102,12 @@ export const kineticScene: SceneDef<KineticProps> = {
     if (!words.length) return;
 
     const beat = dur / words.length;
-    const index = Math.min(words.length - 1, Math.floor(Math.max(0, t) / beat));
-    const local = clamp((t - index * beat) / Math.min(0.22, beat * 0.24));
+    const index = activeStep(frame, words.length);
+    const start = index ? frame.events?.[index - 1]?.at ?? frame.hits?.[index - 1] ?? index * beat : 0;
+    const local = frame.opening && index === 0 ? 1 : clamp((t - start) / Math.min(0.22, beat * 0.24));
     const content = words[index]!.slice(0, 3000).toUpperCase();
-    const inverted = index % 2 === 1;
-    const bg = inverted ? theme.fg : theme.bg;
-    const fg = inverted ? theme.bg : theme.fg;
+    const bg = theme.bg;
+    const fg = theme.fg;
     const areaY = 240;
     const areaH = 1000;
     ctx.fillStyle = bg;

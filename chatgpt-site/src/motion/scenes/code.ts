@@ -1,13 +1,13 @@
 import { clamp, ease, font, type Frame, type CodeProps, type SceneDef } from '../core.ts';
-import { cursor, pixelText, pixelWidth, textWidth, windowFrame } from '../prim.ts';
+import { cursor, panel, text, textWidth } from '../prim.ts';
 
 const MAX_SOURCE_LINES = 14;
 const MAX_SOURCE_CHARS = 512;
 const MAX_CONTENT_HEIGHT = 1000;
-const WINDOW_CHROME_HEIGHT = 144;
+const WINDOW_CHROME_HEIGHT = 120;
 const CONTENT_WIDTH = 752;
-const NOTE_SIZE = 38;
-const NOTE_LINE_HEIGHT = 46;
+const NOTE_SIZE = 52;
+const NOTE_LINE_HEIGHT = 62;
 const NOTE_GAP_TOP = 48;
 const NOTE_GAP_BOTTOM = 24;
 const MAX_NOTE_LINES = 15;
@@ -44,14 +44,6 @@ function wrapMeasured(ctx: Frame['ctx'], value: string, maxWidth: number, size: 
     remaining = remaining.slice(cut);
   }
   return lines;
-}
-
-function fitPixelLabel(value: string, maxWidth: number, px: number): string {
-  const upper = String(value ?? '').toUpperCase().trim();
-  if (pixelWidth(upper, px) <= maxWidth) return upper;
-  const chars = Array.from(upper);
-  while (chars.length && pixelWidth(chars.join('') + '...', px) > maxWidth) chars.pop();
-  return chars.length ? chars.join('') + '...' : '';
 }
 
 function drawCode(ctx: Frame['ctx'], value: string, x: number, y: number, size: number, theme: Frame['theme']) {
@@ -108,8 +100,8 @@ export const codeScene: SceneDef<CodeProps> = {
     const noteSourceLine = noteRequested ? Math.min(...requestedHighlights) : 0;
 
     const fitsAt = (size: number) => source.every(line => textWidth(ctx, line, size, 500, 'mono') <= CONTENT_WIDTH);
-    let size = 30;
-    for (let candidate = 46; candidate >= 30; candidate--) {
+    let size = 36;
+    for (let candidate = 60; candidate >= 36; candidate--) {
       const lineH = Math.round(candidate * 1.6);
       const fitsWidth = fitsAt(candidate);
       const lineCount = source.length;
@@ -150,7 +142,7 @@ export const codeScene: SceneDef<CodeProps> = {
     if (enter <= 0) return;
 
     const typeEnd = Math.min(0.8, Math.max(0.28, dur * 0.32));
-    const hiAt = 0.12 + typeEnd + 0.05;
+    const hiAt = frame.events?.find(event => event.kind === 'highlight')?.at ?? 0.12 + typeEnd + 0.05;
     const noteP = visibleNoteLine ? ease.outExpo(clamp((t - hiAt - 0.05) / 0.18)) : 0;
     const noteCurrentSpace = finalNoteSpace * noteP;
     const height = WINDOW_CHROME_HEIGHT + contentRows * lineH + noteCurrentSpace;
@@ -161,8 +153,11 @@ export const codeScene: SceneDef<CodeProps> = {
     ctx.scale(0.9 + 0.1 * entrance, 0.9 + 0.1 * entrance);
     ctx.translate(-540, -(y + height / 2));
 
-    const filename = fitPixelLabel(props.filename ?? '', 640, 4);
-    const box = windowFrame(ctx, theme, 96, y, 888, height, filename);
+    // Plain panel: the filename is the only furniture, no window buttons.
+    panel(ctx, 96, y, 888, height, { fill: theme.panel, stroke: theme.line, lineWidth: 4 });
+    const filename = fitLabel(ctx, props.filename ?? '', 760);
+    if (filename) text(ctx, filename, 132, y + 60, { size: 48, color: theme.dim, family: 'mono', weight: 800, baseline: 'middle' });
+    const box = { x: 132, y: y + (filename ? WINDOW_CHROME_HEIGHT : 48), w: 816, h: height - WINDOW_CHROME_HEIGHT - 36 };
     const typing = props.typing !== false;
     const totalChars = groups.reduce((sum, group) => sum + group.rows.reduce((n, row) => n + row.text.length, 0), 0);
     const typed = typing ? Math.floor(totalChars * clamp((t - 0.12) / Math.max(0.12, typeEnd))) : totalChars;
@@ -179,24 +174,18 @@ export const codeScene: SceneDef<CodeProps> = {
           : (t < 0.12 + rowIndex * 0.035 ? 0 : line.length);
         const isHighlighted = visibleHighlights.has(row.sourceLine) && t >= hiAt;
         const reveal = isHighlighted ? ease.outExpo(clamp((t - hiAt) / 0.12)) : 0;
-        const rowX = box.x - 34;
+        const rowX = box.x - 36;
         if (isHighlighted) {
           ctx.fillStyle = theme.panelAlt;
-          ctx.fillRect(rowX, rowY, box.w + 68, lineH - 3);
+          ctx.fillRect(rowX, rowY, box.w + 72, lineH - 3);
           ctx.fillStyle = theme.accent;
           ctx.fillRect(rowX, rowY, 12 * reveal, lineH - 3);
         }
 
         ctx.save();
         if (!isHighlighted) ctx.globalAlpha *= 0.62;
-        ctx.font = font(Math.max(24, Math.round(size * 0.55)), 800, 'mono');
-        ctx.textBaseline = 'top';
-        ctx.textAlign = 'right';
-        ctx.fillStyle = isHighlighted ? theme.accent : theme.muted;
-        ctx.fillText(String(row.sourceLine).padStart(2, '0'), box.x + 48, rowY + Math.max(3, (lineH - size * 0.65) / 2));
-
         ctx.textAlign = 'left';
-        const codeX = box.x + 64;
+        const codeX = box.x + 8;
         const visible = Array.from(line).slice(0, visibleChars).join('');
         drawCode(ctx, visible, codeX, rowY + 1, size, theme);
         const isLastRow = rowIndex === contentRows - 1;
@@ -217,8 +206,8 @@ export const codeScene: SceneDef<CodeProps> = {
       if (visibleNoteLine === group.sourceLine && !noteDrawn) {
         const noteTop = rowY + NOTE_GAP_TOP * noteP;
         const noteHeight = noteBoxHeight * noteP;
-        const noteX = box.x + 64;
-        const noteW = Math.min(box.w - 64, Math.max(160, Math.max(...noteLines.map(line => textWidth(ctx, line, NOTE_SIZE, 800, 'body'))) + 48));
+        const noteX = box.x + 8;
+        const noteW = Math.min(box.w - 8, Math.max(160, Math.max(...noteLines.map(line => textWidth(ctx, line, NOTE_SIZE, 800, 'body'))) + 48));
         const arrowX = noteX + Math.min(36, noteW / 2);
         const arrowP = clamp((t - hiAt - 0.04) / 0.2);
         drawSteppedArrow(ctx, arrowX, rowY, noteTop, theme.fg, arrowP);
@@ -256,3 +245,10 @@ function fitTrailingEllipsis(ctx: Frame['ctx'], value: string, maxWidth: number,
   return chars.join('') + '...';
 }
 
+
+function fitLabel(ctx: Frame['ctx'], value: string, maxWidth: number): string {
+  const chars = Array.from(String(value ?? '').trim());
+  if (textWidth(ctx, chars.join(''), 48, 800, 'mono') <= maxWidth) return chars.join('');
+  while (chars.length && textWidth(ctx, chars.join('') + '...', 48, 800, 'mono') > maxWidth) chars.pop();
+  return chars.length ? chars.join('') + '...' : '';
+}

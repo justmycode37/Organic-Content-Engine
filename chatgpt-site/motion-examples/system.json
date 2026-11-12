@@ -1,0 +1,449 @@
+{
+  "version": 1,
+  "title": "948 Linux root bugs — one living system",
+  "style": "system",
+  "mode": "dark",
+  "accent": "blue",
+  "scenes": [
+    {
+      "type": "title",
+      "say": "OpenAI says its agents found 948 Linux root bugs.",
+      "caption": "OpenAI's agents scanned Linux",
+      "reward": "evidence",
+      "duration": 2.4,
+      "transition": "cut",
+      "events": [
+        {
+          "word": "agents",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "948",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ],
+      "text": "948 Linux root bugs",
+      "hits": [
+        1.2
+      ]
+    },
+    {
+      "type": "demo",
+      "actor": "exploit",
+      "action": "Escalate",
+      "target": "Linux account",
+      "before": "user",
+      "after": "root",
+      "say": "Each exploit turns a local user into root.",
+      "caption": "A normal user becomes root",
+      "reward": "mechanism",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "turns",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "local",
+          "kind": "highlight",
+          "target": "system-panel"
+        },
+        {
+          "word": "root",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "flow",
+      "nodes": [
+        {
+          "label": "Scout code"
+        },
+        {
+          "label": "Test in VMs"
+        },
+        {
+          "label": "Draft patches"
+        }
+      ],
+      "say": "Agents scout code, test bugs, then draft patches.",
+      "caption": "A simplified agent pipeline",
+      "reward": "mechanism",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "test",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "draft",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "quantity",
+      "quantity": 2308,
+      "subset": 1724,
+      "unit": "Reproduced findings",
+      "scale": 50,
+      "comparator": {
+        "label": "Candidates",
+        "value": 2308
+      },
+      "say": "Of 2,308 candidates, OpenAI says 1,724 reproduced in VMs.",
+      "caption": "OpenAI's reported findings",
+      "reward": "evidence",
+      "duration": 2.4,
+      "transition": "push",
+      "events": [
+        {
+          "word": "candidates",
+          "kind": "transform",
+          "target": "system-panel"
+        },
+        {
+          "word": "reproduced",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "predict",
+      "question": "1,169 exploits",
+      "guesses": [
+        "= bugs?",
+        "948 bugs"
+      ],
+      "answer": "948 bugs",
+      "say": "Those 1,169 working exploits group into 948 distinct bugs.",
+      "caption": "Exploits share bugs",
+      "reward": "comparison",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "group",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "distinct",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ],
+      "comparison": {
+        "label": "Bugs",
+        "value": "948"
+      }
+    },
+    {
+      "type": "scale",
+      "reference": "Distinct bugs",
+      "unit": "found",
+      "levels": [
+        {
+          "label": "July root exploits",
+          "value": 166
+        },
+        {
+          "label": "October distinct bugs",
+          "value": 948
+        }
+      ],
+      "say": "OpenAI's July run found 166 root exploits; October's, 948 bugs.",
+      "caption": "Exploits then, bugs now",
+      "reward": "comparison",
+      "duration": 2.4,
+      "transition": "push",
+      "events": [
+        {
+          "word": "166",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "948",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "value": 1213430,
+      "from": 1000000,
+      "prefix": "$",
+      "label": "October API credits",
+      "say": "OpenAI says the October run cost about 1.2 million dollars.",
+      "caption": "Reported API credits, not invoices",
+      "reward": "evidence",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "cost",
+          "kind": "transform",
+          "target": "system-panel"
+        },
+        {
+          "word": "million",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "split",
+      "baseline": "API",
+      "axis": "Cost",
+      "left": {
+        "label": "July",
+        "value": "$3,094/exploit"
+      },
+      "right": {
+        "label": "October",
+        "value": "$1,279/bug"
+      },
+      "answer": "Units differ",
+      "say": "July: $3,094 per exploit. October: $1,279 per bug.",
+      "caption": "Different units, different runs",
+      "reward": "comparison",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "October",
+          "kind": "compare",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "bug",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "flow",
+      "nodes": [
+        {
+          "label": "Reports reviewed"
+        },
+        {
+          "label": "Kernel maintainers"
+        },
+        {
+          "label": "Upstream review"
+        }
+      ],
+      "say": "Humans review reports before maintainers assess the fixes.",
+      "caption": "Review precedes an upstream fix",
+      "reward": "mechanism",
+      "duration": 2.4,
+      "transition": "push",
+      "events": [
+        {
+          "word": "before",
+          "kind": "transform",
+          "target": "system-panel"
+        },
+        {
+          "word": "assess",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "changelog",
+      "version": "Snapshot",
+      "items": [
+        {
+          "tag": "FIX",
+          "text": "61 upstream"
+        },
+        {
+          "tag": "CHG",
+          "text": "43 staged"
+        },
+        {
+          "tag": "NEW",
+          "text": "299 discussed"
+        }
+      ],
+      "say": "OpenAI reports 61 upstream fixes, 43 staged, 299 under discussion.",
+      "caption": "Staged is not landed",
+      "reward": "evidence",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "43",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "299",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "layers",
+      "focus": 2,
+      "layers": [
+        {
+          "label": "Internet access?"
+        },
+        {
+          "label": "Not sufficient"
+        },
+        {
+          "label": "Local access required"
+        }
+      ],
+      "say": "These exploits require local access, not internet access.",
+      "caption": "A local foothold comes first",
+      "reward": "consequence",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "require",
+          "kind": "transform",
+          "target": "system-panel"
+        },
+        {
+          "word": "not",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "split",
+      "baseline": "Access",
+      "axis": "Privilege",
+      "left": {
+        "label": "Foothold",
+        "value": "user"
+      },
+      "right": {
+        "label": "Unpatched system",
+        "value": "root"
+      },
+      "answer": "Functionally root",
+      "say": "OpenAI warns: on unpatched systems, user equals root.",
+      "caption": "For well-resourced attackers",
+      "reward": "consequence",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "unpatched",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "equals",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "evidence",
+      "claim": "Whose figures?",
+      "quote": "OpenAI’s own numbers",
+      "source": "OpenAI",
+      "date": "Nov 4, 2026",
+      "say": "These remain OpenAI’s own numbers, not independent verification.",
+      "caption": "These figures are self reported",
+      "reward": "evidence",
+      "duration": 2.4,
+      "transition": "push",
+      "events": [
+        {
+          "word": "OpenAI’s",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "independent",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "demo",
+      "actor": "request",
+      "action": "Request",
+      "target": "Research model",
+      "before": "Released?",
+      "after": "Unreleased",
+      "say": "And the research model is not publicly released.",
+      "caption": "You cannot reproduce this yet",
+      "reward": "consequence",
+      "duration": 2.4,
+      "transition": "morph",
+      "events": [
+        {
+          "word": "model",
+          "kind": "transform",
+          "target": "system-panel"
+        },
+        {
+          "word": "not",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ]
+    },
+    {
+      "type": "outro",
+      "cta": "Kernel upkeep",
+      "sub": "Apply fixes",
+      "duration": 2.4,
+      "say": "The practical takeaway: review and apply kernel fixes.",
+      "caption": "Keep your Linux kernel patched",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "review",
+          "kind": "transform",
+          "target": "system-panel",
+          "sfx": "click"
+        },
+        {
+          "word": "apply",
+          "kind": "resolve",
+          "target": "system-panel"
+        }
+      ],
+      "transition": "push"
+    }
+  ]
+}

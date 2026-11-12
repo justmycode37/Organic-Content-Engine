@@ -1,0 +1,395 @@
+{
+  "version": 1,
+  "title": "948 Linux root bugs — OpenAI’s reported results",
+  "mode": "dark",
+  "accent": "red",
+  "series": "PATCH NOTES",
+  "assets": {
+    "securityweek": "../assets/files/securityweek-948-root-bugs.png"
+  },
+  "scenes": [
+    {
+      "type": "title",
+      "duration": 2.6,
+      "transition": "cut",
+      "say": "OpenAI says agents found 948 Linux root bugs.",
+      "caption": "OpenAI says *948* Linux root bugs.",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "found",
+          "kind": "highlight",
+          "target": "result"
+        },
+        {
+          "word": "root",
+          "kind": "transform",
+          "target": "focus"
+        }
+      ],
+      "text": "948 LINUX *ROOT* BUGS",
+      "claims": [
+        "distinct-root-bugs"
+      ],
+      "hits": [
+        1.15
+      ]
+    },
+    {
+      "type": "terminal",
+      "duration": 3,
+      "transition": "push",
+      "say": "Local user. Exploit runs. Root access.",
+      "caption": "Local access becomes *root* access.",
+      "reward": "mechanism",
+      "events": [
+        {
+          "word": "Exploit",
+          "kind": "contact",
+          "target": "exploit"
+        },
+        {
+          "word": "Root",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "lines": [
+        {
+          "cmd": "whoami",
+          "out": "user",
+          "status": "info"
+        },
+        {
+          "cmd": "./exploit",
+          "out": "running",
+          "status": "info"
+        },
+        {
+          "cmd": "whoami",
+          "out": "root",
+          "status": "ok"
+        }
+      ]
+    },
+    {
+      "type": "evidence",
+      "duration": 2.4,
+      "transition": "slide",
+      "say": "SecurityWeek reports it. OpenAI says: separate root causes.",
+      "caption": "Read the actual *finding* here.",
+      "reward": "evidence",
+      "events": [
+        {
+          "word": "reports",
+          "kind": "highlight",
+          "target": "focus"
+        },
+        {
+          "word": "separate",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "asset": "securityweek",
+      "rect": {
+        "x": 792,
+        "y": 337,
+        "w": 375,
+        "h": 61
+      },
+      "claim": "948 distinct bugs",
+      "source": "SecurityWeek",
+      "date": "November 2026",
+      "claims": [
+        "distinct-root-bugs",
+        "openai-publication-year"
+      ]
+    },
+    {
+      "type": "quantity",
+      "duration": 2.4,
+      "transition": "cut",
+      "say": "OpenAI reports 2,308 candidates. Extract the 1,724 reproduced findings.",
+      "caption": "Keep the *reproduced* findings only.",
+      "reward": "mechanism",
+      "events": [
+        {
+          "word": "candidates",
+          "kind": "transform",
+          "target": "extract"
+        },
+        {
+          "word": "reproduced",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "quantity": 2308,
+      "subset": 584,
+      "unit": "candidates",
+      "comparator": {
+        "label": "reproduced",
+        "value": 1724
+      },
+      "claims": [
+        "candidate-findings",
+        "reproduced-findings"
+      ]
+    },
+    {
+      "type": "quantity",
+      "duration": 2.4,
+      "transition": "cut",
+      "say": "OpenAI says failures leave. Root exploits: 1,169.",
+      "caption": "Next, keep working *root* exploits.",
+      "reward": "mechanism",
+      "events": [
+        {
+          "word": "leave",
+          "kind": "transform",
+          "target": "extract"
+        },
+        {
+          "word": "exploits",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "quantity": 1724,
+      "subset": 555,
+      "unit": "reproduced",
+      "comparator": {
+        "label": "root exploits",
+        "value": 1169
+      },
+      "claims": [
+        "reproduced-findings",
+        "working-root-exploits"
+      ]
+    },
+    {
+      "type": "quantity",
+      "duration": 2.4,
+      "transition": "cut",
+      "say": "Group shared causes and OpenAI says 948 distinct bugs remain.",
+      "caption": "Shared causes become *distinct* bugs.",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "causes",
+          "kind": "transform",
+          "target": "extract"
+        },
+        {
+          "word": "distinct",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "quantity": 1169,
+      "subset": 221,
+      "unit": "root exploits",
+      "comparator": {
+        "label": "distinct bugs",
+        "value": 948
+      },
+      "claims": [
+        "working-root-exploits",
+        "distinct-root-bugs"
+      ]
+    },
+    {
+      "type": "split",
+      "duration": 2.8,
+      "transition": "whip",
+      "say": "SecurityWeek reports July: 166 root exploits. October: 1,169. About three months apart.",
+      "caption": "July versus *October* exploits.",
+      "reward": "comparison",
+      "events": [
+        {
+          "word": "October",
+          "kind": "compare",
+          "target": "flip"
+        },
+        {
+          "word": "About",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "baseline": "reported",
+      "axis": "exploits",
+      "left": {
+        "label": "July",
+        "value": "166"
+      },
+      "right": {
+        "label": "October",
+        "value": "1,169"
+      },
+      "answer": "~3 months apart",
+      "claims": [
+        "july-root-exploits",
+        "working-root-exploits",
+        "comparison-gap"
+      ]
+    },
+    {
+      "type": "split",
+      "duration": 2.8,
+      "transition": "cut",
+      "say": "iTnews reports July cost $3,094 per exploit. October: about $1,280 per bug.",
+      "caption": "Per exploit versus *per bug*.",
+      "reward": "comparison",
+      "events": [
+        {
+          "word": "October",
+          "kind": "compare",
+          "target": "flip"
+        },
+        {
+          "word": "bug",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "baseline": "reported",
+      "axis": "cost",
+      "left": {
+        "label": "July",
+        "value": "$3,094 /exploit"
+      },
+      "right": {
+        "label": "October",
+        "value": "~$1,280 /bug"
+      },
+      "answer": "different units",
+      "claims": [
+        "july-cost-per-exploit",
+        "october-cost-per-bug"
+      ]
+    },
+    {
+      "type": "stat",
+      "duration": 2.4,
+      "transition": "cut",
+      "say": "SecurityWeek reports one run cost about 1.2 million dollars in API credits.",
+      "caption": "One run. *API credits*, not cash.",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "million",
+          "kind": "highlight",
+          "target": "result"
+        }
+      ],
+      "value": 1.2,
+      "prefix": "$",
+      "suffix": "M",
+      "decimals": 1,
+      "label": "API CREDITS",
+      "slam": false,
+      "claims": [
+        "october-api-cost",
+        "one-october-run"
+      ]
+    },
+    {
+      "type": "demo",
+      "duration": 2.6,
+      "camera": {
+        "move": "track",
+        "target": "device",
+        "ramp": true
+      },
+      "transition": "push",
+      "say": "Every exploit starts from a local account. Not remote.",
+      "caption": "Local *foothold* comes first.",
+      "reward": "mechanism",
+      "events": [
+        {
+          "word": "starts",
+          "kind": "contact",
+          "target": "contact"
+        },
+        {
+          "word": "account",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "actor": "local account",
+      "action": "run exploit",
+      "target": "Linux kernel",
+      "before": "USER",
+      "after": "ROOT",
+      "contrast": "not remote"
+    },
+    {
+      "type": "list",
+      "duration": 2.1,
+      "transition": "cut",
+      "say": "The model is unreleased. These are OpenAI’s own numbers.",
+      "caption": "Unreleased model. *Self-reported* results.",
+      "reward": "evidence",
+      "events": [
+        {
+          "word": "These",
+          "kind": "transform",
+          "target": "condition"
+        }
+      ],
+      "items": [
+        "MODEL UNRELEASED",
+        "OPENAI’S OWN NUMBERS"
+      ]
+    },
+    {
+      "type": "changelog",
+      "duration": 2.4,
+      "transition": "slide",
+      "say": "iTnews reports a snapshot: 61 upstream fixes. Next, 43 staged patches.",
+      "caption": "Dated snapshot, not today’s *total*.",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "Next",
+          "kind": "transform",
+          "target": "status"
+        }
+      ],
+      "version": "SNAPSHOT",
+      "items": [
+        {
+          "tag": "FIX",
+          "text": "61 upstream fixes"
+        },
+        {
+          "tag": "CHG",
+          "text": "43 staged patches"
+        }
+      ],
+      "claims": [
+        "upstream-fixes",
+        "staged-fixes"
+      ]
+    },
+    {
+      "type": "outro",
+      "duration": 2.2,
+      "transition": "push",
+      "say": "The takeaway: patch the kernel. Block privilege escalation.",
+      "caption": "Close the *privilege escalation* path.",
+      "reward": "consequence",
+      "events": [
+        {
+          "word": "kernel",
+          "kind": "resolve",
+          "target": "result"
+        }
+      ],
+      "cta": "PATCH THE *KERNEL*"
+    }
+  ]
+}

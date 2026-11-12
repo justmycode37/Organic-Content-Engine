@@ -1,12 +1,123 @@
-import { clamp, hash, type Ctx, type Theme, type TransitionName } from '../core.ts';
+import { clamp, ease, FPS, hash, SAFE, type Ctx, type ObjectRect, type Theme, type TransitionContext, type TransitionName } from '../core.ts';
 
-/** The cover plus reveal stays within a 0.30 second beat. */
+/** Legacy transitions keep their existing 0.30 second cover/reveal. */
 export const TRANSITION_OUT = 0.15;
 export const TRANSITION_IN = 0.15;
+/** New transitions use a 0.20 second total beat, within the v2 0.10–0.25 s range. */
+export const FAST_TRANSITION_OUT = 0.10;
+export const FAST_TRANSITION_IN = 0.10;
+const FAST_TRANSITIONS = new Set<TransitionName>(['whip', 'push', 'morph', 'slide']);
 
-/** Draw a deterministic full-frame transition overlay around a cut. */
-export function drawTransition(ctx: Ctx, name: TransitionName, phase: number, theme: Theme, seed: number) {
+export const transitionOut = (name: TransitionName) => FAST_TRANSITIONS.has(name) ? FAST_TRANSITION_OUT : TRANSITION_OUT;
+export const transitionIn = (name: TransitionName) => FAST_TRANSITIONS.has(name) ? FAST_TRANSITION_IN : TRANSITION_IN;
+
+const centerRect = (): ObjectRect => ({ x: SAFE.cx - 72, y: SAFE.y + 500 - 72, w: 144, h: 144 });
+const mixRect = (a: ObjectRect, b: ObjectRect, p: number): ObjectRect => ({
+  x: a.x + (b.x - a.x) * p,
+  y: a.y + (b.y - a.y) * p,
+  w: a.w + (b.w - a.w) * p,
+  h: a.h + (b.h - a.h) * p,
+});
+const rectCenter = (rect: ObjectRect) => ({ x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 });
+// Player phases are -1..0 before the cut and 0..1 after it. Map both halves to one continuous 0..1 beat.
+const transitionProgress = (phase: number) => phase < 0 ? clamp(phase + 1) * 0.5 : 0.5 + clamp(phase) * 0.5;
+const side = (context: TransitionContext | undefined, seed: number): 'left' | 'right' => {
+  if (context?.direction === 'left' || context?.direction === 'right') return context.direction;
+  return hash(seed, 3) < 0.5 ? 'left' : 'right';
+};
+
+/** Directional whip-pan with flat streaks and a two-to-four-frame destination settle. */
+export function drawWhipTransition(ctx: Ctx, phase: number, theme: Theme, seed: number, context?: TransitionContext) {
+  const incoming = phase >= 0;
+  const p = transitionProgress(phase);
+  const cover = incoming ? (1 - p) * 2 : p * 2;
+  const direction = side(context, seed);
+  const sign = direction === 'left' ? -1 : 1;
+  ctx.save();
+  ctx.globalAlpha *= cover * 0.64;
+  ctx.fillStyle = theme.panelAlt;
+  ctx.fillRect(0, 0, 1080, 1920);
+  ctx.globalAlpha = Math.min(1, 0.9 * (incoming ? 1 - p : p));
+  for (let index = 0; index < 12; index++) {
+    const travel = p;
+    const width = 180 + hash(index, seed) * 560;
+    const x = sign < 0 ? 1280 - travel * 1760 + hash(index, seed + 2) * 240 : -width - 280 + travel * 1760 + hash(index, seed + 2) * 240;
+    const y = 320 + index * 102 + hash(index, seed + 1) * 44;
+    ctx.fillStyle = index % 4 === 0 ? theme.accent : index % 2 ? theme.fg : theme.line;
+    ctx.fillRect(x, y, width, index % 3 === 0 ? 8 : 4);
+  }
+  if (incoming) {
+    const target = context?.incoming?.rect ?? centerRect();
+    const settleFrames = 2 + Math.floor(hash(seed, 11) * 3);
+    const settle = clamp((phase * FPS) / settleFrames);
+    const center = rectCenter(target);
+    const offset = sign * (1 - settle) * 24;
+    ctx.globalAlpha = (1 - settle) * 0.85;
+    ctx.strokeStyle = theme.accent;
+    ctx.lineWidth = 6;
+    ctx.strokeRect(target.x + offset, target.y, target.w, target.h);
+    ctx.beginPath();
+    ctx.moveTo(center.x + offset - sign * 54, center.y);
+    ctx.lineTo(center.x + offset + sign * 54, center.y);
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/** The player scales scene content around its tracked object; the shared push draws no frame or overlay. */
+export function drawPushTransition(_ctx: Ctx, _phase: number, _theme: Theme, _seed: number, _context?: TransitionContext) {}
+
+/** Match-cut marker that morphs the outgoing target bounds into the incoming target bounds. */
+export function drawMorphTransition(ctx: Ctx, phase: number, theme: Theme, _seed: number, context?: TransitionContext) {
+  const p = transitionProgress(phase);
+  const from = context?.outgoing?.rect ?? centerRect();
+  const to = context?.incoming?.rect ?? from;
+  const rect = mixRect(from, to, ease.inOutCubic(p));
+  const opacity = Math.sin(Math.PI * p) * 0.84;
+  ctx.save();
+  ctx.globalAlpha *= opacity;
+  ctx.fillStyle = theme.panelAlt;
+  ctx.fillRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.strokeStyle = theme.accent;
+  ctx.lineWidth = 8;
+  ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
+  ctx.restore();
+}
+
+/** Fast grid-panel slide, with staggered rows and a single accent edge. */
+export function drawSlideTransition(ctx: Ctx, phase: number, theme: Theme, seed: number, context?: TransitionContext) {
+  const p = transitionProgress(phase);
+  const coverage = phase >= 0 ? (1 - p) * 2 : p * 2;
+  const direction = side(context, seed);
+  const cols = 5, rows = 6, cellW = 1080 / cols, cellH = 1920 / rows;
+  ctx.save();
+  for (let row = 0; row < rows; row++) for (let col = 0; col < cols; col++) {
+    const cell = row * cols + col;
+    const delay = 0.12 * (hash(cell, seed) * 0.8 + ((row + col) % 3) * 0.06);
+    const amount = clamp((coverage - delay) / (1 - delay));
+    if (amount <= 0) continue;
+    const width = cellW * amount;
+    const x = (col + row) % 2 === 0
+      ? (direction === 'left' ? col * cellW : (col + 1) * cellW - width)
+      : (direction === 'left' ? (col + 1) * cellW - width : col * cellW);
+    ctx.fillStyle = theme.panelAlt;
+    ctx.fillRect(x, row * cellH, width + 1, cellH + 1);
+    if (amount < 1) {
+      ctx.fillStyle = theme.accent;
+      ctx.fillRect(direction === 'left' ? x : x + width - 6, row * cellH, 6, cellH);
+    }
+  }
+  ctx.restore();
+}
+
+/** Draw a deterministic transition overlay around a cut. */
+export function drawTransition(ctx: Ctx, name: TransitionName, phase: number, theme: Theme, seed: number, context?: TransitionContext) {
   if (name === 'cut' || !Number.isFinite(phase)) return;
+  if (name === 'whip') return drawWhipTransition(ctx, phase, theme, seed, context);
+  if (name === 'push') return drawPushTransition(ctx, phase, theme, seed, context);
+  if (name === 'morph') return drawMorphTransition(ctx, phase, theme, seed, context);
+  if (name === 'slide') return drawSlideTransition(ctx, phase, theme, seed, context);
+
   const cover = phase <= 0;
   const progress = cover ? clamp(phase + 1) : clamp(phase);
   ctx.save();

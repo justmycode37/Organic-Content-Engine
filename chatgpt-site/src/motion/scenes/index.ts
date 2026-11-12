@@ -16,6 +16,13 @@ import { gridScene } from './grid.ts';
 import { kineticScene } from './kinetic.ts';
 import { changelogScene } from './changelog.ts';
 import { outroScene } from './outro.ts';
+import { specialScene } from './special.ts';
+import { demoScene } from './demo.ts';
+import { predictScene } from './predict.ts';
+import { quantityScene } from './quantity.ts';
+import { evidenceScene } from './evidence.ts';
+import { scaleScene } from './scale.ts';
+import { splitScene } from './split.ts';
 
 export const SCENES: { [K in SceneType]: SceneDef<SceneProps[K]> } = {
   title: titleScene,
@@ -34,4 +41,11 @@ export const SCENES: { [K in SceneType]: SceneDef<SceneProps[K]> } = {
   kinetic: kineticScene,
   changelog: changelogScene,
   outro: outroScene,
+  special: specialScene,
+  demo: demoScene,
+  predict: predictScene,
+  quantity: quantityScene,
+  evidence: evidenceScene,
+  scale: scaleScene,
+  split: splitScene,
 };

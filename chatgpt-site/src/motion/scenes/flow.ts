@@ -118,13 +118,19 @@ export const flowScene: SceneDef<FlowProps> = {
         })();
 
     const start = dur * 0.12;
-    const travelStart = dur * 0.2;
+    // Declared events (or camera hits) move the packet one hop per beat; otherwise it travels on a timer.
+    const beats = (frame.events?.length ? frame.events.map(event => event.at) : frame.hits ?? []).slice(0, n - 1);
+    const eventDriven = !looping && beats.length > 0;
+    const travelStart = eventDriven ? 0 : dur * 0.2;
     const travelEnd = dur * 0.82;
     const cycleSpan = Math.max(0.2, travelEnd - travelStart);
     const travel = Math.max(0, (t - travelStart) / cycleSpan);
-    const cycle = looping ? travel * n : clamp(travel) * (n - 1);
+    const hop = beats.filter(at => t >= at).length;
+    const cycle = eventDriven
+      ? Math.max(0, hop - 1) + (hop ? ease.outCubic(prog(t, beats[hop - 1]!, 0.3)) : 0)
+      : looping ? travel * n : clamp(travel) * (n - 1);
     const active = Math.floor(cycle) % n;
-    const phase = !looping && travel >= 1 ? 1 : cycle - Math.floor(cycle);
+    const phase = eventDriven ? cycle - Math.floor(cycle) : !looping && travel >= 1 ? 1 : cycle - Math.floor(cycle);
     const accentIndex = nodes.findIndex(node => node.accent);
 
     // Main connectors sit entirely in the gaps and use the shared stepped arrow head.

@@ -1,0 +1,147 @@
+{
+  "version": 1,
+  "title": "Motion v2 camera and continuity grammar",
+  "style": "patch",
+  "accent": "blue",
+  "series": "FOLLOW THE REQUEST",
+  "scenes": [
+    {
+      "type": "kinetic",
+      "duration": 2.2,
+      "words": [
+        "FOLLOW THE REQUEST"
+      ],
+      "caption": "One signal, three handoffs.",
+      "camera": {
+        "move": "fly",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        0.7
+      ]
+    },
+    {
+      "type": "stat",
+      "duration": 2.2,
+      "value": 3,
+      "label": "HANDOFFS IN THIS MODEL",
+      "caption": "The route becomes visible.",
+      "transition": "whip",
+      "camera": {
+        "move": "push-in",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        0.65,
+        1.3
+      ]
+    },
+    {
+      "type": "flow",
+      "duration": 2.2,
+      "nodes": [
+        {
+          "label": "CLIENT",
+          "icon": "user"
+        },
+        {
+          "label": "ROUTER",
+          "icon": "arrow",
+          "accent": true
+        },
+        {
+          "label": "WORKER",
+          "icon": "gear"
+        }
+      ],
+      "direction": "right",
+      "packet": "REQ",
+      "caption": "A route, then a response.",
+      "transition": "push",
+      "camera": {
+        "move": "track",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        0.8,
+        1.55
+      ]
+    },
+    {
+      "type": "layers",
+      "duration": 2.2,
+      "title": "WHAT MOVED",
+      "layers": [
+        {
+          "label": "SIGNAL"
+        },
+        {
+          "label": "ROUTE",
+          "accent": true
+        },
+        {
+          "label": "RESULT"
+        }
+      ],
+      "caption": "Same request, clearer structure.",
+      "transition": "morph",
+      "camera": {
+        "move": "pan-right",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        0.9
+      ]
+    },
+    {
+      "type": "compare",
+      "duration": 2.2,
+      "title": "ONE PATH",
+      "left": {
+        "label": "BEFORE",
+        "points": [
+          "Request",
+          "Reply"
+        ]
+      },
+      "right": {
+        "label": "AFTER",
+        "points": [
+          "Request",
+          "Route",
+          "Reply"
+        ]
+      },
+      "winner": "right",
+      "caption": "Now the route is visible.",
+      "transition": "slide",
+      "camera": {
+        "move": "pull-out",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        1.1
+      ]
+    },
+    {
+      "type": "outro",
+      "duration": 2.2,
+      "cta": "FOLLOW THE SIGNAL",
+      "sub": "One object. A visible consequence.",
+      "caption": "A clean handoff closes the loop.",
+      "camera": {
+        "move": "pan-left",
+        "target": "content",
+        "ramp": true
+      },
+      "hits": [
+        0.9
+      ]
+    }
+  ]
+}

@@ -7,7 +7,7 @@ import {build} from 'esbuild';
 import {chromium} from 'playwright-core';
 import {spawn} from 'node:child_process';
 import {readFile,writeFile} from 'node:fs/promises';
-import {join} from 'node:path';
+import {dirname,extname,isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url));
@@ -23,6 +23,19 @@ export async function openMotionPage(entry='src/motion/page.ts'){
  return {browser,page};
 }
 
+const MIME={'.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.svg':'image/svg+xml','.ttf':'font/ttf','.otf':'font/otf','.woff':'font/woff','.woff2':'font/woff2'};
+const dataUrl=async path=>{const type=MIME[extname(path).toLowerCase()];if(!type)throw new Error(`Unsupported file type: ${path}`);return `data:${type};base64,${(await readFile(path)).toString('base64')}`;};
+
+/** Loads the style's fonts and the spec's images into the page. Asset paths resolve against the spec file. */
+export async function loadRequirements(page,spec,specPath){
+ const need=await page.evaluate(s=>window.motion.requirements(s),spec);
+ const styleDir=join(process.env.MOTION_DIR??join(ROOT,'src/motion'),'styles',need.style);
+ const fonts=await Promise.all(need.fonts.map(async item=>({...item,data:await dataUrl(join(styleDir,item.file))})));
+ const base=specPath?dirname(resolve(specPath)):process.cwd();
+ const assets=Object.fromEntries(await Promise.all(Object.entries(need.assets).map(async([id,path])=>[id,await dataUrl(isAbsolute(path)?path:join(base,path))])));
+ await page.evaluate(p=>window.motion.load(p),{fonts,assets});
+}
+
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  if(process.argv[2]==='icons'){
   const {browser,page}=await openMotionPage('src/motion/icon-sheet.ts');
@@ -34,6 +47,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  const spec=JSON.parse(await readFile(specPath,'utf8'));
  const {browser,page}=await openMotionPage();
  try{
+  await loadRequirements(page,spec,specPath);
   if(action==='shot'){
    const list=(times.length?times:['0']).map(Number);
    if(list.length===1)await writeFile(outPath,Buffer.from(await page.evaluate(([s,t])=>window.motion.shot(s,t),[spec,list[0]]),'base64'));

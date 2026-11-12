@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "style": "breaking",
+  "title": "OpenAI reports 948 distinct Linux root bugs",
+  "mode": "light",
+  "accent": "red",
+  "assets": { "rack": "assets/breaking/server-rack.png" },
+  "scenes": [
+    {
+      "type": "special", "kind": "alert", "duration": 2.4,
+      "data": { "headline": "948 LINUX BUGS", "kicker": "OPENAI SAYS", "deck": "ROOT ACCESS" },
+      "caption": "An agent pipeline found these",
+      "say": "OpenAI says agents found 948 distinct Linux bugs.",
+      "claims": ["distinct-root-bugs"], "reward": "evidence", "hits": [1.1],
+      "events": [{ "word": "found", "kind": "highlight" }, { "word": "distinct", "kind": "reveal" }]
+    },
+    {
+      "type": "demo", "duration": 2.4, "transition": "push",
+      "actor": "LOCAL ACCOUNT", "action": "EXPLOIT", "target": "LINUX", "before": "USER", "after": "ROOT",
+      "caption": "Local access is required",
+      "say": "In OpenAI's results, exploits turn users into root.",
+      "claims": ["working-root-exploits"], "reward": "mechanism",
+      "events": [{ "word": "turn", "kind": "contact", "sfx": "hit" }, { "word": "into", "kind": "transform" }]
+    },
+    {
+      "type": "title", "duration": 2.4, "transition": "cut",
+      "text": "LOCAL ACCESS", "sub": "NOT REMOTE",
+      "caption": "A foothold must come first",
+      "say": "An attacker needs a foothold first. Not remote.",
+      "reward": "consequence",
+      "events": [{ "word": "needs", "kind": "highlight" }, { "word": "Not", "kind": "resolve", "sfx": "stamp" }]
+    },
+    {
+      "type": "special", "kind": "headline", "duration": 2.4, "transition": "whip",
+      "data": { "kicker": "OPENAI", "headline": "UNRELEASED MODEL", "deck": "CYBER RESEARCH", "asset": "rack", "imageLabel": "ILLUSTRATION" },
+      "caption": "Not a public model release",
+      "say": "The model behind this is still unreleased.",
+      "reward": "evidence",
+      "events": [{ "word": "this", "kind": "reveal" }, { "word": "unreleased", "kind": "resolve" }]
+    },
+    {
+      "type": "bars", "duration": 2.6, "transition": "cut",
+      "items": [{ "label": "CANDIDATES", "value": 2308 }, { "label": "REPRODUCED", "value": 1724 }, { "label": "EXPLOITS", "value": 1169 }],
+      "caption": "The funnel, in OpenAI's numbers",
+      "say": "Candidates: 2,308. Reproduced: 1,724. Working exploits: 1,169.",
+      "claims": ["candidate-findings", "reproduced-findings", "working-root-exploits"], "reward": "comparison",
+      "events": [{ "word": "Reproduced", "kind": "compare" }, { "word": "Working", "kind": "resolve" }]
+    },
+    {
+      "type": "stat", "duration": 2.1, "transition": "morph",
+      "value": 948, "label": "DISTINCT BUGS", "versus": { "value": 1169, "label": "ROOT EXPLOITS" }, "slam": true,
+      "caption": "By cause, OpenAI's figures",
+      "say": "Those exploits share 948 distinct root causes.",
+      "claims": ["distinct-root-bugs", "working-root-exploits"], "reward": "comparison",
+      "events": [{ "word": "948", "kind": "transform", "sfx": "stamp" }]
+    },
+    {
+      "type": "special", "kind": "bignumber", "duration": 2.4, "transition": "cut",
+      "data": { "number": "$1.21M", "label": "API CREDITS", "comparison": "IN OCTOBER", "attribution": "OPENAI REPORTED" },
+      "caption": "One run, via SecurityWeek",
+      "say": "OpenAI reports one run cost about 1.21 million dollars.",
+      "claims": ["october-api-cost", "one-october-run"], "reward": "evidence",
+      "events": [{ "word": "cost", "kind": "compare" }, { "word": "million", "kind": "reveal" }]
+    },
+    {
+      "type": "flow", "duration": 2.6, "transition": "whip",
+      "nodes": [{ "label": "DISCOVER" }, { "label": "VALIDATE" }, { "label": "EXPLOIT" }],
+      "caption": "The pipeline tests its findings",
+      "say": "Agents discover, validate, then test working exploits.",
+      "reward": "mechanism",
+      "events": [{ "word": "validate", "kind": "connect" }, { "word": "working", "kind": "resolve" }]
+    },
+    {
+      "type": "layers", "duration": 2.1, "transition": "cut",
+      "layers": [{ "label": "PATCH DRAFT" }, { "label": "HUMAN REVIEW" }], "focus": 1,
+      "caption": "Reviewed before submission",
+      "say": "Humans reviewed exploits and patches before submission.",
+      "reward": "consequence",
+      "events": [{ "word": "patches", "kind": "highlight" }]
+    },
+    {
+      "type": "special", "kind": "ticker", "duration": 2.4, "transition": "slide",
+      "data": { "title": "SNAPSHOT", "headlines": ["61 UPSTREAM", "43 STAGED"], "attribution": "NOT ALL FIXED" },
+      "caption": "A snapshot, not live status",
+      "say": "61 upstream fixes, 43 staged, via iTnews. A snapshot.",
+      "claims": ["upstream-fixes", "staged-fixes"], "reward": "evidence",
+      "events": [{ "word": "staged", "kind": "compare" }, { "word": "snapshot", "kind": "resolve" }]
+    },
+    {
+      "type": "evidence", "duration": 2.4, "transition": "cut",
+      "claim": "OPENAI'S NUMBERS", "quote": "NOT INDEPENDENT", "source": "OPENAI POST", "date": "NOV 4, 2026",
+      "caption": "Relayed by trade press",
+      "say": "These remain OpenAI's numbers, relayed by trade press.",
+      "reward": "evidence",
+      "events": [{ "word": "numbers", "kind": "highlight" }, { "word": "press", "kind": "reveal" }]
+    },
+    {
+      "type": "split", "duration": 2.4, "transition": "whip",
+      "baseline": "RESEARCH", "axis": "STATUS", "left": { "label": "BUGS", "value": "FOUND" }, "right": { "label": "FIXES", "value": "PARTIAL" }, "answer": "FOUND, NOT FIXED",
+      "caption": "Discovery is not remediation",
+      "say": "Finding a bug does not mean fixing it.",
+      "reward": "comparison",
+      "events": [{ "word": "not", "kind": "compare" }, { "word": "fixing", "kind": "resolve", "sfx": "stamp" }]
+    },
+    {
+      "type": "title", "duration": 2.2, "transition": "cut",
+      "text": "LOCAL EXPLOITS", "sub": "UNRELEASED MODEL",
+      "caption": "Both conditions still apply",
+      "say": "Local access required. An unreleased model.",
+      "reward": "consequence",
+      "events": [{ "word": "required", "kind": "highlight" }, { "word": "unreleased", "kind": "reveal" }]
+    },
+    {
+      "type": "outro", "duration": 2.1, "transition": "push",
+      "cta": "948 FOUND", "sub": "NOT ALL FIXED",
+      "caption": "The distinction that matters",
+      "say": "948 bugs found, OpenAI says. Not all of them fixed.",
+      "claims": ["distinct-root-bugs"], "reward": "consequence",
+      "events": [{ "word": "not", "kind": "resolve", "sfx": "stamp" }]
+    }
+  ]
+}

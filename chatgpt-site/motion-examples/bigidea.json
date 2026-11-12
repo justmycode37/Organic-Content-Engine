@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "style": "bigidea",
+  "title": "948 Linux bugs — OpenAI's reported run",
+  "scenes": [
+    {
+      "type": "title", "duration": 2.2, "text": "*948* Linux bugs", "sub": "with root exploits",
+      "caption": "OpenAI's own numbers.",
+      "say": "OpenAI says its agents found 948 Linux bugs.",
+      "events": [{ "word": "agents", "kind": "transform", "sfx": "hit" }, { "word": "948", "kind": "resolve" }],
+      "hits": [0.82], "reward": "evidence", "claims": ["distinct-root-bugs"]
+    },
+    {
+      "type": "demo", "duration": 2.2, "transition": "cut",
+      "actor": "Local user", "action": "exploit", "target": "Root access", "before": "User", "after": "Root",
+      "caption": "An illustrated privilege escalation.",
+      "say": "Each came with a working root exploit.",
+      "events": [{ "word": "came", "kind": "contact", "sfx": "click" }, { "word": "working", "kind": "resolve", "sfx": "hit" }],
+      "hits": [1.26], "reward": "mechanism", "claims": ["distinct-root-bugs"]
+    },
+    {
+      "type": "bars", "duration": 3, "transition": "cut",
+      "items": [
+        { "label": "Suspected bugs", "value": 2308 },
+        { "label": "Confirmed in VMs", "value": 1724 },
+        { "label": "Root exploits", "value": 1169 },
+        { "label": "Distinct bugs", "value": 948, "accent": true }
+      ],
+      "caption": "OpenAI's reported funnel.",
+      "say": "2308 suspects, 1724 confirmed, 1169 exploits, 948 bugs.",
+      "events": [{ "word": "1724", "kind": "transform", "sfx": "click" }, { "word": "1169", "kind": "transform", "sfx": "click" }, { "word": "948", "kind": "resolve", "sfx": "hit" }],
+      "reward": "mechanism", "claims": ["candidate-findings", "reproduced-findings", "working-root-exploits", "distinct-root-bugs"]
+    },
+    {
+      "type": "scale", "duration": 2.6, "transition": "morph", "reference": "July run", "unit": "found",
+      "levels": [{ "label": "July exploits", "value": 166 }, { "label": "October bugs", "value": 948 }],
+      "caption": "SecurityWeek's report; units differ.",
+      "say": "July: 166 exploits. October: 948 distinct bugs.",
+      "events": [{ "word": "October", "kind": "transform", "sfx": "whoosh" }, { "word": "distinct", "kind": "resolve" }],
+      "hits": [1.2], "reward": "comparison", "claims": ["july-root-exploits", "distinct-root-bugs", "comparison-gap"]
+    },
+    {
+      "type": "special", "kind": "contrast", "duration": 2.4, "transition": "cut",
+      "data": { "before": { "value": "$3,094/exploit", "label": "July" }, "after": { "value": "~$1,280/bug", "label": "October", "note": "Different units" } },
+      "caption": "Estimates via iTnews.",
+      "say": "July: $3,094 per exploit. October: about $1,280 per bug.",
+      "events": [{ "word": "October", "kind": "compare", "sfx": "hit" }, { "word": "bug", "kind": "resolve" }],
+      "reward": "comparison", "claims": ["july-cost-per-exploit", "october-cost-per-bug"]
+    },
+    {
+      "type": "stat", "duration": 1.8, "transition": "cut", "value": 1.2, "prefix": "$", "suffix": "M", "decimals": 1, "label": "API credits", "slam": true,
+      "caption": "Total cost, as reported by OpenAI.",
+      "say": "The run cost about 1.2 million dollars.",
+      "events": [{ "word": "cost", "kind": "transform", "sfx": "hit" }, { "word": "million", "kind": "resolve" }],
+      "reward": "evidence", "claims": ["october-api-cost"]
+    },
+    {
+      "type": "demo", "duration": 2.4, "transition": "push",
+      "actor": "Remote attacker", "action": "blocked", "target": "Local access", "before": "Outside", "after": "Blocked",
+      "caption": "Not a remote break-in.",
+      "say": "The catch: attackers need local access first.",
+      "events": [{ "word": "need", "kind": "contact", "sfx": "thud" }, { "word": "access", "kind": "resolve" }],
+      "reward": "consequence"
+    },
+    {
+      "type": "special", "kind": "statement", "duration": 2.6, "transition": "cut",
+      "data": { "text": "Their numbers.\nSelf-reported.\nModel unreleased.", "emphasis": "Self-reported." },
+      "caption": "Not independently verified.",
+      "say": "These are OpenAI's own numbers. The model is unreleased.",
+      "events": [{ "word": "own", "kind": "transform", "sfx": "page" }, { "word": "model", "kind": "transform", "sfx": "page" }],
+      "reward": "evidence"
+    },
+    {
+      "type": "split", "duration": 2.6, "transition": "cut", "baseline": "Snapshot", "axis": "Fixes",
+      "left": { "label": "Landed upstream", "value": "61" }, "right": { "label": "Staged", "value": "43" },
+      "answer": "104 fixes",
+      "caption": "Reported by iTnews; a snapshot.",
+      "say": "61 landed upstream, 43 staged: 104 fixes.",
+      "events": [{ "word": "43", "kind": "transform", "sfx": "click" }, { "word": "104", "kind": "resolve", "sfx": "hit" }],
+      "reward": "evidence", "claims": ["upstream-fixes", "staged-fixes", "landed-or-staged-fixes"]
+    },
+    {
+      "type": "scale", "duration": 2.4, "transition": "morph", "reference": "Fixes", "unit": "bugs",
+      "levels": [{ "label": "Fixed or staged", "value": 104 }, { "label": "Distinct bugs", "value": 948 }],
+      "caption": "Snapshot via iTnews; not all fixed.",
+      "say": "104 so far, against 948 bugs.",
+      "events": [{ "word": "against", "kind": "compare", "sfx": "whoosh" }, { "word": "bugs", "kind": "resolve" }],
+      "hits": [1.2], "reward": "consequence", "claims": ["landed-or-staged-fixes", "distinct-root-bugs"]
+    },
+    {
+      "type": "outro", "duration": 2.4, "transition": "cut", "cta": "Patch your\nkernel.",
+      "caption": "Then confirm the update took effect.",
+      "say": "Patch your kernel, then verify the update worked.",
+      "events": [{ "word": "kernel", "kind": "transform", "sfx": "click" }, { "word": "verify", "kind": "resolve", "sfx": "success" }],
+      "reward": "consequence"
+    }
+  ]
+}

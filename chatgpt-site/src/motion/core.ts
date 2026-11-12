@@ -61,6 +61,19 @@ export const FONT = {
 } as const;
 export const font = (size: number, weight = 800, family: keyof typeof FONT = 'body') => `${weight} ${size}px ${FONT[family]}`;
 
+// ---------------------------------------------------------------- visual styles
+
+/**
+ * Visual systems a reel can be drawn in. `patch` is the original PATCH NOTES look; every other style lives in
+ * `styles/<name>/` and may replace the palette, fonts, background, chrome, captions, transitions and any scene.
+ */
+export const STYLES = ['patch', 'breaking', 'proof', 'system', 'bigidea', 'miniworld'] as const;
+export type StyleName = (typeof STYLES)[number];
+
+/** Decoded images a reel references by id (`spec.assets`). Loaded before the first frame is drawn. */
+export type AssetImage = CanvasImageSource & { width: number; height: number };
+export type Assets = Readonly<Record<string, AssetImage>>;
+
 // ---------------------------------------------------------------- math and timing
 
 export const clamp = (x: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
@@ -131,12 +144,55 @@ export interface Frame {
   seed: number;
   /** Position of the scene in the reel. */
   index: number;
+  /** True for the first scene so it can draw a readable opening state at t = 0. */
+  opening: boolean;
+  /** Camera hits declared for this scene, in scene-local seconds. */
+  hits: number[];
+  /** Semantic events resolved to scene-local seconds. */
+  events: ResolvedEvent[];
+  /** Visual style the reel is drawn in. */
+  style: StyleName;
+  /** Images from `spec.assets`, by id. A missing id must never throw: draw a placeholder instead. */
+  assets: Assets;
+  /** Per-frame named placements and the previous scene's final placements. */
+  objects?: FrameObjects;
+}
+
+/** A canvas-space rectangle. */
+export interface ObjectRect { x: number; y: number; w: number; h: number }
+/** A named visual that may keep its position and scale across scene boundaries. */
+export interface SceneObject { id: string; rect: ObjectRect; kind: string }
+export interface FrameObjects {
+  /** Placements declared for this frame. */
+  current: Map<string, SceneObject>;
+  /** Placements from the immediately preceding scene's final layout. */
+  previous: ReadonlyMap<string, SceneObject>;
+}
+/** Time-only input for a scene's pure object-layout callback. */
+export type LayoutFrame = Pick<Frame, 't' | 'dur' | 'seed' | 'index' | 'opening' | 'hits' | 'events' | 'style' | 'theme' | 'assets'> & { objects: FrameObjects };
+/** Camera clipping is opt-in; `safe` uses the shared text-safe rectangle. */
+export type CameraClipRegion = 'safe' | ObjectRect;
+export interface CameraSpec {
+  move?: 'push-in' | 'pull-out' | 'pan-left' | 'pan-right' | 'track' | 'fly';
+  /** Named object supplied by the scene's layout callback. Missing ids fall back to the content centre. */
+  target?: string;
+  /** Use a fast travel, slow reveal, then settle curve. Defaults to true. */
+  ramp?: boolean;
+  /** Optional screen-space clip. Omit for full-frame drawing; null disables a style-level clip. */
+  clip?: CameraClipRegion | null;
+}
+export interface TransitionContext {
+  outgoing?: SceneObject;
+  incoming?: SceneObject;
+  direction?: 'left' | 'right' | 'up' | 'down';
 }
 
 export interface SceneDef<P> {
   type: string;
   /** Draws the scene content only. The player draws background, camera, transition, captions and chrome. */
   render(frame: Frame, props: P): void;
+  /** Pure placement pass, called at the requested scene time and at the prior scene's final time. */
+  layout?(frame: LayoutFrame, props: P): void;
 }
 
 // ---------------------------------------------------------------- reel spec (what an agent writes)
@@ -144,16 +200,45 @@ export interface SceneDef<P> {
 export const ICONS = ['cursor', 'chip', 'brain', 'bolt', 'bug', 'check', 'cross', 'file', 'folder', 'gear', 'lock', 'key', 'cloud', 'database', 'server', 'globe', 'user', 'robot', 'eye', 'clock', 'search', 'star', 'heart', 'warning', 'terminal', 'code', 'image', 'play', 'arrow', 'token', 'money', 'rocket', 'skull', 'fire', 'phone'] as const;
 export type IconName = (typeof ICONS)[number];
 
-export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter'] as const;
+export const TRANSITIONS = ['cut', 'blocks', 'wipe', 'glitch', 'zoom', 'flash', 'shutter', 'whip', 'push', 'morph', 'slide'] as const;
 export type TransitionName = (typeof TRANSITIONS)[number];
 
+export type EventKind = 'reveal' | 'contact' | 'transform' | 'connect' | 'compare' | 'resolve' | 'highlight';
+export type RewardKind = 'mechanism' | 'comparison' | 'prediction' | 'evidence' | 'consequence' | 'joke';
+
+/** Semantic change declared by a scene. `word` anchors are resolved by the voiced renderer or estimated silently. */
+export interface SceneEvent {
+  at?: number;
+  word?: string;
+  kind: EventKind;
+  target?: string;
+  sfx?: string;
+}
+
+/** Event form delivered to scenes after its word or time anchor has been resolved. */
+export interface ResolvedEvent {
+  at: number;
+  kind: EventKind;
+  target?: string;
+  sfx?: string;
+  word?: string;
+}
+
 export interface SceneBase {
-  /** Seconds on screen. Most scenes should last 1.5 to 4 seconds. */
+  /** Seconds on screen. Target 1.5 to 3 seconds; 3 to 6 seconds needs at least three meaningful events. */
   duration: number;
+  /** Claim IDs from the adjacent claims ledger that support this scene. */
+  claims?: string[];
   /** How this scene ENTERS. Default 'cut'. */
   transition?: TransitionName;
+  /** Optional semantic camera move. Scenes without this field keep their style's existing camera. */
+  camera?: CameraSpec;
   /** Seconds within the scene at which something lands: the player adds a camera punch and shake. */
   hits?: number[];
+  /** Meaningful changes inside this scene, anchored to a local time or a spoken word. */
+  events?: SceneEvent[];
+  /** The viewer's reward for this scene. */
+  reward?: RewardKind;
   /** Caption shown under this scene (bold sans, `*accent*` markup). An array is split evenly across the scene. */
   caption?: string | string[];
   /**
@@ -173,8 +258,8 @@ export interface DiffProps { filename?: string; removed: string[]; added: string
 export interface TerminalProps { title?: string; lines: { cmd?: string; out?: string; status?: 'ok' | 'fail' | 'info' }[] }
 /** Pipeline of 2 to 5 boxes with a packet travelling through them. The accent node is where the story is. */
 export interface FlowProps { nodes: { label: string; icon?: IconName; accent?: boolean; note?: string }[]; direction?: 'down' | 'right'; packet?: string; loop?: boolean }
-/** One huge number counting up. */
-export interface StatProps { value: number; label: string; from?: number; prefix?: string; suffix?: string; decimals?: number; versus?: { value: number; label: string } }
+/** One huge number counting up, or landing immediately with `slam`. */
+export interface StatProps { value: number; label: string; from?: number; prefix?: string; suffix?: string; decimals?: number; versus?: { value: number; label: string }; slam?: boolean }
 /** Horizontal bar race, 2 to 6 bars. One bar carries the accent. */
 export interface BarsProps { title?: string; unit?: string; items: { label: string; value: number; accent?: boolean }[] }
 /** Two things side by side; the winner takes the accent. */
@@ -185,8 +270,8 @@ export interface ListProps { title?: string; items: string[]; style?: 'check' | 
 export interface TokensProps { text: string; predict?: { token: string; p: number }[]; title?: string }
 /** Chat interface: user prompt types, the AI reply streams. */
 export interface ChatProps { messages: { role: 'user' | 'ai'; text: string }[]; model?: string }
-/** Exploded cutaway: stacked labelled layers separating to reveal what is inside. One layer is the accent. */
-export interface LayersProps { title?: string; layers: { label: string; note?: string; accent?: boolean }[] }
+/** Exploded cutaway: anchored components separate, one narrated layer is highlighted, then the model reassembles. */
+export interface LayersProps { title?: string; layers: { label: string; note?: string; accent?: boolean }[]; focus?: number }
 /** Matrix of cells (attention map, memory, pixels). `pattern` drives the animation; `highlight` cells take the accent. */
 export interface GridProps { title?: string; rows: number; cols: number; pattern?: 'scan' | 'attention' | 'noise' | 'fill'; highlight?: [number, number][]; rowLabels?: string[]; colLabels?: string[] }
 /** Kinetic type: one word or short phrase per beat, full screen, pixel type. */
@@ -195,14 +280,33 @@ export interface KineticProps { words: string[] }
 export interface ChangelogProps { version: string; product?: string; items: { tag: 'NEW' | 'FIX' | 'CHG' | 'DEL'; text: string; accent?: boolean }[] }
 /** Closing card: one action, the wordmark and the handle. */
 export interface OutroProps { cta: string; handle?: string; sub?: string }
+/**
+ * Style-specific scene. `kind` names a scene the reel's style provides (see `styles/<name>/`); `data` is validated
+ * by that style's schema. Use it for formats the shared scene types cannot express.
+ */
+export interface SpecialProps { kind: string; data?: Record<string, unknown> }
+
+/** A local action changes a target's visible state; `contrast` names an optional failed trial. */
+export interface DemoProps { actor: string; action: string; target: string; before: string; after: string; contrast?: string }
+/** Guesses lock before the answer is revealed beside a direct comparison. */
+export interface PredictProps { question: string; guesses: string[]; answer: string; comparison: { label: string; value: string }; correction?: string }
+/** Turn a real quantity into scaled tokens, extract a subset, and compare the exact remainder. */
+export interface QuantityProps { quantity: number; subset: number; unit: string; scale?: number; comparator: { label: string; value: number } }
+/** Spotlight one quoted clause or a pixel rectangle in a referenced image asset. */
+export interface EvidenceProps { asset?: string; quote?: string; rect?: { x: number; y: number; w: number; h: number }; claim: string; source: string; date: string }
+/** Carry one reference object across measured levels; ratios are computed from the supplied values. */
+export interface ScaleProps { reference: string; unit: string; levels: { label: string; value: number }[] }
+/** Reveal a single axis across two matched baselines, then collapse to the resolved answer. */
+export interface SplitProps { baseline: string; axis: string; left: { label: string; value: string }; right: { label: string; value: string }; answer: string }
 
 export interface SceneProps {
   title: TitleProps; code: CodeProps; diff: DiffProps; terminal: TerminalProps; flow: FlowProps; stat: StatProps;
   bars: BarsProps; compare: CompareProps; list: ListProps; tokens: TokensProps; chat: ChatProps; layers: LayersProps;
-  grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; outro: OutroProps;
+  grid: GridProps; kinetic: KineticProps; changelog: ChangelogProps; outro: OutroProps; special: SpecialProps;
+  demo: DemoProps; predict: PredictProps; quantity: QuantityProps; evidence: EvidenceProps; scale: ScaleProps; split: SplitProps;
 }
 export type SceneType = keyof SceneProps;
-export const SCENE_TYPES = ['title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'outro'] as const satisfies readonly SceneType[];
+export const SCENE_TYPES = ['title', 'code', 'diff', 'terminal', 'flow', 'stat', 'bars', 'compare', 'list', 'tokens', 'chat', 'layers', 'grid', 'kinetic', 'changelog', 'outro', 'special', 'demo', 'predict', 'quantity', 'evidence', 'scale', 'split'] as const satisfies readonly SceneType[];
 export type SceneSpec = { [K in SceneType]: { type: K } & SceneBase & SceneProps[K] }[SceneType];
 
 /** A caption timed on the finished timeline (used when narration exists). Overrides per-scene captions. */
@@ -212,8 +316,17 @@ export interface ReelSpec {
   version: 1;
   /** Working title; not drawn. */
   title?: string;
+  /** Visual system. Default 'patch'. */
+  style?: StyleName;
+  /** Overrides the style's default mode. */
   mode?: Mode;
+  /** Overrides the style's default accent. */
   accent?: AccentName;
+  /**
+   * Images used by scenes, by id: a path relative to the spec file (or absolute) to a PNG, JPEG, WebP or SVG.
+   * Cut-out people and objects are PNGs with transparency.
+   */
+  assets?: Record<string, string>;
   /** Series name, for example "UNDER THE HOOD". Not drawn by the chrome; use it as the title's kicker. */
   series?: string;
   scenes: SceneSpec[];
