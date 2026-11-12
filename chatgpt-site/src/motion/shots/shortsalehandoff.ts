@@ -142,8 +142,8 @@ function drawCash(ctx: Frame['ctx'], x: number, y: number, p: number, t: number)
 
 function drawReturnStub(ctx: Frame['ctx'], x: number, y: number, width: number, t: number, progress: number, pinned: number) {
   if (progress <= 0) return;
-  const w = width, h = 62, rot = -.06 + Math.sin(t * 7) * .025 * (1 - pinned);
-  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot);
+  const scale = width / 162, w = 162, h = 62, rot = -.06 + Math.sin(t * 7) * .025 * (1 - pinned);
+  ctx.save(); ctx.translate(Math.round(x / 4) * 4, Math.round(y / 4) * 4); ctx.rotate(rot); ctx.scale(scale, scale);
   ctx.fillStyle = '#08090B'; ctx.fillRect(-w / 2 - 7, -h / 2 - 7, w + 14, h + 14);
   ctx.fillStyle = '#E7E8EA'; ctx.fillRect(-w / 2, -h / 2, w, h);
   ctx.fillStyle = '#676A70'; ctx.fillRect(-w / 2 + 7, -h / 2 + 6, w - 14, 6);
@@ -238,14 +238,16 @@ export const shortSaleHandoffShot: ShotDef = {
     const loanTicketScreen = { x: 350, y: 650 };
     const loanTicketTarget = screenToLocal(rig, loanTicketScreen, activeT);
     const wristScreen = { x: 650 + Math.sin(t * 2.2) * 2, y: 1210 + Math.sin(t * 5.2) * 2 };
+    const returnHoldScreen = { x: 800, y: 1190 };
+    const returnStubWidth = 162 * 1.6;
     const wrist = screenToLocal(rig, wristScreen, activeT);
     const stubStartScreen = localToScreen(rig, { x: saleX + 68, y: saleY + 12 }, activeT);
     const dropP = ease.inOutCubic(clamp(stubP / .72));
     const returnP = ease.inOutCubic(clamp((stubP - .72) / .28));
     const stubXy = screenToLocal(rig, {
-      // Drop down the clear right edge first, then slide across below Hedgy's face to his paw.
-      x: mix(stubStartScreen.x, wristScreen.x, returnP),
-      y: mix(mix(stubStartScreen.y, wristScreen.y + 45, dropP), wristScreen.y, returnP),
+      // Drop down the clear right edge, then hold beside Hedgy, away from his face.
+      x: mix(stubStartScreen.x, returnHoldScreen.x, returnP),
+      y: mix(mix(stubStartScreen.y, returnHoldScreen.y + 45, dropP), returnHoldScreen.y, returnP),
     }, activeT);
     const stubX = stubXy.x, stubY = stubXy.y;
     const pawTicketX = loanTicketTarget.x, pawTicketY = loanTicketTarget.y;
@@ -273,7 +275,7 @@ export const shortSaleHandoffShot: ShotDef = {
 
     // Loan origin, continuous tether, and perforation clip are drawn behind the ticket.
     const tetherSourceX = lenderX - 104, tetherSourceY = lenderY + 9;
-    let tetherEndX = beforeLoan ? ticketX + ticketSize * .34 : activeT < sells ? ticketX + ticketSize * .34 : stubX + 84;
+    let tetherEndX = beforeLoan ? ticketX + ticketSize * .34 : activeT < sells ? ticketX + ticketSize * .34 : stubX + returnStubWidth * .52;
     let tetherEndY = beforeLoan ? ticketY : activeT < sells ? ticketY : stubY;
     ctx.save(); ctx.globalAlpha *= activeT < borrows ? .26 : 1;
     ctx.strokeStyle = '#F0F2F4'; ctx.lineWidth = activeT >= owes ? 14 : 9; ctx.beginPath();
@@ -348,7 +350,7 @@ export const shortSaleHandoffShot: ShotDef = {
 
     // The perforated RETURN 1 half travels back from the sale slot and pins to Hedgy's wrist on “owes”.
     if (activeT >= owes - .42) {
-      drawReturnStub(ctx, stubX, stubY, 162, t, stubP, pinned);
+      drawReturnStub(ctx, stubX, stubY, returnStubWidth, t, stubP, pinned);
       if (pinned > .5) {
         ctx.fillStyle = '#F5F6F7'; ctx.fillRect(wrist.x - 8, wrist.y - 12, 8, 30);
         ctx.fillStyle = '#4F5258'; ctx.fillRect(wrist.x, wrist.y - 12, 9, 30);

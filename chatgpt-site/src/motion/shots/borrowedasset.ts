@@ -218,7 +218,8 @@ export const borrowedAssetShot: ShotDef = {
     }, [{ mesh: RAIL_MESH, materials: MATERIALS, rot: [0, t * .04, 0] }]);
     drawLenderDock(ctx, dockX, dockY, t);
 
-    const hatchY = 790, hatchX = 786, hatchW = 420, hatchH = 216;
+    // Keep the ticket's final leg and sale aperture above Hedgy's head.
+    const hatchY = 610, hatchX = 786, hatchW = 420, hatchH = 216;
     const open = ease.outCubic(clamp((activeT - sells + .11) / .18));
     ctx.fillStyle = '#191B1F'; ctx.fillRect(hatchX - hatchW / 2 - 28, hatchY - hatchH / 2 - 38, hatchW + 56, hatchH + 76);
     ctx.fillStyle = '#777A80'; ctx.fillRect(hatchX - hatchW / 2 - 42, hatchY - hatchH / 2 - 48, hatchW + 84, 24);

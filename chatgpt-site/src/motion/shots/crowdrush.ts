@@ -199,14 +199,15 @@ function crowdLayers(seed: number): { far: Fan[]; middle: Fan[]; near: Fan[] } {
       lean: -.06 - hash(i, seed + 16) * .16,
     });
   }
-  for (let i = 0; i < 5; i++) {
+  const nearPositions = [36, 190, 890, 1044];
+  for (let i = 0; i < nearPositions.length; i++) {
     near.push({
-      x: 58 + i * 138,
-      y: 1060 + (i % 2) * 38,
-      scale: 2.25 + hash(i, seed + 21) * .5,
+      x: nearPositions[i]!,
+      y: 1050 + (i % 2) * 38,
+      scale: 1.7 + hash(i, seed + 21) * .28,
       variant: Math.floor(hash(i, seed + 22) * 4),
       phase: hash(i, seed + 23) * Math.PI * 2,
-      speed: 140 + hash(i, seed + 24) * 90,
+      speed: 64 + hash(i, seed + 24) * 54,
       delay: hash(i, seed + 25) * .1,
       lean: -.13,
     });
@@ -390,20 +391,20 @@ export const crowdRushShot: ShotDef = {
 
     // A short floor apron leaves a clean silhouette window around Hedgy's feet.
     ctx.fillStyle = '#24262B';
-    ctx.fillRect(670, 1198, 267, 14);
+    ctx.fillRect(530, 1112, 267, 14);
     ctx.fillStyle = '#9DA1A8';
-    ctx.fillRect(670, 1198, 267, 5);
+    ctx.fillRect(530, 1112, 267, 5);
     ctx.fillStyle = '#0B0C0F';
-    ctx.fillRect(670, 1212, 267, 24);
+    ctx.fillRect(530, 1126, 267, 24);
     ctx.fillStyle = '#7C8087';
-    ctx.fillRect(702, 1236, 203, 8);
+    ctx.fillRect(562, 1150, 203, 8);
     ctx.fillStyle = '#111317';
-    ctx.beginPath(); ctx.ellipse(800, 1190, 102, 20, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(660, 1104, 102, 20, 0, 0, Math.PI * 2); ctx.fill();
 
     const squeezed = t >= rushAt + .08;
     const shocked = t >= lastAt - .08;
     drawHedgy(ctx, {
-      x: 800, y: 1195, scale: 2.9,
+      x: 660, y: 1110, scale: 4.6,
       t: Math.max(0, t - (shocked ? lastAt - .1 : squeezed ? rushAt : 0)),
       pose: shocked ? 'shock' : squeezed ? 'sweat' : 'think',
       facing: -1, look: 'up',

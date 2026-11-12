@@ -267,9 +267,8 @@ export const forcedBuybackShot: ShotDef = {
     const run = easeOut(runU);
     const runDistance = 620 * run;
     const destination = label(props.params?.destinationLabel, 'BUY', 10);
-    const kioskU = easeOut(progress(t, runStart, dur));
-    const kioskScale = 0.72 + kioskU * 2.06;
-    const kioskX = 840 - 300 * kioskU, kioskY = 440 + 44 * kioskU;
+    const kioskU = progress(t, runStart, dur);
+    const kioskScale = 0.72 + kioskU * (8.5 - 0.72);
     const rig = createCameraRig({
       width: 1080, height: 1290, seed: seed + 271, handheld: 0.75,
       keyframes: [
@@ -281,6 +280,10 @@ export const forcedBuybackShot: ShotDef = {
       ], hits: [payAt, buyAt], punch: 0.012, shake: 4,
     });
     const pose = rig.poseAt(t);
+    // Keep the aperture on the zoomthrough focus as the terminal grows around it.
+    const kioskX = 840 + (540 - pose.x / pose.zoom - 840) * kioskU;
+    const slotCenterY = 538 + (645 - pose.y / pose.zoom - 538) * kioskU;
+    const kioskY = slotCenterY - 136 * kioskScale;
     // The outgoing zoomthrough expands around the handoff slot. Carry Hedgy into
     // that portal and counter-scale him so the transition never crops his shape.
     const transitionStart = Math.max(0, dur - 0.26);
