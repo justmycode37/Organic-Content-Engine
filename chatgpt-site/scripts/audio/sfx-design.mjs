@@ -105,9 +105,9 @@ export function designFor(kind, style = 'foley') {
     variants: 3, source: 'synth', room: false, tail: 0.34, lowpass: 5100,
   };
   if (CINEMATIC_ACCENTS.has(kind)) return {
-    ...base, seconds: kind === 'ding' ? 1.5 : kind === 'coins' ? 0.95 : 0.76,
-    gain: kind === 'ding' ? 0.42 : 0.40, variants: 3, source: 'synth', room: false,
-    tail: kind === 'ding' ? 0.78 : 0.42, lowpass: 5200,
+    ...base, seconds: kind === 'ding' ? 1.4 : kind === 'coins' ? 0.6 : kind === 'sparkle' || kind === 'shimmer' ? 0.7 : 0.3,
+    gain: kind === 'ding' ? 0.40 : kind === 'click' || kind === 'tick' || kind === 'tap' ? 0.34 : 0.38, variants: 3, source: 'synth', room: false,
+    tail: kind === 'ding' ? 0.7 : 0.18, lowpass: 9000,
   };
   if (CINEMATIC_BUILDS.has(kind)) return {
     ...base, seconds: kind === 'rumble' ? 1.05 : 1.0, gain: 0.18,
@@ -118,8 +118,9 @@ export function designFor(kind, style = 'foley') {
   return { ...base, gain: base.gain * 0.78, room: false };
 }
 
-export function isTonalAccent(kind, style = 'foley') {
-  return style === 'cinematic' && CINEMATIC_ACCENTS.has(kind);
+/** Accents used to be tuned notes; the owner wants percussive SFX (clicks, clinks, pops), so nothing is tuned now. */
+export function isTonalAccent(_kind, _style = 'foley') {
+  return false;
 }
 
 export function variantPitch(kind, variant, style = 'foley') {

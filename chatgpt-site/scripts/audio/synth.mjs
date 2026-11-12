@@ -56,17 +56,49 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path, op
     let s = 0;
     if (options.style === 'cinematic' && (CIN_IMPACT.includes(kind) || CIN_MOVE.includes(kind) || CIN_ACCENT.includes(kind) || CIN_BUILD.includes(kind))) {
       if (CIN_ACCENT.includes(kind)) {
-        const f = Math.max(85, Math.min(1100, options.pitchHz || 330));
-        const attack = 0.009 + (variant % 3) * 0.004;
-        const tau = (kind === 'ding' || kind === 'glass' ? 0.42 : 0.24) + (variant % 3) * 0.055;
-        const e = Math.exp(-t / tau) * env(t, seconds, attack, Math.min(0.13, seconds * 0.18));
-        const bend = Math.exp(-t * 13) * (variant === 1 ? -0.018 : 0.012);
-        const phase = TAU * (f * t + f * bend * (1 - Math.exp(-t * 5)) / 5);
-        s = e * (
-          Math.sin(phase) * 0.38 + Math.sin(phase * 2.003 + 0.08) * 0.20
-          + Math.sin(phase * 3.91 + 0.23) * 0.075 + Math.sin(phase * 5.43) * 0.025
-          + md * 0.025 + lo * 0.015
-        );
+        // Percussive, NON-melodic accents (owner: "sound effects — clicks and stuff, not notes"):
+        // short noise transients, damped woody/plastic bodies and inharmonic metal partials.
+        const v = variant % 3, metal = (f) => Math.sin(TAU * f * t);
+        if (kind === 'click' || kind === 'tick' || kind === 'tap') {
+          // dry plastic/wood click: 3 ms noise snap + tiny damped body around 1–2 kHz + soft low knock
+          const snap = Math.exp(-t / 0.0028) * hi * 0.55 + Math.exp(-t / 0.006) * md * 0.5;
+          const body = Math.exp(-t / (0.018 + v * 0.004)) * metal((kind === 'tick' ? 1850 : 1250) + v * 170) * 0.22;
+          const knock = Math.exp(-t / 0.03) * metal(kind === 'tap' ? 210 : 320) * 0.18;
+          s = snap + body + knock;
+        } else if (kind === 'pop') {
+          // mouth/bubble pop: very fast downward chirp (≈ 60 ms) with a breathy edge — percussive, not a note
+          const fq = 140 + 520 * Math.exp(-t / 0.012) + v * 25;
+          const ph = TAU * (140 * t + 520 * 0.012 * (1 - Math.exp(-t / 0.012)) + v * 25 * t);
+          s = Math.exp(-t / 0.032) * Math.sin(ph) * 0.55 + Math.exp(-t / 0.008) * md * 0.35 + Math.exp(-t / 0.05) * lo * 0.2;
+          void fq;
+        } else if (kind === 'coin' || kind === 'coins') {
+          // metal clink: inharmonic partials with fast decay; 'coins' = a little cascade of clinks
+          const hits = kind === 'coins' ? [0, 0.055, 0.105, 0.17, 0.25] : [0];
+          for (const [k, h] of hits.entries()) {
+            const dt = t - h; if (dt < 0) continue;
+            const r = 1 + ((v + k) % 4) * 0.045, g = (kind === 'coins' ? 0.75 - k * 0.11 : 1);
+            s += g * (Math.exp(-dt / 0.0025) * hi * 0.35 + Math.exp(-dt / 0.07) * (Math.sin(TAU * 2350 * r * dt) * 0.16 + Math.sin(TAU * 3720 * r * dt + 0.5) * 0.12 + Math.sin(TAU * 5480 * r * dt + 1.1) * 0.07) + Math.exp(-dt / 0.012) * Math.sin(TAU * 760 * r * dt) * 0.12);
+          }
+        } else if (kind === 'glass') {
+          // glass tick: bright snap + short inharmonic ring
+          s = Math.exp(-t / 0.002) * hi * 0.4 + Math.exp(-t / 0.11) * (metal(2930 + v * 140) * 0.14 + metal(4610 + v * 90) * 0.1 + metal(6870) * 0.05);
+        } else if (kind === 'sparkle' || kind === 'shimmer') {
+          // granular sparkle: a scatter of tiny bright ticks fading out (no pitch line)
+          const grains = kind === 'shimmer' ? 14 : 9;
+          for (let k = 0; k < grains; k++) {
+            const h = (k / grains) ** 1.3 * Math.min(0.5, seconds * 0.7) + ((k * 7919 + v * 31) % 97) / 97 * 0.03, dt = t - h;
+            if (dt < 0) continue;
+            s += (1 - k / grains) * (Math.exp(-dt / 0.003) * hi * 0.22 + Math.exp(-dt / 0.03) * metal(3100 + ((k * 337 + v * 101) % 2400)) * 0.07);
+          }
+        } else if (kind === 'ding') {
+          // service-bell style end hit: strike + inharmonic metal ring (not a melodic note)
+          s = Math.exp(-t / 0.004) * hi * 0.4 + Math.exp(-t / 0.55) * (metal(1210 + v * 30) * 0.2 + metal(2870 + v * 50) * 0.11 + metal(4130) * 0.06 + metal(1830) * 0.05) * env(t, seconds, 0.002, Math.min(0.3, seconds * 0.25));
+        } else {
+          // pluck → soft "thwip": short filtered-noise swipe with a falling resonance
+          const ph = TAU * (300 * t + 900 * 0.02 * (1 - Math.exp(-t / 0.02)));
+          s = Math.exp(-t / 0.05) * (md * 0.4 + Math.sin(ph) * 0.18) + Math.exp(-t / 0.004) * hi * 0.2;
+        }
+        s *= 1.15;
       } else if (CIN_IMPACT.includes(kind)) {
         const length = Math.min(seconds, kind === 'sub' ? 0.62 : 0.46);
         const low = kind === 'sub' ? 48 : kind === 'drop' ? 87 : 76 + (variant % 3) * 6;

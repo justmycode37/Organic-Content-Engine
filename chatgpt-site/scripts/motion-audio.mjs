@@ -171,7 +171,7 @@ async function effect(name,key,variant=0,requestedSeconds=undefined,noteHz=null,
  const prompt=design.prompts?.[variant%design.prompts.length]??design.prompt;
  const seconds=Math.max(0.08,Math.min(name==='hum'?120:8,Number(requestedSeconds)||design.seconds));
  const cinematic=ACTIVE_STYLE==='cinematic';
- const id=hash({kind:name,source:design.source??'synth',prompt:prompt??null,promptSeconds:design.promptSeconds??null,variant,duration:Math.round(seconds*1000)/1000,revision:cinematic?6:5,...(cinematic?{style:ACTIVE_STYLE,noteHz:noteHz?Math.round(noteHz*100)/100:null,direction}: {})});
+ const id=hash({kind:name,source:design.source??'synth',prompt:prompt??null,promptSeconds:design.promptSeconds??null,variant,duration:Math.round(seconds*1000)/1000,revision:cinematic?7:5,...(cinematic?{style:ACTIVE_STYLE,noteHz:noteHz?Math.round(noteHz*100)/100:null,direction}: {})});
  const file=join(CACHE,`${design.source==='eleven'?'sfx':'synth'}-${cinematic?'cinematic-':''}${name}-${id}.wav`);
  if(await exists(file))return file;
  if(design.source==='eleven'){
