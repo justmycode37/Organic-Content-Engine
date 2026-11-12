@@ -9,7 +9,7 @@
 // ELEVENLABS_VOICE_ID (default: Arthur), ELEVENLABS_MODEL. Every generated clip is cached in
 // .motion-cache by content hash, so re-rendering an unchanged line costs nothing.
 import {createHash} from 'node:crypto';
-import {spawn} from 'node:child_process';
+import {spawn,execFileSync} from 'node:child_process';
 import {registerHooks} from 'node:module';
 import {readFileSync} from 'node:fs';
 import {mkdir,readFile,writeFile,access,rm,appendFile,copyFile} from 'node:fs/promises';
@@ -30,8 +30,8 @@ const API='https://api.elevenlabs.io';
 let sfxGenerationsThisRender=0,musicGenerationsThisRender=0;
 const MAX_SFX_GENERATIONS=20;
 let ACTIVE_STYLE='foley';
-const LEAD=Number(process.env.MOTION_LEAD)||0.12;   // silence before the voice in each scene, so a cut never clips a word
-const TAIL=Number(process.env.MOTION_TAIL)||0.32;   // breath after the last word before the next cut
+let LEAD=Number(process.env.MOTION_LEAD)||0.12;   // silence before the voice in each scene, so a cut never clips a word
+let TAIL=Number(process.env.MOTION_TAIL)||0.32;   // breath after the last word before the next cut
 
 /** Pops climb a pentatonic scale through a sequence, so a build sounds like it is going somewhere. */
 const SCALE=[0,2,4,7,9,12,14,16];
@@ -108,10 +108,30 @@ async function eleven(path,body,key){
 const VOICE_ID='TtRFBnwQdH1k01vR0hMz';
 const pickVoice=()=>process.env.ELEVENLABS_VOICE_ID?.trim()||VOICE_ID;
 
+let CONTINUOUS=false;
+/** Whole narration in one take, then one slice per scene cut at the midpoint of the pause between scenes. */
+async function speakContinuous(lines,voice,key){
+ const full=await speak(lines.join(' '),voice,key);
+ const counts=lines.map(line=>line.split(/\s+/).filter(Boolean).length);
+ if(counts.reduce((a,b)=>a+b,0)!==full.words.length)throw new Error(`Continuous narration: ${full.words.length} spoken words for ${counts.reduce((a,b)=>a+b,0)} written words`);
+ const total=Number(execFileSync('ffprobe',['-v','error','-show_entries','format=duration','-of','csv=p=0',full.audio],{encoding:'utf8'}).trim())||full.words.at(-1).end+0.3;
+ const bounds=[0];let index=0;
+ for(let i=0;i<counts.length-1;i++){index+=counts[i];const before=full.words[index-1].end,after=full.words[index].start;bounds.push((before+after)/2);}
+ bounds.push(Math.max(total,full.words.at(-1).end+0.05));
+ const out=[];index=0;
+ for(let i=0;i<counts.length;i++){
+  const start=bounds[i],end=bounds[i+1],words=full.words.slice(index,index+counts[i]).map(w=>({...w,start:w.start-start,end:w.end-start}));index+=counts[i];
+  const file=join(CACHE,`voice-slice-${hash({audio:full.audio,start,end})}.wav`);
+  if(!await exists(file))await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',full.audio,'-af',`atrim=${start.toFixed(4)}:${end.toFixed(4)},asetpts=PTS-STARTPTS`,'-ar','48000','-ac','2',file]);
+  out.push({audio:file,words,length:end-start});
+ }
+ return out;
+}
+
 /** One narration line: cached MP3 plus the time each word is spoken. */
 async function speak(text,voice,key){
  const model=process.env.ELEVENLABS_MODEL??'eleven_multilingual_v2';
- const settings={stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:Number(process.env.MOTION_VOICE_SPEED)||1.12};
+ const settings={stability:0.4,similarity_boost:0.75,style:0.35,use_speaker_boost:true,speed:Number(process.env.MOTION_VOICE_SPEED)||1.0};
  const id=hash({text,voice,model,settings}),audio=join(CACHE,`voice-${id}.mp3`),meta=join(CACHE,`voice-${id}.json`);
  if(!(await exists(audio))||!(await exists(meta))){
   const data=await (await eleven(`/v1/text-to-speech/${voice}/with-timestamps?output_format=mp3_44100_128`,{text,model_id:model,voice_settings:settings},key)).json();
@@ -366,7 +386,7 @@ function governCues(cues,duration,placed){
  if(process.env.MOTION_AUDIO_DEBUG==='1')stageCounts.afterConcurrencyByProtection={primary:kept.filter(cueIsPrimary).length,ordinary:kept.filter(cue=>!cueIsPrimary(cue)).length};
 
  // A four-cue/sec ceiling keeps secondary motion and foley from being crowded out.
- const densityLimit=Math.max(1,Math.floor(duration*(ACTIVE_STYLE==='cinematic'?1.9:4)));
+ const densityLimit=Math.max(1,Math.floor(duration*(ACTIVE_STYLE==='cinematic'?3.6:4)));
  if(process.env.MOTION_AUDIO_DEBUG==='1'){stageCounts.duration=duration;stageCounts.densityLimit=densityLimit;}
  if(kept.length>densityLimit){
   const protectedCues=kept.filter(cueIsPrimary),ordinary=kept.filter(cue=>!cueIsPrimary(cue)).sort(cueStrengthOrder);
@@ -424,10 +444,10 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
  const scenes=spec.scenes.map((scene,index)=>{
   const voice=spoken[index];
   if(!voice)return {...scene};
-  const needed=Math.ceil((LEAD+voice.words.at(-1).end+TAIL)*FPS)/FPS;
+  const needed=CONTINUOUS&&voice.length?Math.round(voice.length*FPS)/FPS:Math.ceil((LEAD+voice.words.at(-1).end+TAIL)*FPS)/FPS;
   // The final scene keeps at least its authored length: the payoff needs a hold after the last word.
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
-  const duration=Math.min(8,Math.max(1.2,needed,index===spec.scenes.length-1?scene.duration:0)+cinematicTail);
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,index===spec.scenes.length-1?scene.duration:0)+cinematicTail);
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
@@ -533,10 +553,16 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  ACTIVE_STYLE=process.env.MOTION_SFX_STYLE?.trim()||(parsed.spec.series?.startsWith('HEDGY')?'cinematic':'foley');
  if(!['cinematic','foley'].includes(ACTIVE_STYLE))throw new Error('MOTION_SFX_STYLE must be cinematic or foley');
 
- if(parsed.spec.series?.startsWith('HEDGY')&&!process.env.MOTION_VOICE_SPEED)process.env.MOTION_VOICE_SPEED='1.2';
+ if(parsed.spec.series?.startsWith('HEDGY')&&!process.env.MOTION_VOICE_SPEED)process.env.MOTION_VOICE_SPEED='1.0';
  const voice=pickVoice();
  const spoken=[];
- for(const scene of parsed.spec.scenes)spoken.push(scene.say?await speak(stripMarkup(scene.say),voice,key):null);
+ // HEDGY: one continuous take of the whole paragraph (natural prosody, no gaps where a sentence continues
+ // across a cut), sliced at the natural pauses between scenes. MOTION_NARRATION=scenes restores per-scene takes.
+ const continuous=(process.env.MOTION_NARRATION??(parsed.spec.series?.startsWith('HEDGY')?'continuous':'scenes'))==='continuous'&&parsed.spec.scenes.every(scene=>scene.say);
+ if(continuous){
+  LEAD=0;TAIL=0;CONTINUOUS=true;
+  spoken.push(...await speakContinuous(parsed.spec.scenes.map(scene=>stripMarkup(scene.say)),voice,key));
+ }else for(const scene of parsed.spec.scenes)spoken.push(scene.say?await speak(stripMarkup(scene.say),voice,key):null);
  // Load scene cues in Node with a no-op canvas; audio only needs each scene's deterministic cue list.
  installCueImportEnvironment();
  const defs=await import('../src/motion/scenes/index.ts').then(module=>module.SCENES).catch(error=>{throw new Error(`Could not load scene cue definitions: ${error.message}`);});
@@ -599,7 +625,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
   if(ACTIVE_STYLE==='cinematic'){
    filters.push('[fx_raw]asplit=2[fxDry][fxReverbInput]');
    filters.push('[fxReverbInput]aecho=0.78:0.27:43|79|127|181|251|337:0.30|0.24|0.19|0.15|0.11|0.08,lowpass=f=5000,volume=0.62[fxWet]');
-   filters.push('[fxDry][fxWet]amix=inputs=2:normalize=0:dropout_transition=0,lowpass=f=7600,acompressor=threshold=0.18:ratio=1.7:attack=12:release=190:makeup=1.08,extrastereo=m=1.035,volume=1.35[fx]');
+   filters.push('[fxDry][fxWet]amix=inputs=2:normalize=0:dropout_transition=0,lowpass=f=7600,acompressor=threshold=0.18:ratio=1.7:attack=12:release=190:makeup=1.08,extrastereo=m=1.035,volume=2.5[fx]');
   }else filters.push('[fx_raw]acompressor=threshold=0.24:ratio=1.65:attack=6:release=130:makeup=1.2,extrastereo=m=1.08,volume=1.35[fx]');
   const buses=[];
   if(bed){
@@ -629,11 +655,11 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    filters.push(`[musicAirSource]highpass=f=1950,lowpass=f=${ACTIVE_STYLE==='cinematic'?'5200':'11500'},volume='${airExpression}':eval=frame[musicAir]`);
    filters.push(`[musicPercSource]highpass=f=3600,lowpass=f=${ACTIVE_STYLE==='cinematic'?'6200':'18000'},acompressor=threshold=0.025:ratio=7:attack=1:release=65,volume='${percussionExpression}':eval=frame[musicPerc]`);
    filters.push(`[musicBody][musicBodyLift][musicAir][musicPerc]amix=inputs=4:normalize=0:dropout_transition=0,volume='${pressureGain}':eval=frame,${pad}[bed]`);
-   filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[fx]asplit=2[fxVoiceSource][fxLowSource]',ACTIVE_STYLE==='cinematic'?'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.035:ratio=3:attack=3:release=180:makeup=1[fxduck]':'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]','[fxLowSource]lowpass=f=180,volume=0.3[fxLowKey]','[bed][keyMusic]sidechaincompress=threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2[musicVoiceDuck]','[musicVoiceDuck][fxLowKey]sidechaincompress=threshold=0.04:ratio=1.6:attack=8:release=125:makeup=1[ducked]');
+   filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[fx]asplit=2[fxVoiceSource][fxLowSource]',ACTIVE_STYLE==='cinematic'?'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.05:ratio=2:attack=3:release=160:makeup=1[fxduck]':'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]','[fxLowSource]lowpass=f=180,volume=0.3[fxLowKey]','[bed][keyMusic]sidechaincompress=threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2[musicVoiceDuck]','[musicVoiceDuck][fxLowKey]sidechaincompress=threshold=0.04:ratio=1.6:attack=8:release=125:makeup=1[ducked]');
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]','[ducked]asplit=2[musicMix][musicStem]');buses.push('[fxMix]','[sayMix]','[musicMix]');}
    else buses.push('[fxduck]','[say]','[ducked]');
   }else{
-   filters.push('[voice]asplit=2[say][keyFx]',ACTIVE_STYLE==='cinematic'?'[fx][keyFx]sidechaincompress=threshold=0.035:ratio=3:attack=3:release=180:makeup=1[fxduck]':'[fx][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]');
+   filters.push('[voice]asplit=2[say][keyFx]',ACTIVE_STYLE==='cinematic'?'[fx][keyFx]sidechaincompress=threshold=0.05:ratio=2:attack=3:release=160:makeup=1[fxduck]':'[fx][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]');
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]');buses.push('[fxMix]','[sayMix]');}
    else buses.push('[fxduck]','[say]');
   }
