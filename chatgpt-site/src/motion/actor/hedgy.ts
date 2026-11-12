@@ -523,7 +523,9 @@ function resolve(options: HedgyOptions): State {
     // Paw reaches for a device-space point (rotation/squash of the body are small enough to ignore here).
     const lx = (options.handTarget.x - options.x) / (k * ART) * facing - rig.dx, ly = (options.handTarget.y - options.y) / (k * ART) - rig.dy;
     const vx = lx - SHOULDER_F.x, vy = ly - SHOULDER_F.y, reach = clamp(options.reach ?? 1);
-    rig.armF = lerp(rig.armF, Math.atan2(vx, vy), reach);
+    // swing the arm the short way round IN FRONT of the body (never back across the muzzle)
+    let target = Math.atan2(vx, vy); if (target < -0.6) target += Math.PI * 2;
+    rig.armF = lerp(rig.armF, target, reach);
     rig.armFLen = lerp(rig.armFLen, clamp(Math.hypot(vx, vy) / (ARM_LENGTH + 1), 0.6, 1.9), reach);
   }
   const squash = clamp(options.squash ?? 1, 0.5, 1.5);

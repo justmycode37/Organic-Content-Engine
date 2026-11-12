@@ -16,16 +16,23 @@ const sweepPhase = (t, from, to, length, bend = 1) => {
   const u = Math.max(0, Math.min(1, t / length));
   return TAU * (from * t + (to - from) * length * (u ** (bend + 1)) / (bend + 1));
 };
+const CIN_IMPACT = ['impact','thud','thump','land','clunk','stamp','sub','drop'];
+const CIN_MOVE = ['swish','whoosh','whump','slide','whip'];
+const CIN_ACCENT = ['pop','pluck','coin','coins','ding','sparkle','shimmer','click','tick','tap','glass'];
+const CIN_BUILD = ['build','rise','reverse','rumble'];
 
 /** Deterministic, mono 48 kHz PCM synthesis. No external binary is needed to author the WAV. */
-export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
-  const seconds = Math.max(0.08, Math.min(8, requestedSeconds));
+export async function synthesizeToFile(kind, variant, requestedSeconds, path, options = {}) {
+  const seconds = Math.max(0.08, Math.min(kind === 'hum' ? 120 : 8, requestedSeconds));
   const frames = Math.ceil(seconds * RATE);
   const seed = hashSeed(kind, variant);
   let state = seed;
   let low = 0;
+  let mid = 0;
+  let movingFilter = 0;
   const noise = new Float32Array(frames);
   const lowNoise = new Float32Array(frames);
+  const midNoise = new Float32Array(frames);
   const highNoise = new Float32Array(frames);
   const lowCut = 0.018 + (variant % 3) * 0.006;
   for (let i = 0; i < frames; i++) {
@@ -33,8 +40,10 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
     const n = ((state >>> 0) / 2147483648) - 1;
     noise[i] = n;
     low += lowCut * (n - low);
+    mid += 0.085 * (n - mid);
     lowNoise[i] = low;
-    highNoise[i] = n - low;
+    midNoise[i] = mid - low;
+    highNoise[i] = n - mid;
   }
 
   const notes = [0, 2, 4, 7, 9, 12];
@@ -43,19 +52,82 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
   for (let i = 0; i < frames; i++) {
     const t = i / RATE;
     const u = Math.min(1, t / seconds);
-    const n = noise[i], lo = lowNoise[i], hi = highNoise[i];
+    const n = noise[i], lo = lowNoise[i], md = midNoise[i], hi = highNoise[i];
     let s = 0;
-    switch (kind) {
+    if (options.style === 'cinematic' && (CIN_IMPACT.includes(kind) || CIN_MOVE.includes(kind) || CIN_ACCENT.includes(kind) || CIN_BUILD.includes(kind))) {
+      if (CIN_ACCENT.includes(kind)) {
+        const f = Math.max(85, Math.min(1100, options.pitchHz || 330));
+        const attack = 0.009 + (variant % 3) * 0.004;
+        const tau = (kind === 'ding' || kind === 'glass' ? 0.42 : 0.24) + (variant % 3) * 0.055;
+        const e = Math.exp(-t / tau) * env(t, seconds, attack, Math.min(0.13, seconds * 0.18));
+        const bend = Math.exp(-t * 13) * (variant === 1 ? -0.018 : 0.012);
+        const phase = TAU * (f * t + f * bend * (1 - Math.exp(-t * 5)) / 5);
+        s = e * (
+          Math.sin(phase) * 0.38 + Math.sin(phase * 2.003 + 0.08) * 0.20
+          + Math.sin(phase * 3.91 + 0.23) * 0.075 + Math.sin(phase * 5.43) * 0.025
+          + md * 0.025 + lo * 0.015
+        );
+      } else if (CIN_IMPACT.includes(kind)) {
+        const length = Math.min(seconds, kind === 'sub' ? 0.62 : 0.46);
+        const low = kind === 'sub' ? 48 : kind === 'drop' ? 87 : 76 + (variant % 3) * 6;
+        const end = kind === 'sub' ? 33 : 39 + (variant % 3) * 3;
+        const tau = kind === 'sub' ? 0.67 : 0.57 + (variant % 3) * 0.12;
+        const e = Math.exp(-t / tau) * env(t, seconds, 0.026 + (variant % 2) * 0.008, Math.min(0.34, seconds * 0.3));
+        const phase = sweepPhase(t, low, end, length, 1.18);
+        const body = Math.sin(phase) * 0.55 + Math.sin(phase * 1.97 + 0.18) * 0.17;
+        const woody = Math.sin(TAU * (kind === 'stamp' ? 135 : 104 + variant * 7) * t) * 0.09;
+        const contact = Math.exp(-t / 0.042) * md * 0.06;
+        s = e * (body + Math.sin(TAU * 53 * t + 0.4) * 0.13 + lo * 0.16 + woody) + contact;
+      } else if (CIN_MOVE.includes(kind)) {
+        const rising = options.direction === 'up' || options.direction === 'departure';
+        const passCenter = kind === 'whip' ? 0.42 : 0.54;
+        const passWidth = kind === 'whip' ? 0.25 : 0.37;
+        const pass = Math.exp(-((u - passCenter) ** 2) / (2 * passWidth * passWidth));
+        const attack = 0.06 + u * 0.045;
+        const cutoff = rising ? 0.016 + 0.07 * u : 0.086 - 0.07 * u;
+        movingFilter += cutoff * (n - movingFilter);
+        const from = rising ? 135 : 620;
+        const to = rising ? 640 : 128;
+        const phase = sweepPhase(t, from + variant * 8, to + variant * 5, seconds, 1.12);
+        const e = env(t, seconds, 0.055, Math.min(0.18, seconds * 0.18));
+        s = e * (pass * (movingFilter * 0.22 + lo * 0.1 + Math.sin(phase) * 0.065) + movingFilter * 0.09);
+      } else if (CIN_BUILD.includes(kind)) {
+        const roll = kind === 'build' || kind === 'rumble';
+        const count = 5 + variant * 2;
+        const interval = seconds / count;
+        let drums = 0;
+        if (roll) {
+          for (let hit = 0; hit < count; hit++) {
+            const local = t - hit * interval;
+            if (local < 0) continue;
+            const amp = 0.11 + 0.12 * (hit / Math.max(1, count - 1));
+            const hitEnv = Math.exp(-local / (0.075 + 0.035 * (hit / count)));
+            const f0 = 54 + 24 * (hit / Math.max(1, count - 1));
+            drums += amp * hitEnv * (Math.sin(TAU * f0 * local) + Math.sin(TAU * f0 * 1.51 * local) * 0.22);
+          }
+        }
+        const edge = env(t, seconds, 0.035, Math.min(0.065, seconds * 0.08));
+        const swell = u ** (kind === 'reverse' ? 1.6 : 1.28);
+        const cutoff = 0.012 + 0.067 * u;
+        movingFilter += cutoff * (n - movingFilter);
+        const phase = sweepPhase(t, 110, 560 + variant * 40, seconds, 1.42);
+        const air = (movingFilter * 0.19 + md * 0.11 + Math.sin(phase) * 0.038) * swell;
+        s = edge * (drums + air + Math.sin(TAU * (42 + 8 * u) * t) * swell * 0.12);
+      }
+    } else switch (kind) {
       case 'pop': {
-        const e = decay(t, seconds, 0.115 + (variant % 3) * 0.018, 0.002);
-        const p = TAU * (540 * base * t);
-        s = e * (Math.sin(p) * 0.62 + Math.sin(p * 2.01 + Math.sin(p * 1.49) * 0.25) * 0.24 + Math.sin(p * 3) * 0.08);
+        const e = decay(t, seconds, 0.145 + (variant % 3) * 0.02, 0.006);
+        const p = TAU * (178 * base * t);
+        s = e * (Math.sin(p) * 0.40 + Math.sin(p * 2.03 + Math.sin(p * 1.49) * 0.12) * 0.20 + Math.sin(TAU * 72 * t) * 0.18 + md * 0.12);
         break;
       }
-      case 'tick': case 'click': case 'snap': {
-        const e = decay(t, seconds, kind === 'tick' ? 0.022 : 0.036, 0.0008);
-        const p = TAU * (kind === 'tick' ? 2050 : 1420) * base * t;
-        s = e * (hi * (kind === 'snap' ? 0.46 : 0.3) + Math.sin(p) * 0.28 + Math.sin(p * 1.83) * 0.12);
+      case 'tick': case 'tap': case 'click': case 'snap': {
+        const tau = kind === 'tick' ? 0.028 : kind === 'click' ? 0.045 : 0.095;
+        const e = decay(t, seconds, tau, kind === 'snap' ? 0.003 : 0.0015);
+        const f = kind === 'tick' ? 310 : kind === 'tap' ? 255 : kind === 'click' ? 205 : 148;
+        const p = TAU * f * base * t;
+        const transient = kind === 'snap' ? md * 0.20 : md * (kind === 'tick' ? 0.10 : 0.07);
+        s = e * (Math.sin(p) * 0.38 + Math.sin(p * 1.93) * 0.12 + Math.sin(TAU * (kind === 'snap' ? 68 : 92) * t) * 0.14 + transient);
         break;
       }
       case 'type': {
@@ -97,7 +169,7 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
         const p = sweepPhase(t, kind === 'drop' ? 112 : kind === 'step' ? 105 : 78, kind === 'drop' ? 42 : 52, impactLen, 1.1);
         const click = Math.exp(-t / 0.012) * hi;
         const pulse = kind === 'heartbeat' ? Math.max(0, Math.sin(TAU * 2.45 * t)) ** 5 : 0;
-        s = e * (Math.sin(p) * (kind === 'bass' ? 0.56 : 0.45) + Math.sin(p * 2.03) * 0.12 + lo * 0.12) + click * 0.14 + pulse * 0.22;
+        s = e * (Math.sin(p) * (kind === 'bass' ? 0.56 : 0.48) + Math.sin(p * 2.03) * 0.15 + lo * 0.18 + md * 0.07) + click * 0.045 + pulse * 0.22;
         break;
       }
       case 'swish': case 'whoosh': case 'whip': {
@@ -106,7 +178,7 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
         const pass = Math.exp(-((u - center) ** 2) / (2 * width * width));
         const e = env(t, seconds, 0.012, 0.055);
         const phase = sweepPhase(t, 520, kind === 'whip' ? 190 : 350, seconds, 1.2);
-        s = e * (pass * (hi * 0.29 + lo * 0.18 + Math.sin(phase) * 0.08) + Math.sin(phase) * 0.035);
+        s = e * (pass * (md * 0.17 + lo * 0.2 + Math.sin(phase) * 0.09) + Math.sin(phase) * 0.045);
         break;
       }
       case 'glitch': case 'zap': case 'beep': case 'alarm': {
@@ -117,9 +189,9 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
         break;
       }
       case 'clack': case 'stamp': case 'crack': {
-        const e = decay(t, seconds, kind === 'crack' ? 0.055 : 0.085, 0.0007);
-        const body = Math.sin(TAU * (kind === 'stamp' ? 170 : 290) * base * t);
-        s = e * (hi * (kind === 'crack' ? 0.52 : 0.24) + lo * 0.2 + body * 0.22);
+        const e = decay(t, seconds, kind === 'crack' ? 0.055 : 0.10, kind === 'crack' ? 0.0007 : 0.0025);
+        const body = Math.sin(TAU * (kind === 'stamp' ? 142 : kind === 'clack' ? 205 : 265) * base * t);
+        s = e * ((kind === 'crack' ? hi * 0.22 : md * 0.11) + lo * 0.22 + body * 0.34 + Math.sin(TAU * 62 * t) * 0.10);
         break;
       }
       case 'coins': case 'cash': {
@@ -144,7 +216,7 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
       }
       case 'paper': {
         const gesture = (Math.sin(TAU * 2.2 * t) * 0.5 + 0.5) ** 2;
-        s = env(t, seconds, 0.015, 0.12) * gesture * (hi * 0.22 + lo * 0.12);
+        s = env(t, seconds, 0.03, 0.14) * gesture * (md * 0.18 + lo * 0.16 + hi * 0.025);
         break;
       }
       case 'rumble': {
@@ -156,6 +228,85 @@ export async function synthesizeToFile(kind, variant, requestedSeconds, path) {
         const p = sweepPhase(t, 520, 38, seconds, 2.4);
         const flutter = 1 + 0.025 * Math.sin(TAU * 17 * t);
         s = env(t, seconds, 0.003, 0.15) * (Math.sin(p) * 0.32 + Math.sin(p * 2.01) * 0.07) * flutter;
+        break;
+      }
+      case 'thump': {
+        const e = Math.exp(-t / (0.19 + variant * 0.018)) * env(t, seconds, 0.009, 0.13);
+        const p = sweepPhase(t, 88 + variant * 3, 48 + variant * 2, Math.min(seconds, 0.32), 0.8);
+        s = e * (Math.sin(p) * 0.42 + Math.sin(p * 1.93) * 0.13 + Math.sin(TAU * 68 * t) * 0.16 + lo * 0.14 + md * 0.035);
+        break;
+      }
+      case 'knock': {
+        const first = decay(t, seconds, 0.13 + variant * 0.012, 0.006);
+        const reboundAt = 0.092 + variant * 0.008, rt = t - reboundAt;
+        const rebound = rt > 0 ? decay(rt, Math.max(0.08, seconds - reboundAt), 0.075, 0.004) * 0.28 : 0;
+        const wood = Math.sin(TAU * 184 * base * t) * 0.37 + Math.sin(TAU * 286 * base * t) * 0.13;
+        s = first * (wood + lo * 0.13 + md * 0.045) + rebound * wood;
+        break;
+      }
+      case 'whump': {
+        const e = env(t, seconds, 0.028, 0.18) * Math.exp(-t / 0.29);
+        const p = sweepPhase(t, 112 + variant * 4, 52, seconds, 1.25);
+        const air = Math.sin(TAU * (variant === 1 ? 69 : 62) * t) * 0.12;
+        s = e * (Math.sin(p) * 0.34 + air + lo * 0.23 + md * 0.045);
+        break;
+      }
+      case 'sub': {
+        const length = Math.min(seconds, 0.34);
+        const e = env(t, seconds, 0.018, 0.12) * Math.exp(-t / 0.19);
+        const p = sweepPhase(t, 52 + variant, 35 + variant, length, 1.1);
+        s = e * (Math.sin(p) * 0.46 + Math.sin(p * 1.51) * 0.06);
+        break;
+      }
+      case 'rustle': {
+        const motion = (0.24 + 0.76 * Math.max(0, Math.sin(TAU * (2.2 + variant * 0.23) * t + variant)))
+          * (0.7 + 0.3 * Math.sin(TAU * 0.43 * t));
+        s = env(t, seconds, 0.04, 0.15) * motion * (md * 0.19 + lo * 0.055 + hi * 0.009);
+        break;
+      }
+      case 'creak': {
+        const e = env(t, seconds, 0.028, 0.12);
+        const wobble = 1 + 0.035 * Math.sin(TAU * (5.2 + variant) * t);
+        const p = sweepPhase(t, 138 + variant * 5, 226 + variant * 9, seconds, 1.3);
+        s = e * (Math.sin(p) * 0.31 * wobble + Math.sin(p * 2.07) * 0.075 + md * 0.045 + lo * 0.08);
+        break;
+      }
+      case 'clunk': {
+        const e = decay(t, seconds, 0.19 + variant * 0.02, 0.007);
+        const p = TAU * (82 + variant * 2) * base * t;
+        const contact = Math.exp(-t / 0.018) * md * 0.065;
+        s = e * (Math.sin(p) * 0.38 + Math.sin(p * 1.91) * 0.18 + Math.sin(p * 3.05) * 0.06 + lo * 0.18) + contact;
+        break;
+      }
+      case 'slide': {
+        const travel = Math.sin(Math.PI * Math.min(1, u)) ** 0.72;
+        const grain = 0.58 + 0.42 * Math.sin(TAU * (4.4 + variant * 0.25) * t) ** 2;
+        s = env(t, seconds, 0.035, 0.12) * travel * grain * (md * 0.16 + lo * 0.065 + Math.sin(TAU * 245 * t) * 0.04);
+        break;
+      }
+      case 'footfall': {
+        const e = decay(t, seconds, 0.11 + variant * 0.012, 0.008);
+        const p = sweepPhase(t, 96 + variant * 3, 55, Math.min(seconds, 0.24), 1.0);
+        s = e * (Math.sin(p) * 0.35 + Math.sin(p * 1.83) * 0.10 + Math.sin(TAU * 78 * t) * 0.14 + lo * 0.10 + md * 0.045);
+        break;
+      }
+      case 'pluck': {
+        const e = Math.exp(-t / (0.16 + variant * 0.012)) * env(t, seconds, 0.003, 0.10);
+        const p = sweepPhase(t, 122 + variant * 4, 108 + variant * 3, seconds, 0.7);
+        s = e * (Math.sin(p) * 0.36 + Math.sin(p * 2.02) * 0.12 + Math.sin(p * 0.5) * 0.08 + lo * 0.055);
+        break;
+      }
+      case 'gulp': {
+        const e = env(t, seconds, 0.014, 0.15) * Math.exp(-t / 0.34);
+        const p = sweepPhase(t, 176 + variant * 5, 76 + variant * 3, seconds, 0.72);
+        const bubble = 0.76 + 0.24 * Math.sin(TAU * (3.8 + variant * 0.2) * t) ** 2;
+        s = e * bubble * (Math.sin(p) * 0.38 + Math.sin(p * 1.52) * 0.11 + Math.sin(p * 2.03) * 0.075 + lo * 0.05);
+        break;
+      }
+      case 'hum': {
+        const e = env(t, seconds, 0.16, 0.28);
+        const f = 52 + variant * 3;
+        s = e * (Math.sin(TAU * f * t) * 0.26 + Math.sin(TAU * (f * 1.49) * t + 0.3 * Math.sin(TAU * 0.7 * t)) * 0.11);
         break;
       }
       default: {
