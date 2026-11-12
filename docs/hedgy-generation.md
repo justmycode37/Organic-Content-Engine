@@ -50,3 +50,25 @@ MOTION_LEAD=.04 MOTION_TAIL=.12 MOTION_SPEECH_TEMPO=.85 node --env-file=.env.mot
 ```
 
 Rendering may incur audio-provider charges when the corresponding cache entries do not exist. No API keys or generated media are checked in. Committing these changes does not deploy the Site or connect the remaining unattended generation/publishing integration.
+
+## Motion v3 (shot library) — showcase "The ticket that took off"
+
+v3 replaces "object on black with a headline" with full-bleed, choreographed 3D pixel-art shots. Architecture and ownership are in `docs/motion-v3.md`; the look rules in `docs/shot-bible.md`; review digests per iteration in `docs/reviews/`.
+
+- **Engine** (`src/motion/three.ts`): lit 7-step material ramps (mono/bone/steel/ink/chrome/glass/paper; brown/red/green semantic only), key+rim+ambient light, specular glints, outlines/creases, ground shadows, fog, full perspective camera with near-plane clipping (fly-throughs), explode/slice builds, instancing.
+- **Assets** (`src/motion/assets/`): 63 parametric finance models with named animatable parts.
+- **Hedgy actor** (`src/motion/actor/hedgy.ts`): redesigned 2D sprite, 17 poses with timing landmarks and cue helpers.
+- **Player** (`src/motion/player.ts`, `fx/transitions.ts`, `fx/rig.ts`): two-scene compositing transitions (push, whip, zoomthrough, shatter, pixelsort, melt, iris, cube, flip, dissolve, slice, ink, match), each with its own sound design; camera rig; full-bleed 1080×1290 animation region for `shot` scenes; floor reflection and light grade under the caption band.
+- **FX / env / viz** (`fx/particles.ts`, `fx/post.ts`, `env/`, `viz/`): deterministic particles, environments, post effects, finance charts, kinetic type, word-timed phrase captions.
+- **Shots** (`src/motion/shots/`): scene type `shot` with narration-synced `events`; `shots/catalog.ts` is the worker-safe catalog the generator uses.
+- **Audio** (`scripts/motion-audio.mjs`, `scripts/audio/`): designed sound for all 38 cue kinds (synth + ElevenLabs foley), cue governor (priority, ≤3 overlapping), sidechained music with event-driven lifts, squeeze vacuum/impact, end button, reel-level caption chunking; −14 LUFS / −1 dBTP.
+- **Review kit**: `node scripts/review-reel.mjs <reel.mp4> <outDir>` writes frame sheets, per-second motion (dead-hold detection) and loudness/spectrogram reports for reviewers.
+
+Render the showcase:
+
+```sh
+cd chatgpt-site
+MOTION_VOICE_SPEED=1.15 MOTION_LEAD=.04 MOTION_TAIL=.14 node --env-file=.env.motion scripts/motion-audio.mjs motion-examples/hedgy-squeeze.json /tmp/hedgy-squeeze.mp4
+```
+
+Note: this film features Hedgy in most shots because he is the actor of the example (policy: "use Hedgy only when he is an actor"). The schema's two-scene mascot cap applies to the legacy `hedgy` scene type only.
