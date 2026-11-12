@@ -15,11 +15,13 @@ const FLOOR = STAGE.floor;
 const PLACE_X = 414;
 const RUN_START_X = 140;
 const STEP_X = 218;
-const EXIT_X = 450;
-const RUN_DURATION = 0.46;
-const EXIT_DURATION = 0.41;
+const EXIT_X = 350;
+const RUN_DURATION = 0.36;
+const EXIT_DURATION = 0.18;
+const EXIT_START_DELAY = 0.12;
+const EXIT_FADE_TAIL = 0.08;
 const TRANSFER_START = 0.32;
-const TRANSFER_END = 0.10;
+const TRANSFER_END = 0;
 const HAND_FACE_GAP = 36;
 
 interface RushPlan {
@@ -55,9 +57,12 @@ function plan(props: ShotProps, dur: number): RushPlan {
   const rawArrivals = beats(props, dur, fallback);
   const arrivals: number[] = [];
   for (let i = 0; i < crowd.length; i++) {
-    const minGap = i >= 2 ? 0.70 : 0.28;
+    const minGap = i >= 2 ? 0.14 : 0.28;
     const earliest = i === 0 ? 0 : arrivals[i - 1]! + minGap;
-    arrivals.push(clamp(Math.max(rawArrivals[i] ?? fallback[i]!, earliest), 0, dur));
+    const afterLastSpokenBuy = i === 2 && rawArrivals.length >= 2
+      ? rawArrivals[1]! + 0.14
+      : rawArrivals[i] ?? fallback[i]!;
+    arrivals.push(clamp(Math.max(afterLastSpokenBuy, earliest), 0, dur));
   }
   const stock = Math.floor(num(props.params, 'stock', crowd.length, 0, 5));
   const sign = str(props.params, 'sign', defaultSign(place)).toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || defaultSign(place);
@@ -70,12 +75,8 @@ function plan(props: ShotProps, dur: number): RushPlan {
 }
 
 function itemFlight(from: { x: number; y: number }, to: { x: number; y: number }, p: number) {
-  if (p < 0.48) {
-    const u = ease.inOutCubic(p / 0.48);
-    return { x: from.x, y: lerp(from.y, to.y, u) };
-  }
-  const u = ease.inOutCubic((p - 0.48) / 0.52);
-  return { x: lerp(from.x, to.x, u), y: to.y };
+  const u = ease.inOutCubic(p);
+  return { x: lerp(from.x, to.x, u), y: lerp(from.y, to.y, u) };
 }
 
 function heldGeometry(who: ActorId, x: number, t: number, item: ItemId, keys: HedgyKey[]) {
@@ -103,7 +104,7 @@ export const rushShot: ShotDef = {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const soldCount = s.arrivals.filter(at => t >= at).length;
     const remaining = Math.max(0, s.stock - soldCount);
-    const shutter = s.soldAt === undefined ? 0 : ease.outCubic(phase(t, s.soldAt, s.soldAt + 0.30));
+    const shutter = s.soldAt === undefined ? 0 : ease.outCubic(phase(t, s.soldAt, s.soldAt + 0.16));
     const sign = s.soldAt !== undefined && t >= s.soldAt + 0.04 ? s.endSign : s.sign;
     const window = s.place === 'booth' ? boothWindow({ x: PLACE_X, y: FLOOR, scale: 1 }) : undefined;
 
@@ -130,29 +131,39 @@ export const rushShot: ShotDef = {
 
     for (let i = 0; i < s.crowd.length; i++) {
       const who = s.crowd[i]!, arrival = s.arrivals[i]!, hasStock = i < s.stock;
-      const start = i === 0 ? 0 : Math.max(0, arrival - RUN_DURATION, i >= 2 ? s.arrivals[i - 1]! + 0.22 : 0);
+      const isThirdBuyer = i === 2 && s.arrivals.length >= 3;
+      const stepX = isThirdBuyer ? 460 : STEP_X;
+      const entranceX = isThirdBuyer ? 500 : RUN_START_X;
+      const runX = isThirdBuyer ? 500 : 188;
+      const previousClearAt = i === 2
+        ? s.arrivals[0]! + EXIT_START_DELAY + EXIT_DURATION + EXIT_FADE_TAIL + 0.04
+        : 0;
+      const start = Math.max(0, arrival - RUN_DURATION, previousClearAt);
       if (t < start) continue;
-      const runEnd = Math.min(arrival, start + RUN_DURATION);
-      const exitStart = arrival + 0.12, exitEnd = exitStart + EXIT_DURATION;
+      const rushAt = Math.max(start, arrival - 0.12);
+      const exitStart = arrival + EXIT_START_DELAY, exitEnd = exitStart + EXIT_DURATION;
       const keys = [
-        { at: start, pose: 'run' as const, expression: 'determined' as const },
-        ...(runEnd < arrival - 0.06 ? [{ at: runEnd, pose: 'tap' as const, expression: 'determined' as const }] : []),
+        { at: start, pose: 'walk' as const, expression: 'determined' as const },
+        { at: rushAt, pose: 'run' as const, expression: 'determined' as const },
         { at: arrival - 0.035, pose: hasStock ? 'receive' as const : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'worried' as const },
         { at: arrival + 0.16, pose: hasStock ? 'hold' as const : 'tap' as const, expression: hasStock ? 'happy' as const : 'worried' as const },
         { at: exitStart, pose: hasStock ? 'run' as const : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'sad' as const },
       ];
-      const rawX = t < runEnd
-        ? tween(t, start, Math.max(0.06, runEnd - start), RUN_START_X, STEP_X, ease.inOutCubic)
-        : t < exitStart ? STEP_X : t < exitEnd ? tween(t, exitStart, EXIT_DURATION, STEP_X, EXIT_X, ease.inOutCubic) : EXIT_X;
+      const rawX = t < rushAt
+        ? tween(t, start, Math.max(0.06, rushAt - start), entranceX, runX, ease.inOutCubic)
+        : t < arrival
+          ? tween(t, rushAt, Math.max(0.06, arrival - rushAt), runX, stepX, ease.inOutCubic)
+          : t < exitStart ? stepX : t < exitEnd ? tween(t, exitStart, EXIT_DURATION, stepX, EXIT_X, ease.inOutCubic) : EXIT_X;
       const actorBox = actorBounds({ who, x: rawX, y: FLOOR, scale: 1, facing: 1, time: t, keys });
       const x = rawX + (actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0);
-      const presence = i === s.crowd.length - 1 ? 1 : 1 - phase(t, exitEnd - 0.04, exitEnd + 0.08);
+      const presence = i === s.crowd.length - 1 ? 1 : 1 - phase(t, exitEnd - 0.04, exitEnd + EXIT_FADE_TAIL);
       const receivedAt = arrival + TRANSFER_END;
       const held = heldGeometry(who, x, t, s.item, keys);
-      const heldAtStep = heldGeometry(who, STEP_X, t, s.item, keys);
+      const heldAtStep = heldGeometry(who, stepX, t, s.item, keys);
       const safeSourceX = Math.min(window ? window.x + window.w * 0.82 : PLACE_X + 130, STAGE.w - held.dims.w / 2 - 24);
       const sourceAt = { x: safeSourceX, y: heldAtStep.center.y };
-      const itemP = ease.inOutCubic(phase(t, arrival - TRANSFER_START, receivedAt));
+      const transferStart = Math.max(arrival - TRANSFER_START, start);
+      const itemP = ease.inOutCubic(phase(t, transferStart, receivedAt));
       const itemPos = t < receivedAt ? itemFlight(sourceAt, heldAtStep.center, itemP) : held.center;
       const reached = hasStock && t >= arrival - 0.05;
       ctx.save();
@@ -165,7 +176,6 @@ export const rushShot: ShotDef = {
       });
       ctx.restore();
 
-      const transferStart = arrival - TRANSFER_START;
       if (hasStock && t >= transferStart) {
         const itemAlpha = presence;
         const pop = t < receivedAt ? 1 : 0.96 + 0.08 * ease.outBack(phase(t, receivedAt, receivedAt + 0.12));
@@ -184,11 +194,16 @@ export const rushShot: ShotDef = {
     const d = Math.max(0.05, dur), s = plan(props, d);
     const list: Cue[] = [];
     s.arrivals.forEach((at, i) => {
-      const start = i === 0 ? 0 : Math.max(0, at - RUN_DURATION);
-      list.push(cue(Math.min(at, start + RUN_DURATION * 0.5), 'footfall', 0.9, RUN_START_X + 48));
-      if (i < s.stock) list.push(cue(at + TRANSFER_END, 'paper', 1.05, STEP_X + 42));
+      const previousClearAt = i === 2
+        ? s.arrivals[0]! + EXIT_START_DELAY + EXIT_DURATION + EXIT_FADE_TAIL + 0.04
+        : 0;
+      const start = Math.max(0, at - RUN_DURATION, previousClearAt);
+      const rushAt = Math.max(start, at - 0.12);
+      const buyerX = i === 2 ? 460 : STEP_X;
+      list.push(cue(rushAt + (at - rushAt) * 0.36, 'footfall', 0.9, i === 2 ? 500 : RUN_START_X + 48));
+      if (i < s.stock) list.push(cue(at + TRANSFER_END, 'paper', 1.05, buyerX + 42));
     });
-    if (s.soldAt !== undefined) list.push(cue(s.soldAt + 0.27, 'clunk', 1.4, PLACE_X));
+    if (s.soldAt !== undefined) list.push(cue(s.soldAt + 0.14, 'clunk', 1.4, PLACE_X));
     return cuesIn(d, list);
   },
 };

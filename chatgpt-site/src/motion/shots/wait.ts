@@ -4,14 +4,13 @@ import { bob, clamp, ease, phase } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage, label } from '../kit/stage.ts';
-import { STAGE, ACTORS, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemSize, pick, str, type ItemId } from './common.ts';
+import { STAGE, ACTORS, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, isItem, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 const TIMERS = ['clock', 'hourglass', 'calendar'] as const;
 type TimerId = typeof TIMERS[number];
 const MOODS = ['neutral', 'worried', 'sad'] as const;
 type WaitMood = typeof MOODS[number];
-const HELD_ITEMS = ['coin', 'ticket', 'key'] as const satisfies readonly ItemId[];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const ACTOR_X = 140;
 const TIMER_X = 520;
@@ -34,6 +33,7 @@ interface WaitPlan {
   who: string;
   mood: WaitMood;
   item?: ItemId;
+  fade?: { item?: ItemId; word?: string };
   label: string;
 }
 
@@ -41,13 +41,16 @@ function plan(props: ShotProps, dur: number): WaitPlan {
   const [check, sigh] = beats(props, dur, [0.24, 0.72]);
   const checkAt = check ?? dur * 0.24;
   const sighAt = Math.min(dur, Math.max(sigh ?? dur * 0.72, checkAt + Math.min(0.32, dur * 0.22)));
-  const rawItem = str(props.params, 'item', 'none').toLowerCase();
+  const rawItem = str(props.params, 'item', 'none').trim();
+  const rawFade = str(props.params, 'fade', '').trim();
+  const fadeItem = isItem(rawFade) ? rawFade : undefined;
   return {
     checkAt, sighAt,
     timer: pick(props.params, 'timer', TIMERS, 'clock'),
     who: pick(props.params, 'who', ACTORS, 'hedgy'),
     mood: pick(props.params, 'mood', MOODS, 'worried'),
-    item: HELD_ITEMS.includes(rawItem as typeof HELD_ITEMS[number]) ? rawItem as ItemId : undefined,
+    item: isItem(rawItem) ? rawItem : undefined,
+    fade: fadeItem ? { item: fadeItem } : rawFade ? { word: rawFade.toUpperCase().replace(/[^A-Z0-9 ]/g, ' ').trim().slice(0, 12) } : undefined,
     label: str(props.params, 'label', '').trim(),
   };
 }
@@ -61,7 +64,7 @@ function raceProgress(t: number, dur: number, checkAt: number) {
 export const waitShot: ShotDef = {
   name: 'wait',
   stage: 'clean',
-  describe: 'A waiting actor taps a foot, looks up at a fast-moving timer, checks an optional item, and sighs while a clock hand and pendulum keep moving. params: timer (clock|hourglass|calendar, default clock), who (actor id, default hedgy), mood (neutral|worried|sad, default worried), item (optional coin|ticket|key in the paw, default none), label (optional word beside the timer, default none). Events: 1 = the actor checks the item or timer, 2 = the actor sighs and keeps waiting.',
+  describe: 'A waiting actor holds any item in one paw and taps a foot as a clock, hourglass, or calendar races; an optional word or item fades above the actor. params: timer (clock|hourglass|calendar, default clock), who (actor id, default hedgy), mood (neutral|worried|sad, default worried), item (any item id held at the paw, default none), fade (optional short word or item that droops and fades, default none), label (optional word beside the timer, default none). Events: 1 = the actor taps and checks the timer or item; 2 = the fade prop droops away as the actor sighs.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const race = raceProgress(t, dur, s.checkAt);
@@ -70,8 +73,9 @@ export const waitShot: ShotDef = {
     const look = t < s.checkAt ? 'up' : t < s.sighAt ? (s.item ? 'down' : 'up') : 'up';
     const tapAgain = Math.min(s.checkAt + 0.62, s.sighAt - 0.08);
     const actorKeys = [
-      { at: 0, pose: 'tap' as const, expression: s.mood, look: 'up' as const },
-      { at: s.checkAt, pose: s.item ? 'think' as const : 'lookup' as const, expression: s.mood, look: s.item ? 'down' as const : 'up' as const },
+      { at: 0, pose: 'idle' as const, expression: s.mood, look: 'up' as const },
+      { at: s.checkAt, pose: 'tap' as const, expression: s.mood, look: s.item ? 'down' as const : 'up' as const },
+      { at: Math.min(dur, s.checkAt + 0.24), pose: s.item ? 'think' as const : 'lookup' as const, expression: s.mood, look: s.item ? 'down' as const : 'up' as const },
       { at: tapAgain, pose: 'tap' as const, expression: s.mood, look: 'up' as const },
       { at: s.sighAt, pose: 'wave-off' as const, expression: 'sad' as const, look: 'up' as const },
       { at: Math.min(dur, s.sighAt + 0.3), pose: 'tap' as const, expression: 'sad' as const, look: 'up' as const },
@@ -82,20 +86,46 @@ export const waitShot: ShotDef = {
     const actorBase = { who: s.who, x: actorX, y: STAGE.floor, facing: 1 as const, time: t, keys: actorKeys };
     const face = actorFace(actorBase), paw = actorPaw(actorBase);
     const itemDims = s.item ? itemSize(s.item, 0.5) : undefined;
-    const heldPos = itemDims ? {
-      x: clamp(paw.x + Math.min(42, itemDims.w * 0.22), itemDims.w / 2 + 28, STAGE.w - itemDims.w / 2 - 28),
-      y: Math.min(STAGE.h - 24 - itemDims.h / 2, Math.max(paw.y + 18, face.y + face.r + itemDims.h / 2 + 14)) + checkLift + sighDrop + bob(t, 1.7, 2),
-    } : undefined;
+    const heldPos = itemDims ? (() => {
+      const belowChin = Math.max(paw.y + 18, face.y + face.r + itemDims.h / 2 + 14);
+      const maxY = STAGE.h - 24 - itemDims.h / 2;
+      const fitsBelowFace = belowChin <= maxY;
+      const naturalX = paw.x + Math.min(42, itemDims.w * 0.22);
+      const safeX = fitsBelowFace ? naturalX : Math.max(naturalX, face.x + face.r + itemDims.w / 2 + 14);
+      return {
+        x: clamp(safeX, itemDims.w / 2 + 28, STAGE.w - itemDims.w / 2 - 28),
+        y: Math.min(maxY, belowChin) + checkLift + sighDrop + bob(t, 1.7, 2),
+      };
+    })() : undefined;
 
     drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: actorX, y: STAGE.floor - 2, w: 170 }, { x: TIMER_X, y: STAGE.floor - 4, w: 240 }] });
     drawActor(ctx, {
       who: s.who, x: actorX, y: STAGE.floor, facing: 1, time: t, look,
       keys: actorKeys,
       handTarget: heldPos && itemDims ? { x: heldPos.x - itemDims.w * 0.34, y: heldPos.y - itemDims.h * 0.18 } : undefined,
-      reach: s.item ? 0.78 : 0,
+      reach: s.item ? 1 : 0,
     });
 
     if (s.item && heldPos) drawItem(ctx, s.item, { x: heldPos.x, y: heldPos.y, t, scale: 0.5, rot: -0.035 + Math.sin(t * 2.1) * 0.025 });
+
+    if (s.fade) {
+      const fadeStart = Math.max(0, s.sighAt - 0.12);
+      const rise = ease.outCubic(phase(t, fadeStart, s.sighAt));
+      const fadeOut = ease.inOutCubic(phase(t, s.sighAt, Math.min(dur, s.sighAt + 0.48)));
+      const fadeAlpha = 1 - fadeOut;
+      if (t >= fadeStart && fadeAlpha > 0.01) {
+        ctx.save();
+        ctx.globalAlpha *= fadeAlpha;
+        if (s.fade.item) {
+          const fadeSize = itemSize(s.fade.item, 0.5);
+          const fadeX = clamp(actorX, fadeSize.w / 2 + 24, STAGE.w - fadeSize.w / 2 - 24);
+          drawItem(ctx, s.fade.item, { x: fadeX, y: 306 + 28 * rise + 18 * fadeOut, t, scale: 0.5, rot: 0.04 * rise });
+        } else if (s.fade.word) {
+          label(ctx, s.fade.word, actorX, 286 + 26 * rise + 18 * fadeOut, { variant: 'bubble', maxWidth: 240, pop: 0.68 + 0.06 * (1 - fadeOut) });
+        }
+        ctx.restore();
+      }
+    }
 
     if (s.timer === 'clock') {
       drawItem(ctx, 'clock', {

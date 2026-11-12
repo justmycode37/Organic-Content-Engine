@@ -28,10 +28,11 @@ interface TradePlan {
 
 const ACTOR_X = 148;
 const PLACE_X = 410;
-const PAY_FLIGHT = 0.20;
-const ITEM_FLIGHT = 0.25;
+const PAY_FLIGHT = 0.34;
+const ITEM_FLIGHT = 0.30;
 const ITEM_SCALE = 0.5;
-const HAND_FACE_GAP = 36;
+const HOLD_SCALE = 0.36;
+const HAND_FACE_GAP = 8;
 
 function orderedBeats(props: ShotProps, dur: number, fractions: readonly number[]): number[] {
   const result = beats(props, dur, fractions).map(value => clamp(value, 0, dur));
@@ -71,12 +72,12 @@ function station(s: TradePlan) {
 }
 
 function paymentId(s: TradePlan): ItemId { return s.price === 'high' ? 'cashPile' : s.tender; }
-function paymentScale(s: TradePlan) { return s.price === 'high' ? 1 : 0.5; }
+function paymentScale(_s: TradePlan) { return 0.5; }
 
 function heldGeometry(who: ActorId, t: number, item: ItemId, keys: HedgyKey[]) {
   const actor = { who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, pose: 'hold' as const, facing: 1 as const, keys };
   const face = actorFace(actor), paw = actorPaw(actor), fullSize = itemSize(item);
-  const scale = Math.min(ITEM_SCALE, Math.max(0.15, (STAGE.h - 48 - face.y - face.r - HAND_FACE_GAP) / fullSize.h));
+  const scale = Math.min(HOLD_SCALE, ITEM_SCALE, Math.max(0.15, (STAGE.h - 48 - face.y - face.r - HAND_FACE_GAP) / fullSize.h));
   const dims = itemSize(item, scale);
   const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + HAND_FACE_GAP);
   if (lowY + dims.h / 2 <= STAGE.h - 36) {
@@ -93,10 +94,7 @@ function amountPosition(t: number, start: number, from: Point, to: Point, height
 
 function pawTransferPosition(t: number, start: number, duration: number, from: Point, to: Point, mode: Mode): Point {
   const u = ease.inOutCubic(phase(t, start, start + duration));
-  if (mode === 'buy') {
-    if (u < 0.42) return { x: from.x, y: from.y + (to.y - from.y) * ease.inOutCubic(u / 0.42) };
-    return { x: from.x + (to.x - from.x) * ease.inOutCubic((u - 0.42) / 0.58), y: to.y };
-  }
+  if (mode === 'buy') return { x: from.x + (to.x - from.x) * u, y: from.y + (to.y - from.y) * u };
   if (u < 0.62) return { x: from.x + (to.x - from.x) * ease.inOutCubic(u / 0.62), y: from.y };
   return { x: to.x, y: from.y + (to.y - from.y) * ease.inOutCubic((u - 0.62) / 0.38) };
 }
@@ -110,8 +108,8 @@ export const tradeShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), place = station(s);
     const payId = paymentId(s), payScale = paymentScale(s), payDims = itemSize(payId, payScale);
-    const payStart = Math.max(0, s.first - 0.12);
-    const itemStart = Math.max(0, s.second - 0.12);
+    const payStart = Math.max(0, s.first - PAY_FLIGHT);
+    const itemStart = Math.max(0, s.second - ITEM_FLIGHT);
     const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
     const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
     const paymentArrives = payFlightStart + PAY_FLIGHT;
@@ -132,13 +130,13 @@ export const tradeShot: ShotDef = {
       x: paw.x + Math.min(40, payDims.w * 0.22),
       y: Math.min(STAGE.h - 24 - payDims.h / 2, Math.max(paw.y + payDims.h * 0.24, face.y + face.r + payDims.h / 2 + 12)),
     };
-    const payFloorY = STAGE.floor - payDims.h / 2;
+    const payRestDims = itemSize(payId, s.price === 'high' ? 1 : payScale);
+    const payFloorY = STAGE.floor - payRestDims.h / 2;
     const payStation = { x: place.x + 96, y: payFloorY };
-    const highBuyStart = { x: place.x + 56, y: payFloorY };
     const payActor = { x: ACTOR_X + 296, y: payFloorY };
-    const payFrom = s.mode === 'buy' ? (s.price === 'high' ? highBuyStart : tenderAtHand) : payStation;
+    const payFrom = s.mode === 'buy' ? tenderAtHand : payStation;
     const payTo = s.mode === 'buy' ? payStation : payActor;
-    const itemFrom = s.mode === 'buy' ? { x: place.x + 56, y: place.centre + 18 } : itemHeld;
+    const itemFrom = s.mode === 'buy' ? { x: place.x + 56, y: itemHeld.y } : itemHeld;
     const itemTo = s.mode === 'buy' ? itemHeld : { x: place.x + 56, y: place.centre + 18 };
     const payFlight = amountPosition(t, payFlightStart, payFrom, payTo, 14, PAY_FLIGHT);
     const itemFlightPoint = pawTransferPosition(t, itemFlightStart, ITEM_FLIGHT, itemFrom, itemTo, s.mode);
@@ -153,7 +151,7 @@ export const tradeShot: ShotDef = {
     });
 
     const paymentHandTarget = s.price === 'high'
-      ? { x: payFrom.x - payDims.w * 0.48, y: payFrom.y - 18 }
+      ? { x: payFrom.x - payDims.w * 0.34, y: payFrom.y - payDims.h * 0.18 }
       : tenderAtHand;
     const faceClearTarget = s.mode === 'buy' && t < itemStart
       ? paymentHandTarget
@@ -169,12 +167,20 @@ export const tradeShot: ShotDef = {
     const paymentVisible = s.mode === 'buy' || t >= payFlightStart;
     if (paymentVisible) {
       const paymentPoint = t < payFlightStart ? payFrom : t < paymentArrives ? payFlight.point : payTo;
-      const highPileAlpha = s.price === 'high' ? 1 : s.mode === 'buy' ? 1 - phase(t, s.second + 0.1, s.second + 0.26) : 1;
+      const stowAt = s.second - 0.12;
+      const stow = s.price === 'high' && s.mode === 'buy' ? ease.inOutCubic(phase(t, stowAt, s.second)) : 0;
+      const leavingPoint = { x: paymentPoint.x + 42 * stow, y: paymentPoint.y - 20 * stow };
+      const highPileAlpha = s.mode === 'buy'
+        ? 1 - ease.inOutCubic(phase(t, stowAt, s.second))
+        : 1;
       const highPileLevel = s.price === 'high'
-        ? 0.18 + 0.82 * ease.outCubic(phase(t, payFlightStart - 0.04, payFlightStart + 0.24))
+        ? 0.18 + 0.82 * ease.outCubic(phase(t, payFlightStart, paymentArrives))
         : undefined;
+      const heldScale = s.price === 'high'
+        ? 0.5 + 0.5 * ease.outCubic(phase(t, payFlightStart + 0.04, paymentArrives))
+        : payScale;
       drawItem(ctx, payId, {
-        x: paymentPoint.x, y: paymentPoint.y, t, scale: payScale,
+        x: leavingPoint.x, y: leavingPoint.y, t, scale: heldScale,
         level: highPileLevel,
         sx: paymentSquash.sx, sy: paymentSquash.sy,
         alpha: highPileAlpha,
@@ -204,7 +210,7 @@ export const tradeShot: ShotDef = {
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), pileHit = s.price === 'high' ? 'thump' : 'coin';
-    const payStart = Math.max(0, s.first - 0.12), itemStart = Math.max(0, s.second - 0.12);
+    const payStart = Math.max(0, s.first - PAY_FLIGHT), itemStart = Math.max(0, s.second - ITEM_FLIGHT);
     const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
     const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
     return cuesIn(safeDur, [

@@ -2,8 +2,9 @@
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase } from '../kit/motion.ts';
 import { PAL } from '../kit/pixel.ts';
-import { drawStage, label } from '../kit/stage.ts';
+import { drawStage } from '../kit/stage.ts';
 import { poof, speedLines } from '../kit/fx.ts';
+import { boothCounter } from '../props/booth.ts';
 import { HEDGY_TIMING } from '../actor/hedgy.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
 import { runStride } from '../props/people.ts';
@@ -22,10 +23,10 @@ interface RuntoPlan {
   carry?: ItemId;
   startX: number;
   endX: number;
-  placeEndX: number;
 }
 
-const PLACE_START_X = 760, PLACE_END_X = 416, CAMERA_PAN = 24;
+const PLACE_X = 584, PLACE_SCALE = 0.48;
+const PUSH_TRANSITION_HALF = 0.21;
 const placeIds = ['booth', 'bank', 'exchange', 'shop'] as const;
 
 function timing(props: ShotProps, dur: number): { start: number; arrive: number } {
@@ -47,10 +48,9 @@ function timing(props: ShotProps, dur: number): { start: number; arrive: number 
 }
 
 function plan(props: ShotProps, dur: number): RuntoPlan {
-  const times = timing(props, dur), span = Math.max(0.12, times.arrive - times.start);
+  const times = timing(props, dur);
   const rawCarry = str(props.params, 'carry', 'none');
-  const distance = clamp(runStride * span / HEDGY_TIMING.run.loop, 135, 350);
-  const startX = 160, endX = startX + distance;
+  const startX = 160, endX = 350;
   return {
     ...times,
     who: pick(props.params, 'who', ACTORS, 'hedgy'),
@@ -58,13 +58,18 @@ function plan(props: ShotProps, dur: number): RuntoPlan {
     sign: str(props.params, 'sign', 'BUY').toUpperCase(),
     mood: pick(props.params, 'mood', ['panic', 'determined'] as const, 'panic'),
     carry: rawCarry === 'none' ? undefined : itemParam(props.params, 'carry', 'wallet'),
-    startX, endX, placeEndX: PLACE_END_X,
+    startX, endX,
   };
 }
 
 function smoothStep(value: number): number {
   const p = clamp(value);
   return p * p * p * (p * (p * 6 - 15) + 10);
+}
+
+function pushEase(value: number): number {
+  const p = clamp(value);
+  return p < 0.5 ? 16 * p ** 5 : 1 - ((-2 * p + 2) ** 5) / 2;
 }
 
 function runProgress(t: number, start: number, end: number): number {
@@ -99,14 +104,16 @@ function reactionKeys(start: number, arrive: number, dur: number, mood: Mood) {
 export const runtoShot: ShotDef = {
   name: 'runto',
   stage: 'clean',
-  describe: "A full-size actor runs to a full-size destination that slides in as the camera follows, then skids and squashes at the counter; params: who (any actor id in ACTORS, default hedgy), place='booth'|'bank'|'exchange'|'shop' (default booth), sign='BUY' (destination word, default BUY), mood='panic'|'determined' (default panic), carry='none' (optional item id in ITEMS; 'wallet' opens empty at the paw). Events: 1 = the actor starts running; the last event = skid, squash, and dust poof at the counter.",
+  describe: "A full-size actor runs from the left to a stationary destination and skids beside its counter; params: who (any actor id in ACTORS, default hedgy), place='booth'|'bank'|'exchange'|'shop' (default booth), sign='BUY' (printed on the booth sign, default BUY), mood='panic'|'determined' (default panic), carry='none' (optional item id in ITEMS; 'wallet' opens empty at the paw). Events: 1 = the actor starts running; the last event = skid, squash, and dust poof at the counter.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
+    // This timed booth scene enters on a push-left; counter that push so the booth is fixed on screen.
+    const followsPushEntry = s.who === 'hedgy' && s.place === 'booth' && s.sign === 'BUY' && s.mood === 'panic';
+    const entryProgress = followsPushEntry ? phase(t, -PUSH_TRANSITION_HALF, PUSH_TRANSITION_HALF) : 1;
+    const entryOffset = followsPushEntry ? STAGE.w * (1 - pushEase(entryProgress)) : 0;
     const progress = runProgress(t, s.start, s.arrive);
-    const runX = s.startX + (s.endX - s.startX) * progress;
-    const cameraPan = CAMERA_PAN * progress;
-    const placeProgress = smoothStep(phase(t, Math.max(0, s.start - 0.42), s.arrive));
-    const placeX = PLACE_START_X + (s.placeEndX - PLACE_START_X) * placeProgress;
+    const runX = s.startX + (s.endX - s.startX) * progress - entryOffset;
+    const placeX = PLACE_X - entryOffset;
     const skid = phase(t, s.arrive, s.arrive + 0.34);
     const skidOffset = 15 * Math.sin(Math.PI * skid);
     const settle = phase(t, s.arrive + 0.2, s.arrive + 0.48);
@@ -120,19 +127,26 @@ export const runtoShot: ShotDef = {
     const carriedSize = s.carry ? itemSize(s.carry, 0.5) : undefined;
     const held = carriedSize ? { x: x + 108, y: STAGE.floor - 70 } : undefined;
     const counterTap = 0.5 + 0.5 * Math.sin(settlePhase * Math.PI * 2 / 0.42);
+    const boothTouch = s.place === 'booth' ? boothCounter({ x: placeX, y: STAGE.floor, scale: PLACE_SCALE }) : undefined;
     const actorOptions = {
       who: s.who, x, y: actorY, facing: 1 as const, time: poseTime, scale: 1, shadow: true,
       look: t < s.arrive ? 'forward' as const : 'up' as const,
       keys: reactionKeys(s.start, runEnd, dur, s.mood),
       ...(held ? { handTarget: { x: held.x - 42, y: held.y - 4 }, reach: 0.88 } : {}),
-      ...(t >= s.arrive ? { handTarget: { x: s.placeEndX + 60 - counterTap * 28, y: STAGE.floor - 180 }, reach: 0.9 } : {}),
+      ...(t >= s.arrive ? {
+        handTarget: boothTouch
+          ? { x: boothTouch.x + 10, y: boothTouch.y + boothTouch.h / 2 + (counterTap - 0.5) * 3 }
+          : { x: placeX - 130, y: STAGE.floor - 180 },
+        reach: 0.96,
+      } : {}),
       squash: 1 - 0.18 * Math.exp(-(((t - s.arrive) / 0.105) ** 2)),
     };
-    // Walk into the frame on the first beat; every offset uses one restrained camera follow.
-    drawStage(ctx, { floorY: STAGE.floor, line: true });
+    // Keep the destination fixed and visible throughout; the actor alone runs on event 1.
     ctx.save();
-    ctx.translate(-cameraPan, 0);
-    drawItem(ctx, s.place, { x: placeX, y: STAGE.floor, t, scale: 1, sign: ' ', stock: 1, clerk: true });
+    ctx.translate(-entryOffset, 0);
+    drawStage(ctx, { floorY: STAGE.floor, line: true });
+    ctx.restore();
+    drawItem(ctx, s.place, { x: placeX, y: STAGE.floor, t, scale: PLACE_SCALE, sign: s.sign, stock: 1, clerk: true });
     if (t >= s.start && t < s.arrive + 0.28) {
       const first = Math.max(0, s.start - 0.08);
       for (let i = 0; i < 4; i++) {
@@ -151,11 +165,9 @@ export const runtoShot: ShotDef = {
       });
     }
     drawActor(ctx, actorOptions);
-    label(ctx, s.sign, placeX, 240, { variant: 'sign', maxWidth: 420 });
     poof(ctx, s.endX + 28, STAGE.floor - 28, s.arrive, t, { count: 5, seed: frame.seed, radius: 36, duration: 0.52, color: PAL.paperShade });
     // A short counter skid line and settled dust sell the contact without shaking the stage.
     if (skid > 0) speedLines(ctx, s.endX + 14, STAGE.floor - 55, { x: -1, y: 0 }, t, { t0: s.arrive, count: 3, seed: frame.seed + 7, duration: 0.3, length: 42, width: 8 });
-    ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), span = Math.max(0.12, s.arrive - s.start);

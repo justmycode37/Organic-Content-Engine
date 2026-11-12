@@ -19,7 +19,7 @@ interface Plan {
   mode: 'vise' | 'walls';
 }
 
-const VISE = { x: STAGE.centre, left: 24, top: 632, bedTop: 656, width: 672, jawHeight: 150, jawStart: 135, jawTravel: 210 };
+const VISE = { x: STAGE.centre, left: 24, top: 632, bedTop: 656, width: 672, jawHeight: 150, jawStart: 175, jawTravel: 210 };
 const WALL_LINE = [
   { x: 42, y: 810 }, { x: 192, y: 790 }, { x: 360, y: 765 }, { x: 528, y: 735 }, { x: 678, y: 700 },
 ];
@@ -166,9 +166,10 @@ function closeAt(t: number, s: Plan): number {
 }
 
 function actorKeys(s: Plan) {
+  const pressedExpression = s.mood === 'happy' ? 'happy' as const : 'shocked' as const;
   return [
     { at: 0, pose: 'shock' as const, expression: s.mood === 'happy' ? 'happy' as const : s.mood === 'shocked' ? 'shocked' as const : 'worried' as const },
-    ...s.hits.map(at => ({ at, pose: 'squeezed' as const, expression: s.mood === 'happy' ? 'happy' as const : 'shocked' as const })),
+    ...s.hits.map(at => ({ at, pose: 'sweat' as const, expression: pressedExpression })),
   ];
 }
 
@@ -186,13 +187,15 @@ function drawActorWithAlpha(ctx: Frame['ctx'], s: Plan, who: ActorId, x: number,
   const strain = followThrough(t, s);
   const lastHit = s.hits[s.steps - 1]!;
   const trembleOn = ease.outCubic(phase(t, lastHit + 0.12, lastHit + 0.36));
-  const tremble = t > lastHit + 0.12 ? Math.sin(t * Math.PI * 2 / 0.2 + x) * 3.8 * trembleOn : 0;
-  const lift = t > lastHit + 0.12 ? Math.cos(t * Math.PI * 2 / 0.27 + x) * 2.2 * trembleOn : 0;
+  const tremble = t > lastHit + 0.12 ? Math.sin(t * Math.PI * 2 / 0.2 + x) * 2.8 * trembleOn : 0;
+  const lift = t > lastHit + 0.12 ? Math.cos(t * Math.PI * 2 / 0.27 + x) * 1.8 * trembleOn : 0;
   ctx.save();
   ctx.globalAlpha *= alpha;
   drawActor(ctx, {
     who, x: x + tremble, y: y + lift, facing, scale: 1, time: t, look: 'up', keys: actorKeys(s),
-    squash: 1 - pressure * 0.13 - impactSquash(t, s) * 0.25 - strain * 0.055,
+    // Preserve the animal silhouette: at most 18% vertical squash and about
+    // 10% horizontal spread, with the vise doing the visible pressing.
+    squash: Math.max(0.82, 1 - pressure * 0.08 - impactSquash(t, s) * 0.06 - strain * 0.035),
   });
   ctx.restore();
 }
@@ -206,7 +209,7 @@ function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, feetY: number, pres
   }
 
   // Two full-size victims keep a clear gap between their faces throughout the squeeze.
-  const leftX = 230, rightX = 490;
+  const leftX = 205, rightX = 455;
   drawActorWithAlpha(ctx, s, actors[0]!, leftX, feetY, -1, t, 1, pressure);
   if (actors.length === 2) {
     drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1, pressure);
@@ -219,40 +222,50 @@ function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, feetY: number, pres
   if (t >= changeAt + 0.12) drawActorWithAlpha(ctx, s, actors[2]!, rightX, feetY, 1, t, enter, pressure);
 }
 
-function drawSweat(ctx: Frame['ctx'], x: number, feetY: number, t: number, pressure: number, facingSide: 1 | -1) {
+function drawSweat(ctx: Frame['ctx'], x: number, feetY: number, t: number, pressure: number, facingSide: 1 | -1, start: number) {
   if (pressure < 0.12) return;
-  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 / 0.66 + facingSide);
-  const atX = x + facingSide * 74;
-  const atY = feetY - 235 + pulse * 9;
-  drawSprite(ctx, SWEAT, atX, atY, { scale: 0.82 + pulse * 0.12, rot: facingSide * 0.18, alpha: 0.7 + pulse * 0.3 });
-  if (pressure > 0.48) drawSprite(ctx, SWEAT, atX - facingSide * 14, atY + 34 + pulse * 8, { scale: 0.58, rot: -facingSide * 0.2, alpha: 0.45 + pulse * 0.25 });
+  if (t < start) return;
+      const atX = x + facingSide * 82;
+  for (let i = 0; i < 2; i++) {
+    const p = ((t - start + i * 0.24) % 0.48) / 0.48;
+    const atY = feetY - 248 + p * 64;
+    drawSprite(ctx, SWEAT, atX + facingSide * p * 8, atY, {
+      scale: (i === 0 ? 0.86 : 0.62) * (1 - p * 0.12),
+      rot: facingSide * (0.18 + p * 0.3), alpha: 0.8 * (1 - p * 0.48),
+    });
+  }
 }
 
-function drawVise(ctx: Frame['ctx'], t: number, close: number, trembleAt: number) {
+const VISE_SCALE = 0.84;
+function drawViseBack(ctx: Frame['ctx']) {
+  drawSprite(ctx, SCREW, VISE.x + 225, 112, { anchor: [0.5, 0] });
+  drawSprite(ctx, LOWER_BED, VISE.x, VISE.top, { anchor: [0.5, 0], scale: VISE_SCALE });
+}
+
+function drawViseJaw(ctx: Frame['ctx'], t: number, close: number, trembleAt: number) {
   const jawY = VISE.jawStart + close * VISE.jawTravel;
-  drawSprite(ctx, SCREW, VISE.x + 275, 112, { anchor: [0.5, 0] });
-  drawSprite(ctx, LOWER_BED, VISE.x, VISE.top, { anchor: [0.5, 0] });
-  drawSprite(ctx, TOP_JAW, VISE.x, jawY);
+  drawSprite(ctx, TOP_JAW, VISE.x, jawY, { scale: VISE_SCALE });
   const ratchet = Math.sin(t * Math.PI * 2 / 0.12) * phase(t, trembleAt, trembleAt + 0.24);
-  drawSprite(ctx, HANDLE, VISE.x + 275, jawY, { rot: close * Math.PI * 4 + ratchet * 0.03 });
+  drawSprite(ctx, HANDLE, VISE.x + 225, jawY, { rot: close * Math.PI * 4 + ratchet * 0.03 });
 }
 
 function drawStamp(ctx: Frame['ctx'], s: Plan, t: number) {
   if (!s.word) return;
-  const at = s.hits[s.steps - 1]! + 0.14;
-  const arrive = ease.outBack(phase(t, at, at + 0.22));
-  const pulse = t >= at + 0.22 ? 0.91 + 0.09 * Math.sin((t - at - 0.22) * Math.PI * 2 / 0.64) : 1;
-  const pop = arrive * pulse;
+  const at = s.hits[s.steps - 1]!;
+  if (t < at - 0.12) return;
+  const land = ease.outCubic(phase(t, at - 0.12, at));
+  const pulse = t >= at ? 1 + 0.055 * Math.sin((t - at) * Math.PI * 2 / 0.64) : 1;
+  const pop = (0.48 + land * 0.6) * pulse;
   label(ctx, s.word, STAGE.centre, 145, {
     variant: 'stamp', maxWidth: 520,
-    rot: -0.018 + (1 - clamp(arrive)) * 0.025 + (pulse - 1) * 0.18, pop,
+    rot: -0.11 + land * 0.092 + (pulse - 1) * 0.18, pop,
   });
 }
 
 export const squeezeShot: ShotDef = {
   name: 'squeeze',
   stage: 'clean',
-  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The threaded screw turns on each step while victims flatten, widen their eyes and sweat, then a red-on-paper word stamp pulses through the cut. walls mode uses a rising price floor and descending bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3). Events: 1–3 = successive pressure steps.',
+  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The screw turns, a short red price line climbs beside the vise, and victims react with wide eyes, sweat and a small tremble while the jaw presses their quills; a red-on-paper word stamp lands on the last event and pulses through the cut. walls mode uses a rising price floor and descending bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3). Events: 1–3 = successive pressure steps.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const close = closeAt(t, s), pressure = clamp((close - 0.035) / 0.835);
@@ -269,7 +282,7 @@ export const squeezeShot: ShotDef = {
           ...(showWatcher ? [{ x: 112, y: STAGE.floor + 4, w: 190 }] : []),
         ],
       });
-      drawVise(ctx, t, close, s.hits[s.steps - 1]! + 0.12);
+      drawViseBack(ctx);
 
       if (s.victim.kind === 'item') {
         const strain = followThrough(t, s);
@@ -281,15 +294,15 @@ export const squeezeShot: ShotDef = {
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
         const dims = itemSize(s.victim.item, 1);
         const itemX = showWatcher && dims.w <= 420 ? STAGE.centre + 65 : STAGE.centre;
-        const itemScaleY = Math.max(0.28, Math.min(1 - pressure * 0.34 - strain * 0.06, (gap - 18) / dims.h));
+        const itemScaleY = Math.max(0.78, Math.min(1 - pressure * 0.18 - strain * 0.03, (gap - 18) / dims.h));
         drawItem(ctx, s.victim.item, {
           x: itemX + itemShakeX, y: (jawBottom + bedTop) / 2 + itemShakeY, t, scale: 1,
           rot: Math.sin(t * Math.PI * 2 / 0.3) * 0.04 * rattle,
-          sx: 1 + pressure * 0.08 + (1 - hit.sx) * 0.08 + rattle * 0.025,
-          sy: itemScaleY + (1 - hit.sx) * 0.08 + strain * 0.03 + Math.sin(t * Math.PI * 2 / 0.24) * 0.025 * rattle,
+          sx: Math.min(1.15, 1 + pressure * 0.08 + (1 - hit.sx) * 0.08 + rattle * 0.025),
+          sy: Math.max(0.78, itemScaleY + (1 - hit.sx) * 0.04 + strain * 0.02 + Math.sin(t * Math.PI * 2 / 0.24) * 0.015 * rattle),
         });
         if (showWatcher && dims.w <= 420) drawActor(ctx, {
-          who: s.who, x: 112, y: STAGE.floor, facing: 1, look: 'forward', scale: 1, time: t,
+          who: s.who, x: 135, y: STAGE.floor, facing: 1, look: 'forward', scale: 1, time: t,
           keys: [
             { at: 0, pose: 'think', expression: 'worried' },
             { at: s.hits[0]!, pose: 'sweat', expression: 'worried' },
@@ -298,12 +311,6 @@ export const squeezeShot: ShotDef = {
         });
       } else {
         actorCluster(ctx, s, t, bedTop, pressure);
-        if (s.victim.actors.length > 1) {
-          drawSweat(ctx, 230, bedTop, t, pressure, -1);
-          drawSweat(ctx, 490, bedTop, t, pressure, 1);
-        } else {
-          drawSweat(ctx, STAGE.centre, bedTop, t, pressure, 1);
-        }
       }
 
     } else {
@@ -320,15 +327,11 @@ export const squeezeShot: ShotDef = {
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
         drawItem(ctx, s.victim.item, {
           x: itemX, y: itemY, t, scale: 1,
-          sx: 1 + pressure * 0.08,
-          sy: 1 - pressure * 0.34 - strain * 0.06 + (1 - hit.sx) * 0.08,
+          sx: Math.min(1.15, 1 + pressure * 0.08),
+          sy: Math.max(0.78, 1 - pressure * 0.18 - strain * 0.03 + (1 - hit.sx) * 0.04),
         });
       } else {
         actorCluster(ctx, s, t, STAGE.floor, pressure);
-        if (s.victim.actors.length > 1) {
-          drawSweat(ctx, 230, STAGE.floor, t, pressure, -1);
-          drawSweat(ctx, 490, STAGE.floor, t, pressure, 1);
-        } else drawSweat(ctx, STAGE.centre, STAGE.floor, t, pressure, 1);
       }
 
       if (showWatcher) drawActor(ctx, {
@@ -337,6 +340,26 @@ export const squeezeShot: ShotDef = {
       });
     }
 
+    if (s.mode === 'vise') {
+      drawViseJaw(ctx, t, close, s.hits[s.steps - 1]! + 0.12);
+      const sweatStart = s.hits[0]! + 0.18;
+      if (s.victim.kind === 'actors') {
+        if (s.victim.actors.length > 1) {
+          drawSweat(ctx, 205, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, -1, sweatStart);
+          drawSweat(ctx, 455, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, 1, sweatStart);
+        } else drawSweat(ctx, STAGE.centre, VISE.bedTop, t, pressure, 1, sweatStart);
+      }
+      const priceProgress = ease.outCubic(phase(t, s.hits[0]!, s.hits[1] ?? s.hits[0]! + 0.48));
+      priceLine(ctx, [
+        { x: 664, y: 626 }, { x: 674, y: 588 }, { x: 682, y: 548 },
+      ], { width: 24, progress: priceProgress, head: 'arrow', color: PAL.UP });
+    } else if (s.victim.kind === 'actors') {
+      const sweatStart = s.hits[0]! + 0.18;
+      if (s.victim.actors.length > 1) {
+        drawSweat(ctx, 205, STAGE.floor, t, pressure, -1, sweatStart);
+        drawSweat(ctx, 455, STAGE.floor, t, pressure, 1, sweatStart);
+      } else drawSweat(ctx, STAGE.centre, STAGE.floor, t, pressure, 1, sweatStart);
+    }
     drawStamp(ctx, s, t);
   },
   cues(props: ShotProps, dur: number): Cue[] {
@@ -345,8 +368,8 @@ export const squeezeShot: ShotDef = {
     return cuesIn(safeDur, [
       cue(0.02, 'creak', 0.7, hitX),
       ...s.hits.map((at, index) => cue(at, 'clunk', index === s.hits.length - 1 ? 1.45 : 1.2, hitX)),
-      cue(s.hits[s.steps - 1]! + 0.13, 'whump', 1.15, hitX),
-      ...(s.word ? [cue(s.hits[s.steps - 1]! + 0.14, 'stamp', 1.25, STAGE.centre)] : []),
+      cue(s.hits[s.steps - 1]!, 'whump', 1.15, hitX),
+      ...(s.word ? [cue(s.hits[s.steps - 1]!, 'stamp', 1.25, STAGE.centre)] : []),
     ]);
   },
 };

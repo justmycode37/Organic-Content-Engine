@@ -165,13 +165,19 @@ function stepProgress(t: number, times: readonly number[], dur: number, hasEvent
 
   for (let i = 0; i < times.length; i++) {
     const at = times[i]!;
-    const start = Math.max(0, at - 0.24);
-    const duration = lineStepDuration(times, i, dur);
+    const start = i === 0 ? at : Math.max(0, at - 0.24);
+    const duration = i === 0 ? stepDuration(times, i, dur) : lineStepDuration(times, i, dur);
     const progress = phase(t, start, start + duration);
     amount = i + ease.inOutCubic(progress);
     if (progress < 1) break;
   }
   return amount / Math.max(1, times.length);
+}
+
+function barProgress(t: number, times: readonly number[], dur: number, hasEvents: boolean): number {
+  if (!hasEvents || !times.length) return stepProgress(t, times, dur, false);
+  const at = times[times.length - 1]!;
+  return phase(t, at, at + stepDuration(times, times.length - 1, dur));
 }
 
 function chartPath(s: PricePlan): ChartPath {
@@ -251,6 +257,7 @@ export const priceShot: ShotDef = {
     const size = itemSize(s.item, 0.5);
     const path = chartPath(s);
     const stepped = stepProgress(t, s.times, dur, s.hasEvents);
+    const barFill = barProgress(t, s.times, dur, s.hasEvents);
     const desiredDistance = path.seed + stepped * s.steps * path.step;
     const pathProgress = clamp(desiredDistance / path.total);
     // priceLine eases internally; invert that easing so narration timing is stable.
@@ -293,7 +300,7 @@ export const priceShot: ShotDef = {
       ctx.save();
       ctx.translate(578, 815);
       ctx.scale(1, pulse);
-      bar(ctx, -118, -19, 236, 38, { progress: stepped, color: s.barColor, background: PAL.grey5 });
+      bar(ctx, -118, -19, 236, 38, { progress: barFill, color: s.barColor, background: PAL.grey5 });
       ctx.restore();
     }
   },

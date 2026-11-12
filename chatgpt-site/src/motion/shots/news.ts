@@ -45,7 +45,7 @@ function oneLine(text: string, maxWidth: number): string {
 }
 
 function plan(props: ShotProps, dur: number) {
-  const [announceAt, reactAt] = beats(props, dur, [0.34, 0.72]);
+    const [announceAt, reactAt] = beats(props, dur, [0.34, 0.72]);
   return {
     announceAt: announceAt!,
     reactAt: Math.min(dur, Math.max(reactAt!, announceAt! + 0.24)),
@@ -82,12 +82,12 @@ export const newsShot: ShotDef = {
   describe: "A full-size actor reacts beside a full-size poster, megaphone, or phone announcement; params: medium='poster'|'megaphone'|'phone' (default poster), word='REUNION' (headline), art='band'|'star'|'megaphone'|'chart' (default band), who (any actor id in ACTORS, default hedgy), mood='shocked'|'happy'|'worried' (default shocked), label='' (optional short paper label below the scene). Events: 1 = the medium reveals its word or lights up; 2 = the actor recoils and reacts in the chosen mood.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const revealStart = Math.max(0, Math.min(s.announceAt - 0.44, 0.2));
-    const revealDuration = Math.max(0.22, Math.min(1, dur * 0.62));
+    const revealStart = 0;
+    const revealDuration = Math.min(0.24, dur);
     const revealEnd = revealStart + revealDuration;
     const revealProgress = phase(t, revealStart, revealEnd);
     const reveal = s.medium === 'poster' ? revealProgress : ease.outCubic(revealProgress);
-    const headline = ease.outBack(phase(t, s.announceAt - 0.04, s.announceAt + 0.2));
+    const headline = ease.outBack(phase(t, s.reactAt - 0.12, s.reactAt));
     const actorX = tween(t, s.reactAt - 0.1, 0.24, ACTOR_X, ACTOR_X - 10, ease.outBack);
     const actorJump = 38 * Math.sin(Math.PI * phase(t, s.reactAt, s.reactAt + 0.38));
     const settleAge = Math.max(0, t - s.reactAt - 0.18);

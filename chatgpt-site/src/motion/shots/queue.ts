@@ -1,7 +1,7 @@
 // queue — each buyer gets a turn while a bold market price ratchets one step.
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
-import { arc, bob, clamp, ease, lerp, phase, tween } from '../kit/motion.ts';
+import { arc, bob, clamp, ease, lerp, phase } from '../kit/motion.ts';
 import { PAL } from '../kit/pixel.ts';
 import { drawStage, priceLine } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
@@ -26,11 +26,14 @@ const PLACE_X = 630;
 const BUYER_STEP_X = 480;
 const EXIT_X = -190;
 const ITEM_FLIGHT = 0.22;
-const EXIT_DELAY = 0.10;
-const EXIT_DURATION = 0.58;
+const EXIT_DELAY = 0.02;
+const EXIT_DURATION = 0.66;
+const EXIT_PASS_DURATION = 0.22;
+const EXIT_DEPTH = 135;
 const TURN_DURATION = 0.30;
-const SHIFT_DELAY = 0.08;
-const SHIFT_DURATION = 0.24;
+const SHIFT_DELAY = 0.23;
+const SHIFT_DURATION = 0.20;
+const BUYER_SCALE = 0.74;
 const FLOOR = STAGE.floor;
 const QUEUE_SLOTS: readonly Slot[] = [
   { x: 480, y: FLOOR },
@@ -122,19 +125,32 @@ function slotAt(index: number): Slot {
   return QUEUE_SLOTS[clamp(index, 0, QUEUE_SLOTS.length - 1)]!;
 }
 
+function shiftStartAt(index: number, times: readonly number[]): number {
+  return times[index]! + SHIFT_DELAY;
+}
+
+function shiftDurationAt(index: number, times: readonly number[]): number {
+  const gap = Math.max(0, (times[index + 1] ?? Infinity) - times[index]!);
+  return Math.min(SHIFT_DURATION, Math.max(0, gap - SHIFT_DELAY));
+}
+
+function shiftEndAt(index: number, times: readonly number[]): number {
+  return shiftStartAt(index, times) + shiftDurationAt(index, times);
+}
+
 /** Later buyers advance one floor position after each completed sale. */
 function queuedPosition(t: number, index: number, times: readonly number[]): Slot {
   let slotIndex = index;
   for (let purchase = 0; purchase < index; purchase++) {
-    const start = times[purchase]! + SHIFT_DELAY;
-    const end = start + SHIFT_DURATION;
+    const start = shiftStartAt(purchase, times);
+    const end = shiftEndAt(purchase, times);
     if (t >= end) {
       slotIndex--;
       continue;
     }
     if (t > start) {
       const from = slotAt(slotIndex), to = slotAt(slotIndex - 1);
-      const p = ease.inOutCubic(phase(t, start, end));
+      const p = phase(t, start, Math.max(start + 0.001, end));
       return { x: lerp(from.x, to.x, p), y: lerp(from.y, to.y, p) };
     }
     break;
@@ -143,7 +159,7 @@ function queuedPosition(t: number, index: number, times: readonly number[]): Slo
 }
 
 function heldGeometry(who: ActorId, x: number, y: number, t: number, item: ItemId, facing: 1 | -1 = 1) {
-  const actor = { who, x, y, facing, time: t, pose: 'hold' as const };
+  const actor = { who, x, y, scale: BUYER_SCALE, facing, time: t, pose: 'hold' as const };
   const face = actorFace(actor), paw = actorPaw(actor), dims = itemSize(item, 0.5);
   const lowY = Math.max(paw.y + 14, face.y + face.r + dims.h / 2 + 12);
   const pawOffset = Math.min(56, dims.w * 0.26);
@@ -189,7 +205,7 @@ export const queueShot: ShotDef = {
 
     for (let i = 0; i < s.crowd.length; i++) {
       const who = s.crowd[i]!, event = s.times[i]!, last = i === s.crowd.length - 1;
-      const previousShiftEnd = i === 0 ? 0 : s.times[i - 1]! + SHIFT_DELAY + SHIFT_DURATION;
+      const previousShiftEnd = i === 0 ? 0 : shiftEndAt(i - 1, s.times);
       const moveStart = i === 0 ? 0 : Math.max(s.times[i - 1]! + SHIFT_DELAY, previousShiftEnd);
       const approachEnd = Math.min(event, moveStart + 0.34);
       const approachFrom = queuedPosition(moveStart, i, s.times);
@@ -202,11 +218,21 @@ export const queueShot: ShotDef = {
       let x = isApproaching ? lerp(approachFrom.x, BUYER_STEP_X, approach) : queued.x;
       let y = isApproaching ? lerp(approachFrom.y, FLOOR, approach) : queued.y;
       if (t >= event) {
-        x = t < exitStart ? BUYER_STEP_X : tween(t, exitStart, EXIT_DURATION, BUYER_STEP_X, EXIT_X, ease.inOutCubic);
-        y = FLOOR;
+        if (t < exitStart) {
+          x = BUYER_STEP_X;
+          y = FLOOR;
+        } else if (t < exitStart + EXIT_PASS_DURATION) {
+          const pass = phase(t, exitStart, exitStart + EXIT_PASS_DURATION);
+          x = lerp(BUYER_STEP_X, QUEUE_SLOTS[1]!.x, pass);
+          y = lerp(FLOOR, FLOOR - EXIT_DEPTH, pass);
+        } else {
+          const exit = phase(t, exitStart + EXIT_PASS_DURATION, exitEnd);
+          x = lerp(QUEUE_SLOTS[1]!.x, EXIT_X, exit);
+          y = FLOOR - EXIT_DEPTH;
+        }
       }
       const presence = t < exitEnd - 0.14 ? 1 : 1 - phase(t, exitEnd - 0.14, exitEnd);
-      const queueFacing: 1 | -1 = i > 0 && t < s.times[i - 1]! + SHIFT_DELAY ? -1 : 1;
+      const queueFacing: 1 | -1 = i > 0 && t < previousShiftEnd ? -1 : 1;
       const facing: 1 | -1 = t < exitStart ? queueFacing : -1;
       const oldHeld = heldGeometry(who, x, y, t, s.item, 1);
       const turnedHeld = heldGeometry(who, x, y, t, s.item, -1);
@@ -218,7 +244,7 @@ export const queueShot: ShotDef = {
       };
       const heldAtStep = heldGeometry(who, BUYER_STEP_X, FLOOR, t, s.item);
       const safeSourceX = clamp(service.x - 42, held.dims.w / 2 + 24, STAGE.w - held.dims.w / 2 - 24);
-      const from = { x: safeSourceX, y: FLOOR - 145 };
+      const from = { x: safeSourceX, y: heldAtStep.center.y };
       const itemU = ease.inOutCubic(phase(t, itemStart, itemArrives));
       const flightTarget = heldAtStep.center;
       const target = { x: held.center.x, y: held.center.y + bob(t, 1.45, 3) };
@@ -239,7 +265,7 @@ export const queueShot: ShotDef = {
         keys.push({ at: shuffleAt + 0.18, pose: 'think', expression: 'determined' });
       }
       keys.push({ at: Math.max(0, event - 0.12), pose: 'receive', expression: 'happy' });
-      keys.push({ at: event + 0.08, pose: 'hold', expression: 'happy' });
+      keys.push({ at: event, pose: 'hold', expression: 'happy' });
       keys.push({ at: exitStart, pose: 'walk', expression: 'happy' });
       if (last) keys.push({ at: Math.max(exitStart + 0.24, dur - 0.12), pose: 'lookup', expression: 'happy' });
       keys.sort((a, b) => a.at - b.at);
@@ -247,7 +273,7 @@ export const queueShot: ShotDef = {
       ctx.save();
       ctx.globalAlpha *= presence;
       drawActor(ctx, {
-        who, x, y, scale: 1, facing, time: t, keys,
+        who, x, y, scale: BUYER_SCALE, facing, time: t, keys,
         look: t < event ? 'up' : last ? 'up' : 'down',
         handTarget: t >= Math.max(0, event - 0.12) ? held.hand : undefined,
         reach: t >= Math.max(0, event - 0.12) ? 1 : 0,

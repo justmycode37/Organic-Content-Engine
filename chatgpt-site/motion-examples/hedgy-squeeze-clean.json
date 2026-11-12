@@ -125,7 +125,8 @@
     "timer": "clock",
     "who": "hedgy",
     "mood": "neutral",
-    "item": "none"
+    "item": "iou",
+    "fade": "hype"
    },
    "transition": "cut"
   },

@@ -56,12 +56,13 @@ interface StorePlan {
 }
 
 function plan(props: ShotProps, dur: number): StorePlan {
-  const [putRaw, closeRaw] = beats(props, dur, [0.31, 0.74]);
-  const putAt = putRaw ?? dur * 0.31;
-  const closeAt = Math.min(dur, Math.max(closeRaw ?? dur * 0.74, putAt + Math.min(0.48, dur * 0.28)));
-  const travel = Math.min(0.46, Math.max(0.28, (closeAt - putAt) * 0.54));
+  const [landedRaw, closeRaw] = beats(props, dur, [0.31, 0.74]);
+  const landedAt = landedRaw ?? dur * 0.31;
+  const closeAt = Math.min(dur, Math.max(closeRaw ?? dur * 0.74, landedAt + Math.min(0.24, dur * 0.14)));
+  const travel = Math.min(0.36, Math.max(0.16, closeAt - landedAt - 0.08));
+  const putAt = Math.max(0, landedAt - travel);
   return {
-    putAt, closeAt, travel, landedAt: Math.min(dur, putAt + travel),
+    putAt, closeAt, travel: landedAt - putAt, landedAt,
     container: pick(props.params, 'container', CONTAINERS, 'safe'),
     item: itemParam(props.params, 'item', 'cash'),
     who: pick(props.params, 'who', ACTORS, 'broker'),
@@ -135,7 +136,7 @@ export const storeShot: ShotDef = {
     const vanish = ease.inOutCubic(phase(t, s.landedAt - 0.06, s.landedAt + 0.12));
     const itemSquash = squash(t, s.landedAt, 0.16, 0.18);
     const opening = ease.outCubic(phase(t, 0, Math.min(0.45, s.putAt + 0.04)));
-    const closing = ease.inOutCubic(phase(t, s.closeAt - 0.24, s.closeAt + 0.08));
+    const closing = ease.inOutCubic(phase(t, s.closeAt - 0.24, s.closeAt));
     const openness = opening * (1 - closing);
     const stored = ease.outCubic(phase(t, s.landedAt, s.closeAt));
 
@@ -188,7 +189,7 @@ export const storeShot: ShotDef = {
     }
 
     if (s.label) label(ctx, s.label.toUpperCase(), g.x, g.labelY, { variant: 'tag', maxWidth: 520 });
-    const lockP = ease.outCubic(phase(t, s.closeAt + 0.04, s.closeAt + 0.24));
+    const lockP = ease.outCubic(phase(t, s.closeAt - 0.12, s.closeAt));
     if (s.container !== 'safe' && lockP > 0) {
       const lockY = s.container === 'crate' ? g.lock.y - (1 - lockP) * 28 : g.lock.y - (1 - lockP) * 22;
       drawItem(ctx, 'padlock', { x: g.lock.x, y: lockY, t, scale: g.lockScale, shut: lockP, alpha: lockP });
@@ -197,7 +198,7 @@ export const storeShot: ShotDef = {
       drawItem(ctx, 'padlock', { x: g.lock.x, y: g.lock.y - (1 - lockP) * 18, t, scale: g.lockScale, shut: lockP, alpha: lockP });
     }
 
-    const lockHit = s.closeAt + 0.08;
+    const lockHit = s.closeAt;
     ring(ctx, g.lock.x, g.lock.y, lockHit, t, { r: 46, duration: 0.34, width: 8, color: PAL.gold2 });
     if (t >= s.closeAt && t < s.closeAt + 0.55) sparks(ctx, g.lock.x, g.lock.y, s.closeAt + 0.14, t, { count: 4, seed: frame.seed, duration: 0.42, color: PAL.gold2, size: 4 });
   },
@@ -209,9 +210,9 @@ export const storeShot: ShotDef = {
       cue(0.04, 'creak', 0.55, g.x),
       cue(s.putAt, 'swish', 0.9, ACTOR_X + 120),
       cue(s.landedAt, 'thud', 1.35, g.entry.x),
-      cue(s.closeAt - 0.06, 'creak', 0.75, g.x),
-      cue(s.closeAt + 0.07, 'clunk', 1.5, g.x),
-      cue(s.closeAt + 0.24, 'snap', 1.2, g.lock.x),
+      cue(s.closeAt - 0.12, 'creak', 0.75, g.x),
+      cue(s.closeAt, 'clunk', 1.5, g.x),
+      cue(s.closeAt + 0.04, 'snap', 1.2, g.lock.x),
     ]);
   },
 };

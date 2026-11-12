@@ -23,8 +23,10 @@ interface DemandPlan {
   outcome: Outcome;
 }
 
-const FROM_X = 180, TO_X = 575, BUBBLE_X = 360, BUBBLE_Y = 236;
+const FROM_X = 210, TO_X = 575, BUBBLE_X = 360, BUBBLE_Y = 236;
 const PAY_FROM = { x: 475, y: 690 }, PAY_TO = { x: 275, y: 680 }, PAY_TRAVEL = 0.46;
+const WALLET_SCALE = 0.75;
+const PUSH_TRANSITION_HALF = 0.21;
 
 const EMPTY_WALLET_INTERIOR = (() => {
   const g = new Grid(56, 32);
@@ -72,10 +74,13 @@ const WALLET_FLAP = (() => {
   return g.sprite('demand:plain-wallet-flap');
 })();
 
-function drawEmptyWallet(ctx: Frame['ctx'], x: number, y: number, open: number, flip: number, wobble: number): void {
+function drawEmptyWallet(ctx: Frame['ctx'], x: number, y: number, open: number, flip: number, wobble: number, scale: number): void {
   const eased = open * open * (3 - 2 * open);
   ctx.save();
   ctx.translate(x, y);
+  // The drawn empty-wallet art is 56 cells wide while the canonical wallet is
+  // 44; counter-scale that extra width so 0.75 matches the hero prop's size.
+  ctx.scale(scale * 0.8, scale);
   ctx.rotate(wobble);
   // Pitch around the wallet's long edge so the empty interior flips without
   // sweeping across either character's face.
@@ -141,12 +146,18 @@ function drawWantedBubble(ctx: Frame['ctx'], s: DemandPlan, t: number, pop: numb
 export const demandShot: ShotDef = {
   name: 'demand',
   stage: 'clean',
-  describe: "A full-size demander steps in with an open-palm thrust toward a paper bubble showing the wanted item and word, while the responder opens a bifold wallet to show its empty pockets; params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = demander thrusts and shows the wanted item; 2 = responder flips and shakes the empty wallet, pays with the item, or waves the demander off.",
+  describe: "A full-size demander thrusts an open palm toward a paper bubble showing the wanted item and word; the responder opens a smaller bifold wallet to reveal empty pockets; params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = demander thrusts and shows the wanted item; 2 = responder flips and shakes the empty wallet, pays with the item, or waves the demander off.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const stepStart = Math.max(0, s.demandAt - 0.62);
-    const step = tween(t, stepStart, Math.max(0.01, s.demandAt - stepStart), 0, 1, ease.outCubic);
-    const fromX = 112 + (FROM_X - 112) * step;
+    const stepStart = Math.max(0, s.demandAt - 0.14);
+    // In the timed reel, this broker-to-Hedgy cash/MORE ask leads into runto's push-left.
+    const followsRuntoPush = s.from === 'broker' && s.to === 'hedgy' && s.want === 'cash' && s.word === 'MORE' && s.outcome === 'empty';
+    const exitProgress = followsRuntoPush ? phase(t, dur - PUSH_TRANSITION_HALF, dur + PUSH_TRANSITION_HALF) : 0;
+    const exitPush = exitProgress < 0.5
+      ? 16 * exitProgress ** 5
+      : 1 - ((-2 * exitProgress + 2) ** 5) / 2;
+    const exitHold = STAGE.w * exitPush;
+    const fromX = FROM_X;
     const answer = phase(t, s.answerAt, s.answerAt + 0.26);
     const speechIn = ease.outCubic(phase(t, s.demandAt - 0.02, s.demandAt + 0.3));
     const speechOut = s.outcome === 'empty' ? 1 : 1 - phase(t, s.answerAt + 0.52, s.answerAt + 0.82);
@@ -160,7 +171,7 @@ export const demandShot: ShotDef = {
     const thrustPulse = Math.sin(talkPhase * Math.PI * 2 / 0.46) * 5 * phase(t, s.demandAt, dur);
     const fromKeys: HedgyKey[] = [
       { at: 0, pose: 'idle' as const, expression: 'neutral' as const },
-      { at: stepStart, pose: 'walk' as const, expression: 'determined' as const },
+      { at: stepStart, pose: 'tap' as const, expression: 'determined' as const },
       { at: s.demandAt, pose: 'push' as const, expression: 'determined' as const },
       { at: Math.min(dur, s.demandAt + 0.24), pose: 'point' as const, expression: 'determined' as const },
       { at: Math.min(dur, s.demandAt + 0.62), pose: 'push' as const, expression: 'determined' as const },
@@ -180,7 +191,7 @@ export const demandShot: ShotDef = {
     }
     const fromTarget = s.outcome === 'pay' && t >= s.answerAt
       ? { x: payPos.x - 28, y: payPos.y + 18 }
-      : { x: 345 + thrustPulse, y: 640 };
+      : { x: 355 + thrustPulse, y: 640 };
     const fromActor = {
       who: s.from, x: fromX, y: STAGE.floor, facing: 1 as const, time: t, scale: 1, shadow: true,
       look: 'forward' as const, keys: fromKeys, handTarget: fromTarget,
@@ -223,27 +234,32 @@ export const demandShot: ShotDef = {
       }
     }
 
-    const walletX = 490, walletY = 720;
-    const open = ease.outCubic(phase(t, s.answerAt, s.answerAt + 0.34));
-    const turn = ease.inOutCubic(phase(t, s.answerAt + 0.18, s.answerAt + 0.56));
-    const walletWobble = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.42) * 0.18 : 0;
-    const walletBob = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.46) * 11 : 0;
+    const walletX = 490, walletY = 690;
+    const open = ease.outCubic(phase(t, s.answerAt, s.answerAt + 0.2));
+    const turn = ease.inOutCubic(phase(t, s.answerAt, s.answerAt + 0.28));
+    const shakeOn = ease.outCubic(phase(t, s.answerAt, s.answerAt + 0.16));
+    const walletWobble = t >= s.answerAt ? Math.sin((t - s.answerAt) * Math.PI * 2 / 0.34) * 0.12 * shakeOn : 0;
+    const walletBob = t >= s.answerAt ? Math.sin((t - s.answerAt) * Math.PI * 2 / 0.38) * 7 * shakeOn : 0;
     const payFloat = 16 * Math.sin((t - payArrived) * Math.PI * 2 / 0.54) * phase(t, payArrived, payArrived + 0.2);
 
+    // Match the reel's incoming push-left so the outgoing composition holds
+    // its place through the cut instead of dragging the broker off screen.
+    ctx.save();
+    ctx.translate(exitHold, 0);
     drawStage(ctx, { floorY: STAGE.floor, line: true });
     // The wanted-item bubble enters above the heads; it never crosses either face.
     drawWantedBubble(ctx, s, t, speechPop, speechBob);
     if (s.outcome === 'pay' && t >= s.answerAt) {
       drawItem(ctx, s.want, { x: payPos.x, y: payPos.y + payFloat, t, scale: 0.5, rot: Math.sin(payU * Math.PI) * 0.08, sx: payHit.sx, sy: payHit.sy });
     }
-    const walletPop = s.outcome === 'empty' ? ease.outBack(phase(t, s.answerAt - 0.1, s.answerAt + 0.14)) : 0;
+    const walletPop = s.outcome === 'empty' ? ease.outBack(phase(t, s.answerAt - 0.08, s.answerAt + 0.06)) : 0;
     drawActor(ctx, fromActor);
+    if (walletPop > 0) drawEmptyWallet(ctx, walletX, walletY + walletBob, open, turn, walletWobble, WALLET_SCALE);
     drawActor(ctx, {
       who: s.to, x: toX, y: STAGE.floor - responseBob, facing: -1, time: t, scale: 1, shadow: true,
       look: s.outcome === 'empty' && answer > 0 ? 'down' : 'forward', keys: toKeys,
-      ...(s.outcome === 'empty' && answer > 0 ? { handTarget: { x: walletX - 12, y: walletY - 4 }, reach: ease.outCubic(answer) } : {}),
+      ...(s.outcome === 'empty' && answer > 0 ? { handTarget: { x: walletX + 8, y: walletY - 16 }, reach: ease.outCubic(answer) } : {}),
     });
-    if (walletPop > 0) drawEmptyWallet(ctx, walletX, walletY + walletBob, open, turn, walletWobble);
 
     if (walletPop > 0) poof(ctx, walletX - 24, walletY + 22, s.answerAt + 0.72, t, { count: 4, seed: frame.seed, radius: 26, duration: 0.4, color: PAL.paperShade });
     if (s.outcome === 'pay' && t >= s.answerAt) {
@@ -252,6 +268,7 @@ export const demandShot: ShotDef = {
     }
     if (s.fromLabel) label(ctx, s.fromLabel.toUpperCase(), FROM_X, 816, { variant: 'sign', maxWidth: 300 });
     if (s.toLabel) label(ctx, s.toLabel.toUpperCase(), TO_X, 816, { variant: 'sign', maxWidth: 300 });
+    ctx.restore();
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), answer = s.answerAt;
