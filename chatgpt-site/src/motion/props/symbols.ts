@@ -315,5 +315,5 @@ export const GALLERY = [
   gEntry('Question mark', (c,x,y)=>drawQuestionMark(c,{x,y}),240,330),
   gEntry('Equation chips', (c,x,y)=>{drawEquationChip(c,{x:x-120,y,symbol:'+'});drawEquationChip(c,{x,y,symbol:'='});drawEquationChip(c,{x:x+120,y,symbol:'x'});},480,240),
   gEntry('VS chip', (c,x,y)=>drawVsChip(c,{x,y}),270,228),
-  gEntry('Labelled crate', (c,x,y)=>drawLabelledCrate(c,{x,y,label:'ASSETS'}),420,360),
+  gEntry('Wooden crate · BOX',(c,x,y)=>drawLabelledCrate(c,{x,y,label:'BOX'}),420,360),
 ];

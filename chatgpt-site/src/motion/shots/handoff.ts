@@ -20,10 +20,12 @@ const FROM_X = 140, TO_X = 580, PAW_Y = 652, SHOW_Y = 392, TRAVEL = 0.42;
 export const handoffShot: ShotDef = {
   name: 'handoff',
   stage: 'clean',
-  describe: 'One character shows an item, hands it paw to paw to another who lifts it up; optionally something comes back the other way. params: from, to (actors), item, back (item, optional), fromLabel, toLabel, tag (word on a hanging tag above the item). Events: 1 = the hand-over, 2 = the return.',
+  describe: 'Two actors face each other as the giver lowers an item to a paw, sends it in a clear arc across the gap, and the receiver catches it, recoils, then celebrates; optionally a second item travels back in another arc. params: from, to (any actor ids), item (any item id), back (optional return item), fromLabel, toLabel, tag (short word on a hanging tag). Events: 1 = the giver starts the pass and the receiver catches and reacts; 2 = the optional return pass.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), p = props.params;
-    const size = itemSize(s.item, 0.5);
+    const rawSize = itemSize(s.item);
+    const itemScale = Math.min(0.5, 230 / rawSize.w, 230 / rawSize.h);
+    const size = itemSize(s.item, itemScale);
     // Key positions: shown above the giver's head, lowered to the paw, passed paw to paw, lifted by the taker.
     const show = { x: FROM_X + 108, y: SHOW_Y }, give = { x: FROM_X + 138, y: PAW_Y }, take = { x: TO_X - 138, y: PAW_Y }, lift = { x: TO_X - 108, y: SHOW_Y };
     const leave = s.give - 0.08, landed = leave + TRAVEL;
@@ -45,19 +47,22 @@ export const handoffShot: ShotDef = {
     const giverHolds = 1 - phase(t, leave + 0.1, leave + 0.3), giverCatches = s.backItem ? phase(t, backStart + TRAVEL * 0.45, backStart + TRAVEL) : 0;
     drawActor(ctx, {
       who: s.from, x: FROM_X, y: STAGE.floor, time: t, look: raise > 0 && !giverCatches ? 'up' : 'forward',
-      keys: [{ at: 0, pose: 'hold' }, { at: leave + 0.26, pose: s.backItem ? 'idle' : 'wave-off' }, ...(s.backItem ? [{ at: backStart + TRAVEL * 0.4, pose: 'receive' as const }, { at: backStart + TRAVEL + 0.12, pose: 'celebrate' as const, expression: 'happy' as const }] : [])],
+      keys: [{ at: 0, pose: 'hold' }, { at: leave - 0.12, pose: 'give' }, { at: leave + 0.26, pose: s.backItem ? 'idle' : 'wave-off' }, ...(s.backItem ? [{ at: backStart + TRAVEL * 0.4, pose: 'receive' as const }, { at: backStart + TRAVEL + 0.12, pose: 'celebrate' as const, expression: 'happy' as const }] : [])],
       handTarget: giverCatches > 0 ? { x: backPos.x - 8, y: backPos.y + 16 } : { x: pos.x - 10, y: itemY + size.h * 0.32 }, reach: Math.max(giverHolds * lower, giverCatches * (1 - phase(t, backStart + TRAVEL + 0.1, backStart + TRAVEL + 0.3))),
     });
     const takerHolds = phase(t, leave + TRAVEL * 0.4, landed);
     drawActor(ctx, {
       who: s.to, x: TO_X, y: STAGE.floor, facing: -1, time: t, look: raise > 0.3 ? 'up' : 'forward',
-      keys: [{ at: 0, pose: 'idle' }, { at: leave + 0.04, pose: 'receive' }, { at: landed + 0.08, pose: 'hold', expression: 'happy' }],
+      keys: [{ at: 0, pose: 'idle' }, { at: leave - 0.12, pose: 'think' }, { at: leave + 0.04, pose: 'receive' }, { at: landed, pose: 'shock', expression: 'shocked' }, { at: landed + 0.14, pose: 'celebrate', expression: 'happy' }, { at: landed + 0.46, pose: 'hold', expression: 'happy' }],
       handTarget: { x: pos.x + 10, y: itemY + size.h * 0.32 }, reach: takerHolds * (1 - raise),
     });
 
     // carried things are drawn over the bodies but stay below the chins or above the heads
-    if (s.backItem && backShown > 0) drawItem(ctx, s.backItem, { x: backPos.x, y: backPos.y, t, scale: 0.5 * Math.min(1, backShown), rot: -Math.sin(backU * Math.PI) * 0.1, sx: backSquash.sx, sy: backSquash.sy });
-    drawItem(ctx, s.item, { x: pos.x, y: itemY, t, rot: Math.sin(u * Math.PI) * 0.08, scale: 0.5 * enter, sx: catchSquash.sx, sy: catchSquash.sy });
+    if (s.backItem && backShown > 0) {
+      const rawBack = itemSize(s.backItem), backScale = Math.min(0.5, 230 / rawBack.w, 230 / rawBack.h);
+      drawItem(ctx, s.backItem, { x: backPos.x, y: backPos.y, t, scale: backScale * Math.min(1, backShown), rot: -Math.sin(backU * Math.PI) * 0.1, sx: backSquash.sx, sy: backSquash.sy });
+    }
+    drawItem(ctx, s.item, { x: pos.x, y: itemY, t, rot: Math.sin(u * Math.PI) * 0.08, scale: itemScale * enter, sx: catchSquash.sx, sy: catchSquash.sy });
     const tag = str(p, 'tag', '').toUpperCase();
     if (tag) {
       const w = measure(tag).w, tx = Math.max(w / 2 + 44, Math.min(STAGE.w - w / 2 - 44, pos.x));

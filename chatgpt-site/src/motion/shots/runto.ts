@@ -5,7 +5,7 @@ import { PAL } from '../kit/pixel.ts';
 import { drawStage } from '../kit/stage.ts';
 import { poof, speedLines } from '../kit/fx.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
-import { ACTORS, STAGE, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, actorPaw, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 type Destination = 'booth' | 'bank' | 'exchange' | 'shop';
@@ -20,9 +20,12 @@ interface RuntoPlan {
   carry?: ItemId;
   startX: number;
   endX: number;
+  placeX: number;
+  facing: 1 | -1;
+  carryScale: number;
 }
 
-const PLACE_X = 414, PLACE_SCALE = 1;
+const PLACE_SCALE = 0.74;
 const placeIds = ['booth', 'bank', 'exchange', 'shop'] as const;
 
 function timing(props: ShotProps, dur: number): { start: number; arrive: number } {
@@ -46,15 +49,20 @@ function timing(props: ShotProps, dur: number): { start: number; arrive: number 
 function plan(props: ShotProps, dur: number): RuntoPlan {
   const times = timing(props, dur);
   const rawCarry = str(props.params, 'carry', 'none');
-  const startX = 160, endX = 310;
+  const place = pick(props.params, 'place', placeIds, 'booth');
+  const facing: 1 | -1 = place === 'bank' || place === 'exchange' ? -1 : 1;
+  const placeX = facing === 1 ? 460 : 360;
+  const startX = facing === 1 ? 112 : 605, endX = facing === 1 ? 292 : 468;
+  const carry = rawCarry === 'none' ? undefined : itemParam(props.params, 'carry', 'wallet');
+  const carryDims = carry ? itemSize(carry) : undefined;
   return {
     ...times,
     who: pick(props.params, 'who', ACTORS, 'hedgy'),
-    place: pick(props.params, 'place', placeIds, 'booth'),
-    sign: str(props.params, 'sign', 'BUY').toUpperCase(),
+    place,
+    sign: str(props.params, 'sign', 'BUY').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || 'BUY',
     mood: pick(props.params, 'mood', ['panic', 'determined'] as const, 'panic'),
-    carry: rawCarry === 'none' ? undefined : itemParam(props.params, 'carry', 'wallet'),
-    startX, endX,
+    carry, startX, endX, placeX, facing,
+    carryScale: carryDims ? Math.min(0.48, 132 / Math.max(carryDims.w, carryDims.h)) : 0,
   };
 }
 
@@ -65,6 +73,10 @@ function smoothStep(value: number): number {
 
 function runProgress(t: number, start: number, end: number): number {
   return end <= start ? (t < start ? 0 : 1) : smoothStep(phase(t, start, end));
+}
+
+function drawItemAt(ctx: Frame['ctx'], item: ItemId, x: number, y: number, t: number, scale: number, extra: Record<string, unknown> = {}) {
+  drawItem(ctx, item, { x, y, t, scale, ...extra });
 }
 
 function inverseInOutCubic(value: number): number {
@@ -95,51 +107,62 @@ function reactionKeys(start: number, arrive: number, dur: number, mood: Mood) {
 export const runtoShot: ShotDef = {
   name: 'runto',
   stage: 'clean',
-  describe: "A full-size actor runs from the left to a stationary destination and skids beside its counter; params: who (any actor id in ACTORS, default hedgy), place='booth'|'bank'|'exchange'|'shop' (default booth), sign='BUY' (printed on the booth sign, default BUY), mood='panic'|'determined' (default panic), carry='none' (optional item id in ITEMS; 'wallet' opens empty at the paw). Events: 1 = the actor starts running; the last event = skid, squash, and dust poof at the counter.",
+  describe: "An actor runs across the stage to a destination, skids at its counter, and kicks up dust; booth and shop approach from the left, bank and exchange from the right. params: who (any actor id, default hedgy), place (booth|bank|exchange|shop, default booth), sign (up to 8 characters on the destination, default BUY), mood (panic|determined, default panic), carry (none or any item id, default none). Events: 1 = the run begins; the last event = skid and dust at the counter.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const progress = runProgress(t, s.start, s.arrive);
     const runX = s.startX + (s.endX - s.startX) * progress;
-    const placeX = PLACE_X;
+    const placeX = s.placeX;
     const skid = phase(t, s.arrive, s.arrive + 0.34);
-    const skidOffset = 15 * Math.sin(Math.PI * skid);
+    const skidOffset = 15 * Math.sin(Math.PI * skid) * s.facing;
     const settle = phase(t, s.arrive + 0.2, s.arrive + 0.48);
     const settlePhase = Math.max(0, t - s.arrive);
-    const x = runX + skidOffset + Math.sin(settlePhase * Math.PI * 2 / 0.48) * 12 * settle;
+    const x = runX + skidOffset + Math.sin(settlePhase * Math.PI * 2 / 0.48) * 12 * settle * s.facing;
     const actorY = STAGE.floor - Math.max(0, Math.sin(settlePhase * Math.PI * 2 / 0.4)) * 14 * settle;
-    const carriedSize = s.carry ? itemSize(s.carry, 0.5) : undefined;
-    const held = carriedSize ? { x: x + 108, y: STAGE.floor - 70 } : undefined;
+    const keys = reactionKeys(s.start, s.arrive, dur, s.mood);
+    const actorBoundsNow = actorBounds({ who: s.who, x, y: actorY, facing: s.facing, scale: 1, time: t, keys });
+    const correction = actorBoundsNow.left < 28 ? 28 - actorBoundsNow.left : actorBoundsNow.right > 692 ? 692 - actorBoundsNow.right : 0;
+    const actorX = x + correction;
+    const carriedSize = s.carry ? itemSize(s.carry, s.carryScale) : undefined;
+    const actorBase = { who: s.who, x: actorX, y: actorY, facing: s.facing, scale: 1, time: t, keys };
+    const paw = actorPaw(actorBase);
+    const held = carriedSize ? {
+      x: clamp(paw.x + s.facing * Math.min(48, carriedSize.w * 0.3), 28 + carriedSize.w / 2, STAGE.w - 28 - carriedSize.w / 2),
+      y: clamp(paw.y + carriedSize.h * 0.18, STAGE.floor - carriedSize.h / 2 - 180, STAGE.floor - carriedSize.h / 2 - 16),
+    } : undefined;
     const actorOptions = {
-      who: s.who, x, y: actorY, facing: 1 as const, time: t, scale: 1, shadow: true,
+      who: s.who, x: actorX, y: actorY, facing: s.facing, time: t, scale: 1, shadow: true,
       look: t < s.arrive ? 'forward' as const : 'up' as const,
-      keys: reactionKeys(s.start, s.arrive, dur, s.mood),
-      ...(held ? { handTarget: { x: held.x - 42, y: held.y - 4 }, reach: 0.88 } : {}),
+      keys,
+      ...(held ? { handTarget: { x: held.x - s.facing * Math.min(40, carriedSize!.w * 0.22), y: held.y - carriedSize!.h * 0.18 }, reach: 0.88 } : {}),
       squash: 1 - 0.18 * Math.exp(-(((t - s.arrive) / 0.105) ** 2)),
     };
     drawStage(ctx, { floorY: STAGE.floor, line: true });
     // Keep the full-size destination fixed while the actor runs on event 1.
-    drawItem(ctx, s.place, { x: placeX, y: STAGE.floor, t, scale: PLACE_SCALE, sign: s.sign, stock: 1, clerk: true });
+    const placeDims = itemSize(s.place, PLACE_SCALE);
+    drawItem(ctx, s.place, { x: placeX, y: STAGE.floor - placeDims.h / 2, t, scale: PLACE_SCALE, sign: s.sign, stock: 1, clerk: true });
     if (t >= s.start && t < s.arrive + 0.28) {
       const first = Math.max(0, s.start - 0.08);
       for (let i = 0; i < 4; i++) {
         const burstAt = first + i * Math.max(0.16, (s.arrive - s.start) / 4);
         if (burstAt > s.arrive) break;
-        speedLines(ctx, x - 58, STAGE.floor - 190, { x: 1, y: 0 }, t, { t0: burstAt, count: 4, seed: frame.seed + i, duration: 0.34, length: 72, width: 10 });
+        speedLines(ctx, x - s.facing * 58, STAGE.floor - 190, { x: s.facing, y: 0 }, t, { t0: burstAt, count: 4, seed: frame.seed + i, duration: 0.34, length: 72, width: 10 });
       }
     }
+    drawActor(ctx, actorOptions);
     if (s.carry && held && carriedSize) {
-      const carryX = clamp(held.x, 24 + carriedSize.w / 2, STAGE.w - 24 - carriedSize.w / 2);
+      const carryX = clamp(held.x, 28 + carriedSize.w / 2, STAGE.w - 28 - carriedSize.w / 2);
       const flap = 0.5 + 0.18 * Math.sin(t * Math.PI * 2 / 0.74);
       const carryRot = 0.07 * Math.sin(t * Math.PI * 2 / 0.62);
-      drawItem(ctx, s.carry, {
-        x: carryX, y: held.y, t, scale: 0.5, rot: carryRot,
+      // Draw the carried prop over the reaching paw so it stays legible in the run.
+      drawItemAt(ctx, s.carry, carryX, held.y, t, s.carryScale, {
+        rot: carryRot,
         ...(s.carry === 'wallet' ? { open: flap, empty: true } : {}),
       });
     }
-    drawActor(ctx, actorOptions);
-    poof(ctx, s.endX + 28, STAGE.floor - 28, s.arrive, t, { count: 5, seed: frame.seed, radius: 36, duration: 0.52, color: PAL.paperShade });
+    poof(ctx, s.endX + s.facing * 28, STAGE.floor - 28, s.arrive, t, { count: 5, seed: frame.seed, radius: 36, duration: 0.52, color: PAL.paperShade });
     // A short counter skid line and settled dust sell the contact without shaking the stage.
-    if (skid > 0) speedLines(ctx, s.endX + 14, STAGE.floor - 55, { x: -1, y: 0 }, t, { t0: s.arrive, count: 3, seed: frame.seed + 7, duration: 0.3, length: 42, width: 8 });
+    if (skid > 0) speedLines(ctx, s.endX - s.facing * 14, STAGE.floor - 55, { x: -s.facing, y: 0 }, t, { t0: s.arrive, count: 3, seed: frame.seed + 7, duration: 0.3, length: 42, width: 8 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), span = Math.max(0.12, s.arrive - s.start);

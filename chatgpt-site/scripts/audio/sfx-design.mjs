@@ -1,3 +1,4 @@
+import {REAL_FOLEY} from './real-foley.mjs';
 /** One sound palette for every public CueKind. Gains are relative to the mix bus. */
 export const SFX = {
   pop:       { seconds: 0.34, gain: 0.25, variants: 3, room: true, tier: 'dull', lowpass: 1850 },
@@ -96,6 +97,9 @@ const SOFT_FOLEY = {
 export function designFor(kind, style = 'foley') {
   const base = SFX[kind];
   if (!base || style !== 'cinematic') return base;
+  // Hedgy (cinematic) uses recorded-style Foley only: clicks, knocks, thuds, clinks, rustles — never tuned synth tones.
+  const real = REAL_FOLEY[kind];
+  if (real) return { ...base, ...real, variants: real.prompts.length, source: 'eleven', room: false, trim: true, tail: Math.min(0.14, real.seconds * 0.4), lowpass: 9000 };
   if (CINEMATIC_IMPACTS.has(kind)) return {
     ...base, seconds: kind === 'sub' ? 0.85 : 0.82, gain: kind === 'sub' ? 0.17 : 0.25,
     variants: 3, source: 'synth', room: false, tail: 0.46, lowpass: 4600,

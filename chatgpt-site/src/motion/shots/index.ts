@@ -23,6 +23,11 @@ import { squeezeShot } from './squeeze.ts';
 import { growShot } from './grow.ts';
 import { splitShot } from './split.ts';
 import { protectShot } from './protect.ts';
+import { takeShot } from './take.ts';
+import { arriveShot } from './arrive.ts';
+import { lockawayShot } from './lockaway.ts';
+import { revealShot } from './reveal.ts';
+import { breaksShot } from './breaks.ts';
 import { STAGE_ZOOM } from '../kit/sprite.ts';
 
 export interface ShotDef {
@@ -56,6 +61,11 @@ export const SHOTS: Record<string, ShotDef> = {
   [growShot.name]: growShot,
   [splitShot.name]: splitShot,
   [protectShot.name]: protectShot,
+  [takeShot.name]: takeShot,
+  [arriveShot.name]: arriveShot,
+  [lockawayShot.name]: lockawayShot,
+  [revealShot.name]: revealShot,
+  [breaksShot.name]: breaksShot,
   [hedgyDemoShot.name]: hedgyDemoShot,
 };
 

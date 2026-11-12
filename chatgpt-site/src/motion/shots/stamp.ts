@@ -24,30 +24,32 @@ interface Plan {
   placement: Placement;
 }
 
-function wordLineCount(text: string, maxWidth = 560): number {
+function wordLines(text: string, maxWidth = 500): string[] {
   const maxCols = Math.max(8, Math.floor(maxWidth / 6) - 6);
-  let lines = 0, line = '';
+  const lines: string[] = [];
+  let line = '';
   for (const word of text.trim().split(/\s+/)) {
     if (!word) continue;
     const candidate = line ? `${line} ${word}` : word;
     if (measure(candidate).cols <= maxCols) { line = candidate; continue; }
-    if (line) { lines++; line = ''; }
+    if (line) { lines.push(line); line = ''; }
     if (measure(word).cols <= maxCols) { line = word; continue; }
     let chunk = '';
     for (const char of [...word]) {
       const next = chunk + char;
-      if (chunk && measure(next).cols > maxCols) { lines++; chunk = char; }
+      if (chunk && measure(next).cols > maxCols) { lines.push(chunk); chunk = char; }
       else chunk = next;
     }
     line = chunk;
   }
-  return Math.max(1, lines + (line ? 1 : 0));
+  if (line) lines.push(line);
+  return lines.length ? lines : [''];
 }
 
 function plan(props: ShotProps, dur: number): Plan {
   const [hitAt, reaction] = beats(props, dur, [Math.min(0.34, 0.96 / dur), Math.min(0.7, 2.4 / dur)]);
   const rawWord = str(props.params, 'word', 'CONCEPT').trim().toUpperCase()
-    .replace(/[^A-Z0-9 $%+!?.,:'&/\-]/g, ' ').replace(/\s+/g, ' ').slice(0, 18);
+    .replace(/[^A-Z0-9 $%+!?.,:'&/\-]/g, ' ').replace(/\s+/g, ' ').slice(0, 39);
   return {
     dur,
     hitAt: hitAt!,
@@ -82,16 +84,24 @@ function livelyKeys(base: HedgyKey[], dur: number, mood: Mood): { keys: HedgyKey
 }
 
 function layout(s: Plan) {
-  const size = itemSize(s.item);
-  const itemX = Math.min(470, STAGE.w - 24 - size.w / 2);
-  const restingY = ITEMS[s.item].base ? STAGE.floor - size.h / 2 : 450;
+  const rawSize = itemSize(s.item);
+  const lines = wordLines(s.word, 500);
+  const wordWidth = Math.min(500, Math.max(...lines.map(line => measure(line).w + 36)));
+  const lineCount = lines.length;
+  const wordHeight = 78 + (lineCount - 1) * 60;
+  const edgeMargin = 42;
+  const safeWidth = wordWidth + wordHeight * 0.12;
+  const minY = Math.max(152, edgeMargin + wordHeight / 2 + wordWidth * 0.05);
+  const maxY = Math.min(684, 836 - edgeMargin - wordHeight / 2 - wordWidth * 0.05);
+  const minTravel = Math.min(130, s.hitAt * 230);
+  const reserveTop = 48 + wordHeight + wordWidth * 0.05 + 4 + minTravel;
+  const itemScale = Math.min(0.82, 360 / rawSize.w, 460 / rawSize.h, Math.max(0.28, (STAGE.floor - reserveTop) / rawSize.h));
+  const size = itemSize(s.item, itemScale);
+  const itemX = 470;
+  const restingY = STAGE.floor - size.h / 2;
   const itemY = clamp(restingY, 24 + size.h / 2, 836 - size.h / 2);
   const actorX = clamp(itemX - size.w / 2 - 18, 160, 188);
-  const wordWidth = Math.min(560, measure(s.word).w + 36);
-  const lineCount = Math.min(2, wordLineCount(s.word));
-  const wordHeight = 78 + (lineCount - 1) * 60;
   const itemTop = itemY - size.h / 2, itemBottom = itemY + size.h / 2;
-  const minY = 24 + wordHeight / 2, maxY = 836 - wordHeight / 2;
   const gap = 4;
   let placement = s.placement;
   let stampX = itemX;
@@ -99,7 +109,7 @@ function layout(s: Plan) {
   if (placement === 'below' && stampY > maxY) {
     const above = itemTop - gap - wordHeight / 2;
     if (above >= minY) stampY = above;
-    else { placement = 'head'; stampY = STAGE.floor - 320 - wordHeight / 2 - 40; }
+    else { placement = 'head'; stampY = itemTop - gap - wordHeight / 2; }
   } else if (placement === 'beside') {
     const left = itemX - size.w / 2 - 28 - wordWidth / 2;
     const right = itemX + size.w / 2 + 28 + wordWidth / 2;
@@ -112,21 +122,22 @@ function layout(s: Plan) {
       stampX = itemX;
       stampY = placement === 'below'
         ? (above >= minY ? above : below)
-        : STAGE.floor - 320 - wordHeight / 2 - 40;
+        : itemTop - gap - wordHeight / 2;
     }
     if (placement === 'beside') stampY = itemY;
   } else if (placement === 'head') {
-    stampX = clamp(360, 24 + wordWidth / 2, 696 - wordWidth / 2);
-    stampY = STAGE.floor - 320 - wordHeight / 2 - 40;
+    stampX = clamp(360, edgeMargin + safeWidth / 2, 678 - safeWidth / 2);
+    stampY = itemTop - gap - wordHeight / 2;
   }
-  stampX = clamp(stampX, 24 + wordWidth / 2, 696 - wordWidth / 2);
+  stampX = clamp(stampX, edgeMargin + safeWidth / 2, 678 - safeWidth / 2);
   stampY = clamp(stampY, minY, maxY);
-  return { size, itemX, actorX, itemY, wordWidth, wordHeight, stampX, stampY, placement };
+  return { size, itemScale, itemX, actorX, itemY, wordWidth, wordHeight, stampX, stampY, placement };
 }
 
 function stampTiming(s: Plan, l: ReturnType<typeof layout>) {
   const desiredTravel = l.placement === 'below' ? l.size.h + 90 : Math.max(150, l.wordHeight + 90);
-  const room = l.stampY - (24 + l.wordHeight / 2);
+  const safeStart = 48 + l.wordHeight / 2 + l.wordWidth * 0.05;
+  const room = l.stampY - safeStart;
   const travel = Math.min(desiredTravel, Math.max(0, room), s.hitAt * 260);
   const duration = Math.max(0.001, travel / 260);
   return { travel, duration, startAt: Math.max(0, s.hitAt - duration) };
@@ -135,7 +146,7 @@ function stampTiming(s: Plan, l: ReturnType<typeof layout>) {
 export const stampShot: ShotDef = {
   name: 'stamp',
   stage: 'clean',
-  describe: "A full-size actor reacts as a red pixel word lands on a paper stamp plate beside or below a full-size item; params: who (any actor id in ACTORS, default hedgy), item (any item id in ITEMS, default ticket), word='CONCEPT' (up to 18 characters; long words wrap to two lines), mood='shocked'|'happy'|'worried'|'smug'|'determined'|'sad'|'neutral' (default shocked), placement='below'|'beside'|'head' (uses another clear stage position when the requested one does not fit). Events: 1 = the paper word stamp lands with squash and dust poof; 2 = the actor reacts and points at the stamped idea.",
+  describe: "An actor braces as a red pixel word plate slams onto the stage beside or above an item; the plate bounces on impact and the actor recoils, then points at it. params: who (any actor id in ACTORS, default hedgy), item (any item id in ITEMS, default ticket), word='CONCEPT' (up to 39 characters; wraps into a frame-safe plate), mood='shocked'|'happy'|'worried'|'smug'|'determined'|'sad'|'neutral' (default shocked), placement='below'|'beside'|'head' (uses another clear position when it does not fit). Events: 1 = the plate slams down with a hit and dust burst; 2 = the actor reacts and points at the stamped idea.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const l = layout(s), { itemX, actorX, itemY, wordHeight, stampX, stampY } = l;
@@ -160,7 +171,7 @@ export const stampShot: ShotDef = {
     const actorCorrection = actorBoundsNow.left < 28 ? 28 - actorBoundsNow.left : actorBoundsNow.right > 692 ? 692 - actorBoundsNow.right : 0;
 
     drawStage(ctx, { floorY: STAGE.floor, line: true });
-    drawItem(ctx, s.item, { x: itemX, y: itemY + itemIdleY, t, scale: 1, sx: itemHit.sx, sy: itemHit.sy });
+    drawItem(ctx, s.item, { x: itemX, y: itemY + itemIdleY, t, scale: l.itemScale, sx: itemHit.sx, sy: itemHit.sy });
     ring(ctx, stampX, stampY, s.hitAt, t, { r: 112, width: 12, duration: 0.44 });
     poof(ctx, stampX, stampY + wordHeight * 0.32, s.hitAt, t, { count: 4, seed: frame.seed + 7, radius: 28, duration: 0.52 });
     sparks(ctx, stampX, stampY, s.hitAt, t, { count: 5, seed: frame.seed, duration: 0.4, size: 10 });
@@ -168,7 +179,7 @@ export const stampShot: ShotDef = {
     ctx.translate(stampX, movingY + stampIdle);
     ctx.rotate((1 - progress) * -0.07 + (t >= s.hitAt ? Math.sin((Math.PI * 2 * (t - s.hitAt)) / 2.4) * 0.006 : 0));
     ctx.scale(hitSquash.sx, hitSquash.sy);
-    label(ctx, s.word, 0, 0, { variant: 'stamp', maxWidth: 560, pop: stampScale });
+    label(ctx, s.word, 0, 0, { variant: 'stamp', maxWidth: 500, pop: stampScale });
     ctx.restore();
     drawActor(ctx, {
       who: s.who, x: actorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys: timeline.keys,

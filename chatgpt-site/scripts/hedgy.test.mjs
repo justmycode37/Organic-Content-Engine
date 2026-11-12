@@ -2,11 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateHedgyReel} from '../worker/hedgy-generation.ts';
 test('missing API key blocks without subscription fallback',async()=>{await assert.rejects(generateHedgyReel({},'diversification'),e=>e.code==='api_key_missing')});
+const idea=input=>({concept:/Choose concept from exactly these ids: ([a-z-]+)/.exec(input)[1],angle:'Hedgy runs a lemonade stand.',setting:'a lemonade stand',heroItem:'lemonade',supportingItems:[],cast:['hedgy'],hook:'Ever run out of lemons?',music:'drive',musicBrief:'Darksynth chase at 136 BPM: distorted bass, hard drums, guitar stabs, building to a hit on the reveal.'});
 test('Sol coordinates twelve bounded Luna specialists and validates reel',async()=>{
  const original=globalThis.fetch;const calls=[];let active=0,peak=0;
  const spec={version:1,title:'Risk',series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',scenes:Array.from({length:6},()=>({type:'hedgy',duration:4,beat:'lesson',action:'upside',headline:'Risk remains',say:'Diversification does not remove all risk.'}))};
- globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,1));active--;return Response.json({status:'completed',output:[{content:[{type:'output_text',text:calls.length===14?JSON.stringify(spec):'production brief'}]}]})};
- try{const r=await generateHedgyReel({OPENAI_API_KEY:'test'},'diversification');assert.equal(r.provenance.specialists,12);assert.equal(calls.length,14);assert.equal(calls.filter(x=>x.model==='gpt-6-luna').length,12);assert.ok(peak<=4);assert.ok(calls.every(x=>x.store===false&&x.reasoning.effort===(x.model==='gpt-6-luna'?'low':'medium')));}finally{globalThis.fetch=original}
+ globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,1));active--;const format=body.text?.format?.name;return Response.json({status:'completed',output:[{content:[{type:'output_text',text:format==='hedgy_reel'?JSON.stringify(spec):format==='hedgy_idea'?JSON.stringify(idea(body.input)):'production brief'}]}]})};
+ try{const r=await generateHedgyReel({OPENAI_API_KEY:'test'},'diversification');assert.equal(r.provenance.specialists,12);assert.equal(calls.length,15);assert.equal(r.spec.musicBrief,r.provenance.idea.musicBrief);assert.equal(calls.filter(x=>x.model==='gpt-6-luna').length,12);assert.ok(peak<=4);assert.ok(calls.every(x=>x.store===false&&x.reasoning.effort===(x.model==='gpt-6-luna'?'low':'medium')));}finally{globalThis.fetch=original}
 });
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
@@ -47,4 +48,18 @@ test('transition audio respects explicit silence and different authored cues',()
  const sfx=r.cues.filter(c=>c.sfx);
  assert.deepEqual(sfx.filter(c=>!c.ending).map(c=>c.sfx),['shimmer']);
  assert.deepEqual(sfx.filter(c=>c.ending).map(c=>c.sfx),['ding']);
+});
+
+test('ideation avoids concepts, items and moods used by earlier reels',async()=>{
+ const {conceptCandidates,recentlyUsed,ideaProblems,HEDGY_CONCEPTS}=await import('../worker/hedgy-ideas.ts');
+ const history=[{concept:'short-selling',item:'ticket',music:'tense'},{concept:'recall-risk',item:'ticket',music:'tense'}];
+ const picks=conceptCandidates(history,5,()=>0.5);assert.equal(picks.length,5);assert.ok(picks.every(c=>!['short-selling','recall-risk'].includes(c.id)));
+ const all=HEDGY_CONCEPTS.map(c=>({concept:c.id}));assert.equal(conceptCandidates(all,1)[0].id,HEDGY_CONCEPTS.at(-1).id);
+ assert.deepEqual(recentlyUsed(history),{items:['ticket'],moods:['drive']});
+ const base={concept:picks[0].id,angle:'a',setting:'s',heroItem:'ticket',supportingItems:[],cast:['hedgy'],hook:'h',music:'tense',musicBrief:'x'.repeat(40)};
+ assert.equal(ideaProblems(base,picks,history).length,2);assert.equal(ideaProblems({...base,heroItem:'pizza',music:'drive'},picks,history).length,0);
+});
+test('Hedgy cinematic sound design uses recorded Foley, never tuned synth tones',async()=>{
+ const {designFor,SFX}=await import('./audio/sfx-design.mjs');
+ for(const kind of Object.keys(SFX)){const d=designFor(kind,'cinematic');assert.equal(d.source,'eleven',kind);assert.ok(d.prompts.every(p=>/no musical note/.test(p)),kind);assert.equal(d.trim,true,kind);}
 });

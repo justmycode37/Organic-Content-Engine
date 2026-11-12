@@ -12,7 +12,7 @@ const DEFAULT_CROWD: ActorId[] = ['fan1', 'fan2', 'fan3'];
 const PLACES = ['booth', 'bank', 'shop', 'exchange'] as const;
 type Place = (typeof PLACES)[number];
 const FLOOR = STAGE.floor;
-const PLACE_X = 414;
+const PLACE_X = 410;
 const HANDOFF_XS = [230, 390, 540] as const;
 const RUN_DISTANCE = 76;
 const EXIT_DISTANCE = 150;
@@ -47,23 +47,29 @@ function actorList(value: unknown): ActorId[] {
   return valid.length >= 2 ? valid : [...DEFAULT_CROWD];
 }
 
-function defaultSign(place: Place): string {
-  return place === 'booth' ? 'TICKETS' : place === 'exchange' ? 'EXCHANGE' : place === 'shop' ? 'MARKET' : 'BANK';
+function itemLabel(item: ItemId): string {
+  const special: Partial<Record<ItemId, string>> = {
+    ticket: 'TICKET', ticketStack: 'TICKETS', cash: 'CASH', cashPile: 'CASH', coin: 'COIN', coinStack: 'COINS',
+    priceTag: 'PRICE', barChart: 'CHART', appleCrate: 'APPLES', lemonade: 'LEMON', pizza: 'PIZZA',
+    snowball: 'SNOWBAL', banknote: 'CASH', gold: 'GOLD', phone: 'PHONE', car: 'CAR', house: 'HOUSE',
+  };
+  return (special[item] ?? item.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/[^A-Za-z0-9 ]/g, ' ').toUpperCase()).slice(0, 8);
 }
 
 function plan(props: ShotProps, dur: number): RushPlan {
   const crowd = actorList(props.params?.crowd);
   const place = pick(props.params, 'place', PLACES, 'booth');
+  const item = itemParam(props.params, 'item', 'ticket');
   const events = [...(props.events ?? [])].filter(event => Number.isFinite(event.at)).sort((a, b) => a.at - b.at);
   const actionCount = Math.min(crowd.length, events.length || crowd.length);
   const fallback = crowd.slice(0, actionCount).map((_, i) => [0.3, 0.58, 0.82][i]!);
   const arrivals = beats(props, dur, fallback);
   const stock = Math.floor(num(props.params, 'stock', arrivals.length, 0, 5));
-  const sign = str(props.params, 'sign', defaultSign(place)).toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || defaultSign(place);
+  const sign = str(props.params, 'sign', itemLabel(item)).toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || itemLabel(item);
   const endSign = str(props.params, 'endSign', 'SOLD OUT').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || 'SOLD OUT';
   const soldAt = stock === 0 ? 0 : stock <= arrivals.length ? arrivals[stock - 1] : undefined;
   return {
-    crowd, arrivals, place, item: itemParam(props.params, 'item', 'ticket'), stock, sign, endSign, soldAt,
+    crowd, arrivals, place, item, stock, sign, endSign, soldAt,
     signY: place === 'booth' ? FLOOR - 720 + 66 : place === 'shop' ? FLOOR - 564 + 210 : FLOOR - 564 + 156,
   };
 }
@@ -109,7 +115,7 @@ function heldGeometry(who: ActorId, x: number, t: number, item: ItemId, keys: He
 export const rushShot: ShotDef = {
   name: 'rush',
   stage: 'clean',
-  describe: 'Two or three full-size buyers run one at a time to a full-size booth or building and receive a half-size item at the paw. params: crowd (2–3 actor ids, default fan1/fan2/fan3), place (booth|bank|shop|exchange, default booth), item (any item id, default ticket), stock (0–5, default crowd size), sign (word, default TICKETS or place name), endSign (word, default SOLD OUT). Events: one per buyer in order; each buyer takes an item at the paw, the final stocked sale changes the sign to endSign, and a booth shutter closes when stock runs out.',
+  describe: 'Two or three buyers run one at a time to a booth, bank, shop, or exchange; the sign and visible stock identify the chosen item, each buyer takes it, and the last reacts beside the changed sign as the booth shutter closes. params: crowd (2–3 actor ids, default fan1/fan2/fan3), place (booth|bank|shop|exchange, default booth), item (any item id, default ticket), stock (0–5, default crowd size), sign (short word, defaults to the chosen item name), endSign (word, default SOLD OUT). Events: one buyer arrives per event and takes the chosen item at the paw; the final stocked sale changes the sign to endSign and lowers the booth shutter while the last buyer stays visible.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const soldCount = s.arrivals.filter(at => t >= at).length;
@@ -125,10 +131,26 @@ export const rushShot: ShotDef = {
       sign: s.place === 'booth' ? sign : s.sign,
       sold: s.soldAt !== undefined && t >= s.soldAt,
       stock: remaining,
-      stockKind: s.place === 'booth' ? (s.item === 'ticket' ? 'ticket' : 'box') : 'none',
+      stockKind: 'none',
       shutter: s.place === 'booth' ? shutter : undefined,
       clerk: s.place === 'booth',
     });
+
+    // The display uses the actual chosen item so the stall never implies
+    // tickets or anonymous boxes when a different product is being sold.
+    const remainingDisplay = Math.min(3, remaining);
+    const itemScale = Math.min(0.2, 108 / Math.max(itemSize(s.item).w, itemSize(s.item).h));
+    if (s.place === 'booth' && window) {
+      for (let i = 0; i < remainingDisplay; i++) {
+        drawItem(ctx, s.item, {
+          x: window.x + window.w * (0.55 + i * 0.13),
+          y: window.y + window.h * 0.72,
+          t, scale: itemScale,
+        });
+      }
+    } else if (remainingDisplay > 0) {
+      drawItem(ctx, s.item, { x: PLACE_X + 90, y: FLOOR - 255, t, scale: itemScale });
+    }
 
     if (s.place !== 'booth' && s.soldAt !== undefined && t >= s.soldAt + 0.04) {
       const flip = ease.outBack(phase(t, s.soldAt + 0.04, s.soldAt + 0.26));
@@ -142,24 +164,31 @@ export const rushShot: ShotDef = {
 
     for (let i = 0; i < Math.min(s.crowd.length, s.arrivals.length); i++) {
       const who = s.crowd[i]!, arrival = s.arrivals[i]!, hasStock = i < s.stock;
+      const last = i === Math.min(s.crowd.length, s.arrivals.length) - 1;
       const stepX = HANDOFF_XS[i] ?? HANDOFF_XS[HANDOFF_XS.length - 1]!;
       const start = Math.max(0, arrival - 0.12);
       const entranceX = stepX - RUN_DISTANCE;
       if (t < start) continue;
       const exitStart = arrival + EXIT_START_DELAY, exitEnd = exitStart + EXIT_DURATION;
       const exitX = Math.min(EXIT_MAX_X, stepX + EXIT_DISTANCE);
-      const keys = [
+      const keys: HedgyKey[] = [
         { at: start, pose: 'run' as const, expression: 'determined' as const },
         { at: arrival - 0.035, pose: hasStock ? 'receive' as const : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'worried' as const },
         { at: arrival + 0.04, pose: hasStock ? 'hold' as const : 'tap' as const, expression: hasStock ? 'happy' as const : 'worried' as const },
         { at: exitStart, pose: hasStock ? 'run' as const : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'sad' as const },
       ];
+      if (last) {
+        for (let at = arrival + 0.48, index = 0; at < dur - 0.05; at += 0.42, index++) {
+          keys.push({ at, pose: hasStock ? (index % 2 === 0 ? 'celebrate' as const : 'point' as const) : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'sad' as const });
+        }
+      }
       const rawX = t < arrival
         ? tween(t, start, Math.max(0.06, arrival - start), entranceX, stepX, smoothStep)
+        : last ? stepX
         : t < exitStart ? stepX : t < exitEnd ? tween(t, exitStart, EXIT_DURATION, stepX, exitX, smoothStep) : exitX;
       const actorBox = actorBounds({ who, x: rawX, y: FLOOR, scale: 1, facing: 1, time: t, keys });
       const x = rawX + (actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0);
-      const presence = 1 - phase(t, exitEnd - EXIT_FADE_DURATION, exitEnd);
+      const presence = last ? 1 : 1 - phase(t, exitEnd - EXIT_FADE_DURATION, exitEnd);
       const receivedAt = arrival + TRANSFER_END;
       const held = heldGeometry(who, x, t, s.item, keys);
       const heldAtStep = heldGeometry(who, stepX, t, s.item, keys);

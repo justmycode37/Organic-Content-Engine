@@ -5,8 +5,8 @@ export const POSTER_SIZE = { w: 522, h: 684 } as const;
 export const MEGAPHONE_SIZE = { w: 300, h: 228 } as const;
 export const POSTER_ANCHOR = 'centre' as const;
 export const MEGAPHONE_ANCHOR = 'centre' as const;
-export type PosterArt = 'band' | 'star' | 'megaphone' | 'chart';
-export interface PosterOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; reveal: number; word: string; art?: PosterArt }
+export type PosterArt = 'band' | 'star' | 'megaphone' | 'chart' | 'brochure';
+export interface PosterOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; reveal: number; word?: string; art?: PosterArt }
 export interface MegaphoneOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; blast: number }
 
 const TAU = Math.PI * 2;
@@ -61,45 +61,22 @@ function star(g: Grid, cx: number, cy: number, outer: number, inner: number, col
   g.poly(points, color);
 }
 
-function bandArt(g: Grid) {
-  // Gold starburst behind three distinct performers.
-  const rays = [
-    [{ x: 42, y: 31 }, { x: 38, y: 12 }, { x: 46, y: 12 }],
-    [{ x: 38, y: 34 }, { x: 20, y: 17 }, { x: 17, y: 22 }],
-    [{ x: 47, y: 34 }, { x: 68, y: 17 }, { x: 71, y: 23 }],
-    [{ x: 40, y: 38 }, { x: 8, y: 34 }, { x: 8, y: 40 }],
-    [{ x: 45, y: 38 }, { x: 78, y: 32 }, { x: 78, y: 40 }],
-  ];
-  rays.forEach(points => g.poly(points, PAL.gold2));
-  g.ellipse(43, 39, 27, 18, PAL.gold1);
-  // Guitarist: head, jacket, legs and a bold six-string guitar silhouette.
-  g.ellipse(19, 34, 5, 5, PAL.ink); g.ellipse(18, 33, 4, 4, PAL.paperShade);
-  g.rect(14, 31, 8, 2, PAL.wood3);
-  g.poly([{ x: 13, y: 40 }, { x: 23, y: 39 }, { x: 26, y: 52 }, { x: 12, y: 52 }], PAL.blue3);
-  g.rect(14, 51, 5, 12, PAL.ink); g.rect(21, 50, 5, 13, PAL.ink);
-  g.rect(12, 61, 9, 3, PAL.wood4); g.rect(20, 61, 9, 3, PAL.wood4);
-  g.ellipse(29, 47, 7, 6, PAL.ink); g.ellipse(28, 46, 5, 4, PAL.gold2);
-  g.line({ x: 28, y: 46 }, { x: 43, y: 31 }, 3, PAL.wood3); g.rect(40, 28, 7, 4, PAL.wood4);
-  // Drummer: seated torso, two readable drum faces and cymbal stands.
-  g.ellipse(43, 34, 5, 5, PAL.ink); g.ellipse(42, 33, 4, 4, PAL.paperShade);
-  g.rect(39, 31, 8, 2, PAL.red3);
-  g.rect(37, 40, 13, 12, PAL.red2); g.rect(39, 42, 8, 7, PAL.red1);
-  g.ellipse(35, 54, 7, 6, PAL.ink); g.ellipse(35, 54, 5, 4, PAL.paper);
-  g.ellipse(51, 54, 7, 6, PAL.ink); g.ellipse(51, 54, 5, 4, PAL.paper);
-  g.rect(34, 59, 3, 5, PAL.wood3); g.rect(50, 59, 3, 5, PAL.wood3);
-  g.rect(29, 31, 2, 17, PAL.wood4); g.rect(28, 31, 9, 2, PAL.gold2);
-  g.rect(56, 28, 2, 20, PAL.wood4); g.rect(52, 28, 10, 2, PAL.gold2);
-  // Singer on the right with raised microphone and a broad stand.
-  g.ellipse(67, 34, 5, 5, PAL.ink); g.ellipse(66, 33, 4, 4, PAL.paperShade);
-  g.rect(63, 31, 8, 2, PAL.wood3);
-  g.poly([{ x: 61, y: 40 }, { x: 72, y: 40 }, { x: 75, y: 53 }, { x: 60, y: 53 }], PAL.pink3);
-  g.rect(62, 52, 5, 11, PAL.ink); g.rect(70, 52, 5, 11, PAL.ink);
-  g.rect(60, 61, 9, 3, PAL.wood4); g.rect(69, 61, 9, 3, PAL.wood4);
-  g.line({ x: 70, y: 40 }, { x: 77, y: 29 }, 3, PAL.ink); g.ellipse(78, 27, 3, 3, PAL.ink); g.ellipse(77, 26, 2, 2, PAL.grey2);
-}
-
 function posterArtwork(g: Grid, art: PosterArt) {
-  if (art === 'band') { bandArt(g); return; }
+  // Keep old specs that request `band` valid, but draw the generic leaflet so
+  // an announcement never turns into unrelated concert art.
+  if (art === 'band') art = 'brochure';
+  if (art === 'brochure') {
+    // A small open product leaflet: folded cream panels, a simple package and
+    // printed copy lines. It stays generic when a shot has no item-specific art.
+    g.poly([{ x: 8, y: 17 }, { x: 39, y: 23 }, { x: 39, y: 66 }, { x: 8, y: 59 }], PAL.ink);
+    g.poly([{ x: 11, y: 20 }, { x: 37, y: 25 }, { x: 37, y: 62 }, { x: 11, y: 56 }], PAL.paper);
+    g.poly([{ x: 39, y: 23 }, { x: 77, y: 16 }, { x: 77, y: 57 }, { x: 39, y: 66 }], PAL.ink);
+    g.poly([{ x: 42, y: 25 }, { x: 74, y: 20 }, { x: 74, y: 55 }, { x: 42, y: 62 }], PAL.paperShade);
+    g.rect(18, 30, 13, 18, PAL.blue3); g.rect(20, 32, 9, 13, PAL.blue1); g.rect(21, 34, 7, 3, PAL.white);
+    g.rect(48, 30, 21, 2, PAL.wood3); g.rect(48, 37, 19, 2, PAL.wood2); g.rect(48, 44, 16, 2, PAL.wood2); g.rect(48, 51, 17, 2, PAL.wood2);
+    g.rect(14, 24, 17, 2, PAL.red2); g.rect(47, 27, 20, 2, PAL.red2);
+    return;
+  }
   g.ellipse(43, 42, 29, 25, PAL.gold1);
   for (let i = 0; i < 8; i++) {
     const a = i * TAU / 8, x1 = 43 + Math.cos(a) * 25, y1 = 42 + Math.sin(a) * 20;
@@ -174,8 +151,8 @@ const roller = sprite('roller', 87, 7, g => {
 
 export function drawPoster(ctx: CanvasRenderingContext2D, o: PosterOptions) {
   rotateAround(ctx, o.x, o.y, o.rot);
-  const s = o.scale ?? 1, top = o.y - POSTER_SIZE.h * s / 2, art = o.art ?? 'band', p = ease(o.reveal);
-  const paper = posterFor(o.word || 'SHOW', art, p), rows = Math.round(p * 114);
+  const s = o.scale ?? 1, top = o.y - POSTER_SIZE.h * s / 2, art = o.art ?? 'brochure', p = ease(o.reveal);
+  const paper = posterFor(o.word || 'INFO', art, p), rows = Math.round(p * 114);
   drawSprite(ctx, rail, o.x, top, { anchor: [0.5, 0], scale: s, alpha: o.alpha });
   if (rows > 0) drawSprite(ctx, paper, o.x, top + 7 * ART * s, { anchor: [0.5, 0], scale: s, alpha: o.alpha });
   drawSprite(ctx, roller, o.x, top + (7 + rows) * ART * s, { anchor: [0.5, 0.5], scale: s, alpha: o.alpha });
@@ -219,6 +196,7 @@ export function drawMegaphone(ctx: CanvasRenderingContext2D, o: MegaphoneOptions
 }
 
 export const GALLERY: { name: string; draw(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void }[] = [
+  { name: 'poster generic brochure', draw: (ctx, x, y) => drawPoster(ctx, { x, y, scale: 0.5, reveal: 1, word: 'INFO', art: 'brochure' }) },
   { name: 'poster hidden', draw: (ctx, x, y) => drawPoster(ctx, { x, y, scale: 0.5, reveal: 0, word: 'REUNION' }) },
   { name: 'poster half reveal', draw: (ctx, x, y) => drawPoster(ctx, { x, y, scale: 0.5, reveal: 0.52, word: 'REUNION', art: 'band' }) },
   { name: 'poster reunion', draw: (ctx, x, y) => drawPoster(ctx, { x, y, scale: 0.5, reveal: 1, word: 'REUNION', art: 'band' }) },

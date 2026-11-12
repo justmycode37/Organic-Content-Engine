@@ -5,6 +5,10 @@ import {VideoPublisher} from '../publishing/adapters/video.ts';
 import {PublishError} from '../publishing/types.ts';
 import {listAccounts} from './accounts.ts';
 const now=()=>new Date().toISOString();
+const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
+/** What a published or finished reel covered, so the next one can avoid its concept, item and music. */
+export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),idea=parse(row.provenance).idea??{};
+ return {title:spec.title,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
 export const runtime=(env:Env)=>Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
 export async function tickAccounts(c:Container,env:Env){
  const accounts=await listAccounts(c.db);let queued=0;
@@ -20,7 +24,8 @@ export async function claimAccountJob(c:Container){
  const lease=crypto.randomUUID(),until=new Date(Date.now()+20*60000).toISOString();
  const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND json_extract(a.value,'$.enabled')=1 ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now()).first<any>();
  if(!row)return {job:null};const a=await c.db.prepare('SELECT value FROM accounts WHERE id=?').bind(row.account_id).first<{value:string}>();
- return {job:{id:row.id,lease,account:JSON.parse(a!.value),scheduledAt:row.scheduled_at}};
+ const past=await c.db.prepare("SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC LIMIT 30").bind(row.account_id,row.id).all<{spec:string;provenance:string|null}>();
+ return {job:{id:row.id,lease,account:JSON.parse(a!.value),scheduledAt:row.scheduled_at,history:past.results.map(reelHistory)}};
 }
 export async function accountLease(c:Container,id:string,lease:string){const row=await c.db.prepare("SELECT * FROM account_automation_jobs WHERE id=? AND lease_id=? AND status='leased' AND lease_until>?").bind(id,lease,now()).first<any>();if(!row)throw new AppError(409,'stale_lease','This job is no longer leased to this worker');return row;}
 export async function heartbeatAccountJob(c:Container,id:string,lease:string){await accountLease(c,id,lease);await c.db.prepare('UPDATE account_automation_jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_id=?').bind(new Date(Date.now()+20*60000).toISOString(),now(),id,lease).run();await c.settings.setJob('account_worker',now(),{online:true});return {ok:true};}

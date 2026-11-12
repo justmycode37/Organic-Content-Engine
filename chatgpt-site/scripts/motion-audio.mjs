@@ -28,7 +28,7 @@ const ROOT=fileURLToPath(new URL('../',import.meta.url));
 const CACHE=join(ROOT,'.motion-cache');
 const API='https://api.elevenlabs.io';
 let sfxGenerationsThisRender=0,musicGenerationsThisRender=0;
-const MAX_SFX_GENERATIONS=20;
+const MAX_SFX_GENERATIONS=Number(process.env.MOTION_SFX_CAP)||120;
 let ACTIVE_STYLE='foley';
 let LEAD=Number(process.env.MOTION_LEAD)||0.12;   // silence before the voice in each scene, so a cut never clips a word
 let TAIL=Number(process.env.MOTION_TAIL)||0.32;   // breath after the last word before the next cut
@@ -86,7 +86,7 @@ function installCueImportEnvironment(){
 
 /** Music beds. Instrumental, minimal, mixed low and ducked under the voice. */
 export const MUSIC={
- drive:'Instrumental only. Modern upbeat tech explainer background track for a short vertical video: punchy tight drums, deep clean sub bass, plucky bright synth arpeggio, light chiptune 8-bit texture, confident and driving, 118 BPM, minimal and uncluttered so a voice-over sits on top, starts immediately at full energy, no vocals.',
+ drive:'Instrumental only. High-energy electronic action track for a short vertical video: hard punchy drums, distorted pulsing synth bass, gritty electric guitar stabs, chase-scene energy, 132 BPM, dark and propulsive, never happy or playful, leaves space for a voice-over, starts immediately at full energy, no vocals.',
  chill:'Instrumental only. Warm lo-fi electronic background track for a short tech explainer: soft drums, mellow electric piano chords, gentle sub bass, subtle 8-bit bleeps, relaxed and curious, 92 BPM, minimal so a voice-over sits on top, starts immediately, no vocals.',
  tense:'Instrumental only, premium cinematic noir-electronic score for a 33-second finance film. A driving 108 BPM pulse made from muted low toms, restrained analog bass, ticking metal percussion and sparse bowed-steel harmonics; minimal and dark, with no lead melody or bright chiptune. Start with a clear low pulse and lots of space for narration, gradually add a second rhythmic layer and open the filtered upper texture around the middle, then build pressure and width toward a strong final impact. Controlled dynamics, clean ending, no vocals, no speech.',
  bright:'Instrumental only. Bright playful electronic pop background track for a short tech explainer: bouncy drums, glassy bell melody, warm bass, sparkling chiptune arpeggios, optimistic and fun, 124 BPM, minimal so a voice-over sits on top, starts immediately, no vocals.',
@@ -194,7 +194,7 @@ async function effect(name,key,variant=0,requestedSeconds=undefined,noteHz=null,
    const response=await eleven('/v1/sound-generation?output_format=mp3_44100_128',{text:prompt,duration_seconds:design.promptSeconds,prompt_influence:0.7},key);
    await writeFile(raw,Buffer.from(await response.arrayBuffer()));
   }
-  const speed=atempoChain(design.promptSeconds/seconds);
+  const speed=design.trim?'anull':atempoChain(design.promptSeconds/seconds);
   const tail=Math.min(design.tail??0.09,seconds*0.95),start=Math.max(0,seconds-tail);
   const filter=`silenceremove=start_periods=1:start_threshold=-46dB:start_silence=0.003,${speed},aresample=48000,aformat=channel_layouts=stereo,apad=whole_dur=${seconds.toFixed(3)},atrim=0:${seconds.toFixed(3)},afade=t=out:st=${start.toFixed(3)}:d=${tail.toFixed(3)}`;
   await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',raw,'-af',filter,'-c:a','pcm_s16le',file]);
@@ -202,8 +202,8 @@ async function effect(name,key,variant=0,requestedSeconds=undefined,noteHz=null,
  return file;
 }
 
-async function music(mood,seconds,key){
- const prompt=MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+1.5)/5)*5));
+async function music(mood,seconds,key,brief){
+ const prompt=brief?`Instrumental only, no vocals. High-energy electronic action score (heist/chase trailer energy, never happy, cute or playful) under narration for a short vertical finance story: ${brief} Punchy drums and driving bass from the first second, leave mid-range space for the voice, end on a clean hit.`:MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+1.5)/5)*5));
  const file=join(CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!(await exists(file))){
   if(musicGenerationsThisRender>=1)throw new Error('Music generation cap reached (1); use the cached music asset');
@@ -582,7 +582,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  const unmapped=CUE_KINDS.filter(kind=>!SFX[kind]);
  if(unmapped.length)throw new Error(`Missing sound designs for CueKind: ${unmapped.join(', ')}`);
  const mood=process.env.MOTION_MUSIC?.trim()||parsed.spec.music||'drive';
- const bed=mood==='none'||mood==='off'?null:await music(mood,duration,key);
+ const bed=mood==='none'||mood==='off'?null:await music(mood,duration,key,process.env.MOTION_MUSIC?.trim()?undefined:parsed.spec.musicBrief);
  const musicKey=bed&&ACTIVE_STYLE==='cinematic'?await detectMusicKey(bed):null;
  if(musicKey)tuneAccents(cues,musicKey);
  const files=new Map();
@@ -618,7 +618,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    const gain=cue.file?(cue.gain??1):design.gain*(cue.gain??1)*(0.98+0.02*((index*7919)%5)/5);
    const pan=cue.file?0:Math.max(-1,Math.min(1,cue.pan??[-0.22,0,0.22][index%3]));
    const requestedPitch=cue.semitones??(cue.step===undefined?0:Math.round((cue.step-0.5)*4));
-   const semitones=cue.file||isTonalAccent(kind,ACTIVE_STYLE)?0:requestedPitch+variantPitch(kind,cue.variant??0,ACTIVE_STYLE);
+   const semitones=cue.file||ACTIVE_STYLE==='cinematic'||isTonalAccent(kind,ACTIVE_STYLE)?0:requestedPitch+variantPitch(kind,cue.variant??0,ACTIVE_STYLE);
    const pitch=semitones?`asetrate=${Math.round(48000*2**(semitones/12))},aresample=48000,`:'';
    const length=cue.file?null:cue.mixLength;
    const requestedTail=Number(cue.tail??design?.tail??0.08);

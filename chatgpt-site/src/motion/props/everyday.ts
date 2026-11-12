@@ -4,7 +4,8 @@ import { drawSprite, type Sprite } from '../kit/sprite';
 type Ctx=CanvasRenderingContext2D|OffscreenCanvasRenderingContext2D;
 type Base={x:number;y:number;t?:number;rot?:number;scale?:number;alpha?:number};
 export const EVERYDAY_ANCHOR=[0.5,0.5] as const;
-export const APPLE_SIZE={w:330,h:330} as const,APPLE_CRATE_SIZE={w:450,h:360} as const,LEMONADE_STAND_SIZE={w:450,h:600} as const,PIZZA_SIZE={w:492,h:420} as const,CAR_SIZE={w:510,h:300} as const,PHONE_SIZE={w:276,h:450} as const,CART_SIZE={w:480,h:360} as const,GIFT_SIZE={w:330,h:330} as const,KEY_SIZE={w:420,h:180} as const,BULB_SIZE={w:330,h:420} as const,WEATHER_SIZE={w:480,h:390} as const,TREE_SIZE={w:390,h:420} as const,SNOWBALL_SIZE={w:300,h:300} as const,LADDER_SIZE={w:270,h:480} as const,BRIDGE_SIZE={w:510,h:300} as const;
+export const APPLE_SIZE={w:330,h:330} as const,APPLE_CRATE_SIZE={w:450,h:360} as const,LEMONADE_STAND_SIZE={w:450,h:600} as const,PIZZA_SIZE={w:420,h:420} as const,PIZZA_SLICE_SIZE={w:300,h:360} as const,CAR_SIZE={w:510,h:300} as const,PHONE_SIZE={w:276,h:450} as const,CART_SIZE={w:480,h:360} as const,GIFT_SIZE={w:330,h:330} as const,KEY_SIZE={w:420,h:180} as const,BULB_SIZE={w:330,h:420} as const,WEATHER_SIZE={w:480,h:390} as const,TREE_SIZE={w:390,h:420} as const,SNOWBALL_SIZE={w:300,h:300} as const,LADDER_SIZE={w:270,h:480} as const,BRIDGE_SIZE={w:510,h:300} as const;
+export const COFFEE_CUP_SIZE={w:300,h:300} as const,BREAD_SIZE={w:390,h:300} as const,BURGER_SIZE={w:330,h:288} as const,BIKE_SIZE={w:504,h:348} as const,LAPTOP_SIZE={w:432,h:324} as const,SNEAKER_SIZE={w:396,h:270} as const,WATCH_SIZE={w:300,h:384} as const,CHOCOLATE_BAR_SIZE={w:420,h:240} as const,LEMON_SIZE={w:324,h:264} as const;
 
 const FONT:Record<string,readonly string[]>={
   A:['010','101','111','101','101'],B:['110','101','110','101','110'],C:['011','100','100','100','011'],D:['110','101','101','101','110'],E:['111','100','110','100','111'],F:['111','100','110','100','100'],G:['011','100','101','101','011'],H:['101','101','111','101','101'],I:['111','010','010','010','111'],J:['001','001','001','101','010'],K:['101','101','110','101','101'],L:['100','100','100','100','111'],M:['10001','11011','10101','10101','10101'],N:['1001','1101','1011','1001','1001'],O:['111','101','101','101','111'],P:['110','101','110','100','100'],Q:['111','101','101','111','001'],R:['110','101','110','101','101'],S:['011','100','010','001','110'],T:['111','010','010','010','010'],U:['101','101','101','101','111'],V:['101','101','101','101','010'],W:['10001','10001','10101','10101','01010'],X:['101','101','010','101','101'],Y:['101','101','010','010','010'],Z:['111','001','010','100','111'],
@@ -63,18 +64,29 @@ export function drawLemonadeStand(ctx:Ctx,o:Base&{sign?:string}){draw(ctx,standS
 function sector(cx:number,cy:number,r:number,a:number,b:number):Pt[]{const points:Pt[]=[{x:cx,y:cy}],steps=8;for(let i=0;i<=steps;i++){const t=a+(b-a)*i/steps;points.push({x:cx+Math.cos(t)*r,y:cy+Math.sin(t)*r});}return points;}
 function pizzaWedge(g:Grid,slices:number,index:number){
   const cx=35,cy=35,r=27,gap=.055,a=-Math.PI/slices+index*Math.PI*2/slices+gap,b=-Math.PI/slices+(index+1)*Math.PI*2/slices-gap;
-  g.poly(sector(cx,cy,r,a,b),PAL.ink);g.poly(sector(cx,cy,r-2,a,b),PAL.orange3);g.poly(sector(cx,cy,r-4,a,b),PAL.gold2);g.poly(sector(cx,cy,r-9,a,b),PAL.red2);
-  const mid=(a+b)/2;for(const d of [12,19]){const px=cx+Math.cos(mid)*d,py=cy+Math.sin(mid)*d;g.ellipse(px,py,2.5,2.5,PAL.red3);g.ellipse(px-.6,py-.7,1,1,PAL.red1);}
+  // The crust is a warm brown rim, with cheese filling most of each triangular
+  // wedge. Pepperoni stays as small red discs so a slice cannot read as a gem.
+  g.poly(sector(cx,cy,r,a,b),PAL.ink);g.poly(sector(cx,cy,r-2,a,b),PAL.orange3);g.poly(sector(cx,cy,r-5,a,b),PAL.gold3);g.poly(sector(cx,cy,r-7,a,b),PAL.gold2);
+  const mid=(a+b)/2,pepperRadius=slices>8?1.5:2.2,spots=slices>8?[17]:[11,19];
+  for(const d of spots){const px=cx+Math.cos(mid)*d,py=cy+Math.sin(mid)*d;g.ellipse(px,py,pepperRadius,pepperRadius,PAL.red3);g.ellipse(px-.5,py-.6,Math.max(.7,pepperRadius*.55),Math.max(.7,pepperRadius*.55),PAL.red2);g.rect(px-1,py-1,1,1,PAL.red1);}
 }
-function pizzaSprite(slices:number,removed:number){return cached(`pizza-${slices}-${removed}`,()=>make(`pizza-${slices}-${removed}`,82,70,g=>{for(let i=removed;i<slices;i++)pizzaWedge(g,slices,i);}));}
-function pizzaWedgeSprite(slices:number,index:number){return cached(`pizza-wedge-${slices}-${index}`,()=>make(`pizza-wedge-${slices}-${index}`,82,70,g=>pizzaWedge(g,slices,index)));}
+function pizzaSprite(slices:number,removed:number){return cached(`pizza-${slices}-${removed}`,()=>make(`pizza-${slices}-${removed}`,70,70,g=>{for(let i=removed;i<slices;i++)pizzaWedge(g,slices,i);}));}
+const pizzaSlice=make('pizza-slice',50,60,g=>{
+  // Standalone triangular slice with a thick browned crust at the wide end.
+  poly(g,[[25,56],[4,10],[46,10]],PAL.ink);poly(g,[[25,52],[7,13],[43,13]],PAL.orange3);poly(g,[[25,50],[9,15],[41,15]],PAL.gold2);poly(g,[[25,46],[13,16],[37,16]],PAL.gold1);
+  g.rect(8,9,34,7,PAL.orange3);g.rect(11,10,28,3,PAL.orange1);g.rect(14,14,22,2,PAL.gold2);
+  for(const [x,y] of [[20,24],[30,32],[20,41]]){g.ellipse(x,y,2.7,2.7,PAL.red3);g.ellipse(x-.5,y-.7,1.7,1.7,PAL.red2);g.rect(x-1,y-1,1,1,PAL.red1);}
+  // A small cheese drip breaks up the straight point without hiding the triangle.
+  poly(g,[[22,48],[28,48],[29,53],[26,55],[24,52]],PAL.gold1);
+});
+export function drawPizzaSlice(ctx:Ctx,o:Base){draw(ctx,pizzaSlice,o);}
 export function drawPizza(ctx:Ctx,o:Base&{slices?:number;taken?:number}){
   const n=clamp(Math.floor(o.slices??6),2,10),taken=clamp(o.taken??0,0,n),whole=Math.floor(taken),progress=taken-whole;
   const moving=whole<n&&progress>0,remove=Math.min(n,whole+(moving?1:0)),s=o.scale??1;
   draw(ctx,pizzaSprite(n,remove),o);
   const detached=Math.min(3,whole);
-  for(let i=0;i<detached;i++)drawSprite(ctx,pizzaWedgeSprite(n,i),o.x+(72+i*13)*s,o.y+(-24-i*12)*s,{scale:s,alpha:o.alpha});
-  if(moving)drawSprite(ctx,pizzaWedgeSprite(n,whole),o.x+72*progress*s,o.y-24*progress*s,{scale:s,alpha:o.alpha});
+  for(let i=0;i<detached;i++)drawPizzaSlice(ctx,{x:o.x+(224+i*18)*s,y:o.y+(-90-i*20)*s,scale:s*.38,rot:-.08,alpha:o.alpha});
+  if(moving)drawPizzaSlice(ctx,{x:o.x+(146+78*progress)*s,y:o.y+(-60-30*progress)*s,scale:s*.38,rot:-.08,alpha:o.alpha});
 }
 
 // Side-view car. `color` chooses the main body; glass and tyres stay consistent.
@@ -195,8 +207,101 @@ export function drawCompoundingTree(ctx:Ctx,o:Base&{grow?:number}){
   drawSprite(ctx,treeCanopy,o.x,groundY-24*6*s,{anchor:[.5,1],scale:s*(.12+.88*p),alpha:(o.alpha??1)*p});
 }
 
-const snowball=make('snowball',50,50,g=>{g.ellipse(25,26,23,21,PAL.ink);g.ellipse(24,24,19,17,PAL.grey2);g.ellipse(19,17,8,6,PAL.white);g.ellipse(35,33,7,5,PAL.grey1);g.rect(17,13,4,2,PAL.white);});
+const snowball=make('snowball',50,50,g=>{
+  // A snow-white sphere, blue-white shade, powdery facets and crystal glints.
+  g.ellipse(25,26,23,21,PAL.ink);g.ellipse(24,24,19,17,PAL.blue2);g.ellipse(23,23,17,15,PAL.blue1);
+  g.ellipse(19,17,9,7,PAL.white);g.ellipse(18,17,5,4,PAL.white);g.ellipse(33,31,8,6,PAL.blue2);g.ellipse(30,29,6,5,PAL.blue1);
+  // Irregular snow crystals and compressed icy flecks keep it from looking like an egg.
+  for(const [x,y,w,h,c] of [[15,25,2,1,PAL.white],[20,31,2,2,PAL.white],[27,16,2,1,PAL.white],[31,23,2,2,PAL.white],[37,28,2,1,PAL.white],[23,36,2,1,PAL.white],[14,31,1,2,PAL.blue2],[35,17,2,1,PAL.white]] as [number,number,number,number,string][])g.rect(x,y,w,h,c);
+  // Four-point glint and loose snow at the base signal fresh, powdery snow.
+  g.rect(39,10,2,8,PAL.white);g.rect(36,13,8,2,PAL.white);g.rect(38,12,4,4,PAL.blue1);
+  g.ellipse(10,43,4,2,PAL.blue1);g.ellipse(12,42,2,1,PAL.white);g.rect(6,43,3,1,PAL.white);
+});
 export function drawSnowball(ctx:Ctx,o:Base&{size?:number}){const p=clamp(o.size??1,0,1);drawSprite(ctx,snowball,o.x,o.y,{scale:(o.scale??1)*(.28+.72*p),rot:o.rot,alpha:o.alpha});}
+
+// ---- Everyday staples ------------------------------------------------------
+// Simple silhouettes and natural colour blocks keep these household props
+// legible beside the finance icons at the same reel scale.
+const coffeeCup=make('coffee-cup',50,50,g=>{
+  g.ellipse(38,27,9,10,PAL.ink);g.ellipse(38,27,5,6,PAL.paperShade);g.ellipse(38,27,3,4,PAL.black);
+  poly(g,[[8,15],[34,15],[31,42],[12,42]],PAL.ink);poly(g,[[11,17],[31,17],[29,39],[14,39]],PAL.paper);poly(g,[[12,25],[30,25],[29,39],[14,39]],PAL.paperShade);
+  g.ellipse(21,15,13,4,PAL.ink);g.ellipse(21,15,10,2,PAL.wood4);g.ellipse(20,14,7,1,PAL.wood2);
+  g.rect(15,22,13,2,PAL.wood1);g.rect(16,23,10,1,PAL.wood2);g.rect(16,41,12,2,PAL.ink);
+  g.line({x:17,y:9},{x:15,y:6},2,PAL.grey1);g.line({x:23,y:9},{x:24,y:5},2,PAL.white);g.line({x:29,y:10},{x:31,y:7},2,PAL.grey1);
+});
+export function drawCoffeeCup(ctx:Ctx,o:Base){draw(ctx,coffeeCup,o);}
+
+const bread=make('bread-loaf',65,50,g=>{
+  g.ellipse(32,29,29,17,PAL.ink);g.ellipse(31,27,26,14,PAL.orange3);g.ellipse(29,25,23,11,PAL.gold2);g.ellipse(26,23,15,7,PAL.orange1);g.ellipse(42,29,13,10,PAL.gold3);
+  // Three pale diagonal scores and a darker baked underside make this a loaf.
+  g.line({x:20,y:16},{x:25,y:23},3,PAL.paperShade);g.line({x:31,y:13},{x:36,y:20},3,PAL.paperShade);g.line({x:42,y:16},{x:47,y:23},3,PAL.paperShade);
+  g.line({x:17,y:35},{x:47,y:37},2,PAL.orange3);g.rect(11,28,3,5,PAL.orange2);g.rect(50,28,3,5,PAL.orange2);
+});
+export function drawBread(ctx:Ctx,o:Base){draw(ctx,bread,o);}
+
+const burger=make('burger',55,48,g=>{
+  g.ellipse(27,19,23,13,PAL.ink);g.ellipse(27,18,21,11,PAL.orange3);g.ellipse(26,16,18,8,PAL.gold2);g.ellipse(20,14,8,4,PAL.orange1);g.ellipse(31,13,2,1,PAL.paperShade);g.ellipse(37,17,2,1,PAL.paperShade);
+  poly(g,[[6,25],[13,22],[17,25],[22,22],[28,25],[34,22],[40,25],[47,22],[49,28],[44,30],[8,30]],PAL.ink);poly(g,[[8,25],[14,24],[18,27],[23,24],[29,27],[35,24],[41,27],[47,24],[46,28],[9,28]],PAL.green2);
+  poly(g,[[8,29],[46,29],[37,36],[8,31]],PAL.gold1);g.rect(8,30,38,3,PAL.gold2);
+  g.rect(7,32,40,8,PAL.ink);g.rect(9,33,36,5,PAL.wood4);g.rect(11,34,31,2,PAL.wood3);
+  g.ellipse(27,41,20,6,PAL.ink);g.ellipse(27,40,18,4,PAL.orange3);g.ellipse(26,39,15,3,PAL.gold2);
+});
+export function drawBurger(ctx:Ctx,o:Base){draw(ctx,burger,o);}
+
+const bike=make('bicycle',84,58,g=>{
+  for(const x of [15,68]){g.ellipse(x,42,13,13,PAL.ink);g.ellipse(x,42,10,10,PAL.grey2);g.ellipse(x,42,8,8,PAL.black);g.ellipse(x,42,2,2,PAL.grey1);}
+  // Two wheels, diamond frame, fork, handlebar and saddle form a clear side view.
+  const rear={x:15,y:42},front={x:68,y:42},crank={x:41,y:42},seat={x:33,y:22},stem={x:55,y:21};
+  for(const [a,b] of [[rear,seat],[seat,crank],[crank,rear],[seat,stem],[stem,front],[front,crank]] as [Pt,Pt][])g.line(a,b,3,PAL.blue3);
+  g.line({x:31,y:19},{x:40,y:19},4,PAL.ink);g.line({x:31,y:18},{x:38,y:18},2,PAL.grey4);
+  g.line({x:54,y:21},{x:57,y:15},3,PAL.ink);g.line({x:54,y:15},{x:63,y:15},3,PAL.grey4);g.line({x:63,y:15},{x:67,y:19},2,PAL.ink);
+  g.ellipse(crank.x,crank.y,4,4,PAL.ink);g.ellipse(crank.x,crank.y,2,2,PAL.grey1);g.line({x:41,y:42},{x:46,y:47},2,PAL.grey2);g.line({x:46,y:47},{x:50,y:47},3,PAL.ink);
+  g.line({x:15,y:42},{x:15,y:32},1,PAL.grey4);g.line({x:68,y:42},{x:68,y:31},1,PAL.grey4);
+});
+export function drawBike(ctx:Ctx,o:Base){draw(ctx,bike,o);}
+
+const laptop=make('laptop-open',72,54,g=>{
+  poly(g,[[16,5],[58,5],[62,37],[13,37]],PAL.ink);poly(g,[[19,8],[55,8],[58,33],[17,33]],PAL.blue4);g.rect(20,10,34,20,PAL.blue2);g.rect(22,12,30,3,PAL.blue1);g.rect(21,18,12,2,PAL.paper);g.rect(21,22,24,2,PAL.paperShade);g.rect(21,26,18,2,PAL.paperShade);g.rect(51,25,3,5,PAL.gold2);
+  poly(g,[[7,38],[65,38],[71,47],[1,47]],PAL.ink);poly(g,[[10,39],[62,39],[67,44],[5,44]],PAL.grey2);g.rect(13,40,45,2,PAL.grey3);
+  for(let row=0;row<3;row++)for(let col=0;col<10;col++)g.rect(14+col*4,40+row*2,2,1,(row+col)%4===0?PAL.blue3:PAL.grey5);
+  g.rect(29,46,16,2,PAL.grey4);g.rect(5,45,62,2,PAL.grey1);
+});
+export function drawLaptop(ctx:Ctx,o:Base){draw(ctx,laptop,o);}
+
+const sneaker=make('sneaker',66,45,g=>{
+  poly(g,[[4,29],[12,25],[21,25],[29,17],[37,15],[44,22],[54,25],[61,28],[64,34],[61,38],[8,38],[3,35]],PAL.ink);
+  poly(g,[[7,29],[14,27],[23,27],[31,19],[37,18],[43,24],[53,27],[60,30],[61,34],[58,35],[9,35],[6,33]],PAL.paperShade);
+  poly(g,[[18,26],[29,20],[36,20],[41,25],[51,28],[48,32],[18,32]],PAL.blue2);g.rect(11,29,12,4,PAL.paper);g.rect(9,33,48,2,PAL.blue3);g.rect(7,36,53,4,PAL.ink);g.rect(10,36,47,2,PAL.white);g.rect(12,39,40,1,PAL.grey3);
+  for(const [x,y] of [[29,23],[33,25],[37,27],[41,29]]){g.rect(x,y,5,1,PAL.paper);g.rect(x+1,y+1,4,1,PAL.grey3);}
+  g.rect(53,28,4,5,PAL.blue4);g.rect(20,25,4,3,PAL.paper);
+});
+export function drawSneaker(ctx:Ctx,o:Base){draw(ctx,sneaker,o);}
+
+const wristwatch=make('wristwatch',50,64,g=>{
+  g.rect(19,0,12,18,PAL.ink);g.rect(21,1,8,16,PAL.wood3);g.rect(22,2,3,13,PAL.wood2);g.rect(19,46,12,18,PAL.ink);g.rect(21,47,8,16,PAL.wood3);g.rect(22,48,3,12,PAL.wood2);
+  g.ellipse(25,32,21,20,PAL.ink);g.ellipse(24,31,18,17,PAL.grey4);g.ellipse(24,30,15,14,PAL.gold3);g.ellipse(24,30,12,11,PAL.paper);g.ellipse(20,26,4,3,PAL.white);
+  for(const [x,y] of [[24,21],[24,39],[15,30],[33,30]])g.rect(x,y,2,2,PAL.ink);
+  g.line({x:24,y:30},{x:24,y:23},2,PAL.ink);g.line({x:24,y:30},{x:31,y:32},2,PAL.red3);g.ellipse(24,30,2,2,PAL.gold4);g.rect(44,27,4,6,PAL.gold3);
+});
+export function drawWatch(ctx:Ctx,o:Base){draw(ctx,wristwatch,o);}
+
+const chocolateBar=make('chocolate-bar',70,40,g=>{
+  // A broken wrapper corner exposes a scored bar of dark milk chocolate.
+  poly(g,[[5,13],[18,5],[66,7],[68,32],[54,38],[6,34]],PAL.ink);poly(g,[[8,13],[20,8],[63,10],[64,29],[53,34],[9,31]],PAL.wood4);
+  for(let row=0;row<2;row++)for(let col=0;col<4;col++){const x=13+col*12,y=13+row*9;g.rect(x,y,10,7,PAL.wood3);g.rect(x+1,y+1,7,2,PAL.wood2);g.rect(x+8,y+1,1,5,PAL.wood4);g.line({x:x+2,y:y+3},{x:x+6,y:y+3},1,PAL.wood1);}
+  poly(g,[[5,13],[16,7],[24,8],[17,13],[13,21],[6,19]],PAL.paperShade);poly(g,[[7,14],[16,9],[21,9],[15,14],[11,20],[7,18]],PAL.paper);
+  g.rect(5,24,4,8,PAL.gold3);g.rect(6,24,2,6,PAL.gold1);poly(g,[[56,31],[65,28],[64,32],[55,36]],PAL.wood2);
+});
+export function drawChocolateBar(ctx:Ctx,o:Base){draw(ctx,chocolateBar,o);}
+
+const lemon=make('lemon',54,44,g=>{
+  poly(g,[[4,23],[10,14],[18,11],[27,12],[36,9],[45,14],[50,21],[47,29],[39,34],[30,33],[21,36],[12,32],[6,28]],PAL.ink);
+  poly(g,[[7,23],[12,16],[19,14],[27,15],[36,12],[43,16],[47,21],[44,28],[38,31],[30,30],[21,33],[13,30],[9,27]],PAL.gold3);
+  poly(g,[[10,22],[14,17],[21,15],[28,16],[36,14],[42,17],[44,22],[41,27],[35,29],[29,28],[21,30],[14,28],[11,26]],PAL.gold2);
+  g.ellipse(19,20,5,3,PAL.gold1);g.rect(26,23,3,2,PAL.orange1);g.rect(35,19,2,2,PAL.gold1);
+  poly(g,[[30,13],[35,5],[45,5],[43,11],[37,15]],PAL.ink);poly(g,[[33,12],[37,7],[43,7],[41,10],[36,13]],PAL.green2);g.line({x:35,y:12},{x:41,y:8},1,PAL.green1);
+});
+export function drawLemon(ctx:Ctx,o:Base){draw(ctx,lemon,o);}
 
 const ladder=make('wood-ladder',45,80,g=>{
   g.line({x:8,y:4},{x:8,y:76},6,PAL.ink);g.line({x:36,y:4},{x:36,y:76},6,PAL.ink);
@@ -224,8 +329,10 @@ export const GALLERY=[
   g('Apple crate · timber',(c,x,y)=>drawAppleCrate(c,{x,y,items:5}),APPLE_CRATE_SIZE.w,APPLE_CRATE_SIZE.h),
   g('Lemonade stand · pitcher',(c,x,y)=>drawLemonadeStand(c,{x,y,sign:'LEMONADE'}),LEMONADE_STAND_SIZE.w,LEMONADE_STAND_SIZE.h),
   g('Pizza · slices',(c,x,y)=>drawPizza(c,{x,y,slices:6}),PIZZA_SIZE.w,PIZZA_SIZE.h),
-  g('Pizza · slice taken',(c,x,y)=>drawPizza(c,{x,y,slices:6,taken:1}),PIZZA_SIZE.w,PIZZA_SIZE.h),
-  g('Pizza · taking a slice',(c,x,y,t)=>drawPizza(c,{x,y,slices:6,taken:ease((t+.12)/.5)}),PIZZA_SIZE.w,PIZZA_SIZE.h),
+  g('Pizza · triangular slice',(c,x,y)=>drawPizzaSlice(c,{x,y}),PIZZA_SLICE_SIZE.w,PIZZA_SLICE_SIZE.h),
+  // Leave gallery room for the separated slice, which extends beyond the whole pie.
+  g('Pizza · slice taken',(c,x,y)=>drawPizza(c,{x,y,slices:6,taken:1}),600,420),
+  g('Pizza · taking a slice',(c,x,y,t)=>drawPizza(c,{x,y,slices:6,taken:ease((t+.12)/.5)}),600,420),
   g('Car · red',(c,x,y)=>drawCar(c,{x,y,color:'red'}),CAR_SIZE.w,CAR_SIZE.h),g('Car · blue',(c,x,y)=>drawCar(c,{x,y,color:'blue'}),CAR_SIZE.w,CAR_SIZE.h),
   g('Phone · rising candlestick chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'up'}),PHONE_SIZE.w,PHONE_SIZE.h),g('Phone · falling candlestick chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'down'}),PHONE_SIZE.w,PHONE_SIZE.h),
   g('Shopping cart · coloured goods',(c,x,y)=>drawShoppingCart(c,{x,y,items:4}),CART_SIZE.w,CART_SIZE.h),
@@ -236,4 +343,13 @@ export const GALLERY=[
   g('Seedling',(c,x,y)=>drawCompoundingTree(c,{x,y,grow:0}),TREE_SIZE.w,TREE_SIZE.h),g('Tree growth · animation',(c,x,y,t)=>drawCompoundingTree(c,{x,y,grow:ease((t+.2)/.7)}),TREE_SIZE.w,TREE_SIZE.h),g('Mature tree',(c,x,y)=>drawCompoundingTree(c,{x,y,grow:1}),TREE_SIZE.w,TREE_SIZE.h),
   g('Snowball · small',(c,x,y)=>drawSnowball(c,{x,y,size:.25}),SNOWBALL_SIZE.w,SNOWBALL_SIZE.h),g('Snowball · growing',(c,x,y,t)=>drawSnowball(c,{x,y,size:.5+.5*ease(t/.5)}),SNOWBALL_SIZE.w,SNOWBALL_SIZE.h),g('Snowball · large',(c,x,y)=>drawSnowball(c,{x,y,size:1}),SNOWBALL_SIZE.w,SNOWBALL_SIZE.h),
   g('Wood ladder',(c,x,y)=>drawLadder(c,{x,y}),LADDER_SIZE.w,LADDER_SIZE.h),g('Stone bridge',(c,x,y)=>drawBridge(c,{x,y}),BRIDGE_SIZE.w,BRIDGE_SIZE.h),
+  g('Coffee cup · steaming',(c,x,y)=>drawCoffeeCup(c,{x,y}),COFFEE_CUP_SIZE.w,COFFEE_CUP_SIZE.h),
+  g('Bread loaf · scored crust',(c,x,y)=>drawBread(c,{x,y}),BREAD_SIZE.w,BREAD_SIZE.h),
+  g('Burger · lettuce and cheese',(c,x,y)=>drawBurger(c,{x,y}),BURGER_SIZE.w,BURGER_SIZE.h),
+  g('Bicycle · blue frame',(c,x,y)=>drawBike(c,{x,y}),BIKE_SIZE.w,BIKE_SIZE.h),
+  g('Laptop · open screen',(c,x,y)=>drawLaptop(c,{x,y}),LAPTOP_SIZE.w,LAPTOP_SIZE.h),
+  g('Sneaker · lace-up',(c,x,y)=>drawSneaker(c,{x,y}),SNEAKER_SIZE.w,SNEAKER_SIZE.h),
+  g('Wristwatch · analog',(c,x,y)=>drawWatch(c,{x,y}),WATCH_SIZE.w,WATCH_SIZE.h),
+  g('Chocolate bar · scored',(c,x,y)=>drawChocolateBar(c,{x,y}),CHOCOLATE_BAR_SIZE.w,CHOCOLATE_BAR_SIZE.h),
+  g('Lemon · yellow and leaf',(c,x,y)=>drawLemon(c,{x,y}),LEMON_SIZE.w,LEMON_SIZE.h),
 ];

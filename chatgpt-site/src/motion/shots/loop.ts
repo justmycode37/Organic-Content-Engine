@@ -1,32 +1,44 @@
-// loop — a large, parameter-driven feedback cycle with a marker that gathers speed.
+// loop — two actors keep one real item moving around a belt; it changes at each station.
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
-import { loopArrow, drawStage, label } from '../kit/stage.ts';
+import { drawStage, label } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
-import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, isItem, itemSize, num, pick, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, isItem, itemParam, itemSize, num, pick, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
+import type { HedgyKey } from '../actor/hedgy.ts';
 
 type Node = { item?: ItemId; word?: string };
 interface Plan {
-  nodes: Node[];
-  marker: ItemId;
-  who: string;
-  mood: 'worried' | 'happy' | 'smug';
-  speedup: number;
-  events: number[];
+  nodes: Node[]; marker: ItemId; actors: ActorId[]; mood: 'worried' | 'happy' | 'smug'; speedup: number; events: number[];
 }
-
-const CX = STAGE.centre, CY = 250, RADIUS = 192, START_ANGLE = -Math.PI / 2;
-const NODE_SIZE = 42 * 6;
-const NODE_POINTS = [{ x: 156, y: 338 }, { x: CX, y: 150 }, { x: 564, y: 338 }] as const;
-const DISC = new Grid(42, 42)
-  .ellipse(21, 21, 20, 20, PAL.ink)
-  .ellipse(21, 21, 18.5, 18.5, PAL.paper)
-  .ellipse(16, 15, 7, 4, PAL.white)
-  .outline(PAL.ink)
-  .sprite('shot-loop:paper-disc');
+const CX = STAGE.centre, CY = 395, RX = 189, RY = 144, START_ANGLE = Math.PI;
+const BELT = (() => {
+  const g = new Grid(100, 72).ellipse(50, 36, 34, 27, PAL.ink).ellipse(50, 36, 32, 25, PAL.grey4).ellipse(50, 36, 29, 21, PAL.grey2);
+  // The open center leaves the floor visible; raised pale treads make this read as a conveyor belt.
+  g.fill((x, y) => ((x - 50) / 29) ** 2 + ((y - 36) / 21) ** 2 <= 1, undefined);
+  for (let i = 0; i < 28; i++) {
+    const angle = i * Math.PI * 2 / 28;
+    const x = Math.round(50 + 30.5 * Math.cos(angle)), y = Math.round(36 + 23 * Math.sin(angle));
+    g.rect(x, y, 2, 2, PAL.grey1);
+  }
+  // Restore a quiet inner rail around the open oval.
+  g.ellipse(50, 36, 29, 21, undefined).outline(PAL.ink);
+  return g.sprite('loop:physical-conveyor');
+})();
+const GATE = (() => {
+  const g = new Grid(18, 12);
+  g.rect(1, 4, 16, 7, PAL.ink).rect(3, 5, 12, 5, PAL.grey4);
+  g.rect(4, 4, 10, 2, PAL.grey1).rect(7, 1, 4, 5, PAL.gold3);
+  g.rect(8, 2, 2, 3, PAL.gold1).outline(PAL.ink);
+  return g.sprite('loop:sorting-gate');
+})();
+const ROLLER = (() => {
+  const g = new Grid(8, 8).ellipse(4, 4, 3.5, 3.5, PAL.ink).ellipse(4, 4, 2.5, 2.5, PAL.grey2);
+  g.rect(3, 0, 2, 8, PAL.grey1).outline(PAL.ink);
+  return g.sprite('loop:belt-roller');
+})();
 
 function parseNode(value: unknown): Node | undefined {
   if (typeof value === 'string') {
@@ -35,175 +47,131 @@ function parseNode(value: unknown): Node | undefined {
     return isItem(text) ? { item: text } : { word: text.toUpperCase().slice(0, 18) };
   }
   if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined;
-  const raw = value as Record<string, unknown>;
-  const word = typeof raw.label === 'string' ? raw.label.trim().toUpperCase().slice(0, 18) : '';
+  const raw = value as Record<string, unknown>, word = typeof raw.label === 'string' ? raw.label.trim().toUpperCase().slice(0, 18) : '';
   if (isItem(raw.item)) return { item: raw.item, ...(word ? { word } : {}) };
   return word ? { word } : undefined;
 }
-
+function actorsFor(params: ShotProps['params']): ActorId[] {
+  const raw = params?.actors;
+  if (Array.isArray(raw)) return raw.filter((id): id is ActorId => typeof id === 'string' && (ACTORS as readonly string[]).includes(id)).slice(0, 2);
+  const who = pick(params, 'who', [...ACTORS, 'none'] as const, 'hedgy');
+  if (who === 'none') return [];
+  const partner = pick(params, 'partner', [...ACTORS, 'none'] as const, 'mouse');
+  return partner === 'none' ? [who as ActorId] : [who as ActorId, partner as ActorId];
+}
 function plan(props: ShotProps, dur: number): Plan {
-  const p = props.params;
-  const rawNodes = Array.isArray(p?.nodes) ? p.nodes.map(parseNode).filter((node): node is Node => Boolean(node)).slice(0, 3) : [];
-  const defaults: Node[] = [{ item: 'coin' }, { item: 'share' }, { item: 'warning' }];
-  const nodes = rawNodes.slice();
+  const p = props.params, raw = Array.isArray(p?.nodes) ? p.nodes.map(parseNode).filter((node): node is Node => Boolean(node)).slice(0, 3) : [];
+  const nodes = raw.slice(), defaults: Node[] = [{ item: 'coin' }, { item: 'share' }, { item: 'warning' }];
   while (nodes.length < 3) nodes.push(defaults[nodes.length]!);
-  const count = nodes.length;
-  const eventCount = Math.min(1 + count, 4);
-  const events = beats(props, dur, Array.from({ length: eventCount }, (_, i) => i === 0
-    ? Math.min(0.16, dur * 0.1)
-    : [0.36, 0.58, 0.78][i - 1]! * dur));
   return {
-    nodes,
-    marker: isItem(p?.marker) ? p.marker : 'coin',
-    who: pick(p, 'who', [...ACTORS, 'none'] as const, 'hedgy'),
+    nodes, marker: itemParam(p, 'marker', 'coin'), actors: actorsFor(p),
     mood: pick(p, 'mood', ['worried', 'happy', 'smug'] as const, 'worried'),
     speedup: num(p, 'speedup', 2.6, 1.1, 3.5),
-    events,
+    events: beats(props, dur, [0.12, 0.38, 0.62, 0.82]),
   };
 }
-
-function nodeAngles(count: number): number[] {
-  return count === 3
-    ? [Math.atan2(NODE_POINTS[0].y - CY, NODE_POINTS[0].x - CX), START_ANGLE, Math.atan2(NODE_POINTS[2].y - CY, NODE_POINTS[2].x - CX)]
-    : [Math.PI, -Math.PI / 2, 0];
-}
-
-function eventNode(index: number, count: number): number {
-  return index === 0 ? 0 : index === 1 ? count - 1 : (index - 2) % count;
-}
-
-function initialRate(p: Plan): number { return Math.min(0.8, 0.8 / p.speedup); }
-
-function nodePulse(index: number, angle: number, laps: number, t: number, p: Plan): number {
-  if (t < (p.events[0] ?? 0)) return 0;
-  const offset = ((angle - START_ANGLE + Math.PI * 4) % (Math.PI * 2)) / (Math.PI * 2);
-  const progress = laps - offset;
-  const lastCrossing = Math.floor(progress) + offset;
-  const rate = initialRate(p) * (1 + (p.speedup - 1) * phase(t, p.events[0]!, p.events[p.events.length - 1]! + 0.2));
-  const age = Math.max(0, (laps - lastCrossing) / Math.max(0.25, rate));
-  let pulse = progress > 0 ? ease.outCubic(1 - clamp(age / 0.34)) : 0;
-  for (let event = 0; event < p.events.length; event++) {
-    const target = eventNode(event, p.nodes.length);
-    if (target !== index || t < p.events[event]! || t >= p.events[event]! + 0.3) continue;
-    pulse = Math.max(pulse, 1 - phase(t, p.events[event]!, p.events[event]! + 0.3));
-  }
-  return pulse;
-}
-
 function lapsAt(t: number, p: Plan, dur: number): number {
-  const start = p.events[0] ?? 0, elapsed = Math.max(0, t - start), span = Math.max(0.2, dur - start);
-  const rate = initialRate(p), acceleration = rate * (p.speedup - 1) / span;
-  return rate * elapsed + acceleration * elapsed * elapsed / 2;
+  const start = p.events[0]!, boostAt = p.events[1] ?? dur * 0.38;
+  const rate = 0.22, end = Math.max(start + 0.2, dur);
+  const ramp = Math.min(1, Math.max(0, (t - start) / Math.max(0.2, boostAt - start)));
+  const afterBoost = Math.max(0, t - Math.max(start, boostAt));
+  const rampDistance = rate * (t - start) * (1 + (p.speedup - 1) * Math.min(1, (t - start) / Math.max(0.2, end - start)) / 2);
+  return Math.max(0, rampDistance + afterBoost * rate * (p.speedup - 1) * ramp * 0.35);
 }
-
-function lapTimes(p: Plan, dur: number): number[] {
-  const start = p.events[0]!, span = Math.max(0.2, dur - start);
-  const rate = initialRate(p), acceleration = rate * (p.speedup - 1) / span;
-  const count = Math.floor(lapsAt(dur, p, dur));
-  return Array.from({ length: count }, (_, index) => {
-    const lap = index + 1;
-    const elapsed = acceleration > 0
-      ? (-rate + Math.sqrt(rate * rate + 2 * acceleration * lap)) / acceleration
-      : lap / rate;
-    return start + elapsed;
-  }).filter(at => at < dur - 0.08);
+function crossings(p: Plan, dur: number): number[] {
+  const total = lapsAt(dur, p, dur), out: number[] = [];
+  for (let n = 1; n <= Math.ceil(total * 4); n++) {
+    const target = n / 4; let low = p.events[0]!, high = dur;
+    for (let i = 0; i < 18; i++) { const mid = (low + high) / 2; if (lapsAt(mid, p, dur) < target) low = mid; else high = mid; }
+    if (high < dur - 0.03) out.push(high);
+  }
+  return out;
 }
-
-function actorKeys(p: Plan, dur: number) {
-  const initial = p.mood === 'happy' ? 'happy' as const : p.mood === 'smug' ? 'smug' as const : 'worried' as const;
-  const keys: { at: number; pose: 'think' | 'lookup' | 'celebrate' | 'smug' | 'sweat' | 'panic'; expression: 'happy' | 'smug' | 'worried' | 'shocked' }[] = [
-    { at: 0, pose: 'think' as const, expression: initial },
-    { at: p.events[0]!, pose: p.mood === 'happy' ? 'celebrate' as const : p.mood === 'smug' ? 'smug' as const : 'panic' as const, expression: p.mood === 'happy' ? 'happy' as const : p.mood === 'smug' ? 'smug' as const : 'shocked' as const },
-  ];
-  lapTimes(p, dur).forEach(at => {
-    const pose = p.mood === 'happy' ? 'celebrate' : p.mood === 'smug' ? 'smug' : 'panic';
-    const expression = p.mood === 'happy' ? 'happy' : p.mood === 'smug' ? 'smug' : 'shocked';
-    keys.push({ at, pose: pose as 'celebrate' | 'smug' | 'sweat' | 'panic', expression: expression as 'happy' | 'smug' | 'worried' | 'shocked' });
-  });
-  p.events.slice(1).forEach(at => {
-    const pose = p.mood === 'happy' ? 'celebrate' : p.mood === 'smug' ? 'smug' : 'panic';
-    const expression = p.mood === 'happy' ? 'happy' : p.mood === 'smug' ? 'smug' : 'shocked';
-    keys.push({ at, pose: pose as 'celebrate' | 'smug' | 'sweat' | 'panic', expression: expression as 'happy' | 'smug' | 'worried' | 'shocked' });
-  });
+const near = (a: number, b: number) => 1 - clamp(Math.abs(Math.atan2(Math.sin(a - b), Math.cos(a - b))) / 0.55);
+function stationForStep(step: number) { return (step + 3) % 4; }
+function stationPoint(station: number) {
+  const theta = -Math.PI / 2 + station * Math.PI / 2;
+  return { x: CX + Math.cos(theta) * RX, y: CY + Math.sin(theta) * RY };
+}
+function drawItemAlpha(ctx: Frame['ctx'], id: ItemId, x: number, y: number, t: number, alpha: number, rot: number) {
+  if (alpha <= 0.01) return;
+  const scale = Math.min(0.48, 270 / itemSize(id).w, 340 / itemSize(id).h);
+  ctx.save(); ctx.globalAlpha *= alpha; drawItem(ctx, id, { x, y, t, scale, rot }); ctx.restore();
+}
+function actorKeys(events: number[], mood: Plan['mood']) {
+  const expression = mood === 'happy' ? 'happy' as const : mood === 'smug' ? 'smug' as const : 'worried' as const;
+  const keys: HedgyKey[] = [{ at: 0, pose: 'walk', expression }, { at: events[0] ?? 0.12, pose: 'carry', expression: 'determined' }];
+  events.slice(0, 10).forEach((at, index) => keys.push({
+    at: Math.max(0, at - 0.14), pose: index % 2 ? 'receive' as const : 'give' as const,
+    expression: expression,
+  }));
   return keys.sort((a, b) => a.at - b.at);
 }
 
 export const loopShot: ShotDef = {
   name: 'loop',
   stage: 'clean',
-  describe: 'A thick pixel arrow circles three large item nodes as a marker speeds up; a pulsing node reveals its label below the icon, and a floor actor panics. params: nodes (three item ids, short words, or {item,label} nodes; default coin, share, warning), marker (item id, default coin), who (actor or none, default hedgy), mood (worried|happy|smug, default worried), speedup (final speed relative to start, 1.1–3.5, default 2.6). Events: 1 = the first node pulses and starts the actor panic; 2 = the final node pulses for the buy-back.',
+  describe: 'A real item rides a moving oval conveyor between two actors; each sorting gate changes it into the next real item, so the same object keeps coming around in a new form. params: nodes (three item ids, short words or {item,label} station tags; default coin, share, warning), marker (starting item id, default coin), actors (up to two actor ids; defaults hedgy and mouse), who (legacy first actor or none), partner (second actor), mood (worried|happy|smug), speedup (final belt speed, 1.1–3.5, default 2.6). Events: 1 = actor releases the item onto the belt; 2 = the far gate catches it and the belt accelerates; later events trigger gate clunks.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), p = plan(props, dur);
-    const start = p.events[0]!, laps = lapsAt(t, p, dur), angle = START_ANGLE + laps * Math.PI * 2;
-    const active = ease.outCubic(phase(t, start, start + 0.34));
-    const markerDims = itemSize(p.marker, 0.5);
-    const markerRadius = Math.min(
-      RADIUS,
-      CX - 24 - markerDims.w / 2,
-      STAGE.w - 24 - CX - markerDims.w / 2,
-      CY - 24 - markerDims.h / 2,
-      STAGE.h - 24 - CY - markerDims.h / 2,
-    );
-    const markerX = CX + Math.cos(angle) * markerRadius, markerY = CY + Math.sin(angle) * markerRadius;
-    const angles = nodeAngles(p.nodes.length);
-    const visibleActor = p.who !== 'none';
-
-    drawStage(ctx, {
-      floorY: STAGE.floor, line: true,
-      shadow: visibleActor ? [{ x: CX, y: STAGE.floor - 2, w: 220 }] : [],
-    });
-    loopArrow(ctx, CX, CY, RADIUS, { color: PAL.paper, width: 36, progress: active, spin: laps * Math.PI * 2 });
-
-    const nodePoints = p.nodes.map((node, index) => {
-      const baseAngle = angles[index]!;
-      const point = NODE_POINTS[index] ?? NODE_POINTS[2];
-      const x = point.x, y = point.y;
-      const pulse = nodePulse(index, baseAngle, laps, t, p);
-      return { node, index, baseAngle, x, y, pulse };
-    });
-
-    drawItem(ctx, p.marker, {
-      x: markerX, y: markerY, t, scale: 0.5 * ease.outBack(phase(t, start, start + 0.2)),
-      rot: Math.sin(laps * Math.PI * 2) * 0.035,
-      sy: 1 + 0.08 * Math.sin(phase(t, start, start + 0.14) * Math.PI),
-    });
-
-    nodePoints.forEach(({ x, y, pulse }) => {
-      if (pulse > 0.08) {
-        const age = (1 - pulse) * 0.28;
-        ring(ctx, x, y, t - age, t, { r: 78, width: 10, duration: 0.32, color: PAL.gold2 });
+    const progress = lapsAt(t, p, dur), theta = START_ANGLE + progress * Math.PI * 2;
+    const mx = CX + Math.cos(theta) * RX, my = CY + Math.sin(theta) * RY;
+    const step = progress * 4, crossed = Math.floor(step), within = step - crossed;
+    const before = crossed === 0 ? p.marker : p.nodes[(crossed - 1) % p.nodes.length]!.item ?? p.marker;
+    const node = p.nodes[crossed % p.nodes.length]!, after = node.item ?? before;
+    const change = ease.inOutCubic(phase(within, 0.76, 0.99));
+    const movement = ease.outCubic(phase(t, p.events[0]!, p.events[0]! + 0.24));
+    const visible = 0.18 + movement * 0.82;
+    const stationPoints = [stationPoint(0), stationPoint(1), stationPoint(2), stationPoint(3)];
+    drawStage(ctx, { floorY: 686, line: true, shadow: p.actors.length ? [{ x: 360, y: 672, w: 580 }] : [] });
+    drawSprite(ctx, BELT, CX, CY, { anchor: [0.5, 0.5] });
+    // Exposed rollers turn continuously under the belt and the top gate stamps each passing item.
+    for (const [index, point] of stationPoints.entries()) {
+      drawSprite(ctx, GATE, point.x, point.y, { anchor: [0.5, 0.5], rot: index === 0 ? Math.sin(t * 8) * 0.04 : 0 });
+      drawSprite(ctx, ROLLER, point.x + (index % 2 ? -35 : 35), point.y + (index < 2 ? 26 : -26), { anchor: [0.5, 0.5], rot: t * (index % 2 ? -3 : 3) });
+      if (node.word && stationForStep(crossed + 1) === index && change > 0.25) {
+        label(ctx, node.word, point.x, point.y + (index === 0 ? 52 : 64), { variant: 'tag', maxWidth: 190 });
       }
-    });
+    }
 
-    nodePoints.forEach(({ node, x, y, pulse }) => {
-      drawSprite(ctx, DISC, x, y, { anchor: [0.5, 0.5], scale: 1 + pulse * 0.05 });
-      const iconScale = node.item ? Math.min(0.58, (NODE_SIZE - 12) / Math.max(itemSize(node.item).w, itemSize(node.item).h)) : undefined;
-      const size = node.item ? itemSize(node.item, iconScale) : undefined;
-      const iconOffset = size ? Math.min(Math.max(30, size.h / 2 - 40), y - 24 - size.h / 2) : 0;
-      if (node.item && iconScale) {
-        drawItem(ctx, node.item, { x, y: y - iconOffset, t, scale: iconScale, alpha: 1, rot: 0 });
-      }
-      if (node.item && node.word && pulse > 0.1 && size && size.h < 160) {
-        label(ctx, node.word, x, y + 91, { variant: 'sign', maxWidth: 260, pop: 1 + pulse * 0.035 });
-      } else if (!node.item && node.word) {
-        label(ctx, node.word, x, y, { variant: 'sign', maxWidth: 312 });
-      }
-    });
-
-    if (visibleActor) {
+    const hits = crossings(p, dur);
+    const cast = p.actors.slice(0, 2);
+    for (let index = 0; index < cast.length; index++) {
+      const left = index === 0, who = cast[index]!, x0 = left ? CX - 140 : CX + 140;
+      const facing = left ? 1 : -1, bounds = actorBounds({ who, x: 0, y: 0, facing });
+      const x = clamp(x0, 30 - bounds.left, 690 - bounds.right);
+      const stationAngle = left ? Math.PI : 0;
+      const actorEventTimes = hits.filter((_, i) => stationForStep(i + 1) === (left ? 3 : 1));
+      const keys = actorKeys([p.events[0]!, ...actorEventTimes], p.mood);
+      const contact = near(theta, stationAngle);
+      const actorY = 668 + Math.sin(t * 7 + index) * 2.2;
+      const current = actorBounds({ who, x, y: actorY, facing, time: t, keys });
+      const correction = current.left < 28 ? 28 - current.left : current.right > 692 ? 692 - current.right : 0;
       drawActor(ctx, {
-        who: p.who, x: CX, y: STAGE.floor, scale: 1, time: t, look: 'up',
-        keys: actorKeys(p, dur),
+        who, x: x + correction, y: actorY, facing, scale: 1, time: t,
+        look: 'up', keys, handTarget: { x: mx, y: my }, reach: 0.18 + contact * 0.76,
       });
+    }
+    const tangent = Math.atan2(Math.cos(theta) * RY, -Math.sin(theta) * RX);
+    drawItemAlpha(ctx, before, mx, my, t, visible * (1 - change), tangent * 0.025);
+    drawItemAlpha(ctx, after, mx, my, t, visible * change, tangent * 0.025);
+    // Small impacts only when the item actually reaches a gate.
+    const lastCrossing = hits[crossed - 1];
+    if (lastCrossing !== undefined && t >= lastCrossing && t < lastCrossing + 0.26) {
+      ring(ctx, mx, my, lastCrossing, t, { r: 46, width: 6, duration: 0.24, color: PAL.gold1 });
+    }
+    for (const [index, at] of p.events.slice(1).entries()) if (t >= at && t < at + 0.34) {
+      const point = stationPoint(index === 0 ? 1 : 0);
+      ring(ctx, point.x, point.y, at, t, { r: 46, width: 6, duration: 0.28, color: PAL.gold1 });
     }
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), p = plan(props, safeDur);
-    const accents = p.events.slice(0, Math.min(p.events.length, 4)).map((at, index) =>
-      cue(at, index === 0 ? 'sub' : 'clunk', index === 0 ? 1.35 : 0.9 + index * 0.12, CX));
     return cuesIn(safeDur, [
-      cue(0.03, 'creak', 0.65, CX), ...accents,
-      cue(Math.max(0.06, p.events[0]! + 0.32), 'coin', 0.65, CX),
+      cue(Math.max(0, p.events[0]! - 0.08), 'footfall', 0.7, CX - RX),
+      cue(p.events[0]!, 'clunk', 1.1, CX), cue(p.events[1]!, 'rise', 0.65, CX),
+      ...p.events.slice(2).map((at, i) => cue(at, i % 2 ? 'coin' : 'clack', 0.75, CX)),
+      cue(safeDur * 0.88, 'slide', 0.55, CX),
     ]);
   },
 };

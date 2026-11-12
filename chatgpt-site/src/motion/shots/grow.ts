@@ -1,50 +1,40 @@
-// grow — a changing asset compounds through visible steps as time passes.
+// grow — an actor feeds or scrapes an item, making each size change visibly causal.
 import type { Cue, Frame, ShotProps } from '../core.ts';
-import { bob, clamp, ease, lerp, phase, squash } from '../kit/motion.ts';
+import { arc, bob, clamp, ease, lerp, phase } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite, type Sprite } from '../kit/sprite.ts';
 import { drawStage } from '../kit/stage.ts';
-import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
+import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, num, pick, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
-const GROW_ITEMS = ['tree', 'snowball', 'cashPile', 'piggy'] as const satisfies readonly ItemId[];
 const DIRECTIONS = ['grow', 'shrink'] as const;
-const TIMERS = ['clock', 'hourglass'] as const;
-const HERO_X = 430;
-const TIMER_X = 350;
-const ACTOR_X = 112;
-const cashPileSprites = new Map<number, Sprite>();
+const TIMERS = ['none', 'clock', 'hourglass'] as const;
+const MIN_SIZE = 0.34;
+const MAX_SIZE = 0.9;
+const HERO_X = 482;
+const ACTOR_X = 140;
+const TIMER_X = 640;
+const ACTION_DUR = 0.22;
 
-function cashPileFor(value: number): Sprite {
-  const count = 7 + Math.round(clamp(value) * 5);
-  const cached = cashPileSprites.get(count);
-  if (cached) return cached;
-  const g = new Grid(62, 64);
-  for (let i = 0; i < count; i++) {
-    const x = 3 + (i % 3) * 19, y = 48 - Math.floor(i / 3) * 15;
-    g.round(x, y, 18, 13, 2, PAL.ink);
-    g.round(x + 1, y + 1, 16, 11, 1, PAL.green3);
-    g.rect(x + 2, y + 2, 14, 2, PAL.green1);
-    g.rect(x + 2, y + 4, 14, 5, PAL.green2);
-    g.rect(x + 7, y + 1, 4, 11, PAL.paperShade);
-    g.rect(x + 8, y + 2, 2, 9, PAL.paper);
-    g.rect(x + 8, y + 5, 2, 1, PAL.green4);
-    g.rect(x + 6, y + 6, 6, 1, PAL.green4);
-    g.rect(x + 7, y + 8, 4, 1, PAL.green4);
-    g.rect(x + 2, y + 10, 14, 1, PAL.green4);
-  }
-  const sprite = g.outline(PAL.ink).sprite(`shot-grow:cash-pile:${count}`);
-  cashPileSprites.set(count, sprite);
-  return sprite;
-}
+const feedPellet: Sprite = new Grid(9, 8)
+  .ellipse(4.5, 4, 3.8, 3.1, PAL.paperShade)
+  .ellipse(3.6, 3.1, 1.4, 1, PAL.paper)
+  .outline(PAL.ink)
+  .sprite('shot-grow:feed-pellet');
+const shavedChunk: Sprite = new Grid(9, 8)
+  .poly([{ x: 1, y: 5 }, { x: 3, y: 1 }, { x: 7, y: 2 }, { x: 8, y: 5 }, { x: 5, y: 7 }], PAL.grey2)
+  .poly([{ x: 3, y: 2 }, { x: 7, y: 2 }, { x: 5, y: 4 }], PAL.grey1)
+  .outline(PAL.grey5)
+  .sprite('shot-grow:shaved-chunk');
 
 interface Plan {
-  item: typeof GROW_ITEMS[number];
+  item: ItemId;
   dir: typeof DIRECTIONS[number];
   steps: number;
   who: string;
   timer: typeof TIMERS[number];
   times: number[];
+  baseScale: number;
 }
 
 function plannedTimes(props: ShotProps, dur: number, count: number): number[] {
@@ -67,132 +57,148 @@ function plan(props: ShotProps, dur: number): Plan {
   const requested = Math.round(num(p, 'steps', 4, 2, 6));
   const capacity = Math.max(2, Math.min(6, Math.floor(Math.max(0, dur - 0.2) / 0.38) + 1));
   const steps = Math.min(requested, capacity);
+  const item = itemParam(p, 'item', 'tree');
+  const dims = itemSize(item);
   return {
-    item: pick(p, 'item', GROW_ITEMS, 'tree'),
+    item,
     dir: pick(p, 'dir', DIRECTIONS, 'grow'),
     steps,
     who: pick(p, 'who', ACTORS, 'hedgy'),
-    timer: pick(p, 'timer', TIMERS, 'clock'),
+    timer: pick(p, 'timer', TIMERS, 'none'),
     times: plannedTimes(props, dur, steps),
+    baseScale: Math.min(0.82, 410 / dims.w, 460 / dims.h),
   };
 }
 
-function heroSize(item: Plan['item']) {
-  return item === 'cashPile' ? { w: 372, h: 384 } : itemSize(item);
-}
-
-function floorValue(item: Plan['item']): number {
-  if (item === 'tree') return 0.4;
-  if (item === 'snowball') return 0.52;
-  if (item === 'cashPile') return 0.18;
-  return 0;
-}
-
-function valueAt(t: number, s: Plan): number {
-  const low = floorValue(s.item);
-  let value = s.dir === 'grow' ? low : 1;
+function sizeValueAt(t: number, s: Plan): number {
+  let value = s.dir === 'grow' ? MIN_SIZE : MAX_SIZE;
   for (let i = 0; i < s.times.length; i++) {
     const at = s.times[i]!;
     if (t < at) break;
     const portion = (i + 1) / s.times.length;
     const target = s.dir === 'grow'
-      ? low + (1 - low) * portion ** 1.45
-      : 1 - (1 - low) * portion ** 1.45;
-    const progress = phase(t, at, at + 0.3);
+      ? lerp(MIN_SIZE, MAX_SIZE, portion ** 1.25)
+      : lerp(MAX_SIZE, MIN_SIZE, portion ** 1.25);
+    const progress = phase(t, at, at + ACTION_DUR);
     value = lerp(value, target, ease.outCubic(progress));
     if (progress < 1) break;
   }
-  return clamp(value);
+  return clamp(value, MIN_SIZE, MAX_SIZE);
 }
 
-function assetState(item: Plan['item'], value: number): Record<string, unknown> {
-  if (item === 'tree') return { grow: value };
-  if (item === 'snowball') return { size: value };
-  return { fill: value };
+function sizeBeforeStep(s: Plan, index: number): number {
+  if (index === 0) return s.dir === 'grow' ? MIN_SIZE : MAX_SIZE;
+  const portion = index / s.times.length;
+  return s.dir === 'grow'
+    ? lerp(MIN_SIZE, MAX_SIZE, portion ** 1.25)
+    : lerp(MAX_SIZE, MIN_SIZE, portion ** 1.25);
 }
 
-function followThrough(last: number, dur: number, direction: Plan['dir']) {
-  const keys: { at: number; pose: 'point' | 'think'; expression: 'happy' | 'worried' }[] = [];
-  for (let at = last + 0.48, index = 0; at < dur - 0.08; at += 0.56, index++) {
-    keys.push({
-      at,
-      pose: index % 2 === 0 ? 'point' : 'think',
-      expression: direction === 'grow' ? 'happy' : 'worried',
-    });
+function poseKeys(s: Plan, dur: number) {
+  const keys = [
+    { at: 0, pose: 'walk' as const, expression: s.dir === 'grow' ? 'determined' as const : 'worried' as const },
+    { at: Math.max(0, s.times[0]! - 0.18), pose: s.dir === 'grow' ? 'give' as const : 'push' as const, expression: s.dir === 'grow' ? 'determined' as const : 'determined' as const },
+    ...s.times.flatMap((at, i) => [
+      { at, pose: s.dir === 'grow' ? 'give' as const : 'push' as const, expression: s.dir === 'grow' ? 'happy' as const : 'determined' as const },
+      ...(i < s.times.length - 1 && at + 0.24 < s.times[i + 1]!
+        ? [{ at: at + 0.24, pose: s.dir === 'grow' ? 'think' as const : 'hold' as const, expression: s.dir === 'grow' ? 'happy' as const : 'worried' as const }]
+        : []),
+    ]),
+    { at: Math.min(dur, s.times.at(-1)! + 0.26), pose: s.dir === 'grow' ? 'celebrate' as const : 'sweat' as const, expression: s.dir === 'grow' ? 'happy' as const : 'worried' as const },
+  ];
+  return keys.sort((a, b) => a.at - b.at);
+}
+
+function actionPoint(s: Plan, sizeValue: number) {
+  const dims = itemSize(s.item, s.baseScale * sizeValue);
+  const y = STAGE.floor - dims.h / 2;
+  return { dims, x: HERO_X - dims.w / 2 + 10, y: y - dims.h * 0.12 };
+}
+
+function drawFlyingBits(ctx: Frame['ctx'], s: Plan, t: number) {
+  for (let i = 0; i < s.times.length; i++) {
+    const at = s.times[i]!, before = sizeBeforeStep(s, i), source = actionPoint(s, before);
+    if (s.dir === 'grow') {
+      const start = at - ACTION_DUR;
+      const u = phase(t, start, at);
+      if (u > 0 && u < 1) {
+        const from = { x: ACTOR_X + 100, y: STAGE.floor - 182 };
+        const to = { x: source.x, y: source.y };
+        const pos = arc(from, to, 20, ease.inOutCubic(u));
+        drawSprite(ctx, feedPellet, pos.x, pos.y, { anchor: [0.5, 0.5], scale: 0.38, rot: u * 0.24 });
+      }
+      continue;
+    }
+    for (let piece = 0; piece < 4; piece++) {
+      const start = at + piece * 0.055, flight = 0.31 + piece * 0.02;
+      const u = phase(t, start, start + flight);
+      if (u <= 0 || u >= 1) continue;
+      const from = { x: source.x, y: source.y + (piece - 1.5) * 16 };
+      const to = { x: ACTOR_X + 94, y: STAGE.floor - 184 + (piece - 1.5) * 13 };
+      const pos = arc(from, to, 24 + piece * 5, ease.inOutCubic(u));
+      drawSprite(ctx, shavedChunk, pos.x, pos.y, { anchor: [0.5, 0.5], scale: 0.56 - piece * 0.055, rot: (u - 0.5) * 0.55 + piece * 0.18 });
+    }
   }
-  return keys;
+}
+
+function drawScraper(ctx: Frame['ctx'], x: number, y: number, t: number) {
+  const nudge = Math.sin(t * Math.PI * 2 / 0.44) * 3;
+  ctx.save();
+  ctx.translate(x + nudge, y);
+  ctx.rotate(-0.26);
+  ctx.fillStyle = PAL.ink;
+  ctx.fillRect(-24, -5, 30, 10);
+  ctx.fillStyle = PAL.wood2;
+  ctx.fillRect(-21, -3, 22, 6);
+  ctx.fillStyle = PAL.grey5;
+  ctx.fillRect(3, -10, 7, 20);
+  ctx.fillStyle = PAL.grey1;
+  ctx.fillRect(4, -8, 4, 16);
+  ctx.restore();
 }
 
 export const growShot: ShotDef = {
   name: 'grow',
   stage: 'clean',
-  describe: 'A tree, snowball, cash pile, or piggy bank visibly grows in compounding steps or shrinks as time passes. params: item (tree | snowball | cashPile | piggy, default tree), dir (grow | shrink, default grow), steps (2–6, default 4; capped to fit short durations), who (actor id, default hedgy), timer (clock | hourglass, default clock). Events: each event triggers the next change; missing events use evenly spaced fallback steps.',
+  describe: 'An actor feeds an item with small pieces that fly from its paw and make it grow, or scrapes visible chunks off it that fly back to the actor as it shrinks; every change keeps the item silhouette proportional. params: item (any item id in ITEMS, default tree), dir (grow|shrink, default grow), steps (2–6, default 4; capped to fit), who (actor id, default hedgy), timer (none|clock|hourglass, default none; when requested it stays small in the upper-right). Events: each event triggers the next feed or scrape; missing events use evenly spaced fallback steps.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const dims = heroSize(s.item), itemY = s.item === 'tree' ? STAGE.floor - 180 : STAGE.floor - dims.h / 2;
-    const amount = valueAt(t, s), last = [...s.times].reverse().find(at => t >= at);
-    const hit = last === undefined ? { sx: 1, sy: 1 } : squash(t, last + 0.025, 0.2, 0.28);
-    const itemDrawY = itemY + bob(t, 1.1, 9);
-    const safeSy = Math.min(hit.sy, (STAGE.h - 28 - itemDrawY) / (dims.h / 2));
-    const keys = [
-      { at: 0, pose: 'think' as const, expression: 'neutral' as const },
-      { at: 0.14, pose: 'point' as const, expression: 'determined' as const },
-      ...s.times.flatMap((at, i) => [
-        {
-          at: at + 0.1,
-          pose: (s.dir === 'grow' ? (i === s.times.length - 1 ? 'celebrate' : 'tap') : (i === s.times.length - 1 ? 'sweat' : 'give')) as 'celebrate' | 'tap' | 'sweat' | 'give',
-          expression: (s.dir === 'grow' ? 'happy' : 'worried') as 'happy' | 'worried',
-        },
-        ...(i < s.times.length - 1 && at + 0.4 < s.times[i + 1]!
-          ? [{ at: at + 0.4, pose: 'think' as const, expression: (s.dir === 'grow' ? 'happy' : 'worried') as 'happy' | 'worried' }]
-          : []),
-      ]),
-      ...followThrough(s.times[s.times.length - 1]!, dur, s.dir),
-    ];
-    const handTarget = { x: 310, y: itemY + 26 };
-    const rawActorX = ACTOR_X + Math.sin(t * 1.6) * 10;
-    const actorBox = actorBounds({ who: s.who, x: rawActorX, y: STAGE.floor, facing: 1, scale: 1, time: t, keys });
-    const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
-    const reach = last === undefined
-      ? ease.outCubic(phase(t, 0.12, 0.38)) * 0.55
-      : 0.42 + 0.28 * (1 - ease.outCubic(phase(t, last + 0.22, last + 0.42)));
+    const amount = sizeValueAt(t, s), dims = itemSize(s.item, s.baseScale * amount);
+    const itemY = STAGE.floor - dims.h / 2 + bob(t, 1.2, 3);
+    const last = [...s.times].reverse().find(at => t >= at);
+    const itemHit = last === undefined ? 1 : 1 + Math.sin(Math.min(1, Math.max(0, t - last) / 0.22) * Math.PI) * 0.035;
+    const itemX = HERO_X + Math.sin(t * 1.4) * 2;
+    const keys = poseKeys(s, dur);
+    const touchX = itemX - dims.w / 2 + 10;
+    const hand = { x: Math.max(ACTOR_X + 78, touchX - 10), y: Math.min(STAGE.floor - 150, itemY - dims.h * 0.1) };
+    const currentAction = last !== undefined && t < last + 0.24;
 
-    drawStage(ctx, {
-      floorY: STAGE.floor, line: true,
-      shadow: [
-        { x: ACTOR_X, y: STAGE.floor - 3, w: 178 },
-        { x: HERO_X, y: STAGE.floor - 3, w: Math.min(360, dims.w) },
-      ],
-    });
-
+    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: ACTOR_X, y: STAGE.floor - 3, w: 170 }, { x: itemX, y: STAGE.floor - 3, w: Math.min(380, dims.w) }] });
     if (s.timer === 'clock') {
-      drawItem(ctx, 'clock', { x: TIMER_X, y: 207, t, scale: 0.5, hour: 11, minute: t * 170, fast: true, rim: 'blue' });
-    } else {
-      drawItem(ctx, 'hourglass', { x: TIMER_X, y: 207, t, scale: 0.5, p: clamp(t / dur) });
+      drawItem(ctx, 'clock', { x: TIMER_X, y: 150, t, scale: 0.24, hour: 11, minute: t * 220, fast: true, rim: 'blue' });
+    } else if (s.timer === 'hourglass') {
+      drawItem(ctx, 'hourglass', { x: TIMER_X, y: 150, t, scale: 0.32, p: clamp(t / dur) });
     }
 
-    if (s.item === 'cashPile') {
-      drawSprite(ctx, cashPileFor(amount), HERO_X + Math.sin(t * 1.7) * 3, itemY + bob(t, 1.1, 9), {
-        anchor: [0.5, 0.5], scale: 1, sx: hit.sx, sy: safeSy,
-      });
-    } else {
-      drawItem(ctx, s.item, {
-        x: HERO_X + Math.sin(t * 1.7) * 3, y: itemDrawY, t, scale: 1,
-        ...assetState(s.item, amount), sx: hit.sx, sy: safeSy,
-      });
-    }
-
+    drawFlyingBits(ctx, s, t);
+    drawItem(ctx, s.item, {
+      x: itemX, y: itemY, t, scale: s.baseScale * amount * itemHit,
+      rot: s.item === 'snowball' ? Math.sin(t * 1.8) * 0.025 : 0,
+    });
+    if (s.dir === 'shrink' && currentAction) drawScraper(ctx, hand.x, hand.y, t);
     drawActor(ctx, {
-      who: s.who, x: rawActorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t,
-      look: 'up', keys, handTarget, reach,
+      who: s.who, x: ACTOR_X + Math.sin(t * 1.9) * 3, y: STAGE.floor, facing: 1, scale: 1, time: t,
+      look: 'up', keys, handTarget: hand, reach: ease.outCubic(phase(t, 0.08, Math.max(0.4, s.times[0]! + 0.16))),
     });
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur);
     return cuesIn(safeDur, [
-      cue(0.08, 'footfall', 0.62, ACTOR_X),
-      cue(0.2, s.timer === 'clock' ? 'tick' : 'paper', 0.55, TIMER_X),
-      ...s.times.map((at, i) => cue(at + 0.04, i === 0 ? 'thump' : i % 2 ? 'paper' : 'clunk', i === 0 ? 1.4 : 0.8, HERO_X)),
+      cue(0.03, 'footfall', 0.62, ACTOR_X),
+      ...(s.timer !== 'none' ? [cue(0.16, 'tick', 0.42, TIMER_X)] : []),
+      ...s.times.flatMap((at, i) => s.dir === 'grow'
+        ? [cue(at - ACTION_DUR, 'swish', 0.56, ACTOR_X + 100), cue(at, i === 0 ? 'build' : 'thump', i === 0 ? 1.25 : 0.9, HERO_X)]
+        : [cue(at - 0.04, 'slide', 0.58, HERO_X - 80), cue(at, i === 0 ? 'crack' : 'clunk', i === 0 ? 1.2 : 0.85, HERO_X)]),
     ]);
   },
 };

@@ -273,6 +273,8 @@ export interface ReelSpec {
   accent?: AccentName;
   /** Background music mood for the audio render. Default 'drive'. 'none' disables music. */
   music?: MusicMood;
+  /** Per-reel instrumental brief; gives every reel its own generated score. */
+  musicBrief?: string;
   /** Series name, for example "UNDER THE HOOD". Not drawn by the chrome; use it as the title's kicker. */
   series?: string;
   scenes: SceneSpec[];

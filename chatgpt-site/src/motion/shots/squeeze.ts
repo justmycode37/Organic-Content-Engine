@@ -5,7 +5,7 @@ import { clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { bar, candles, drawStage, label } from '../kit/stage.ts';
-import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemSize, isItem, num, pick, type ActorId, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemSize, isItem, num, pick, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 type Victim = { kind: 'item'; item: ItemId } | { kind: 'actors'; actors: ActorId[] };
@@ -17,7 +17,7 @@ interface Plan {
   mood: 'worried' | 'happy' | 'shocked';
   word: string;
   mode: 'vise' | 'walls';
-  chart: 'candles';
+  chart: 'candles' | 'none';
 }
 
 const VISE = { x: STAGE.centre, left: 24, top: 632, bedTop: 656, width: 672, jawHeight: 150, jawStart: 175, jawTravel: 210 };
@@ -115,7 +115,7 @@ function plan(props: ShotProps, dur: number): Plan {
     hits.push(Math.min(upper, Math.max(lower, raw)));
   });
   const rawWord = params?.word;
-  const word = (typeof rawWord === 'string' ? rawWord : 'PRESSURE').trim().slice(0, 22).toUpperCase();
+  const word = (typeof rawWord === 'string' ? rawWord : '').trim().slice(0, 22).toUpperCase();
   return {
     steps, hits,
     victim: parseVictim(params?.victim),
@@ -123,7 +123,7 @@ function plan(props: ShotProps, dur: number): Plan {
     mood: pick(params, 'mood', ['worried', 'happy', 'shocked'] as const, 'worried'),
     word,
     mode: pick(params, 'mode', ['vise', 'walls'] as const, 'vise'),
-    chart: pick(params, 'chart', ['candles'] as const, 'candles'),
+    chart: pick(params, 'chart', ['candles', 'none'] as const, 'none'),
   };
 }
 
@@ -192,15 +192,30 @@ function drawActorWithAlpha(ctx: Frame['ctx'], s: Plan, who: ActorId, x: number,
   const trembleOn = ease.outCubic(phase(t, lastHit + 0.12, lastHit + 0.36));
   const tremble = t > lastHit + 0.12 ? Math.sin(t * Math.PI * 2 / 0.2 + x) * 2.8 * trembleOn : 0;
   const lift = t > lastHit + 0.12 ? Math.cos(t * Math.PI * 2 / 0.27 + x) * 1.8 * trembleOn : 0;
+  const keys = actorKeys(s), squashAmount = Math.max(0.82, 1 - pressure * 0.08 - impactSquash(t, s) * 0.06 - strain * 0.035);
+  const current = actorBounds({ who, x: x + tremble, y: y + lift, facing, time: t, keys, squash: squashAmount });
+  const correction = current.left < 28 ? 28 - current.left : current.right > 692 ? 692 - current.right : 0;
   ctx.save();
   ctx.globalAlpha *= alpha;
   drawActor(ctx, {
-    who, x: x + tremble, y: y + lift, facing, scale: 1, time: t, look: 'up', keys: actorKeys(s),
+    who, x: x + tremble + correction, y: y + lift, facing, scale: 1, time: t, look: 'up', keys,
     // Preserve the animal silhouette: at most 18% vertical squash and about
     // 10% horizontal spread, with the vise doing the visible pressing.
-    squash: Math.max(0.82, 1 - pressure * 0.08 - impactSquash(t, s) * 0.06 - strain * 0.035),
+    squash: squashAmount,
   });
   ctx.restore();
+}
+
+function clusterPositions(actors: ActorId[]): { x: number; facing: 1 | -1 }[] {
+  if (actors.length < 2) return actors.map(() => ({ x: STAGE.centre, facing: 1 }));
+  const left = actorBounds({ who: actors[0]!, x: 0, y: 0, facing: 1 });
+  const right = actorBounds({ who: actors[1]!, x: 0, y: 0, facing: -1 });
+  const leftW = left.right - left.left, rightW = right.right - right.left, gap = 18;
+  const start = clamp(STAGE.centre - (leftW + gap + rightW) / 2, 32, 688 - leftW - gap - rightW);
+  return [
+    { x: start - left.left, facing: 1 },
+    { x: start + leftW + gap - right.left, facing: -1 },
+  ];
 }
 
 function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, feetY: number, pressure: number) {
@@ -211,18 +226,17 @@ function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, feetY: number, pres
     return;
   }
 
-  // Two full-size victims keep a clear gap between their faces throughout the squeeze.
-  const leftX = 205, rightX = 455;
-  drawActorWithAlpha(ctx, s, actors[0]!, leftX, feetY, -1, t, 1, pressure);
+  const [left, right] = clusterPositions(actors);
+  drawActorWithAlpha(ctx, s, actors[0]!, left!.x, feetY, left!.facing, t, 1, pressure);
   if (actors.length === 2) {
-    drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1, pressure);
+    drawActorWithAlpha(ctx, s, actors[1]!, right!.x, feetY, right!.facing, t, 1, pressure);
     return;
   }
   const changeAt = s.hits[1] ?? s.hits[0]! + 0.25;
   const leave = phase(t, changeAt, changeAt + 0.1);
   const enter = phase(t, changeAt + 0.12, changeAt + 0.28);
-  if (t < changeAt + 0.1) drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1 - leave, pressure);
-  if (t >= changeAt + 0.12) drawActorWithAlpha(ctx, s, actors[2]!, rightX, feetY, 1, t, enter, pressure);
+  if (t < changeAt + 0.1) drawActorWithAlpha(ctx, s, actors[1]!, right!.x, feetY, right!.facing, t, 1 - leave, pressure);
+  if (t >= changeAt + 0.12) drawActorWithAlpha(ctx, s, actors[2]!, right!.x, feetY, right!.facing, t, enter, pressure);
 }
 
 function drawSweat(ctx: Frame['ctx'], x: number, feetY: number, t: number, pressure: number, facingSide: 1 | -1, start: number) {
@@ -265,14 +279,27 @@ function drawStamp(ctx: Frame['ctx'], s: Plan, t: number) {
   });
 }
 
+function drawWatcher(ctx: Frame['ctx'], s: Plan, t: number, preferred: number, facing: 1 | -1, look: 'up' | 'forward') {
+  const keys = [
+    { at: 0, pose: 'think' as const, expression: 'worried' as const },
+    { at: s.hits[0]!, pose: 'sweat' as const, expression: 'worried' as const },
+    { at: s.hits[s.steps - 1]! + 0.1, pose: s.mood === 'happy' ? 'celebrate' as const : 'panic' as const, expression: s.mood === 'happy' ? 'happy' as const : 'shocked' as const },
+  ];
+  const base = actorBounds({ who: s.who as ActorId, x: 0, y: STAGE.floor, facing });
+  const x = clamp(preferred, 32 - base.left, 688 - base.right);
+  const current = actorBounds({ who: s.who as ActorId, x, y: STAGE.floor, facing, time: t, keys });
+  const correction = current.left < 28 ? 28 - current.left : current.right > 692 ? 692 - current.right : 0;
+  drawActor(ctx, { who: s.who, x: x + correction, y: STAGE.floor, facing, look, scale: 1, time: t, keys });
+}
+
 export const squeezeShot: ShotDef = {
   name: 'squeeze',
   stage: 'clean',
-  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The screw turns beside a small rising candlestick chart, and victims react with wide eyes, sweat and a small tremble while the jaw presses their quills; a red-on-paper word stamp lands on the last event and pulses through the cut. walls mode shows the rising candle chart beside a descending pressure bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3), chart (candles, default candles). Events: 1–3 = successive pressure steps and candle reveals.',
+  describe: 'A steel vise ratchets down onto one real item or one to three actors; the item visibly flattens or two actors huddle and strain as the screw turns, with a third actor replacing the right-side victim at press 2. An optional word stamp lands on the final press, and an optional candle strip appears at the side. params: victim (item id or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (optional short stamp; default empty), mode (vise|walls, default vise), steps (2|3, default 3), chart (candles|none, default none). Events: 1–3 = successive presses; later events add a small settling shake.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const close = closeAt(t, s), pressure = clamp((close - 0.035) / 0.835);
-    const showWatcher = s.who !== 'none' && (s.victim.kind === 'item' || s.victim.actors.length < 2);
+    const showWatcher = s.who !== 'none' && (s.victim.kind === 'actors' ? s.victim.actors.length < 2 : itemSize(s.victim.item).w <= 300);
 
     if (s.mode === 'vise') {
       const jawBottom = VISE.jawStart + close * VISE.jawTravel + VISE.jawHeight / 2;
@@ -297,68 +324,66 @@ export const squeezeShot: ShotDef = {
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
         const dims = itemSize(s.victim.item, 1);
         const itemX = showWatcher && dims.w <= 420 ? STAGE.centre + 65 : STAGE.centre;
-        const itemScaleY = Math.max(0.78, Math.min(1 - pressure * 0.18 - strain * 0.03, (gap - 18) / dims.h));
+        const itemScaleY = Math.max(0.18, Math.min(1 - pressure * 0.18 - strain * 0.03, (gap - 18) / dims.h));
         drawItem(ctx, s.victim.item, {
           x: itemX + itemShakeX, y: (jawBottom + bedTop) / 2 + itemShakeY, t, scale: 1,
           rot: Math.sin(t * Math.PI * 2 / 0.3) * 0.04 * rattle,
           sx: Math.min(1.15, 1 + pressure * 0.08 + (1 - hit.sx) * 0.08 + rattle * 0.025),
           sy: Math.max(0.78, itemScaleY + (1 - hit.sx) * 0.04 + strain * 0.02 + Math.sin(t * Math.PI * 2 / 0.24) * 0.015 * rattle),
         });
-        if (showWatcher && dims.w <= 420) drawActor(ctx, {
-          who: s.who, x: 135, y: STAGE.floor, facing: 1, look: 'forward', scale: 1, time: t,
-          keys: [
-            { at: 0, pose: 'think', expression: 'worried' },
-            { at: s.hits[0]!, pose: 'sweat', expression: 'worried' },
-            { at: s.hits[s.steps - 1]! + 0.1, pose: s.mood === 'happy' ? 'celebrate' : 'panic', expression: s.mood === 'happy' ? 'happy' : 'shocked' },
-          ],
-        });
+        if (showWatcher) drawWatcher(ctx, s, t, 112, 1, 'forward');
       } else {
         actorCluster(ctx, s, t, bedTop, pressure);
       }
 
     } else {
       drawStage(ctx, { floorY: STAGE.floor, line: false });
-      bar(ctx, 40, 250 + close * 120, 640, 44, { progress: 1, color: PAL.blue3, background: PAL.blue4, direction: 'right' });
+      let pressureBarY = 470;
 
       if (s.victim.kind === 'item') {
         const strain = followThrough(t, s);
-        const dims = itemSize(s.victim.item, 0.5);
-        const itemX = 285, itemY = STAGE.floor - dims.h / 2 - 8;
+        const dims = itemSize(s.victim.item, 1);
+        const itemX = STAGE.centre, itemY = STAGE.floor - dims.h / 2 - 8;
+        const itemScale = Math.min(1, 660 / dims.w, 760 / dims.h);
+        const itemTop = itemY - dims.h * itemScale / 2;
+        pressureBarY = itemTop - 220 + pressure * 218;
         const activeHit = [...s.hits].reverse().find(at => t >= at) ?? s.hits[0]!;
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
         drawItem(ctx, s.victim.item, {
-          x: itemX, y: itemY, t, scale: 1,
+          x: itemX, y: itemY, t, scale: itemScale,
           sx: Math.min(1.15, 1 + pressure * 0.08),
           sy: Math.max(0.78, 1 - pressure * 0.18 - strain * 0.03 + (1 - hit.sx) * 0.04),
         });
       } else {
+        pressureBarY = 270 + pressure * 190;
         actorCluster(ctx, s, t, STAGE.floor, pressure);
       }
 
-      if (showWatcher) drawActor(ctx, {
-        who: s.who, x: 560, y: STAGE.floor, facing: -1, look: 'up', scale: 1, time: t,
-        keys: [{ at: 0, pose: 'think' }, { at: s.hits[0]!, pose: 'sweat' }, { at: s.hits[s.steps - 1]! + 0.1, pose: 'panic' }],
-      });
+      // The bar descends onto the item or actors so its pressure has a visible target.
+      bar(ctx, 40, pressureBarY, 640, 44, { progress: 1, color: PAL.blue3, background: PAL.blue4, direction: 'right' });
+      if (showWatcher) drawWatcher(ctx, s, t, 620, -1, 'up');
     }
 
     if (s.mode === 'vise') {
       drawViseJaw(ctx, t, close, s.hits[s.steps - 1]! + 0.12);
       const sweatStart = s.hits[0]! + 0.18;
       if (s.victim.kind === 'actors') {
-        if (s.victim.actors.length > 1) {
-          drawSweat(ctx, 205, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, -1, sweatStart);
-          drawSweat(ctx, 455, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, 1, sweatStart);
+      if (s.victim.actors.length > 1) {
+          const positions = clusterPositions(s.victim.actors);
+          drawSweat(ctx, positions[0]!.x, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, -1, sweatStart);
+          drawSweat(ctx, positions[1]!.x, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, 1, sweatStart);
         } else drawSweat(ctx, STAGE.centre, VISE.bedTop, t, pressure, 1, sweatStart);
       }
     } else if (s.victim.kind === 'actors') {
       const sweatStart = s.hits[0]! + 0.18;
       if (s.victim.actors.length > 1) {
-        drawSweat(ctx, 205, STAGE.floor, t, pressure, -1, sweatStart);
-        drawSweat(ctx, 455, STAGE.floor, t, pressure, 1, sweatStart);
+        const positions = clusterPositions(s.victim.actors);
+        drawSweat(ctx, positions[0]!.x, STAGE.floor, t, pressure, -1, sweatStart);
+        drawSweat(ctx, positions[1]!.x, STAGE.floor, t, pressure, 1, sweatStart);
       } else drawSweat(ctx, STAGE.centre, STAGE.floor, t, pressure, 1, sweatStart);
     }
     // Keep the mini candle column inside the frame with a little right margin.
-    candles(ctx, 568, 548, 126, 184, {
+    if (s.chart === 'candles') candles(ctx, 568, 548, 126, 184, {
       closes: 'up', count: s.steps, revealAt: s.hits.map(at => Math.max(-0.2, at - 0.18)),
       revealDuration: 0.30, t, seed: frame.seed, colorUp: PAL.DOWN, colorDown: PAL.UP,
     });

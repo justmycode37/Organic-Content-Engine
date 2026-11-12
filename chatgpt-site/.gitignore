@@ -13,3 +13,5 @@
 *.pem
 .DS_Store
 /.motion-cache/
+.acryllex-assets/
+.acryllex-cache/

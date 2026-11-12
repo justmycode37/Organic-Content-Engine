@@ -146,7 +146,7 @@ function drawWantedBubble(ctx: Frame['ctx'], s: DemandPlan, t: number, pop: numb
 export const demandShot: ShotDef = {
   name: 'demand',
   stage: 'clean',
-  describe: "A full-size demander thrusts an open palm toward a paper bubble showing the wanted item and word; the responder opens a smaller bifold wallet to reveal empty pockets; params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = demander thrusts and shows the wanted item; 2 = responder flips and shakes the empty wallet, pays with the item, or waves the demander off.",
+  describe: "One full-size actor asks for the chosen item: its picture and short word pop into a speech bubble as the other actor opens a bifold wallet, pays with that item, or waves the asker away. params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = the asker thrusts forward and reveals the wanted item; 2 = the responder opens the wallet to show empty pockets, sends the item across, or refuses; the asker keeps gesturing while the responder reacts.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const stepStart = Math.max(0, s.demandAt - 0.14);

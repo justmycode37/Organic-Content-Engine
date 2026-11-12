@@ -1,18 +1,20 @@
-// trade — a full-size seller takes payment, then hands the purchased item over.
+// trade — payment and goods cross the counter in opposite directions.
 import type { Cue, Frame, ShotProps } from '../core.ts';
-import { arc, clamp, ease, phase, squash, tween } from '../kit/motion.ts';
-import { drawStage, label } from '../kit/stage.ts';
+import { arc, clamp, ease, phase, squash } from '../kit/motion.ts';
+import { Grid, PAL } from '../kit/pixel.ts';
+import { drawSprite } from '../kit/sprite.ts';
+import { drawStage } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
 import { boothCounter } from '../props/booth.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
-import { ACTORS, STAGE, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ActorId, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 type Mode = 'buy' | 'sell';
 type Price = 'low' | 'high';
 type Tender = 'coin' | 'banknote';
 type Place = 'booth' | 'shop';
-
+interface Point { x: number; y: number }
 interface TradePlan {
   mode: Mode;
   price: Price;
@@ -24,203 +26,166 @@ interface TradePlan {
   tag: string;
   first: number;
   second: number;
+  actorX: number;
+  placeX: number;
+  facing: 1 | -1;
+  itemScale: number;
+  payScale: number;
 }
 
-const ACTOR_X = 148;
-const PLACE_X = 410;
-const PAY_FLIGHT = 0.34;
-const ITEM_FLIGHT = 0.30;
-const ITEM_SCALE = 0.5;
-const HOLD_SCALE = 0.5;
-const HAND_FACE_GAP = 8;
+const PLACE_SCALE = 0.72;
+const FLIGHT = 0.30;
 
-function orderedBeats(props: ShotProps, dur: number, fractions: readonly number[]): number[] {
-  const result = beats(props, dur, fractions).map(value => clamp(value, 0, dur));
-  const gap = Math.min(0.16, dur / (result.length + 1) * 0.55);
-  for (let i = 1; i < result.length; i++) result[i] = Math.max(result[i]!, result[i - 1]! + gap);
-  if (result.length && result[result.length - 1]! > dur) {
-    result[result.length - 1] = dur;
-    for (let i = result.length - 2; i >= 0; i--) result[i] = Math.min(result[i]!, result[i + 1]! - gap);
+const TAG_FONT: Record<string, readonly string[]> = {
+  A:['010','101','111','101','101'], B:['110','101','110','101','110'], C:['011','100','100','100','011'], D:['110','101','101','101','110'], E:['111','100','110','100','111'], F:['111','100','110','100','100'], G:['011','100','101','101','011'], H:['101','101','111','101','101'], I:['111','010','010','010','111'], J:['001','001','001','101','010'], K:['101','101','110','101','101'], L:['100','100','100','100','111'], M:['101','111','111','101','101'], N:['101','111','111','111','101'], O:['111','101','101','101','111'], P:['110','101','110','100','100'], Q:['111','101','101','111','001'], R:['110','101','110','101','101'], S:['011','100','010','001','110'], T:['111','010','010','010','010'], U:['101','101','101','101','111'], V:['101','101','101','101','010'], W:['101','101','111','111','101'], X:['101','101','010','101','101'], Y:['101','101','010','010','010'], Z:['111','001','010','100','111'],
+  '0':['111','101','101','101','111'], '1':['010','110','010','010','111'], '2':['110','001','010','100','111'], '3':['110','001','010','001','110'], '4':['101','101','111','001','001'], '5':['111','100','110','001','110'], '6':['011','100','110','101','010'], '7':['111','001','010','010','010'], '8':['010','101','010','101','010'], '9':['010','101','011','001','110'],
+};
+
+function smallTag(value: string) {
+  const text = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), cols = text.length * 4 + 4, g = new Grid(cols, 9);
+  g.rect(0, 0, cols, 9, PAL.ink).rect(1, 1, cols - 2, 7, PAL.paper);
+  let x = 2;
+  for (const char of text) {
+    (TAG_FONT[char] ?? TAG_FONT.S!).forEach((row, y) => [...row].forEach((on, xx) => { if (on === '1') g.rect(x + xx, y + 2, 1, 1, PAL.ink); }));
+    x += 4;
   }
-  return result.map(value => clamp(value, 0, dur));
+  return g.sprite(`shot-trade:tag:${text}`);
+}
+
+function orderedBeats(props: ShotProps, dur: number): [number, number] {
+  const [rawFirst, rawSecond] = beats(props, dur, [0.3, 0.66]);
+  const gap = Math.min(0.22, dur * 0.16);
+  const first = clamp(rawFirst ?? dur * 0.3, 0, Math.max(0, dur - gap));
+  const second = clamp(Math.max(rawSecond ?? dur * 0.66, first + gap), first + gap, dur);
+  return [first, second];
 }
 
 function plan(props: ShotProps, dur: number): TradePlan {
-  const p = props.params;
-  const [first = dur * 0.3, second = dur * 0.66] = orderedBeats(props, dur, [0.3, 0.66]);
+  const p = props.params, [first, second] = orderedBeats(props, dur);
+  const mode = pick(p, 'mode', ['buy', 'sell'] as const, 'buy');
+  const facing: 1 | -1 = mode === 'buy' ? 1 : -1;
+  const item = itemParam(p, 'item', 'ticket'), itemDims = itemSize(item);
   const sign = str(p, 'sign', 'MARKET').toUpperCase().replace(/[^A-Z0-9 ]/g, '').slice(0, 8) || 'MARKET';
   return {
-    mode: pick(p, 'mode', ['buy', 'sell'] as const, 'buy'),
-    price: pick(p, 'price', ['low', 'high'] as const, 'low'),
+    mode, price: pick(p, 'price', ['low', 'high'] as const, 'low'),
     tender: pick(p, 'payment', ['coin', 'banknote'] as const, 'banknote'),
     who: pick(p, 'who', ACTORS, 'hedgy') as ActorId,
-    place: pick(p, 'place', ['booth', 'shop'] as const, 'booth'),
-    sign,
-    item: itemParam(p, 'item', 'ticket'),
-    tag: str(p, 'tag', '').trim().slice(0, 8),
-    first: first!,
-    second: second!,
+    place: pick(p, 'place', ['booth', 'shop'] as const, 'booth'), sign,
+    item, tag: str(p, 'tag', '').trim().replace(/[^A-Za-z0-9]/g, '').slice(0, 8), first, second,
+    actorX: mode === 'buy' ? 130 : 590,
+    placeX: mode === 'buy' ? 470 : 250,
+    facing,
+    itemScale: Math.min(0.46, 216 / Math.max(itemDims.w, itemDims.h)),
+    payScale: 0.42,
   };
+}
+
+function paymentId(s: TradePlan): ItemId { return s.price === 'high' ? 'cashPile' : s.tender; }
+
+function drawItemAt(ctx: Frame['ctx'], item: ItemId, point: Point, t: number, scale: number, extra: Record<string, unknown> = {}) {
+  drawItem(ctx, item, { x: point.x, y: point.y, t, scale, ...extra });
 }
 
 function station(s: TradePlan) {
   if (s.place === 'booth') {
-    const counter = boothCounter({ x: PLACE_X, y: STAGE.floor, scale: 1 });
-    return { x: counter.x + counter.w * 0.5, top: counter.y, centre: counter.y + counter.h * 0.5, height: counter.h };
+    const counter = boothCounter({ x: s.placeX, y: STAGE.floor, scale: PLACE_SCALE });
+    return { top: counter.y, height: counter.h };
   }
-  return { x: PLACE_X + 20, top: STAGE.floor - 228, centre: STAGE.floor - 196, height: 48 };
+  return { top: STAGE.floor - 240, height: 36 };
 }
 
-function paymentId(s: TradePlan): ItemId { return s.price === 'high' ? 'cashPile' : s.tender; }
-function paymentScale(_s: TradePlan) { return 0.5; }
-
-function heldGeometry(who: ActorId, t: number, item: ItemId, keys: HedgyKey[]) {
-  const actor = { who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, pose: 'hold' as const, facing: 1 as const, keys };
-  const face = actorFace(actor), paw = actorPaw(actor), fullSize = itemSize(item);
-  const scale = Math.min(HOLD_SCALE, ITEM_SCALE, Math.max(0.15, (STAGE.h - 48 - face.y - face.r - HAND_FACE_GAP) / fullSize.h));
-  const dims = itemSize(item, scale);
-  const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + HAND_FACE_GAP);
-  if (lowY + dims.h / 2 <= STAGE.h - 36) {
-    const center = { x: Math.min(STAGE.w - dims.w / 2 - 36, paw.x + Math.min(64, dims.w * 0.34)), y: lowY };
-    return { center, hand: { x: center.x - dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims, scale };
-  }
-  const center = { x: face.x, y: Math.max(24 + dims.h / 2, face.y - face.r - dims.h / 2 - 16) };
-  return { center, hand: { x: center.x, y: center.y + dims.h / 2 + 8 }, dims, scale };
+function heldGeometry(who: ActorId, actorX: number, facing: 1 | -1, t: number, item: ItemId, scale: number, keys: HedgyKey[]) {
+  const actor = { who, x: actorX, y: STAGE.floor, scale: 1, time: t, pose: 'hold' as const, facing, keys };
+  const paw = actorPaw(actor), dims = itemSize(item, scale);
+  const y = clamp(paw.y + dims.h * 0.18, STAGE.floor - dims.h / 2 - 180, STAGE.floor - dims.h / 2 - 20);
+  const x = clamp(paw.x + facing * Math.min(58, dims.w * 0.34), 28 + dims.w / 2, STAGE.w - 28 - dims.w / 2);
+  const center = { x, y };
+  return { center, hand: { x: center.x - facing * dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims, scale };
 }
-function amountPosition(t: number, start: number, from: Point, to: Point, height: number, duration: number) {
+
+function transferPoint(t: number, start: number, duration: number, from: Point, to: Point): Point {
   const u = ease.inOutCubic(phase(t, start, start + duration));
-  return { u, point: arc(from, to, height, u) };
+  return arc(from, to, 22, u);
 }
-
-function pawTransferPosition(t: number, start: number, duration: number, from: Point, to: Point, mode: Mode): Point {
-  const u = ease.inOutCubic(phase(t, start, start + duration));
-  if (mode === 'buy') return { x: from.x + (to.x - from.x) * u, y: from.y + (to.y - from.y) * u };
-  if (u < 0.62) return { x: from.x + (to.x - from.x) * ease.inOutCubic(u / 0.62), y: from.y };
-  return { x: to.x, y: from.y + (to.y - from.y) * ease.inOutCubic((u - 0.62) / 0.38) };
-}
-
-interface Point { x: number; y: number }
 
 export const tradeShot: ShotDef = {
   name: 'trade',
   stage: 'clean',
-  describe: 'An actor trades across a full-size booth or shop; a high price shows a full-size cash pile and a worried reaction. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (word, default MARKET), item (any item id, default ticket), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for a low price, default banknote), tag (optional word by the item, default none). Events for buy: 1 = payment crosses the counter, 2 = the item reaches the buyer. Events for sell: 1 = the item reaches the shop, 2 = payment reaches the seller.',
+  describe: 'A customer and shopkeeper exchange payment and an item across a counter; buy sends money to the shop before the item reaches the customer, while sell sends the item in before payment returns. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (up to 8 characters, default MARKET), item (any library item, default ticket), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for low price, default banknote), tag (optional short tag by the item, default none). Events: buy event 1 = payment reaches the counter and event 2 = the item reaches the customer; sell event 1 = the item reaches the counter and event 2 = payment reaches the customer.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), place = station(s);
-    const payId = paymentId(s), payScale = paymentScale(s), payDims = itemSize(payId, payScale);
-    const payStart = Math.max(0, s.first - PAY_FLIGHT);
-    const itemStart = Math.max(0, s.second - ITEM_FLIGHT);
-    const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
-    const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
-    const paymentArrives = payFlightStart + PAY_FLIGHT;
-    const itemArrives = itemFlightStart + ITEM_FLIGHT;
-    const actorKeys: HedgyKey[] = [
-      { at: 0, pose: s.mode === 'sell' ? 'hold' as const : 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'neutral' as const },
-      { at: payStart, pose: 'give' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'determined' as const },
-      ...(s.price === 'high' && s.mode === 'buy' ? [{ at: paymentArrives, pose: 'sweat' as const, expression: 'worried' as const }] : [{ at: paymentArrives + 0.04, pose: 'tap' as const }]),
-      { at: itemStart, pose: 'receive' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-      { at: itemArrives + 0.04, pose: 'hold' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-      { at: Math.max(itemArrives + 0.36, dur - 0.3), pose: 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-    ].sort((a, b) => a.at - b.at);
-    const actorBase = { who: s.who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, t, pose: 'hold' as const, facing: 1 as const, keys: actorKeys };
-    const face = actorFace(actorBase), paw = actorPaw(actorBase), held = heldGeometry(s.who, t, s.item, actorKeys);
-    const itemDims = held.dims;
-    const itemHeld = held.center;
-    const tenderAtHand = {
-      x: paw.x + Math.min(40, payDims.w * 0.22),
-      y: Math.min(STAGE.h - 24 - payDims.h / 2, Math.max(paw.y + payDims.h * 0.24, face.y + face.r + payDims.h / 2 + 12)),
-    };
-    const payRestDims = itemSize(payId, s.price === 'high' ? 1 : payScale);
-    const payFloorY = STAGE.floor - payRestDims.h / 2;
-    const payStation = { x: place.x + 96, y: payFloorY };
-    const payActor = { x: ACTOR_X + 296, y: payFloorY };
-    const payFrom = s.mode === 'buy' ? tenderAtHand : payStation;
-    const payTo = s.mode === 'buy' ? payStation : payActor;
-    const itemFrom = s.mode === 'buy' ? { x: place.x + 56, y: itemHeld.y } : itemHeld;
-    const itemTo = s.mode === 'buy' ? itemHeld : { x: place.x + 56, y: place.centre + 18 };
-    const payFlight = amountPosition(t, payFlightStart, payFrom, payTo, 14, PAY_FLIGHT);
-    const itemFlightPoint = pawTransferPosition(t, itemFlightStart, ITEM_FLIGHT, itemFrom, itemTo, s.mode);
-    const paymentSquash = squash(t, paymentArrives, 0.14, 0.18);
-    const itemSquash = squash(t, itemArrives, 0.14, 0.18);
+    const payId = paymentId(s), payScale = s.payScale, payDims = itemSize(payId, payScale), itemDims = itemSize(s.item, s.itemScale);
+    const payTargetAt = s.mode === 'buy' ? s.first : s.second;
+    const itemTargetAt = s.mode === 'buy' ? s.second : s.first;
+    const payStart = Math.max(0, payTargetAt - FLIGHT), itemStart = Math.max(0, itemTargetAt - FLIGHT);
+    const payArrives = payStart + FLIGHT, itemArrives = itemStart + FLIGHT;
+    const actorKeys = ([
+      { at: 0, pose: s.mode === 'sell' ? 'hold' : 'think', expression: 'neutral' },
+      { at: payStart, pose: s.mode === 'buy' ? 'give' : 'hold', expression: s.price === 'high' && s.mode === 'buy' ? 'worried' : 'determined' },
+      { at: payArrives + 0.04, pose: s.mode === 'sell' ? 'receive' : 'tap', expression: s.price === 'high' && s.mode === 'buy' ? 'worried' : 'happy' },
+      { at: itemStart, pose: s.mode === 'sell' ? 'give' : 'receive', expression: 'determined' },
+      { at: itemArrives + 0.04, pose: 'hold', expression: s.price === 'high' && s.mode === 'buy' ? 'worried' : 'happy' },
+      { at: Math.max(itemArrives + 0.42, dur - 0.28), pose: 'tap', expression: s.price === 'high' && s.mode === 'buy' ? 'worried' : 'happy' },
+    ] satisfies HedgyKey[]).sort((a, b) => a.at - b.at);
+    const rawActorBounds = actorBounds({ who: s.who, x: s.actorX, y: STAGE.floor, facing: s.facing, scale: 1, time: t, keys: actorKeys });
+    const actorCorrection = rawActorBounds.left < 28 ? 28 - rawActorBounds.left : rawActorBounds.right > 692 ? 692 - rawActorBounds.right : 0;
+    const actorX = s.actorX + actorCorrection;
+    const held = heldGeometry(s.who, actorX, s.facing, t, s.item, s.itemScale, actorKeys);
+    const paymentHeld = heldGeometry(s.who, actorX, s.facing, t, payId, payScale, actorKeys);
+    const payHand = paymentHeld.center;
+    const payStationPoint = { x: s.placeX + s.facing * 66, y: place.top - payDims.h / 2 };
+    const itemStationPoint = { x: s.placeX - s.facing * 68, y: place.top - itemDims.h / 2 };
+    const payFrom = s.mode === 'buy' ? payHand : payStationPoint;
+    const payTo = s.mode === 'buy' ? payStationPoint : payHand;
+    const itemFrom = s.mode === 'buy' ? itemStationPoint : held.center;
+    const itemTo = s.mode === 'buy' ? held.center : itemStationPoint;
+    const payMoving = t >= payStart && t < payArrives;
+    const itemMoving = t >= itemStart && t < itemArrives;
+    const payPoint = t < payStart ? payFrom : payMoving ? transferPoint(t, payStart, FLIGHT, payFrom, payTo) : payTo;
+    const itemPoint = t < itemStart ? itemFrom : itemMoving ? transferPoint(t, itemStart, FLIGHT, itemFrom, itemTo) : itemTo;
+    const paymentHit = squash(t, payArrives, 0.14, 0.16), itemHit = squash(t, itemArrives, 0.14, 0.18);
 
     drawStage(ctx, { floorY: STAGE.floor, line: true });
-    const placeScale = 1;
+    const placeDims = itemSize(s.place, PLACE_SCALE);
     drawItem(ctx, s.place, {
-      x: PLACE_X, y: STAGE.floor - itemSize(s.place).h / 2, t, scale: placeScale,
+      x: s.placeX, y: STAGE.floor - placeDims.h / 2, t, scale: PLACE_SCALE,
       sign: s.sign, clerk: s.place === 'booth', stock: 0, stockKind: 'none',
     });
-
-    const paymentHandTarget = s.price === 'high'
-      ? { x: payFrom.x - payDims.w * 0.34, y: payFrom.y - payDims.h * 0.18 }
-      : tenderAtHand;
-    const faceClearTarget = s.mode === 'buy' && t < itemStart
-      ? paymentHandTarget
-      : s.mode === 'sell' && t >= payFlightStart
-        ? { x: payTo.x - payDims.w * 0.34, y: payTo.y - 16 }
-        : held.hand;
     drawActor(ctx, {
-      who: s.who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t,
+      who: s.who, x: actorX, y: STAGE.floor, scale: 1, facing: s.facing, time: t,
       look: t < itemStart ? 'forward' : 'down', keys: actorKeys,
-      handTarget: faceClearTarget, reach: t < payFlightStart + PAY_FLIGHT ? 1 : phase(t, itemStart, itemStart + 0.14),
+      handTarget: s.mode === 'sell' && t < itemArrives ? held.hand : paymentHeld.hand,
+      reach: t < payArrives + 0.1 || t >= itemStart ? 0.9 : 0.55,
     });
 
-    const paymentVisible = s.mode === 'buy' || t >= payFlightStart;
-    if (paymentVisible) {
-      const paymentPoint = t < payFlightStart ? payFrom : t < paymentArrives ? payFlight.point : payTo;
-      const stowAt = s.second - 0.12;
-      const stow = s.price === 'high' && s.mode === 'buy' ? ease.inOutCubic(phase(t, stowAt, s.second)) : 0;
-      const leavingPoint = { x: paymentPoint.x + 42 * stow, y: paymentPoint.y - 20 * stow };
-      const highPileAlpha = s.mode === 'buy'
-        ? 1 - ease.inOutCubic(phase(t, stowAt, s.second))
-        : 1;
-      const highPileLevel = s.price === 'high'
-        ? 0.18 + 0.82 * ease.outCubic(phase(t, payFlightStart, paymentArrives))
-        : undefined;
-      const heldScale = s.price === 'high'
-        ? 0.5 + 0.5 * ease.outCubic(phase(t, payFlightStart + 0.04, paymentArrives))
-        : payScale;
-      drawItem(ctx, payId, {
-        x: leavingPoint.x, y: leavingPoint.y, t, scale: heldScale,
-        level: highPileLevel,
-        sx: paymentSquash.sx, sy: paymentSquash.sy,
-        alpha: highPileAlpha,
-      });
+    drawItemAt(ctx, payId, payPoint, t, payScale, {
+      sx: paymentHit.sx, sy: paymentHit.sy,
+      ...(s.price === 'high' ? { level: 0.92 } : {}),
+    });
+    drawItemAt(ctx, s.item, itemPoint, t, held.scale, { sx: itemHit.sx, sy: itemHit.sy });
+
+    if (s.tag) {
+      const tag = smallTag(s.tag), active = ease.outCubic(phase(t, itemArrives - 0.06, itemArrives + 0.16));
+      const x = clamp(itemPoint.x + Math.min(38, itemDims.w * 0.32), 36 + tag.w * 0.28, STAGE.w - 36 - tag.w * 0.28);
+      const y = clamp(itemPoint.y - itemDims.h / 2 - tag.h * 0.24, 40 + tag.h * 0.25, STAGE.floor - 20);
+      drawSprite(ctx, tag, x, y, { anchor: [0.5, 0.5], scale: 0.52, alpha: active });
     }
 
-    const itemVisible = s.mode === 'sell' ? 1 : phase(t, itemStart - 0.06, itemStart + 0.04);
-    if (s.mode === 'sell' || t >= itemStart - 0.06) {
-      const itemPoint = t < itemFlightStart ? itemFrom : t < itemArrives ? itemFlightPoint : itemTo;
-      drawItem(ctx, s.item, {
-        x: itemPoint.x, y: itemPoint.y, t, scale: held.scale,
-        sx: itemSquash.sx, sy: itemSquash.sy, alpha: itemVisible,
-      });
-      if (s.tag) {
-        const tagProgress = s.mode === 'sell'
-          ? phase(t, payStart, payStart + 0.20)
-          : phase(t, itemStart, itemStart + 0.16);
-        const tagX = clamp(itemPoint.x + itemDims.w * 0.5 + 42, 86, STAGE.w - 92);
-        const tagY = Math.min(STAGE.floor - 62, itemPoint.y + itemDims.h * 0.5 + 46);
-        label(ctx, s.tag.toUpperCase(), tagX, tagY, {
-          variant: 'tag', pop: tagProgress * 0.62, maxWidth: 260,
-        });
-      }
-    }
-
-    const impactRingY = Math.min(STAGE.h - 58, itemTo.y + itemDims.h / 2 + 58);
-    if (t >= itemArrives - 0.02) ring(ctx, itemTo.x, impactRingY, itemArrives, t, { r: 54, width: 8 });
+    const ringAt = itemArrives;
+    ring(ctx, itemPoint.x, Math.min(STAGE.floor - 38, itemPoint.y + itemDims.h / 2 + 24), ringAt, t, { r: 34, width: 5, duration: 0.24 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), pileHit = s.price === 'high' ? 'thump' : 'coin';
-    const payStart = Math.max(0, s.first - PAY_FLIGHT), itemStart = Math.max(0, s.second - ITEM_FLIGHT);
-    const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
-    const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
+    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), payId = paymentId(s);
+    const payTargetAt = s.mode === 'buy' ? s.first : s.second, itemTargetAt = s.mode === 'buy' ? s.second : s.first;
+    const payArrives = Math.max(0, payTargetAt - FLIGHT) + FLIGHT;
+    const itemArrives = Math.max(0, itemTargetAt - FLIGHT) + FLIGHT;
     return cuesIn(safeDur, [
-      cue(0.03, 'clunk', 0.65, PLACE_X),
-      cue(payStart, s.mode === 'buy' ? 'slide' : 'paper', 0.92, s.mode === 'buy' ? ACTOR_X + 200 : PLACE_X),
-      cue(payFlightStart + PAY_FLIGHT, s.mode === 'buy' ? pileHit : 'paper', s.price === 'high' ? 1.5 : 1.0, PLACE_X),
-      cue(itemFlightStart, 'slide', 0.88, s.mode === 'buy' ? PLACE_X : ACTOR_X),
-      cue(itemFlightStart + ITEM_FLIGHT, s.mode === 'buy' ? 'land' : pileHit, s.price === 'high' && s.mode === 'sell' ? 1.4 : 1.25, ACTOR_X),
-      ...(s.tag ? [cue(itemFlightStart + ITEM_FLIGHT + 0.08, 'paper', 0.6, ACTOR_X)] : []),
+      cue(0.03, 'clunk', 0.62, s.placeX),
+      cue(Math.max(0, payTargetAt - FLIGHT), s.mode === 'buy' ? 'slide' : 'paper', 0.9, s.mode === 'buy' ? s.actorX : s.placeX),
+      cue(payArrives, s.price === 'high' ? 'thump' : s.tender === 'coin' ? 'coin' : 'paper', s.price === 'high' ? 1.35 : 0.95, s.mode === 'buy' ? s.placeX : s.actorX),
+      cue(Math.max(0, itemTargetAt - FLIGHT), 'slide', 0.88, s.mode === 'buy' ? s.placeX : s.actorX),
+      cue(itemArrives, s.mode === 'buy' ? 'land' : payId === 'cashPile' ? 'thump' : 'coin', 1.15, s.mode === 'buy' ? s.actorX : s.placeX),
+      ...(s.tag ? [cue(itemArrives + 0.06, 'paper', 0.58, s.actorX)] : []),
     ]);
   },
 };

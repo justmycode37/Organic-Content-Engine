@@ -74,11 +74,11 @@ export const ITEMS = {
   banknote: I(money.drawBanknote, 300, 150), cash: I(money.drawCashBundle, 264, 168, { state: { count: 3 } }),
   cashPile: I(money.drawCashPile, 264, 276, { base: true, state: { level: 1 } }), coin: I(money.drawCoin, 132, 132),
   coinStack: I(money.drawCoinStack, 132, 258, { base: true, state: { n: 5 } }), priceTag: I(money.drawPriceTag, 252, 240),
-  iou: I(paper.drawIOU, 228, 276), wallet: I(wallet.drawWallet, 264, 192),
+  iou: I(paper.drawIOU, 228, 276), wallet: I(wallet.drawWallet, 264, 192, { state: { open: 0, empty: false } }),
   safe: I(safe.drawSafe, 528, 564, { base: true }), padlock: I(safe.drawPadlock, 168, 204, { state: { shut: 1 } }),
-  clock: I(clock.drawClock, 468, 468), hourglass: I(clock.drawHourglass, 210, 330),
-  booth: I(booth.drawBooth, 564, 720, { base: true }), poster: I(poster.drawPoster, 522, 684, { state: { reveal: 1 } }), megaphone: I(poster.drawMegaphone, 300, 228),
-  press: I(press.drawSqueeze, 456, 540),
+  clock: I(clock.drawClock, 468, 468, { state: { hour: 12, minute: 0 } }), hourglass: I(clock.drawHourglass, 210, 330, { state: { p: 0.5 } }),
+  booth: I(booth.drawBooth, 564, 720, { base: true }), poster: I(poster.drawPoster, 522, 684, { state: { reveal: 1, word: 'INFO', art: 'brochure' } }), megaphone: I(poster.drawMegaphone, 300, 228, { state: { blast: 0 } }),
+  press: I(press.drawSqueeze, 456, 540, { state: { close: 0, w: 456, h: 540 } }),
   share: I(finance.drawShare, 480, 372), contract: I(finance.drawContract, 420, 390), bond: I(finance.drawBond, 450, 390),
   piggy: I(finance.drawPiggyBank, 390, 336), moneyBag: I(finance.drawMoneyBag, 360, 420), gold: I(finance.drawGoldBars, 420, 300),
   card: I(finance.drawCreditCard, 432, 276), calculator: I(finance.drawCalculator, 360, 456), percent: I(finance.drawPercentBadge, 420, 264),
@@ -88,12 +88,17 @@ export const ITEMS = {
   dice: I(finance.drawDice, 300, 300), crypto: I(finance.drawCryptoCoin, 330, 330),
   bank: I(buildings.drawBank, 528, 564, { base: true }), exchange: I(buildings.drawExchange, 528, 564, { base: true }), house: I(buildings.drawHouse, 528, 564, { base: true }),
   factory: I(buildings.drawFactory, 528, 564, { base: true }), shop: I(buildings.drawShop, 528, 564, { base: true }), taxOffice: I(buildings.drawTaxOffice, 528, 564, { base: true }),
-  bull: I(symbols.drawBull, 510, 390), bear: I(symbols.drawBear, 480, 390), crate: I(symbols.drawLabelledCrate, 420, 360),
+  bull: I(symbols.drawBull, 510, 390), bear: I(symbols.drawBear, 480, 390), crate: I(symbols.drawLabelledCrate, 420, 360, { state: { label: 'BOX' } }),
   warning: I(symbols.drawWarningTriangle, 360, 330), check: I(symbols.drawCheckStamp, 300, 300), cross: I(symbols.drawCrossStamp, 300, 300), question: I(symbols.drawQuestionMark, 240, 330),
-  apple: I(everyday.drawApple, 330, 330), appleCrate: I(everyday.drawAppleCrate, 450, 360), lemonade: I(everyday.drawLemonadeStand, 450, 600), pizza: I(everyday.drawPizza, 420, 420),
+  apple: I(everyday.drawApple, 330, 330), appleCrate: I(everyday.drawAppleCrate, 450, 360), lemonade: I(everyday.drawLemonadeStand, 450, 600), pizza: I(everyday.drawPizza, everyday.PIZZA_SIZE.w, everyday.PIZZA_SIZE.h),
+  pizzaSlice: I(everyday.drawPizzaSlice, everyday.PIZZA_SLICE_SIZE.w, everyday.PIZZA_SLICE_SIZE.h),
   car: I(everyday.drawCar, 510, 300), phone: I(everyday.drawPhoneChart, 276, 450), cart: I(everyday.drawShoppingCart, 480, 360), gift: I(everyday.drawGiftBox, 330, 330),
   key: I(everyday.drawKey, 420, 180), bulb: I(everyday.drawLightBulb, 330, 420), weather: I(everyday.drawRiskWeather, 480, 390), tree: I(everyday.drawCompoundingTree, 390, 420, { state: { grow: 1 } }),
   snowball: I(everyday.drawSnowball, 300, 300, { state: { size: 1 } }),
+  coffeeCup: I(everyday.drawCoffeeCup, everyday.COFFEE_CUP_SIZE.w, everyday.COFFEE_CUP_SIZE.h), bread: I(everyday.drawBread, everyday.BREAD_SIZE.w, everyday.BREAD_SIZE.h),
+  burger: I(everyday.drawBurger, everyday.BURGER_SIZE.w, everyday.BURGER_SIZE.h), bike: I(everyday.drawBike, everyday.BIKE_SIZE.w, everyday.BIKE_SIZE.h),
+  laptop: I(everyday.drawLaptop, everyday.LAPTOP_SIZE.w, everyday.LAPTOP_SIZE.h), sneaker: I(everyday.drawSneaker, everyday.SNEAKER_SIZE.w, everyday.SNEAKER_SIZE.h),
+  watch: I(everyday.drawWatch, everyday.WATCH_SIZE.w, everyday.WATCH_SIZE.h), chocolateBar: I(everyday.drawChocolateBar, everyday.CHOCOLATE_BAR_SIZE.w, everyday.CHOCOLATE_BAR_SIZE.h), lemon: I(everyday.drawLemon, everyday.LEMON_SIZE.w, everyday.LEMON_SIZE.h),
 } satisfies Record<string, Item>;
 export type ItemId = keyof typeof ITEMS;
 export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];
@@ -115,4 +120,22 @@ export function drawItem(ctx: Ctx, id: ItemId, o: ItemOptions) {
   if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
   item.draw(ctx, { ...item.state, ...rest, x: 0, y: item.base ? (item.h * scale) / 2 : 0, scale });
   ctx.restore();
+}
+
+/**
+ * Draw one separable portion for item-transfer shots. Discrete goods use a
+ * matching single unit (pizza slice, apple, coin, banknote or ticket); other
+ * item ids fall back to a smaller intact icon so every ITEM_IDS value works.
+ * The default piece scale is uniform, preserving the source silhouette.
+ */
+export function drawItemPiece(ctx: Ctx, id: ItemId, o: ItemOptions) {
+  const scale = o.scale ?? 0.5;
+  const piece = { ...o, scale, sx: 1, sy: 1 };
+  if (id === 'pizza' || id === 'pizzaSlice') return everyday.drawPizzaSlice(ctx, piece);
+  if (id === 'appleCrate') return everyday.drawApple(ctx, piece);
+  if (id === 'coinStack') return money.drawCoin(ctx, piece);
+  if (id === 'cashPile') return money.drawCashBundle(ctx, piece);
+  if (id === 'cash') return money.drawBanknote(ctx, piece);
+  if (id === 'ticketStack') return ticket.drawTicket(ctx, piece);
+  return drawItem(ctx, id, piece);
 }

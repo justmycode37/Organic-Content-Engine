@@ -29,7 +29,7 @@ const sceneSchemas = {
  outro:z.object({type:z.literal('outro'),...base,cta:short(90),handle:short(40).optional(),sub:short(90).optional()}).strict(),
 };
 const sceneSchema=z.discriminatedUnion('type',SCENE_TYPES.map(t=>sceneSchemas[t]) as [typeof sceneSchemas[keyof typeof sceneSchemas], ...typeof sceneSchemas[keyof typeof sceneSchemas][]]);
-export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),music:z.enum(MUSIC_MOODS).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive(),words:z.array(z.object({start:z.number(),end:z.number()}).strict()).max(40).optional()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
+export const reelSpecSchema=z.object({version:z.literal(1),title:short(90).optional(),mode:z.enum(['dark','light']).optional(),accent:z.enum(Object.keys(ACCENTS) as [keyof typeof ACCENTS,...(keyof typeof ACCENTS)[]]).optional(),series:short(60).optional(),music:z.enum(MUSIC_MOODS).optional(),musicBrief:short(400).optional(),scenes:z.array(sceneSchema).min(1).max(40),captions:z.array(z.object({text:short(90),start:z.number().min(0),end:z.number().positive(),words:z.array(z.object({start:z.number(),end:z.number()}).strict()).max(40).optional()}).strict()).max(100).optional()}).strict().superRefine((spec,ctx)=>{
  if(spec.series?.startsWith('HEDGY')){
  if(spec.accent!=='mono')ctx.addIssue({code:'custom',message:'Hedgy requires monochrome palette'});
  for(const scene of spec.scenes){

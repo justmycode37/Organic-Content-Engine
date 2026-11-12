@@ -3,7 +3,7 @@ import type { Cue, Frame, ShotProps } from '../core.ts';
 import { arc, bob, clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
-import { drawStage, label } from '../kit/stage.ts';
+import { drawStage } from '../kit/stage.ts';
 import { ring, sparks } from '../kit/fx.ts';
 import { ACTORS, STAGE, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
@@ -12,7 +12,6 @@ const CONTAINERS = ['safe', 'piggy', 'bank', 'wallet', 'crate'] as const;
 type ContainerId = typeof CONTAINERS[number];
 const ACTOR_X = 140;
 const CONTAINER_X = 430;
-const ITEM_SCALE = 0.5;
 
 const crateOpening = (() => {
   const g = new Grid(70, 26);
@@ -51,8 +50,28 @@ interface StorePlan {
   travel: number;
   container: ContainerId;
   item: ItemId;
+  itemScale: number;
   who: string;
   label: string;
+}
+
+const TAG_FONT: Record<string, readonly string[]> = {
+  A:['010','101','111','101','101'], B:['110','101','110','101','110'], C:['011','100','100','100','011'], D:['110','101','101','101','110'], E:['111','100','110','100','111'], F:['111','100','110','100','100'], G:['011','100','101','101','011'], H:['101','101','111','101','101'], I:['111','010','010','010','111'], J:['001','001','001','101','010'], K:['101','101','110','101','101'], L:['100','100','100','100','111'], M:['101','111','111','101','101'], N:['101','111','111','111','101'], O:['111','101','101','101','111'], P:['110','101','110','100','100'], Q:['111','101','101','111','001'], R:['110','101','110','101','101'], S:['011','100','010','001','110'], T:['111','010','010','010','010'], U:['101','101','101','101','111'], V:['101','101','101','101','010'], W:['101','101','111','111','101'], X:['101','101','010','101','101'], Y:['101','101','010','010','010'], Z:['111','001','010','100','111'],
+  '0':['111','101','101','101','111'], '1':['010','110','010','010','111'], '2':['110','001','010','100','111'], '3':['110','001','010','001','110'], '4':['101','101','111','001','001'], '5':['111','100','110','001','110'], '6':['011','100','110','101','010'], '7':['111','001','010','010','010'], '8':['010','101','010','101','010'], '9':['010','101','011','001','110'],
+};
+function smallTag(value: string) {
+  const text = value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8), cols = text.length * 4 + 4, g = new Grid(cols, 9);
+  g.rect(0, 0, cols, 9, PAL.ink).rect(1, 1, cols - 2, 7, PAL.paper);
+  let x = 2;
+  for (const char of text) {
+    (TAG_FONT[char] ?? TAG_FONT.S!).forEach((row, y) => [...row].forEach((on, xx) => { if (on === '1') g.rect(x + xx, y + 2, 1, 1, PAL.ink); }));
+    x += 4;
+  }
+  return g.sprite(`shot-store:tag:${text}`);
+}
+
+function itemAt(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, item: ItemId, x: number, y: number, t: number, scale: number, extra: Record<string, unknown> = {}) {
+  drawItem(ctx, item, { x, y, t, scale, ...extra });
 }
 
 function plan(props: ShotProps, dur: number): StorePlan {
@@ -61,10 +80,11 @@ function plan(props: ShotProps, dur: number): StorePlan {
   const closeAt = Math.min(dur, Math.max(closeRaw ?? dur * 0.74, landedAt + Math.min(0.24, dur * 0.14)));
   const travel = Math.min(0.36, Math.max(0.16, closeAt - landedAt - 0.08));
   const putAt = Math.max(0, landedAt - travel);
+  const item = itemParam(props.params, 'item', 'cash'), dims = itemSize(item);
   return {
     putAt, closeAt, travel: landedAt - putAt, landedAt,
     container: pick(props.params, 'container', CONTAINERS, 'safe'),
-    item: itemParam(props.params, 'item', 'cash'),
+    item, itemScale: Math.min(0.5, 156 / Math.max(dims.w, dims.h)),
     who: pick(props.params, 'who', ACTORS, 'broker'),
     label: str(props.params, 'label', '').trim(),
   };
@@ -94,10 +114,10 @@ function drawStoredContainer(ctx: CanvasRenderingContext2D | OffscreenCanvasRend
 export const storeShot: ShotDef = {
   name: 'store',
   stage: 'clean',
-  describe: 'An actor puts an item into a container, closes and locks it, then pats the safe or dusts their paws while the dial turns. params: container (safe|piggy|bank|wallet|crate, default safe), item (any item id, default cash), who (actor id, default broker), label (optional word on a paper plate above the container, default none). Events: 1 = the actor carries or tosses the item in, 2 = the container closes and locks.',
+  describe: 'An actor carries an item to an open container; it shrinks inside, then the door or lid closes and locks as the actor pats it. params: container (safe|piggy|bank|wallet|crate, default safe), item (any item id, default cash), who (actor id, default broker), label (optional short tag on the container, default none). Events: 1 = the item lands inside; 2 = the door or lid closes and the lock snaps.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), g = geometry(s.container);
-    const carriedSize = itemSize(s.item, ITEM_SCALE);
+    const carriedSize = itemSize(s.item, s.itemScale);
     const walkEnd = Math.min(0.42, s.putAt * 0.44);
     const prepareAt = Math.max(walkEnd, s.putAt - 0.48);
     const timeAfterClose = Math.max(0, dur - s.closeAt);
@@ -120,7 +140,7 @@ export const storeShot: ShotDef = {
     const approach = (at: number) => 62 * ease.outCubic(phase(at, 0, 0.46));
     const start = {
       x: Math.max(paw.x + 12, face.x + face.r + 14) + carriedSize.w / 2,
-      y: paw.y + Math.min(34, carriedSize.h * 0.18),
+      y: Math.min(paw.y - 58, STAGE.floor - carriedSize.h / 2 - 44),
     };
     const prep = ease.inOutCubic(phase(t, prepareAt, s.putAt));
     const holdPoint = (at: number, p: number) => ({
@@ -165,10 +185,9 @@ export const storeShot: ShotDef = {
 
     if (t < s.landedAt + 0.14) {
       const flightAlpha = 1 - vanish;
-      const settlingScale = ITEM_SCALE * (1 - vanish * 0.74);
-      drawItem(ctx, s.item, {
-        x: itemPos.x, y: itemPos.y + bob(t, 1.6, t < s.putAt ? 4 : 0), t,
-        scale: settlingScale, rot: Math.sin(travelP * Math.PI) * 0.12,
+      const settlingScale = s.itemScale * (1 - vanish * 0.34);
+      itemAt(ctx, s.item, itemPos.x, itemPos.y + bob(t, 1.6, t < s.putAt ? 4 : 0), t, settlingScale, {
+        rot: Math.sin(travelP * Math.PI) * 0.12,
         sx: itemSquash.sx, sy: itemSquash.sy, alpha: flightAlpha,
       });
     }
@@ -188,7 +207,15 @@ export const storeShot: ShotDef = {
       drawSprite(ctx, crateLid, g.x, g.y - 99 - 96 * opened * (1 - lidP), { sx: hit.sx, sy: hit.sy, rot: -0.06 * opened * (1 - lidP) });
     }
 
-    if (s.label) label(ctx, s.label.toUpperCase(), g.x, g.labelY, { variant: 'tag', maxWidth: 520 });
+    if (s.label && t >= s.landedAt) {
+      const tag = smallTag(s.label), point = s.container === 'safe' || s.container === 'bank'
+        ? { x: g.x + 132, y: g.y + 115 }
+        : s.container === 'wallet' ? { x: g.x, y: g.y - 58 }
+          : s.container === 'piggy' ? { x: g.x + 28, y: g.y - 62 }
+            : { x: g.x, y: g.y - 86 };
+      const tagAlpha = ease.outCubic(phase(t, s.landedAt, s.landedAt + 0.18));
+      drawSprite(ctx, tag, point.x, point.y, { anchor: [0.5, 0.5], scale: 0.56, alpha: tagAlpha });
+    }
     const lockP = ease.outCubic(phase(t, s.closeAt - 0.12, s.closeAt));
     if (s.container !== 'safe' && lockP > 0) {
       const lockY = s.container === 'crate' ? g.lock.y - (1 - lockP) * 28 : g.lock.y - (1 - lockP) * 22;

@@ -1,179 +1,183 @@
-// equation — two supporting terms resolve into one full-size result.
+// equation — two actors feed real objects through a machine; a third item comes out.
 import type { Cue, Frame, ShotProps } from '../core.ts';
-import type { HedgyKey } from '../actor/hedgy.ts';
-import { clamp, ease, phase, squash, bob } from '../kit/motion.ts';
-import { PAL } from '../kit/pixel.ts';
+import { clamp, ease, phase, squash } from '../kit/motion.ts';
+import { Grid, PAL } from '../kit/pixel.ts';
+import { drawSprite } from '../kit/sprite.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { ring, sparks } from '../kit/fx.ts';
-import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
-const ACTOR_OPTIONS = [...ACTORS, 'none'] as const;
-const OPERATORS = ['+', '−', '-', '×', 'x', 'X'] as const;
+const OPS = ['+', '−', '-', '×', 'x', 'X'] as const;
+const GEAR = (() => {
+  const g = new Grid(16, 16);
+  g.ellipse(8, 8, 7, 7, PAL.ink).ellipse(8, 8, 5, 5, PAL.grey3);
+  for (const [x, y] of [[8, 0], [8, 12], [0, 8], [12, 8], [3, 3], [11, 3], [3, 11], [11, 11]]) g.rect(x, y, 4, 4, PAL.ink);
+  g.ellipse(8, 8, 2, 2, PAL.gold2).outline(PAL.ink);
+  return g.sprite('equation:machine-gear');
+})();
+const MACHINE = (() => {
+  const g = new Grid(64, 42);
+  g.rect(5, 4, 54, 34, PAL.ink);
+  g.rect(7, 6, 50, 30, PAL.grey4);
+  g.rect(9, 8, 46, 24, PAL.grey3);
+  g.rect(10, 8, 44, 4, PAL.grey1);
+  g.rect(12, 32, 40, 5, PAL.grey5);
+  g.rect(14, 36, 8, 5, PAL.ink).rect(46, 36, 8, 5, PAL.ink);
+  // Two visible feed throats and one low output hatch.
+  g.rect(14, 11, 13, 7, PAL.ink).rect(16, 12, 9, 4, PAL.blue3);
+  g.rect(37, 11, 13, 7, PAL.ink).rect(39, 12, 9, 4, PAL.blue3);
+  g.rect(25, 19, 14, 13, PAL.ink).rect(27, 21, 10, 9, PAL.grey5);
+  g.rect(29, 22, 6, 7, PAL.gold3);
+  g.rect(11, 24, 9, 3, PAL.grey1).rect(44, 24, 9, 3, PAL.grey1);
+  g.rect(14, 29, 36, 2, PAL.blue2);
+  g.outline(PAL.ink);
+  return g.sprite('equation:feed-machine');
+})();
+const ROLLER = (() => {
+  const g = new Grid(22, 8);
+  g.rect(1, 1, 20, 6, PAL.ink).rect(2, 2, 18, 4, PAL.grey4);
+  for (let x = 4; x < 20; x += 4) g.rect(x, 2, 2, 4, PAL.grey1);
+  g.outline(PAL.ink);
+  return g.sprite('equation:output-roller');
+})();
 
-function labelsParam(params: ShotProps['params']): string[] {
+function actorsFor(params: ShotProps['params']): ActorId[] {
+  const raw = params?.actors;
+  if (Array.isArray(raw)) return raw.filter((id): id is ActorId => typeof id === 'string' && (ACTORS as readonly string[]).includes(id)).slice(0, 2);
+  const legacy = params?.who;
+  if (typeof legacy === 'string') return legacy === 'none' ? [] : (ACTORS as readonly string[]).includes(legacy) ? [legacy as ActorId] : [];
+  return ['hedgy', 'mouse'];
+}
+function labelsParam(params: ShotProps['params']): [string, string, string] {
   const raw = params?.labels;
-  if (Array.isArray(raw)) return [0, 1, 2].map(i => String(raw[i] ?? ['A', 'B', 'C'][i]).trim());
-  if (typeof raw === 'string') {
-    const values = raw.split(/[|/]/).map(value => value.trim());
-    return [0, 1, 2].map(i => values[i] || ['A', 'B', 'C'][i]!);
-  }
-  return ['A', 'B', 'C'];
+  const fallback = ['', '', ''];
+  const values = Array.isArray(raw) ? raw.map(String) : typeof raw === 'string' ? raw.split(/[|/]/) : fallback;
+  return [0, 1, 2].map(i => String(values[i] ?? '').trim().slice(0, 14)) as [string, string, string];
 }
-
-function eventsOf(props: ShotProps): number[] {
-  return [...(props.events ?? [])]
-    .filter(event => Number.isFinite(event.at))
-    .map(event => Math.max(0, event.at))
-    .sort((a, b) => a - b);
-}
-
 interface Plan {
-  a: ItemId;
-  b: ItemId;
-  c: ItemId;
-  op: string;
-  labels: string[];
-  who: typeof ACTOR_OPTIONS[number];
-  aAt: number;
-  bAt: number;
-  cAt: number;
+  a: ItemId; b: ItemId; c: ItemId; op: '+' | '−' | '×'; actors: ActorId[]; labels: [string, string, string];
+  aAt: number; bAt: number; cAt: number; extra: number[];
 }
-
 function plan(props: ShotProps, dur: number): Plan {
-  const p = props.params, [rawAAt, rawBAt, rawCAt] = beats(props, dur, [0.2, 0.42, 0.65]);
-  const supplied = eventsOf(props).map(at => Math.min(dur, at));
-  const gap = Math.min(0.52, dur * 0.34);
-  const aAt = supplied[0] ?? rawAAt!;
-  const bAt = supplied[1] ?? Math.min(rawBAt!, aAt + gap);
-  const cAt = supplied[2] ?? Math.min(rawCAt!, bAt + gap);
-  const orderedB = Math.max(bAt, Math.min(dur, aAt + Math.min(0.2, dur / 5)));
-  const orderedC = Math.max(cAt, Math.min(dur, orderedB + Math.min(0.2, dur / 5)));
-  const requested = pick(p, 'op', OPERATORS, '+');
+  const p = props.params, [first, second, third] = beats(props, dur, [0.24, 0.48, 0.72]);
+  const gap = Math.min(0.24, dur * 0.16);
+  const aAt = first, bAt = Math.min(dur, Math.max(second, first + gap)), cAt = Math.min(dur, Math.max(third, bAt + gap));
+  const requested = pick(p, 'op', OPS, '+');
   return {
-    a: itemParam(p, 'a', 'share'),
-    b: itemParam(p, 'b', 'cash'),
-    c: itemParam(p, 'c', 'moneyBag'),
-    op: requested === '-' ? '−' : requested === 'x' || requested === 'X' ? '×' : requested,
-    labels: labelsParam(p),
-    who: pick(p, 'who', ACTOR_OPTIONS, 'none'),
-    aAt,
-    bAt: orderedB,
-    cAt: orderedC,
+    a: itemParam(p, 'a', 'share'), b: itemParam(p, 'b', 'cash'), c: itemParam(p, 'c', 'moneyBag'),
+    op: requested === '-' ? '−' : requested === 'x' || requested === 'X' ? '×' : requested as '+' | '−' | '×',
+    actors: actorsFor(p), labels: labelsParam(p), aAt, bAt, cAt,
+    extra: [...(props.events ?? [])].slice(3, 6).map(event => Math.max(0, event.at)),
   };
 }
-
-function entry(t: number, at: number, travel: number): number {
-  return ease.outCubic(phase(t, Math.max(0, at - travel), at));
-}
-
-function chip(
-  ctx: Frame['ctx'], id: ItemId, x: number, restY: number, t: number, at: number,
-  scale: 1 | 0.5, travel: number, seed: number, result = false, extraEvents: number[] = [],
-) {
-  const size = itemSize(id, scale);
-  const p = entry(t, at, travel);
-  const maxOffset = Math.max(0, restY - 24 - size.h / 2);
-  const offset = Math.min(result ? 74 : 62, maxOffset);
-  const y = restY - offset * (1 - p) + (t >= at ? Math.sin((t - at) * Math.PI * 2 / 1.15) * (result ? 9 : 8) : 0);
-  const impact = squash(t, at, result ? 0.24 : 0.2, result ? 0.3 : 0.25);
-  const bounce = result ? extraEvents.reduce((sum, eventAt) => {
-    const age = t - eventAt;
-    return sum + (age >= 0 ? 0.035 * Math.exp(-5.8 * age) * Math.sin(13 * age) : 0);
-  }, 0) : 0;
-  drawItem(ctx, id, { x, y, t, scale, alpha: p, sx: impact.sx + bounce, sy: impact.sy - bounce });
-  if (result && t >= at && t < at + 0.48) {
-    ring(ctx, x, y - size.h * 0.2, at, t, { r: 118, width: 12, duration: 0.42, color: PAL.gold1 });
-    sparks(ctx, x, y - size.h * 0.2, at, t, { count: 6, seed, size: 8, duration: 0.44, color: PAL.gold1 });
+const approach = (t: number, at: number) => ease.outCubic(phase(t, at - 0.48, at));
+function flight(ctx: Frame['ctx'], id: ItemId, startX: number, slotX: number, t: number, at: number, seed: number, scale = 0.46) {
+  if (t < at - 0.48) return;
+  const move = approach(t, at), enter = ease.outCubic(phase(t, at - 0.48, at - 0.18));
+  const swallowed = ease.inOutCubic(phase(t, at - 0.04, at + 0.2));
+  const fromY = 445, slotY = 556;
+  const x = startX + (slotX - startX) * move + (slotX > startX ? 1 : -1) * swallowed * 16;
+  const y = fromY + (slotY - fromY) * move + Math.sin(move * Math.PI) * 28 - swallowed * 42;
+  const size = itemSize(id, scale), hit = squash(t, at, 0.22, 0.24);
+  const alpha = t < at ? enter : 1 - ease.outCubic(phase(t, at + 0.06, at + 0.22));
+  if (alpha <= 0.01) return;
+  ctx.save(); ctx.globalAlpha *= alpha;
+  drawItem(ctx, id, { x, y, t, scale: scale * (1 - swallowed * 0.28), sx: hit.sx, sy: hit.sy, rot: (1 - move) * 0.05 });
+  ctx.restore();
+  if (t >= at && t < at + 0.46) {
+    ring(ctx, slotX, slotY - size.h * 0.08, at, t, { r: 54, width: 7, duration: 0.34, color: PAL.gold1 });
+    sparks(ctx, slotX, slotY - 18, at, t, { count: 4, seed, size: 6, duration: 0.3, color: PAL.gold1 });
   }
+}
+function actorAt(ctx: Frame['ctx'], who: ActorId, side: 'left' | 'right', t: number, at: number, target: { x: number; y: number }, outputAt: number, removesItem = false) {
+  const facing = side === 'left' ? 1 : -1;
+  const preferred = side === 'left' ? 190 : 530;
+  const base = actorBounds({ who, x: 0, y: STAGE.floor, facing });
+  const x = clamp(preferred, 46 - base.left, 674 - base.right);
+  const approach = ease.outCubic(phase(t, at - 0.48, at - 0.12));
+  const keys = [
+    { at: 0, pose: 'walk' as const, expression: 'neutral' as const },
+    { at: Math.max(0, at - 0.46), pose: 'carry' as const, expression: 'determined' as const },
+    { at: Math.max(0, at - 0.12), pose: removesItem ? 'receive' as const : 'push' as const, expression: 'determined' as const },
+    { at, pose: removesItem ? 'hold' as const : 'give' as const, expression: 'happy' as const },
+    { at: at + 0.3, pose: 'hold' as const, expression: 'neutral' as const },
+    { at: Math.max(at + 0.35, outputAt - 0.18), pose: 'receive' as const, expression: 'shocked' as const },
+    { at: outputAt + 0.22, pose: 'celebrate' as const, expression: 'happy' as const },
+  ].sort((a, b) => a.at - b.at);
+  const renderX = x + (side === 'left' ? 14 : -14) * (1 - approach);
+  const current = actorBounds({ who, x: renderX, y: STAGE.floor, facing, time: t, keys });
+  const correction = current.left < 28 ? 28 - current.left : current.right > 692 ? 692 - current.right : 0;
+  drawActor(ctx, {
+    who, x: renderX + correction, y: STAGE.floor, facing, scale: 1, time: t,
+    look: 'up', keys, handTarget: target, reach: ease.outCubic(phase(t, at - 0.18, at + 0.12)),
+  });
 }
 
 export const equationShot: ShotDef = {
   name: 'equation',
   stage: 'clean',
-  describe: 'Two half-size item terms assemble above a full-size result, with each term named on a paper plate and a clear operator and equals sign. params: a, b, c (item ids; defaults share, cash, moneyBag), op (+|−|×, default +), labels (three strings or A|B|C, default A|B|C), who (actor id|none, default none). Events: 1 lands A; 2 lands B; 3 brings in the full-size result C; later events add small settling bounces.',
+  describe: 'Two actors carry real items into a feed machine one at a time; its gear turns, then a third item rises from the output hatch. op (+|−|×) changes the machine cycle: both items feed in, the second is pulled back out, or the first makes a duplicate pass; no floating math marks. params: a, b, c (item ids; defaults share, cash, moneyBag), op (+|−|×, default +), actors (up to two actor ids; defaults hedgy and mouse), who (legacy single actor or none), labels (three optional short words on feed plates). Events: 1 = actor feeds A; 2 = actor feeds or removes B; 3 = C rises from the hatch; later events bounce the output.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const extraEvents = eventsOf(props).slice(3, 6);
-    const aSize = itemSize(s.a, 0.5), bSize = itemSize(s.b, 0.5), cSize = itemSize(s.c);
-    const inputTravel = Math.min(0.82, Math.max(0.72, dur * 0.2));
-    const resultTravel = Math.min(0.72, Math.max(0.48, dur * 0.18));
-    const aX = 180;
-    const bX = 540;
-    const aY = 220;
-    const bY = 220;
-    const cX = clamp(500, 24 + cSize.w / 2, STAGE.w - 24 - cSize.w / 2);
-    const cY = STAGE.floor - cSize.h / 2 - 18;
-    const aLabelY = aY + aSize.h / 2 + 43;
-    const bLabelY = bY + bSize.h / 2 + 43;
-    const cLabelY = Math.min(790, cY + cSize.h / 2 + 38);
-    const aLabelAt = Math.max(0, s.aAt - inputTravel);
-    const bLabelAt = Math.max(0, s.bAt - inputTravel);
-    const aProgress = entry(t, s.aAt, inputTravel);
-    const bProgress = entry(t, s.bAt, inputTravel);
-    const cProgress = entry(t, s.cAt, resultTravel);
-    const equalsPop = ease.outBack(phase(t, Math.max(0, s.cAt - 0.18), Math.max(0.22, s.cAt + 0.08)));
+    const slotL = 300, slotR = 420, outputAt = s.cAt;
+    const aScale = Math.min(0.46, 172 / itemSize(s.a).w, 210 / itemSize(s.a).h);
+    const bScale = Math.min(0.46, 172 / itemSize(s.b).w, 210 / itemSize(s.b).h);
+    const outScale = Math.min(1, 660 / itemSize(s.c).w, 760 / itemSize(s.c).h);
+    const outProgress = ease.outBack(phase(t, outputAt - 0.24, outputAt + 0.18));
+    const outputY = 420 + (1 - outProgress) * 142 + (t >= outputAt ? Math.sin((t - outputAt) * Math.PI * 2 / 0.86) * 6 : 0);
+    const active = ease.outCubic(phase(t, s.aAt, s.cAt + 0.2));
+    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: STAGE.centre, y: 752, w: 490 }, { x: 360, y: 772, w: 440, h: 20 }] });
+    drawSprite(ctx, MACHINE, STAGE.centre, 632, { anchor: [0.5, 0.5] });
+    drawSprite(ctx, ROLLER, 360, 775, { anchor: [0.5, 0.5], rot: Math.sin(t * Math.PI * 2 / 0.36) * 0.06 });
+    drawSprite(ctx, GEAR, 494, 620, { anchor: [0.5, 0.5], rot: t * (s.op === '×' ? 5.2 : s.op === '−' ? -3.2 : 3.8) * active });
+    drawSprite(ctx, GEAR, 226, 620, { anchor: [0.5, 0.5], rot: -t * 3.4 * active });
 
-    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: cX, y: STAGE.floor - 3, w: 390 }] });
-    // The two inputs are supporting terms; C is the single full-size hero object.
-    chip(ctx, s.a, aX, aY, t, s.aAt, 0.5, inputTravel, frame.seed + 17);
-    chip(ctx, s.b, bX, bY, t, s.bAt, 0.5, inputTravel, frame.seed + 31);
+    const leftActor = s.actors[0], rightActor = s.actors[1];
+    if (leftActor) actorAt(ctx, leftActor, 'left', t, s.aAt, { x: slotL, y: 506 }, outputAt);
+    if (rightActor) actorAt(ctx, rightActor, 'right', t, s.bAt, s.op === '−' ? { x: 560, y: 500 } : { x: slotR, y: 506 }, outputAt, s.op === '−');
+    if (s.labels[0]) label(ctx, s.labels[0], slotL, 458, { variant: 'tag', maxWidth: 160 });
+    if (s.labels[1]) label(ctx, s.labels[1], slotR, 458, { variant: 'tag', maxWidth: 160 });
 
-    label(ctx, s.op, STAGE.centre, 220, { variant: 'sign', maxWidth: 90, pop: ease.outBack(phase(t, 0.02, 0.28)) });
-
-    chip(ctx, s.c, cX, cY, t, s.cAt, 1, resultTravel, frame.seed + 53, true, extraEvents);
-    // Keep the equation mark in the clear space between the input row and result.
-    const equalsX = Math.max(64, cX - cSize.w / 2 - 42);
-    label(ctx, '=', equalsX, cY, { variant: 'sign', maxWidth: 78, pop: equalsPop });
-    label(ctx, s.labels[2]!.toUpperCase(), cX, cLabelY, { variant: 'sign', maxWidth: 380, pop: ease.outBack(cProgress) });
-
-    // Keep entrance labels synchronized while every settled item keeps moving gently.
-    if (aProgress > 0.02 && aLabelAt <= t) label(ctx, s.labels[0]!.toUpperCase(), aX, aLabelY + (1 - aProgress) * 56, { variant: 'sign', maxWidth: 300, pop: ease.outBack(aProgress) });
-    if (bProgress > 0.02 && bLabelAt <= t) label(ctx, s.labels[1]!.toUpperCase(), bX, bLabelY + (1 - bProgress) * 56, { variant: 'sign', maxWidth: 300, pop: ease.outBack(bProgress) });
-
-    if (s.who !== 'none') {
-      const actorBase = actorBounds({ who: s.who, x: 0, y: STAGE.floor, scale: 1, facing: 1 });
-      const actorX = clamp(108, 32 - actorBase.left, 688 - actorBase.right);
-      const keys: HedgyKey[] = [
-        { at: 0, pose: 'think', expression: 'neutral', look: 'up' },
-        { at: Math.min(0.12, dur), pose: 'point', expression: 'neutral', look: 'up' },
-        { at: Math.max(0, s.aAt - 0.12), pose: 'point', expression: 'neutral', look: 'up' },
-        { at: s.aAt, pose: 'lookup', expression: 'neutral', look: 'up' },
-        { at: (s.aAt + s.bAt) / 2, pose: 'think', expression: 'neutral', look: 'up' },
-        { at: Math.max(s.aAt + 0.2, s.bAt - 0.14), pose: 'tap', expression: 'neutral', look: 'up' },
-        { at: s.bAt, pose: 'lookup', expression: 'neutral', look: 'up' },
-        { at: (s.bAt + s.cAt) / 2, pose: 'point', expression: 'neutral', look: 'up' },
-        { at: Math.max(0, s.cAt - 0.1), pose: 'point', expression: 'neutral', look: 'up' },
-        { at: s.cAt, pose: 'celebrate', expression: 'happy', look: 'up' },
-        { at: Math.min(dur, s.cAt + 0.34), pose: 'think', expression: 'happy', look: 'up' },
-      ];
-      if (s.aAt > 0.64) keys.push({ at: s.aAt / 2, pose: 'tap', expression: 'neutral', look: 'up' });
-      for (let at = s.cAt + 0.78, index = 0; at < dur - 0.18; at += 0.55, index++) {
-        keys.push({ at, pose: index % 2 ? 'think' : 'point', expression: 'happy', look: 'up' });
-      }
-      keys.sort((a, b) => a.at - b.at);
-      const actorBox = actorBounds({ who: s.who, x: actorX, y: STAGE.floor, scale: 1, facing: 1, time: t, keys });
-      const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
-      drawActor(ctx, {
-        who: s.who, x: actorX + actorCorrection, y: STAGE.floor, scale: 1, facing: 1, time: t, look: 'up', keys,
-        handTarget: { x: cX - cSize.w * 0.32, y: cY - cSize.h * 0.2 },
-        reach: phase(t, s.cAt - 0.18, s.cAt + 0.22),
-      });
+    flight(ctx, s.a, 180, slotL, t, s.aAt, frame.seed + 17, aScale);
+    const removeB = s.op === '−';
+    if (!removeB) flight(ctx, s.b, 540, slotR, t, s.bAt, frame.seed + 31, bScale);
+    else if (t >= s.bAt - 0.48 && t < s.bAt + 0.28) {
+      const p = ease.outCubic(phase(t, s.bAt - 0.48, s.bAt + 0.28));
+      const alpha = 1 - ease.outCubic(phase(t, s.bAt + 0.04, s.bAt + 0.28));
+      const exitScale = Math.min(bScale, 132 / itemSize(s.b).w, 150 / itemSize(s.b).h);
+      ctx.save(); ctx.globalAlpha *= alpha;
+      drawItem(ctx, s.b, { x: 530 + p * 88, y: 445 + p * 125, t, scale: bScale + (exitScale - bScale) * p, rot: p * 0.18 });
+      ctx.restore();
     }
+    if (s.op === '×' && t >= s.aAt + 0.08 && t < s.bAt + 0.16) {
+      const p = ease.outCubic(phase(t, s.aAt + 0.08, s.aAt + 0.32));
+      const alpha = p * (1 - ease.outCubic(phase(t, s.bAt - 0.04, s.bAt + 0.16)));
+      ctx.save(); ctx.globalAlpha *= alpha;
+      drawItem(ctx, s.a, { x: 360, y: 542 + Math.sin(t * 18) * 4, t, scale: aScale * 0.68, rot: Math.sin(t * 12) * 0.04 });
+      ctx.restore();
+    }
+    if (t >= outputAt - 0.28) {
+      ctx.save(); ctx.globalAlpha *= ease.outCubic(phase(t, outputAt - 0.28, outputAt - 0.04));
+      drawItem(ctx, s.c, { x: STAGE.centre, y: outputY, t, scale: outScale, rot: Math.sin((t - outputAt) * 5) * 0.025 });
+      ctx.restore();
+      for (const at of s.extra) if (t >= at && t < at + 0.5) {
+        ring(ctx, STAGE.centre, outputY - 22, at, t, { r: 76, width: 9, duration: 0.38, color: PAL.gold1 });
+      }
+      if (t >= outputAt && t < outputAt + 0.5) {
+        sparks(ctx, STAGE.centre, outputY - 42, outputAt, t, { count: 5, seed: frame.seed + 53, size: 7, duration: 0.42, color: PAL.gold1 });
+      }
+    }
+    // The wheel keeps turning and the output belt keeps crawling after the reveal.
+    if (t > s.cAt + 0.35) drawSprite(ctx, ROLLER, 360, 775, { anchor: [0.5, 0.5], rot: t * 0.08 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), p = props.params;
-    const list: Cue[] = [
-      cue(Math.max(0, s.aAt - 0.12), 'rustle', 0.65, 140),
-      cue(s.aAt, 'thump', 1.35, 140),
-      cue(Math.max(0, s.bAt - 0.12), 'slide', 0.7, 580),
-      cue(s.bAt, 'land', 1.3, 580),
-      cue(Math.max(0, s.cAt - 0.12), 'sub', 0.85, 470),
-      cue(s.cAt, 'thump', 1.45, 470),
-    ];
-    if (pick(p, 'who', ACTOR_OPTIONS, 'none') !== 'none') list.push(cue(s.cAt + 0.14, 'footfall', 0.75, 108));
-    else list.push(cue(s.cAt + 0.14, 'ding', 0.7, 470));
-    for (const at of eventsOf(props).slice(3, 5)) list.push(cue(at, 'knock', 0.65, 470));
-    return cuesIn(safeDur, list.slice(0, 8));
+    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur);
+    return cuesIn(safeDur, [
+      cue(Math.max(0, s.aAt - 0.15), 'footfall', 0.7, 180), cue(s.aAt, 'clunk', 1.15, 300),
+      cue(Math.max(0, s.bAt - 0.15), 'footfall', 0.7, 540), cue(s.bAt, s.op === '−' ? 'slide' : 'clunk', 1.2, 420),
+      cue(Math.max(0, s.cAt - 0.12), 'rise', 0.8, 360), cue(s.cAt, 'thump', 1.4, 360),
+      ...s.extra.map(at => cue(at, 'knock', 0.65, 360)),
+    ].slice(0, 8));
   },
 };

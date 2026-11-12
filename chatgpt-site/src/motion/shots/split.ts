@@ -1,209 +1,226 @@
-// split — one whole becomes separate portions or holdings.
+// split — portions travel from one readable source to two to four owners.
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import { arc, bob, clamp, ease, lerp, phase, squash } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage } from '../kit/stage.ts';
-import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
+import { ACTORS, ITEM_IDS, STAGE, actorBounds, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
-const SPLIT_ITEMS = ['pie', 'pizza', 'basket', 'share'] as const satisfies readonly ItemId[];
 const MODES = ['split', 'merge'] as const;
-
-// A generous crust and broad toppings keep each half-scale slice readable.
-const pizzaPart = new Grid(60, 60)
-  .poly([{ x: 30, y: 57 }, { x: 4, y: 31 }, { x: 9, y: 15 }, { x: 18, y: 7 }, { x: 30, y: 3 }, { x: 42, y: 7 }, { x: 51, y: 15 }, { x: 56, y: 31 }], PAL.ink)
-  .poly([{ x: 30, y: 52 }, { x: 9, y: 31 }, { x: 14, y: 17 }, { x: 21, y: 10 }, { x: 30, y: 7 }, { x: 39, y: 10 }, { x: 46, y: 17 }, { x: 51, y: 31 }], PAL.orange3)
-  .poly([{ x: 30, y: 47 }, { x: 13, y: 30 }, { x: 18, y: 19 }, { x: 24, y: 13 }, { x: 30, y: 11 }, { x: 36, y: 13 }, { x: 42, y: 19 }, { x: 47, y: 30 }], PAL.gold2)
-  .poly([{ x: 30, y: 44 }, { x: 16, y: 29 }, { x: 21, y: 21 }, { x: 27, y: 17 }, { x: 33, y: 17 }, { x: 39, y: 21 }, { x: 44, y: 29 }], PAL.red2)
-  .ellipse(22, 26, 4, 4, PAL.red1).ellipse(38, 27, 4, 4, PAL.red1).ellipse(30, 20, 3.5, 3.5, PAL.red1)
-  .outline(PAL.ink)
-  .sprite('shot-split:pizza-wedge');
-const piePart = new Grid(60, 60)
-  .poly([{ x: 30, y: 57 }, { x: 3, y: 5 }, { x: 57, y: 5 }], PAL.ink)
-  .poly([{ x: 30, y: 52 }, { x: 8, y: 9 }, { x: 52, y: 9 }], PAL.blue3)
-  .poly([{ x: 30, y: 47 }, { x: 14, y: 13 }, { x: 46, y: 13 }], PAL.blue1)
-  .rect(20, 21, 6, 6, PAL.gold2).rect(34, 17, 6, 6, PAL.red2)
-  .outline(PAL.ink)
-  .sprite('shot-split:pie-wedge');
-
+type Mode = typeof MODES[number];
 interface Point { x: number; y: number }
+interface Recipient { who: string; x: number; facing: 1 | -1; scale: number; at: number }
 interface Plan {
-  item: typeof SPLIT_ITEMS[number];
+  item: ItemId;
   parts: number;
-  mode: typeof MODES[number];
-  who: string;
+  mode: Mode;
+  recipients: Recipient[];
   times: number[];
   travel: number;
-  outputs: ItemId[];
-  positions: Point[];
+  sourceScale: number;
+  pieceScale: number;
 }
 
-function outputItems(item: Plan['item'], count: number): ItemId[] {
-  if (item === 'basket') return (count === 2 ? ['share', 'bond'] : ['share', 'bond', 'pie']).slice(0, count) as ItemId[];
-  return Array.from({ length: count }, () => item === 'pizza' || item === 'pie' ? item : 'share');
+const FONT: Record<string, readonly string[]> = {
+  '0': ['111','101','101','101','111'], '1': ['010','110','010','010','111'],
+  '2': ['110','001','010','100','111'], '3': ['110','001','010','001','110'],
+  '4': ['101','101','111','001','001'], '5': ['111','100','110','001','110'],
+  '6': ['011','100','110','101','010'], '7': ['111','001','010','010','010'],
+  '8': ['010','101','010','101','010'], '9': ['010','101','011','001','110'],
+  '/': ['001','001','010','100','100'],
+};
+
+function fractionBadge(index: number, count: number) {
+  const value = `${index + 1}/${count}`, cols = value.length * 4 + 2, g = new Grid(cols, 9);
+  g.rect(0, 0, cols, 9, PAL.ink).rect(1, 1, cols - 2, 7, PAL.paper);
+  let x = 2;
+  for (const char of value) {
+    const glyph = FONT[char] ?? FONT['1']!;
+    glyph.forEach((row, y) => [...row].forEach((on, xx) => { if (on === '1') g.rect(x + xx, y + 2, 1, 1, PAL.ink); }));
+    x += 4;
+  }
+  return g.sprite(`shot-split:fraction:${value}`);
 }
 
-function partPositions(count: number, mode: Plan['mode']): Point[] {
-  if (count === 2) return [{ x: 320, y: 410 }, { x: 580, y: 410 }];
-  return [{ x: 320, y: 325 }, { x: 565, y: 325 }, mode === 'merge' ? { x: 380, y: 520 } : { x: 330, y: 570 }];
+function sourceScaleFor(item: ItemId): number {
+  const size = itemSize(item);
+  return Math.min(0.70, 360 / Math.max(size.w, size.h));
+}
+
+function pieceScaleFor(item: ItemId): number {
+  const size = itemSize(item);
+  return Math.min(0.32, 126 / Math.max(size.w, size.h));
+}
+
+function drawItemAt(ctx: Frame['ctx'], item: ItemId, point: Point, t: number, scale: number, extra: Record<string, unknown> = {}) {
+  drawItem(ctx, item, { x: point.x, y: point.y, t, scale, ...extra });
+}
+
+// Broad triangular face, toppings, and a thick browned crust at the wide end.
+const pizzaSlice = (() => {
+  const g = new Grid(52, 50);
+  g.poly([{x:26,y:3},{x:49,y:43},{x:47,y:47},{x:5,y:47},{x:3,y:43}], PAL.ink);
+  g.poly([{x:26,y:7},{x:45,y:41},{x:7,y:41}], PAL.orange3);
+  g.poly([{x:26,y:9},{x:41,y:38},{x:11,y:38}], PAL.gold2);
+  g.poly([{x:26,y:14},{x:37,y:35},{x:15,y:35}], PAL.red2);
+  g.poly([{x:9,y:38},{x:43,y:38},{x:46,y:43},{x:6,y:43}], PAL.orange3);
+  g.line({x:12,y:41},{x:40,y:41},2,PAL.gold1);
+  g.ellipse(25,21,3,3,PAL.red1).ellipse(21,29,2.5,2.5,PAL.red1).ellipse(30,31,2.5,2.5,PAL.red1);
+  g.outline(PAL.ink);
+  return g.sprite('shot-split:triangular-pizza-slice');
+})();
+
+function recipientXs(count: number): { xs: number[]; scale: number } {
+  if (count === 2) return { xs: [160, 560], scale: 0.62 };
+  if (count === 3) return { xs: [94, 360, 626], scale: 0.48 };
+  return { xs: [78, 260, 460, 642], scale: 0.40 };
+}
+
+function ownerList(props: ShotProps, count: number): string[] {
+  const raw = props.params?.owners;
+  const requested = Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === 'string')
+    : typeof raw === 'string' ? raw.split(',').map(v => v.trim()) : [];
+  const valid = requested.filter((v): v is typeof ACTORS[number] => ACTORS.includes(v as typeof ACTORS[number]));
+  const first = pick(props.params, 'who', ACTORS, 'hedgy');
+  const owners = [...new Set(valid.length ? valid : [first])];
+  for (const fallback of ['hedgy', 'badger', 'owl', 'mouse'] as const) {
+    if (owners.length >= count) break;
+    if (!owners.includes(fallback)) owners.push(fallback);
+  }
+  while (owners.length < count) owners.push(first);
+  return owners.slice(0, count);
 }
 
 function plannedTimes(props: ShotProps, dur: number, count: number, travel: number): number[] {
-  const fractions = Array.from({ length: count }, (_, i) => 0.2 + (i / Math.max(1, count - 1)) * 0.6);
-  const requested = beats(props, dur, fractions);
-  const first = Math.min(0.16, dur * 0.1);
-  const latestEnd = Math.max(first, dur - travel - 0.08);
-  const gap = count > 1 ? Math.min(0.46, (latestEnd - first) / (count - 1)) : 0;
+  const start = Math.min(0.14, dur * 0.09);
+  const end = Math.max(start, dur - travel - Math.min(0.14, dur * 0.1));
+  const gap = count > 1 ? (end - start) / (count - 1) : 0;
+  const requested = beats(props, dur, Array.from({ length: count }, (_, i) => 0.12 + (i / Math.max(1, count - 1)) * 0.62));
   const result: number[] = [];
   for (let i = 0; i < count; i++) {
-    const earliest = i === 0 ? first : result[i - 1]! + gap;
-    const latest = Math.max(earliest, latestEnd - gap * (count - 1 - i));
-    result.push(clamp(requested[i] ?? earliest, earliest, latest));
+    const lo = i === 0 ? start : result[i - 1]! + Math.min(0.32, gap);
+    const hi = end - Math.min(0.32, gap) * (count - i - 1);
+    result.push(clamp(requested[i] ?? start + gap * i, lo, Math.max(lo, hi)));
   }
   return result;
 }
 
 function plan(props: ShotProps, dur: number): Plan {
   const p = props.params;
-  const requested = Math.round(num(p, 'parts', 3, 2, 3));
-  const parts = Math.min(requested, Math.max(2, Math.min(3, Math.floor(Math.max(0, dur - 0.14) / 0.8) + 1)));
-  const travel = dur < 1.9 ? Math.min(0.32, dur * 0.16) : Math.min(1.2, Math.max(0.4, dur * 0.29));
-  const item = pick(p, 'item', SPLIT_ITEMS, 'share');
-  return {
-    item, parts, mode: pick(p, 'mode', MODES, 'split'), who: pick(p, 'who', ACTORS, 'hedgy'), travel,
-    times: plannedTimes(props, dur, parts, travel),
-    outputs: outputItems(item, parts), positions: partPositions(parts, pick(p, 'mode', MODES, 'split')),
-  };
+  const rawOwners = Array.isArray(p?.owners) ? p.owners.length : typeof p?.owners === 'string' ? p.owners.split(',').filter(Boolean).length : 0;
+  const parts = Math.round(num(p, 'parts', rawOwners ? clamp(rawOwners, 2, 4) : 3, 2, 4));
+  const mode = pick(p, 'mode', MODES, 'split');
+  const item = pick(p, 'item', ITEM_IDS, 'share');
+  const travel = Math.min(0.54, Math.max(0.30, dur * 0.24));
+  const times = plannedTimes(props, dur, parts, travel);
+  const { xs, scale } = recipientXs(parts);
+  const owners = ownerList(props, parts);
+  const recipients = xs.map((x, i) => {
+    const facing: 1 | -1 = x <= STAGE.centre ? 1 : -1;
+    const at = times[i]!;
+    const key = [{ at: 0, pose: 'think' as const, expression: 'neutral' as const },
+      { at: Math.max(0.08, times[i]! - 0.08), pose: 'give' as const, expression: 'determined' as const },
+      { at: times[i]! + travel * 0.75, pose: 'receive' as const, expression: 'happy' as const },
+      { at: times[i]! + travel + 0.32, pose: 'hold' as const, expression: 'happy' as const }];
+    const bounds = actorBounds({ who: owners[i]!, x, y: STAGE.floor, facing, scale, time: 0, keys: key });
+    const safeX = x + (bounds.left < 30 ? 30 - bounds.left : bounds.right > 690 ? 690 - bounds.right : 0);
+    return { who: owners[i]!, x: safeX, facing, scale, at };
+  });
+  return { item, parts, mode, recipients, times, travel, sourceScale: sourceScaleFor(item), pieceScale: item === 'pizza' ? 0.28 : pieceScaleFor(item) };
 }
 
-function drawPart(ctx: Frame['ctx'], s: Plan, index: number, x: number, y: number, t: number, alpha = 1, rot = 0, sx = 1, sy = 1): void {
-  if (s.item === 'pizza' || s.item === 'pie') {
-    const part = s.item === 'pizza' ? pizzaPart : piePart;
-    const centerX = clamp(x, 36 + part.w * 0.25, STAGE.w - 36 - part.w * 0.25);
-    drawSprite(ctx, part, centerX, y, { anchor: [0.5, 0.5], scale: 0.5, alpha, rot, sx, sy });
-    return;
-  }
-  const dims = itemSize(s.outputs[index]!, 0.5);
-  const centerX = clamp(x, 36 + dims.w / 2, STAGE.w - 36 - dims.w / 2);
-  drawItem(ctx, s.outputs[index]!, { x: centerX, y, t, scale: 0.5, alpha, rot, sx, sy });
-}
-
-function sourceState(item: Plan['item']): Record<string, unknown> {
-  if (item === 'pie') return { slices: [1, 1, 1, 1, 1], highlight: 0 };
-  if (item === 'pizza') return { slices: 6, taken: 0 };
-  if (item === 'basket') return { items: 3 };
-  return {};
-}
-
-function followThrough(last: number, dur: number, mode: Plan['mode']) {
-  const keys: { at: number; pose: 'point' | 'think' | 'hold'; expression: 'happy' | 'neutral' }[] = [];
-  for (let at = last + 0.54, index = 0; at < dur - 0.08; at += 0.58, index++) {
-    keys.push({ at, pose: index % 2 ? 'think' : mode === 'split' ? 'hold' : 'point', expression: mode === 'split' ? 'happy' : 'neutral' });
+function recipientKeys(at: number, index: number, dur: number, travel: number): { at: number; pose: 'think' | 'give' | 'receive' | 'hold' | 'tap' | 'point'; expression: 'neutral' | 'determined' | 'happy' }[] {
+  const keys: { at: number; pose: 'think' | 'give' | 'receive' | 'hold' | 'tap' | 'point'; expression: 'neutral' | 'determined' | 'happy' }[] = [
+    { at: 0, pose: 'think', expression: 'neutral' },
+    { at: Math.max(0.05, at - 0.10), pose: 'give', expression: 'determined' },
+    { at: at + travel * 0.75, pose: 'receive', expression: 'happy' },
+    { at: at + travel + 0.12, pose: 'hold', expression: 'happy' },
+  ];
+  for (let next = at + travel + 0.46, step = 0; next < dur - 0.05; next += 0.54, step++) {
+    keys.push({ at: next, pose: (step + index) % 2 ? 'point' : 'tap', expression: 'happy' });
   }
   return keys;
 }
 
-function intervalActing(times: number[], mode: Plan['mode']) {
-  const keys: { at: number; pose: 'point' | 'think' | 'tap' | 'give'; expression: 'happy' | 'neutral' }[] = [];
-  for (let i = 0; i < times.length - 1; i++) {
-    for (let at = times[i]! + 0.44, index = 0; at < times[i + 1]! - 0.12; at += 0.4, index++) {
-      keys.push({
-        at,
-        pose: index % 2 ? 'think' : 'point',
-        expression: mode === 'split' ? 'happy' : 'neutral',
-      });
-    }
+function piecePoint(recipient: Recipient, t: number, index: number, item: ItemId, travel: number): Point {
+  const keys = recipientKeys(recipient.at, index, Math.max(recipient.at + travel + 0.5, t + 0.01), travel);
+  const actor = { who: recipient.who, x: recipient.x, y: STAGE.floor, facing: recipient.facing, scale: recipient.scale, time: t, keys };
+  const paw = actorPaw(actor), dims = itemSize(item, item === 'pizza' ? 0.28 : pieceScaleFor(item));
+  const x = paw.x + recipient.facing * (Math.min(28, dims.w * 0.18) + 6);
+  const y = Math.min(paw.y - 78, STAGE.floor - 150 * recipient.scale);
+  return { x: clamp(x, 28 + dims.w / 2, STAGE.w - 28 - dims.w / 2), y: clamp(y, 100, STAGE.h - dims.h / 2 - 18) };
+}
+
+function sourcePoint(s: Plan, index: number): Point {
+  const size = itemSize(s.item, s.sourceScale);
+  const angle = Math.PI * 0.5 + ((index / Math.max(1, s.parts - 1)) - 0.5) * 1.2;
+  return { x: STAGE.centre + Math.cos(angle) * Math.min(46, size.w * 0.16), y: 342 + Math.sin(angle) * Math.min(38, size.h * 0.14) };
+}
+
+function drawPiece(ctx: Frame['ctx'], s: Plan, index: number, point: Point, t: number, alpha = 1, rot = 0, sx = 1, sy = 1) {
+  const scale = s.item === 'pizza' ? s.pieceScale : s.pieceScale;
+  if (s.item === 'pizza') {
+    drawSprite(ctx, pizzaSlice, point.x, point.y, { anchor: [0.5, 0.5], scale, alpha, rot, sx, sy });
+  } else {
+    drawItemAt(ctx, s.item, point, t, scale, { alpha, rot, sx, sy });
+    const dims = itemSize(s.item, scale), badge = fractionBadge(index, s.parts);
+    const badgeScale = 0.58, badgeW = badge.w * badgeScale, badgeH = badge.h * badgeScale;
+    const badgeX = clamp(point.x + Math.min(40, dims.w * 0.3), 35 + badgeW / 2, STAGE.w - 35 - badgeW / 2);
+    const badgeY = clamp(point.y - dims.h / 2 - badgeH / 2 - 3, 40 + badgeH / 2, STAGE.h - badgeH / 2 - 20);
+    drawSprite(ctx, badge, badgeX, badgeY, { anchor: [0.5, 0.5], scale: badgeScale, alpha });
   }
-  return keys;
 }
 
 export const splitShot: ShotDef = {
   name: 'split',
   stage: 'clean',
-  describe: 'A whole pie, pizza, basket, or share certificate separates into two or three portions or holdings; merge gathers them back together. params: item (pie | pizza | basket | share, default share), parts (2–3, default 3; capped to fit short durations), mode (split | merge, default split), who (actor id, default hedgy). Events: each event releases the next part or gathers one back; missing events use evenly spaced fallback beats.',
+  describe: 'One whole item stays visible while two to four recognizable portions travel into the reaching paws of their owners; pizza becomes crusted triangular slices and other items carry a small fraction tag. params: item (any library item, default share), parts (2–4, default 3), owners (2–4 actor ids, default hedgy, badger, owl, mouse; old who sets the first owner), who (first owner id, default hedgy), mode (split | merge, default split). Events: each event starts the next portion moving to its owner; merge events return portions to the whole; missing beats are spaced evenly.',
   render(frame: Frame, props: ShotProps) {
-    const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), quick = dur < 1.9;
-    const source = { x: 450, y: 410 };
-    const lastAt = s.times[s.times.length - 1]!;
-    const payoffAt = lastAt + s.travel;
-    const carryMix = s.parts === 3 && s.mode === 'split' ? ease.inOutCubic(phase(t, lastAt, payoffAt)) : 0;
-    const handTarget = { x: lerp(314, 194, carryMix), y: lerp(433, 610, carryMix) };
-    const keys = [
-      { at: 0, pose: 'think' as const, expression: 'neutral' as const },
-      { at: 0.14, pose: 'point' as const, expression: 'determined' as const },
-      ...s.times.flatMap((at, i) => [
-        {
-          at: at + 0.1,
-          pose: (s.mode === 'split' ? (i === s.parts - 1 ? (s.parts === 3 ? 'hold' : 'celebrate') : 'tap') : (i === s.parts - 1 ? 'hold' : 'give')) as 'celebrate' | 'tap' | 'hold' | 'give',
-          expression: (s.mode === 'split' ? 'happy' : 'neutral') as 'happy' | 'neutral',
-        },
-      ]),
-      ...intervalActing(s.times, s.mode),
-      { at: payoffAt + 0.18, pose: 'point' as const, expression: 'happy' as const },
-      ...followThrough(payoffAt, dur, s.mode),
-    ].sort((a, b) => a.at - b.at);
+    const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
+    const source = { x: STAGE.centre, y: 342 };
+    const sourceVisible = s.mode === 'split' ? 1 : ease.outCubic(phase(t, s.times[s.parts - 1]! + s.travel - 0.16, s.times[s.parts - 1]! + s.travel));
 
-    drawStage(ctx, {
-      floorY: STAGE.floor, line: true,
-      shadow: [{ x: 112, y: STAGE.floor - 3, w: 178 }],
-    });
-
-    if (s.mode === 'split') {
-      const sourceFade = 1 - ease.outCubic(phase(t, s.times[0]! - 0.08, s.times[0]! + (quick ? 0.32 : s.travel * 0.72)));
-      if (sourceFade > 0.01) {
-        drawItem(ctx, s.item, { x: source.x, y: source.y + bob(t, 1.15, 7), t, scale: 1, ...sourceState(s.item), alpha: sourceFade });
-      }
-      for (let i = 0; i < s.parts; i++) {
-        const at = s.times[i]!, dest = s.positions[i]!;
-        if (t < at) continue;
-        const resting = { x: dest.x, y: dest.y + bob(t + i * 0.13, 1.05, 14) };
-        const progress = quick ? 1 : ease.inOutCubic(phase(t, at, at + s.travel));
-        const pos = quick ? resting : arc(source, resting, 34, progress);
-        const alpha = ease.outCubic(phase(t, at, at + (quick ? 0.32 : 0.18)));
-        const hit = squash(t, at + s.travel, 0.14, 0.2);
-        if (alpha > 0.01) drawPart(ctx, s, i, pos.x, pos.y, t, alpha, (1 - progress) * (i % 2 ? 0.07 : -0.07), hit.sx, hit.sy);
-      }
-    } else {
-      const sourceAlpha = quick
-        ? ease.outCubic(phase(t, lastAt + 0.1, lastAt + 0.4))
-        : ease.outCubic(phase(t, payoffAt - 0.24, payoffAt + 0.08));
-      const sourceHit = squash(t, payoffAt + 0.04, 0.16, 0.2);
-      for (let i = 0; i < s.parts; i++) {
-        const at = s.times[i]!, dest = s.positions[i]!;
-        if (t < at) {
-          drawPart(ctx, s, i, dest.x, dest.y + bob(t + i * 0.13, 1.05, 14), t);
-          continue;
-        }
-        const launch = { x: dest.x, y: dest.y + bob(at + i * 0.13, 1.05, 14) };
-        const progress = ease.inOutCubic(phase(t, at, at + (quick ? 0.34 : s.travel)));
-        const pos = quick ? arc(launch, source, 18, progress * 0.12) : arc(launch, source, 30, progress);
-        const alpha = 1 - ease.outCubic(phase(t, at + (quick ? 0.18 : s.travel * 0.55), at + (quick ? 0.4 : s.travel)));
-        const hit = squash(t, at + s.travel, 0.14, 0.2);
-        if (alpha > 0.01) drawPart(ctx, s, i, pos.x, pos.y, t, alpha, progress * (i % 2 ? 0.07 : -0.07), hit.sx, hit.sy);
-      }
-      if (sourceAlpha > 0.01) {
-        drawItem(ctx, s.item, { x: source.x, y: source.y + bob(t, 1.15, 7), t, scale: 1, ...sourceState(s.item), alpha: sourceAlpha, sx: sourceHit.sx, sy: sourceHit.sy });
-      }
+    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: s.recipients.map(owner => ({ x: owner.x, y: STAGE.floor - 2, w: 105 })) });
+    if (sourceVisible > 0.01) {
+      const hit = s.mode === 'merge' ? squash(t, s.times[s.parts - 1]! + s.travel, 0.18, 0.13) : { sx: 1, sy: 1 };
+      drawItemAt(ctx, s.item, source, t, s.sourceScale, { alpha: sourceVisible, sx: hit.sx, sy: hit.sy });
     }
 
-    const rawActorX = 112 + Math.sin(t * 2.8 + 0.4) * 24;
-    const actorBox = actorBounds({ who: s.who, x: rawActorX, y: STAGE.floor, facing: 1, scale: 1, time: t, keys });
-    const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
-    drawActor(ctx, {
-      who: s.who, x: rawActorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys,
-      handTarget: { x: handTarget.x + actorCorrection, y: handTarget.y },
-      reach: ease.inOutCubic(phase(t, 0.14, 0.42)) * (t > payoffAt + 0.25 ? 0.5 : 0.76),
-    });
+    for (let i = 0; i < s.parts; i++) {
+      const owner = s.recipients[i]!, keys = recipientKeys(owner.at, i, dur, s.travel), point = piecePoint(owner, t, i, s.item, s.travel);
+      const active = t >= owner.at - 0.10 && t < owner.at + s.travel + 0.54;
+      drawActor(ctx, {
+        who: owner.who, x: owner.x, y: STAGE.floor, facing: owner.facing, scale: owner.scale, time: t,
+        look: active ? 'down' : 'forward', keys,
+        handTarget: { x: point.x - owner.facing * 12, y: point.y }, reach: active ? 0.85 : 0.42,
+      });
+    }
+    for (let i = 0; i < s.parts; i++) {
+      const owner = s.recipients[i]!, at = s.times[i]!, hand = piecePoint(owner, t, i, s.item, s.travel);
+      const origin = sourcePoint(s, i), depart = at, arrive = at + s.travel;
+      const progress = ease.inOutCubic(phase(t, depart, arrive));
+      const start = s.mode === 'split' ? origin : hand;
+      const end = s.mode === 'split' ? hand : origin;
+      const pos = t < depart ? (s.mode === 'merge' ? hand : origin) : arc(start, end, s.mode === 'split' ? -36 : 30, progress);
+      const alpha = s.mode === 'split'
+        ? (t < depart || t >= arrive ? 0 : 1)
+        : (t < depart ? 1 : 1 - ease.outCubic(phase(t, arrive - 0.12, arrive)));
+      const hit = squash(t, arrive, 0.16, 0.19);
+      if (alpha > 0.01) drawPiece(ctx, s, i, pos, t, alpha, (1 - progress) * (i % 2 ? 0.055 : -0.055), hit.sx, hit.sy);
+      if (s.mode === 'split' && t >= arrive) {
+        const settled = piecePoint(owner, t, i, s.item, s.travel), wobble = bob(t + i * 0.11, 1.15, 4);
+        drawPiece(ctx, s, i, { x: settled.x, y: settled.y + wobble }, t, 1, Math.sin(t * 1.4 + i) * 0.018);
+      }
+    }
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), last = s.times[s.times.length - 1]!;
+    const safeDur = Math.max(0.05, dur), s = plan(props, safeDur);
     return cuesIn(safeDur, [
-      cue(0.08, 'footfall', 0.58, 112),
-      cue(0.16, 'rustle', 0.55, 450),
-      ...s.times.map((at, i) => cue(s.mode === 'split' ? at + s.travel : at, s.mode === 'split' ? (i === 0 ? 'thump' : 'paper') : 'slide', i === 0 ? 1.3 : 0.78, s.positions[i]!.x)),
-      ...s.times.slice(0, -1).filter((at, i) => at + 0.4 < s.times[i + 1]!).map(at => cue(at + 0.4, 'rustle', 0.55, 112)),
-      cue(Math.min(safeDur, last + (safeDur < 1.9 ? 0.26 : s.travel + 0.12)), s.mode === 'split' ? 'ding' : 'clunk', 0.62, 450),
+      cue(0.05, 'footfall', 0.55, s.recipients[0]!.x),
+      ...s.times.map((at, i) => cue(s.mode === 'split' ? at : at + s.travel * 0.18, s.mode === 'split' ? (i ? 'slide' : 'swish') : 'slide', i ? 0.82 : 1.08, s.recipients[i]!.x)),
+      ...s.times.map((at, i) => cue(s.mode === 'split' ? at + s.travel : at + s.travel * 0.18, s.mode === 'split' ? 'land' : 'thud', i ? 0.82 : 1.1, s.mode === 'split' ? s.recipients[i]!.x : STAGE.centre)),
     ]);
   },
 };

@@ -5,7 +5,7 @@ if(process.stdin.isTTY)process.stdin.setRawMode(true);process.stdin.resume();
 const setup=JSON.parse(await new Promise((resolve,reject)=>{let s='';process.stdin.setEncoding('utf8').on('data',x=>{s+=x;if(s.includes('\n')){process.stdin.pause();resolve(s.trim())}}).on('error',reject)}));
 const source=fileURLToPath(new URL('../',import.meta.url)),target=join(homedir(),'Library/Application Support/Organic Content Engine/account-worker');
 await mkdir(target,{recursive:true,mode:0o700});await chmod(target,0o700);
-for(const p of ['scripts','src/motion','worker/hedgy-generation.ts','worker/hedgy-policy.ts','worker/errors.ts','package.json','node_modules/zod','node_modules/esbuild','node_modules/@esbuild','node_modules/playwright-core']){await mkdir(join(target,p).slice(0,join(target,p).lastIndexOf('/')),{recursive:true});await cp(join(source,p),join(target,p),{recursive:true,force:true});}
+for(const p of ['scripts','src/motion','worker/hedgy-generation.ts','worker/hedgy-policy.ts','worker/hedgy-ideas.ts','worker/errors.ts','package.json','node_modules/zod','node_modules/esbuild','node_modules/@esbuild','node_modules/playwright-core']){await mkdir(join(target,p).slice(0,join(target,p).lastIndexOf('/')),{recursive:true});await cp(join(source,p),join(target,p),{recursive:true,force:true});}
 // Reuse licensed cached audio; source credentials are never copied.
 await cp(join(source,'.motion-cache'),join(target,'.motion-cache'),{recursive:true,force:false,errorOnExist:false}).catch(()=>{});
 for(const [key,value] of Object.entries(setup))if(!/^[A-Z_]+$/.test(key)||typeof value!=='string'||/[\r\n]/.test(value))throw Error('Invalid worker setting');
