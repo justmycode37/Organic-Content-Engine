@@ -8,13 +8,18 @@ export interface CameraRigOptions {
   width?: number;
   height?: number;
   keyframes?: CameraKeyframe[];
+  /** Legacy drift option; ignored when `clean` is true (the HEDGY player default). */
   handheld?: number;
   seed?: number;
   hits?: number[];
   punch?: number;
+  /** Accepted for compatibility and intentionally ignored to prevent quantized shake. */
   shake?: number;
+  /** Legacy camera pan; ignored when `clean` is true. */
   whip?: CameraWhip[];
   dollyZoom?: DollyZoom;
+  /** Clean series mode: keep caller keyframes, but suppress impact and handheld motion. */
+  clean?: boolean;
 }
 export interface CameraPose { x: number; y: number; zoom: number; rot: number }
 export interface View3DCamera { yaw: number; pitch: number; distance: number; target: [number, number, number] }
@@ -47,7 +52,7 @@ function sampleKeyframes(time: number, frames: CameraKeyframe[]): CameraPose {
   return { ...last };
 }
 
-/** Build a deterministic 2D / 3D camera path. The returned transforms are intended to be wrapped in ctx.save/restore. */
+/** Build a deterministic 2D / 3D path. `clean` retains eased keyframes and suppresses handheld, hit and whip effects. */
 export function createCameraRig(options: CameraRigOptions = {}) {
   const width = options.width ?? 1080, height = options.height ?? 1920;
   const seed = options.seed ?? 1;
@@ -57,23 +62,22 @@ export function createCameraRig(options: CameraRigOptions = {}) {
   function poseAt(time: number): CameraPose {
     const t = Number.isFinite(time) ? time : 0;
     const pose = sampleKeyframes(t, frames);
-    const handheld = Math.max(0, options.handheld ?? 0);
+    const handheld = options.clean ? 0 : Math.max(0, options.handheld ?? 0);
     pose.x += handheld * (Math.sin(t * 1.73 + seed * 0.013) * 0.62 + Math.sin(t * 0.71 + seed * 0.029) * 0.38);
     pose.y += handheld * (Math.sin(t * 1.31 + seed * 0.021) * 0.58 + Math.sin(t * 0.53 + seed * 0.037) * 0.42);
     pose.rot += handheld * 0.00007 * Math.sin(t * 1.11 + seed * 0.017);
 
     for (const [index, hit] of hits.entries()) {
+      if (options.clean) break;
       const dt = t - hit;
       if (dt < 0 || dt > 0.36) continue;
       const decay = Math.exp(-dt / 0.092);
       const punch = (options.punch ?? 0) * decay;
       pose.zoom *= 1 + punch;
-      const shake = (options.shake ?? 0) * decay;
-      pose.x += Math.round(Math.sin((dt * 33 + index * 3.7 + seed * 0.01) * 2.1) * shake / 4) * 4;
-      pose.y += Math.round(Math.cos((dt * 29 + index * 5.1 + seed * 0.01) * 2.3) * shake / 4) * 4;
+      // `shake` remains accepted for old shot specs, but is intentionally a no-op.
     }
 
-    for (const whip of options.whip ?? []) {
+    for (const whip of options.clean ? [] : options.whip ?? []) {
       const duration = Math.max(0.08, whip.duration ?? 0.3);
       const dt = t - whip.at;
       if (Math.abs(dt) > duration) continue;
@@ -97,7 +101,7 @@ export function createCameraRig(options: CameraRigOptions = {}) {
 
   function apply(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, time: number) {
     const pose = poseAt(time), cx = width / 2, cy = height / 2;
-    ctx.translate(cx + Math.round(pose.x / 4) * 4, cy + Math.round(pose.y / 4) * 4);
+    ctx.translate(cx + pose.x, cy + pose.y);
     ctx.rotate(pose.rot);
     ctx.scale(pose.zoom, pose.zoom);
     ctx.translate(-cx, -cy);

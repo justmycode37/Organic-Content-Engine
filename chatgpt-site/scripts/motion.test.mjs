@@ -29,7 +29,7 @@ test('markup parsing exposes accent flags',()=>{
 test('shot catalog matches the registered shot library',async()=>{
  const {SHOT_CATALOG}=await import('../src/motion/shots/catalog.ts');
  const src=(await import('node:fs')).readFileSync(new URL('../src/motion/shots/index.ts',import.meta.url),'utf8');
- for(const entry of SHOT_CATALOG){assert.match(src,new RegExp(`\\b${entry.name}\\b`),`${entry.name} registered`);assert.ok(entry.events.length>0);}
+ for(const entry of SHOT_CATALOG){assert.match(src,new RegExp(`\\b${entry.name}Shot\\b`,'i'),`${entry.name} registered`);assert.ok(entry.describe.length>20);}
 });
 test('worker transition mirror equals core transitions',async()=>{
  const {SHOT_TRANSITIONS}=await import('../src/motion/shots/catalog.ts');const {TRANSITIONS}=await import('../src/motion/core.ts');

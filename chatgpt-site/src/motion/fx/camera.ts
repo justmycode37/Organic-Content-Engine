@@ -2,7 +2,7 @@ import { clamp, CONTENT_BOTTOM, SAFE, W, type Frame } from '../core.ts';
 import { createCameraRig } from './rig.ts';
 
 /** Applies a restrained deterministic camera rig. Call ctx.restore() afterwards. */
-export function applyCamera(frame: Frame, hits: number[], clipBottom: number = SAFE.bottom, cinematic = false, exitZoom = false, fullBleed = false) {
+export function applyCamera(frame: Frame, hits: number[], clipBottom: number = SAFE.bottom, cinematic = false, exitZoom = false, fullBleed = false, clean = false) {
   const { ctx, t, dur, seed } = frame;
   ctx.save();
   const x = fullBleed ? 0 : SAFE.x, y = fullBleed ? 0 : SAFE.y;
@@ -24,12 +24,13 @@ export function applyCamera(frame: Frame, hits: number[], clipBottom: number = S
   const rig = createCameraRig({
     width, height,
     keyframes: path,
-    handheld: cinematic ? 1.8 : 0.25,
+    handheld: clean ? 0 : cinematic ? 1.8 : 0.25,
     seed,
     hits: [0, ...hits.filter(hit => Number.isFinite(hit) && hit > 0.001)],
-    punch: cinematic ? 0.024 : 0.032,
-    shake: cinematic ? 4 : 5,
-    dollyZoom: cinematic ? { start: 0, end: Math.max(0.1, dur), amount: exitZoom ? 0.22 : 0.025 } : undefined,
+    punch: clean ? 0 : cinematic ? 0.024 : 0.032,
+    shake: 0,
+    dollyZoom: !clean && cinematic ? { start: 0, end: Math.max(0.1, dur), amount: exitZoom ? 0.22 : 0.025 } : undefined,
+    clean,
   });
   ctx.translate(centerX - width / 2, centerY - height / 2);
   rig.apply(ctx, t);

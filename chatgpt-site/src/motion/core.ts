@@ -56,6 +56,8 @@ export interface Theme {
   onAccent: string;  // text placed on an accent fill
   /** Reel time in seconds: drives the drifting rainbow. */
   time: number;
+  /** Optional renderer hint; clean HEDGY frames use stable, undithered 3D shading. */
+  renderMode?: 'pixel' | 'smooth';
 }
 
 /** Solid-colour theme. The player upgrades `accent` to the live rainbow paint (see frameTheme in pix.ts). */
@@ -151,7 +153,7 @@ export interface Frame {
 
 /** A moment in a scene that should be HEARD. The audio renderer places a matching sound exactly here. */
 /** Every sound a scene or transition can ask for. The audio renderer maps each kind to a designed sound. */
-export const CUE_KINDS = ['pop', 'tick', 'type', 'rise', 'shimmer', 'impact', 'swish', 'whoosh', 'whip', 'coin', 'coins', 'cash', 'thud', 'crack', 'shatter', 'click', 'clack', 'servo', 'boing', 'sparkle', 'drop', 'bass', 'glass', 'paper', 'stamp', 'alarm', 'heartbeat', 'zap', 'rumble', 'snap', 'beep', 'step', 'land', 'squeak', 'build', 'reverse', 'tape', 'ding'] as const;
+export const CUE_KINDS = ['pop', 'tick', 'type', 'rise', 'shimmer', 'impact', 'swish', 'whoosh', 'whip', 'coin', 'coins', 'cash', 'thud', 'crack', 'shatter', 'click', 'clack', 'servo', 'boing', 'sparkle', 'drop', 'bass', 'glass', 'paper', 'stamp', 'alarm', 'heartbeat', 'zap', 'rumble', 'snap', 'beep', 'step', 'land', 'squeak', 'build', 'reverse', 'tape', 'ding', 'thump', 'knock', 'whump', 'sub', 'rustle', 'creak', 'clunk', 'slide', 'footfall', 'pluck', 'gulp', 'hum'] as const;
 export type CueKind = (typeof CUE_KINDS)[number];
 export interface Cue {
   /** Seconds since the scene started. */

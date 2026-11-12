@@ -3,8 +3,8 @@ import { clamp, hash, type Cue, type Ctx, type Theme, type TransitionDirection, 
 export const TRANSITION_DURATIONS: Record<TransitionName, number> = {
   cut: 0,
   blocks: 0.42, wipe: 0.38, glitch: 0.32, zoom: 0.48, flash: 0.3, shutter: 0.38,
-  push: 0.42, whip: 0.3, zoomthrough: 0.52, shatter: 0.5, pixelsort: 0.46, melt: 0.48,
-  iris: 0.42, cube: 0.52, flip: 0.42, dissolve: 0.44, slice: 0.38, ink: 0.52, match: 0.3,
+  push: 0.26, whip: 0.3, zoomthrough: 0.52, shatter: 0.5, pixelsort: 0.46, melt: 0.48,
+  iris: 0.24, cube: 0.52, flip: 0.42, dissolve: 0.44, slice: 0.38, ink: 0.52, match: 0.2,
 };
 /** Symmetric defaults kept for callers that used the original timing constants. */
 export const TRANSITION_OUT = 0.21;
@@ -20,6 +20,14 @@ export interface TransitionOptions {
 
 const stepped = (value: number, unit = 4) => Math.round(value / unit) * unit;
 const easeInOut = (p: number) => p < 0.5 ? 4 * p * p * p : 1 - Math.pow(-2 * p + 2, 3) / 2;
+
+/** Keep legacy transition names valid while routing HEDGY to the clean renderer set. */
+const CLEAN_TRANSITION_MAP: Readonly<Record<TransitionName, TransitionName>> = {
+  cut: 'cut', blocks: 'match', wipe: 'iris', glitch: 'match', zoom: 'push', flash: 'match', shutter: 'iris',
+  push: 'push', whip: 'push', zoomthrough: 'push', shatter: 'match', pixelsort: 'match', melt: 'match',
+  iris: 'iris', cube: 'push', flip: 'push', dissolve: 'match', slice: 'push', ink: 'iris', match: 'match',
+};
+export const cleanTransition = (name: TransitionName): TransitionName => CLEAN_TRANSITION_MAP[name] ?? 'cut';
 function entryVector(direction: TransitionDirection) {
   if (direction === 'left') return [1, 0];
   if (direction === 'right') return [-1, 0];
@@ -35,10 +43,55 @@ function drawLayer(ctx: Ctx, image: ImageLayer, x = 0, y = 0, alpha = 1) {
   ctx.restore();
 }
 
+function drawCleanLayer(ctx: Ctx, image: ImageLayer, height: number, x = 0, y = 0, alpha = 1) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.imageSmoothingEnabled = true;
+  ctx.drawImage(image, 0, 0, W, height, x, y, W, height);
+  ctx.restore();
+}
+
+function drawCleanScaled(ctx: Ctx, image: ImageLayer, height: number, focus: [number, number], scale: number, alpha: number) {
+  ctx.save();
+  ctx.globalAlpha *= alpha;
+  ctx.imageSmoothingEnabled = true;
+  ctx.translate(focus[0], focus[1]);
+  ctx.scale(scale, scale);
+  ctx.translate(-focus[0], -focus[1]);
+  ctx.drawImage(image, 0, 0, W, height);
+  ctx.restore();
+}
+
+/** Continuous two-plane slide; the incoming stage fills beneath both planes. */
+function drawCleanPush(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, direction: TransitionDirection, height: number) {
+  const [vx, vy] = entryVector(direction), p = easeInOut(progress);
+  const dx = vx * W, dy = vy * height;
+  drawCleanLayer(ctx, incoming, height);
+  drawCleanLayer(ctx, outgoing, height, -dx * p, -dy * p);
+  drawCleanLayer(ctx, incoming, height, dx * (1 - p), dy * (1 - p));
+}
+
+function drawCleanIris(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number], height: number) {
+  drawCleanLayer(ctx, outgoing, height);
+  const radius = Math.hypot(W, height) * easeInOut(progress);
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(focus[0], focus[1], radius, 0, Math.PI * 2);
+  ctx.clip();
+  drawCleanLayer(ctx, incoming, height);
+  ctx.restore();
+}
+
+function drawCleanMatch(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number], height: number) {
+  const p = easeInOut(progress), scale = 1 + 0.012 * Math.sin(Math.PI * p);
+  drawCleanScaled(ctx, outgoing, height, focus, scale, 1);
+  drawCleanScaled(ctx, incoming, height, focus, scale, p);
+}
+
 function drawTransformed(ctx: Ctx, image: ImageLayer, focus: [number, number], scaleX: number, scaleY = scaleX, x = 0, y = 0, alpha = 1) {
   ctx.save();
   ctx.globalAlpha *= alpha;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = !Number.isInteger(scaleX) || !Number.isInteger(scaleY) || x % 1 !== 0 || y % 1 !== 0;
   ctx.translate(stepped(focus[0] + x), stepped(focus[1] + y));
   ctx.scale(scaleX, scaleY);
   ctx.translate(-focus[0], -focus[1]);
@@ -49,7 +102,7 @@ function drawTransformed(ctx: Ctx, image: ImageLayer, focus: [number, number], s
 function drawMotionLayer(ctx: Ctx, image: ImageLayer, x: number, y: number, height: number, scale: number, alpha = 1) {
   ctx.save();
   ctx.globalAlpha *= alpha;
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = true;
   if (scale === 1) {
     ctx.drawImage(image, 0, 0, W, height, stepped(x), stepped(y), W, height);
   } else {
@@ -311,7 +364,7 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
       drawLayer(ctx, p < 0.5 ? outgoing : incoming);
       break;
     case 'push':
-      drawPush(ctx, outgoing, incoming, p, direction, height, 3);
+      drawCleanPush(ctx, outgoing, incoming, p, direction, height);
       break;
     case 'whip':
       drawWhip(ctx, outgoing, incoming, p, direction, height);
@@ -332,7 +385,7 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
       drawColumns(ctx, outgoing, incoming, p, seed, height, true, direction);
       break;
     case 'iris':
-      drawIris(ctx, outgoing, incoming, p, snappedFocus, height);
+      drawCleanIris(ctx, outgoing, incoming, p, focus, height);
       break;
     case 'cube':
       drawCube(ctx, outgoing, incoming, p, snappedFocus, false, theme);
@@ -392,20 +445,7 @@ export function compositeTransition(ctx: Ctx, outgoing: ImageLayer, incoming: Im
       break;
     }
     case 'match': {
-      drawLayer(ctx, p < 0.5 ? outgoing : incoming);
-      if (p >= 0.5) {
-        const punch = 1 + 0.035 * (1 - easeInOut((p - 0.5) * 2));
-        drawTransformed(ctx, incoming, snappedFocus, punch);
-        const edgeAlpha = 0.2 * clamp(1 - Math.abs(p - 0.5) / 0.12);
-        if (edgeAlpha > 0) {
-          ctx.save();
-          ctx.globalAlpha *= edgeAlpha;
-          ctx.strokeStyle = theme.fg;
-          ctx.lineWidth = 4;
-          ctx.strokeRect(2, 2, W - 4, height - 4);
-          ctx.restore();
-        }
-      }
+      drawCleanMatch(ctx, outgoing, incoming, p, focus, height);
       break;
     }
   }

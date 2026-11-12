@@ -235,9 +235,12 @@ export interface View3D {
   position?: Vec3; target?: Vec3; lookAt?: Vec3; fov?: number; roll?: number; near?: number;
   /** Direction from surfaces toward the key light, in world coordinates. */
   light?: Vec3; rim?: number; ambient?: number;
+  /** The clean renderer omits ground planes and their shadows; use the 2D stage shadow instead. */
   ground?: Ground3D; fog?: Fog3D;
   /** Pixel size and outline controls. A string outline is a direct colour override. */
   cell?: number; outline?: boolean | string; outlineColor?: string; ink?: boolean | string;
+  /** `smooth` uses device-resolution coverage, stable tones and float placement. */
+  renderMode?: 'pixel' | 'smooth';
   creaseDepth?: number; creaseNormal?: number;
   /** Legacy ramp override for materials without an explicit ramp. */
   palette?: string[];
@@ -279,7 +282,7 @@ let clipA = new Float64Array(72), clipB = new Float64Array(72), faceFx = new Flo
 
 const unit = (x: number, y: number, z: number): Vec3 => { const d = Math.hypot(x, y, z) || 1; return [x / d, y / d, z / d]; };
 function camera(view: View3D) {
-  const cell = Math.max(1, view.cell ?? CELL), cols = Math.ceil(view.w / cell), rows = Math.ceil(view.h / cell);
+  const cell = view.renderMode === 'smooth' ? 1 : Math.max(1, view.cell ?? CELL), cols = Math.ceil(view.w / cell), rows = Math.ceil(view.h / cell);
   const ox = cols / 2 + (view.cx ?? 0) / cell, oy = rows / 2 + (view.cy ?? 0) / cell, distance = Math.max(0.001, view.distance ?? 6);
   let right: Vec3, up: Vec3, forward: Vec3, position: Vec3;
   const target = view.target ?? view.lookAt;
@@ -308,7 +311,8 @@ function camera(view: View3D) {
 /** Canvas position of a world point, for attaching labels and callouts to a 3D object. */
 export function project(view: View3D, point: Vec3): { x: number; y: number } {
   const cam = camera(view), v = cam.viewPoint(point[0], point[1], point[2]), s = cam.screen(v[0], v[1], v[2]);
-  const left = Math.round(view.x / cam.cell) * cam.cell, top = Math.round(view.y / cam.cell) * cam.cell;
+  const left = view.renderMode === 'smooth' ? view.x : Math.round(view.x / cam.cell) * cam.cell;
+  const top = view.renderMode === 'smooth' ? view.y : Math.round(view.y / cam.cell) * cam.cell;
   return { x: left + s[0] * cam.cell, y: top + s[1] * cam.cell };
 }
 
@@ -370,11 +374,13 @@ function clipPlane(input: Float64Array, count: number, output: Float64Array, coo
   return out;
 }
 
-/** Rasterises dithered 3D materials. The synchronous scratch arrays are reused between renders. */
+/** Rasterises software 3D. Smooth mode uses native pixels and no screen-anchored dither. */
 export function render3d(ctx: Ctx, theme: Theme, view: View3D, objects: Object3D[]) {
   if (!canDraw()) return;
-  const cam = camera(view), { cols, rows, cell } = cam, count = cols * rows;
-  if (count < 1 || count > 400000) return;
+  const smoothMode = (view.renderMode ?? theme.renderMode ?? 'pixel') === 'smooth';
+  const renderView = smoothMode && view.renderMode !== 'smooth' ? { ...view, renderMode: 'smooth' as const } : view;
+  const cam = camera(renderView), { cols, rows, cell } = cam, count = cols * rows;
+  if (count < 1 || count > 2200000) return;
   const buf = ensureBuffers(cols, rows), { z: zb, shade: sb, glint: gb, normals: nb, mat: mb, kind: kb } = buf;
   zb.fill(Infinity); kb.fill(0);
   const paints: MaterialPaint[] = [], objectBases: number[] = [];
@@ -506,7 +512,7 @@ export function render3d(ctx: Ctx, theme: Theme, view: View3D, objects: Object3D
   }
 
   let groundMaterial = -1;
-  if (view.ground) {
+  if (view.ground && !smoothMode) {
     const g = view.ground, defaultRamp = theme.mode === 'dark' ? ['#09090B', '#111115', '#19191F', '#222228', '#2A2A31', '#34343C', '#414149'] : ['#A5A5AA', '#B8B8BD', '#C9C9CE', '#D6D6DB', '#E0E0E4', '#EBEBEE', '#F5F5F6'];
     const baseGround = g.color ? color(g.color) : undefined;
     const gColors = g.ramp ? rampColors(g.ramp) : baseGround ? [0.36, 0.48, 0.6, 0.72, 0.84, 0.92, 1].map(k => [baseGround[0] * k, baseGround[1] * k, baseGround[2] * k] as [number, number, number]) : defaultRamp.map(color);
@@ -525,33 +531,40 @@ export function render3d(ctx: Ctx, theme: Theme, view: View3D, objects: Object3D
         const ux = (wx - s.x) / s.radius, uz = (wz - s.z) / s.radius, rr = ux * ux + uz * uz;
         if (rr < 1.65) shadow = Math.max(shadow, s.strength * Math.exp(-2.8 * rr));
       }
-      const gridLine = g.grid && (Math.min(Math.abs(wx - Math.round(wx)), Math.abs(wz - Math.round(wz))) < 0.018);
-      const dither = bayer(xx + Math.round(view.x / cell), yy + Math.round(view.y / cell));
-      const shade = gridLine ? 0.18 : Math.max(0.12, 1 - Math.floor(shadow * 6 + dither) / 6 * 0.78);
+      const gridLine = !smoothMode && g.grid && (Math.min(Math.abs(wx - Math.round(wx)), Math.abs(wz - Math.round(wz))) < 0.018);
+      const dither = smoothMode ? 0 : bayer(xx + Math.round(view.x / cell), yy + Math.round(view.y / cell));
+      const shade = gridLine ? 0.18 : Math.max(0.12, smoothMode ? 1 - shadow * 0.78 : 1 - Math.floor(shadow * 6 + dither) / 6 * 0.78);
       zb[i] = depth; sb[i] = shade; mb[i] = groundMaterial; kb[i] = 3;
     }
   }
 
-  const left = Math.round(view.x / cell), top = Math.round(view.y / cell), buffer = layer(cols, rows, '3d');
+  const left = smoothMode ? view.x : Math.round(view.x / cell) * cell;
+  const top = smoothMode ? view.y : Math.round(view.y / cell) * cell;
+  const buffer = layer(cols, rows, '3d');
   const image = buf.image ?? (buf.image = buffer.ctx.createImageData(cols, rows)), data = image.data;
-  const spectrumColors = theme.spectrum.map(color), drift = Math.floor(theme.time * 14), fog = view.fog, fogColor = fog?.color ? color(fog.color) : color(theme.bg);
-  const fogNear = fog?.near ?? Infinity, fogFar = Math.max(fogNear + 1e-6, fog?.far ?? Infinity), threshold = view.outline === false ? false : view.outline !== undefined && typeof view.outline === 'string' ? color(view.outline) : view.outlineColor ? color(view.outlineColor) : typeof view.ink === 'string' ? color(view.ink) : view.ink === true ? color('#08090B') : theme.mode === 'dark' ? color('#E0E1E2') : color('#101114');
+  const spectrumColors = theme.spectrum.map(color), accentColor = color(theme.accentSolid), drift = smoothMode ? 0 : Math.floor(theme.time * 14), fog = smoothMode ? undefined : view.fog, fogColor = fog?.color ? color(fog.color) : color(theme.bg);
+  const fogNear = fog?.near ?? Infinity, fogFar = Math.max(fogNear + 1e-6, fog?.far ?? Infinity), threshold = view.outline === false ? false : view.outline !== undefined && typeof view.outline === 'string' ? color(view.outline) : view.outlineColor ? color(view.outlineColor) : typeof view.ink === 'string' ? color(view.ink) : view.ink === true ? color('#08090B') : smoothMode ? color('#0B0B0D') : theme.mode === 'dark' ? color('#E0E1E2') : color('#101114');
   const creaseColor = color('#08090B'), band = 3;
   for (let i = 0; i < count; i++) {
     const kind = kb[i]!, o = i * 4;
     if (!kind) { data[o + 3] = 0; continue; }
     let r: number, g: number, b: number;
     if (kind === 2 && spectrumColors.length) {
-      const x = i % cols, y = (i / cols) | 0, spectrum = spectrumColors[spectrumIndex(x + left + drift, y + top, spectrumColors.length, band)]!, val = sb[i]!;
-      const step = Math.min(2, Math.floor(val * 2 + bayer(x + left, y + top))); const scale = [0.38, 0.69, 1][step]!; r = spectrum[0] * scale; g = spectrum[1] * scale; b = spectrum[2] * scale;
+      const x = i % cols, y = (i / cols) | 0;
+      const spectrum = smoothMode ? accentColor : spectrumColors[spectrumIndex(x + left + drift, y + top, spectrumColors.length, band)]!, val = sb[i]!;
+      const step = Math.min(2, Math.round(val * 2)); const scale = [0.38, 0.69, 1][step]!; r = spectrum[0] * scale; g = spectrum[1] * scale; b = spectrum[2] * scale;
     } else {
-      const paint = paints[mb[i]!] ?? paints[0], colors = paint?.colors ?? rampColors('mono'), value = Math.max(0, Math.min(1, sb[i]!)) * (colors.length - 1), low = Math.floor(value), x = i % cols, y = (i / cols) | 0;
-      let step = Math.min(colors.length - 1, low + (value - low > bayer(x + left, y + top) ? 1 : 0));
-      if (gb[i]! > 0.34 && bayer(x + left + drift, y + top) < gb[i]!) step = colors.length - 1;
+      const paint = paints[mb[i]!] ?? paints[0], colors = paint?.colors ?? rampColors('mono'), value = Math.max(0, Math.min(1, sb[i]!)) * (colors.length - 1), x = i % cols, y = (i / cols) | 0;
+      let step = smoothMode
+        ? Math.round(Math.max(0, Math.min(1, sb[i]!)) * 3) * (colors.length - 1) / 3
+        : Math.min(colors.length - 1, Math.floor(value) + (value - Math.floor(value) > bayer(x + left, y + top) ? 1 : 0));
+      step = Math.round(step);
+      if (smoothMode) step = Math.min(colors.length - 1, Math.round((Math.max(0, Math.min(1, sb[i]! + gb[i]! * 0.12))) * 3) * (colors.length - 1) / 3);
+      else if (gb[i]! > 0.34 && bayer(x + left + drift, y + top) < gb[i]!) step = colors.length - 1;
       const c = colors[step]!; r = c[0]; g = c[1]; b = c[2];
     }
     if (fog && zb[i]! > fogNear) {
-      const amount = Math.max(0, Math.min(1, (zb[i]! - fogNear) / (fogFar - fogNear))), d = bayer(i % cols + left, ((i / cols) | 0) + top), mix = Math.min(4, Math.floor(amount * 4 + d)) / 4;
+      const amount = Math.max(0, Math.min(1, (zb[i]! - fogNear) / (fogFar - fogNear))), d = smoothMode ? 0 : bayer(i % cols + left, ((i / cols) | 0) + top), mix = smoothMode ? amount : Math.min(4, Math.floor(amount * 4 + d)) / 4;
       r += (fogColor[0] - r) * mix; g += (fogColor[1] - g) * mix; b += (fogColor[2] - b) * mix;
     }
     data[o] = r; data[o + 1] = g; data[o + 2] = b; data[o + 3] = 255;
@@ -577,5 +590,10 @@ export function render3d(ctx: Ctx, theme: Theme, view: View3D, objects: Object3D
     }
   }
   buffer.ctx.putImageData(image, 0, 0);
-  blit(ctx, buffer.canvas as CanvasImageSource, left * cell, top * cell, cols, rows, cell);
+  if (smoothMode) {
+    const smoothing = ctx.imageSmoothingEnabled;
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(buffer.canvas as CanvasImageSource, 0, 0, cols, rows, left, top, cols * cell, rows * cell);
+    ctx.imageSmoothingEnabled = smoothing;
+  } else blit(ctx, buffer.canvas as CanvasImageSource, left, top, cols, rows, cell);
 }

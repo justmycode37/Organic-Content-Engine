@@ -2,57 +2,73 @@
 // (src/motion/shots/<name>.ts) exporting a ShotDef; register it in SHOTS below.
 import type { Cue, Frame, SceneDef, ShotProps } from '../core.ts';
 import { hedgyDemoShot } from './demo-hedgy.ts';
-import { demoAudioShot } from './demo-audio.ts';
-import { demoVizShot } from './demo-viz.ts';
-import { demoAssetsShot } from './demo-assets.ts';
-import { demoFxShot } from './demo-fx.ts';
-import { announcementShot } from './announcement.ts';
-import { waitclockShot } from './waitclock.ts';
-import { buybackHandoffShot } from './buybackhandoff.ts';
-import { miniMarketShot } from './minimarket.ts';
-import { collateralCallShot } from './collateralcall.ts';
-import { forcedBuybackShot } from './forcedbuyback.ts';
-import { priceStairShot } from './pricestair.ts';
-import { vaultLockShot } from './vaultlock.ts';
-import { borrowedAssetShot } from './borrowedasset.ts';
-import { shortSaleHandoffShot } from './shortsalehandoff.ts';
-import { crowdRushShot } from './crowdrush.ts';
-import { priceRideShot } from './priceride.ts';
-import { demandFeedbackShot } from './demandfeedback.ts';
-import { squeezeRocketShot } from './squeezerocket.ts';
+
+import { handoffShot } from './handoff.ts';
+import { priceShot } from './price.ts';
+import { compareShot } from './compare.ts';
+import { storeShot } from './store.ts';
+import { waitShot } from './wait.ts';
+import { balanceShot } from './balance.ts';
+import { equationShot } from './equation.ts';
+import { presentShot } from './present.ts';
+import { stampShot } from './stamp.ts';
+import { demandShot } from './demand.ts';
+import { runtoShot } from './runto.ts';
+import { newsShot } from './news.ts';
+import { rushShot } from './rush.ts';
+import { tradeShot } from './trade.ts';
+import { queueShot } from './queue.ts';
+import { loopShot } from './loop.ts';
+import { squeezeShot } from './squeeze.ts';
+import { growShot } from './grow.ts';
+import { splitShot } from './split.ts';
+import { protectShot } from './protect.ts';
+import { STAGE_ZOOM } from '../kit/sprite.ts';
 
 export interface ShotDef {
   name: string;
   /** One line: what the shot shows and which params it takes. Fed to the reel-writing model. */
   describe: string;
   render(frame: Frame, props: ShotProps): void;
+  /** 'clean' = authored on the 720 x 860 stage (kit/sprite STAGE_ZOOM); the player zooms it to fill the frame. */
+  stage?: 'clean';
   cues?(props: ShotProps, dur: number): Cue[];
 }
 
 export const SHOTS: Record<string, ShotDef> = {
+  [handoffShot.name]: handoffShot,
+  [priceShot.name]: priceShot,
+  [compareShot.name]: compareShot,
+  [storeShot.name]: storeShot,
+  [waitShot.name]: waitShot,
+  [balanceShot.name]: balanceShot,
+  [equationShot.name]: equationShot,
+  [presentShot.name]: presentShot,
+  [stampShot.name]: stampShot,
+  [demandShot.name]: demandShot,
+  [runtoShot.name]: runtoShot,
+  [newsShot.name]: newsShot,
+  [rushShot.name]: rushShot,
+  [tradeShot.name]: tradeShot,
+  [queueShot.name]: queueShot,
+  [loopShot.name]: loopShot,
+  [squeezeShot.name]: squeezeShot,
+  [growShot.name]: growShot,
+  [splitShot.name]: splitShot,
+  [protectShot.name]: protectShot,
   [hedgyDemoShot.name]: hedgyDemoShot,
-  [demoAudioShot.name]: demoAudioShot,
-  [demoVizShot.name]: demoVizShot,
-  [demoAssetsShot.name]: demoAssetsShot,
-  [demoFxShot.name]: demoFxShot,
-  [waitclockShot.name]: waitclockShot,
-  [announcementShot.name]: announcementShot,
-  [buybackHandoffShot.name]: buybackHandoffShot,
-  [miniMarketShot.name]: miniMarketShot,
-  [collateralCallShot.name]: collateralCallShot,
-  [forcedBuybackShot.name]: forcedBuybackShot,
-  [priceStairShot.name]: priceStairShot,
-  [vaultLockShot.name]: vaultLockShot,
-  [borrowedAssetShot.name]: borrowedAssetShot,
-  [shortSaleHandoffShot.name]: shortSaleHandoffShot,
-  [crowdRushShot.name]: crowdRushShot,
-  [priceRideShot.name]: priceRideShot,
-  [demandFeedbackShot.name]: demandFeedbackShot,
-  [squeezeRocketShot.name]: squeezeRocketShot,
 };
 
 export const shotScene: SceneDef<ShotProps> = {
   type: 'shot',
-  render(frame, props) { SHOTS[props.shot]?.render(frame, props); },
+  render(frame, props) {
+    const shot = SHOTS[props.shot];
+    if (!shot) return;
+    if (shot.stage !== 'clean') { shot.render(frame, props); return; }
+    frame.ctx.save();
+    frame.ctx.scale(STAGE_ZOOM, STAGE_ZOOM);
+    shot.render(frame, props);
+    frame.ctx.restore();
+  },
   cues(props, dur) { return SHOTS[props.shot]?.cues?.(props, dur) ?? []; },
 };
