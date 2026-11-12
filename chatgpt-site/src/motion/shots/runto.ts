@@ -1,13 +1,10 @@
-// runto — a full-size actor runs to a destination that slides into view, then skids to a stop.
+// runto — a full-size actor runs to a stationary destination, then skids to a stop.
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase } from '../kit/motion.ts';
 import { PAL } from '../kit/pixel.ts';
 import { drawStage } from '../kit/stage.ts';
 import { poof, speedLines } from '../kit/fx.ts';
-import { boothCounter } from '../props/booth.ts';
-import { HEDGY_TIMING } from '../actor/hedgy.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
-import { runStride } from '../props/people.ts';
 import { ACTORS, STAGE, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -25,8 +22,7 @@ interface RuntoPlan {
   endX: number;
 }
 
-const PLACE_X = 584, PLACE_SCALE = 0.48;
-const PUSH_TRANSITION_HALF = 0.21;
+const PLACE_X = 414, PLACE_SCALE = 1;
 const placeIds = ['booth', 'bank', 'exchange', 'shop'] as const;
 
 function timing(props: ShotProps, dur: number): { start: number; arrive: number } {
@@ -50,7 +46,7 @@ function timing(props: ShotProps, dur: number): { start: number; arrive: number 
 function plan(props: ShotProps, dur: number): RuntoPlan {
   const times = timing(props, dur);
   const rawCarry = str(props.params, 'carry', 'none');
-  const startX = 160, endX = 350;
+  const startX = 160, endX = 310;
   return {
     ...times,
     who: pick(props.params, 'who', ACTORS, 'hedgy'),
@@ -65,11 +61,6 @@ function plan(props: ShotProps, dur: number): RuntoPlan {
 function smoothStep(value: number): number {
   const p = clamp(value);
   return p * p * p * (p * (p * 6 - 15) + 10);
-}
-
-function pushEase(value: number): number {
-  const p = clamp(value);
-  return p < 0.5 ? 16 * p ** 5 : 1 - ((-2 * p + 2) ** 5) / 2;
 }
 
 function runProgress(t: number, start: number, end: number): number {
@@ -107,45 +98,26 @@ export const runtoShot: ShotDef = {
   describe: "A full-size actor runs from the left to a stationary destination and skids beside its counter; params: who (any actor id in ACTORS, default hedgy), place='booth'|'bank'|'exchange'|'shop' (default booth), sign='BUY' (printed on the booth sign, default BUY), mood='panic'|'determined' (default panic), carry='none' (optional item id in ITEMS; 'wallet' opens empty at the paw). Events: 1 = the actor starts running; the last event = skid, squash, and dust poof at the counter.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    // This timed booth scene enters on a push-left; counter that push so the booth is fixed on screen.
-    const followsPushEntry = s.who === 'hedgy' && s.place === 'booth' && s.sign === 'BUY' && s.mood === 'panic';
-    const entryProgress = followsPushEntry ? phase(t, -PUSH_TRANSITION_HALF, PUSH_TRANSITION_HALF) : 1;
-    const entryOffset = followsPushEntry ? STAGE.w * (1 - pushEase(entryProgress)) : 0;
     const progress = runProgress(t, s.start, s.arrive);
-    const runX = s.startX + (s.endX - s.startX) * progress - entryOffset;
-    const placeX = PLACE_X - entryOffset;
+    const runX = s.startX + (s.endX - s.startX) * progress;
+    const placeX = PLACE_X;
     const skid = phase(t, s.arrive, s.arrive + 0.34);
     const skidOffset = 15 * Math.sin(Math.PI * skid);
     const settle = phase(t, s.arrive + 0.2, s.arrive + 0.48);
     const settlePhase = Math.max(0, t - s.arrive);
     const x = runX + skidOffset + Math.sin(settlePhase * Math.PI * 2 / 0.48) * 12 * settle;
     const actorY = STAGE.floor - Math.max(0, Math.sin(settlePhase * Math.PI * 2 / 0.4)) * 14 * settle;
-    const distance = s.endX - s.startX;
-    const runClock = s.start + (distance * progress / runStride) * HEDGY_TIMING.run.loop;
-    const runEnd = s.start + (distance / runStride) * HEDGY_TIMING.run.loop;
-    const poseTime = t < s.start ? t : t <= s.arrive ? runClock : runEnd + (t - s.arrive);
     const carriedSize = s.carry ? itemSize(s.carry, 0.5) : undefined;
     const held = carriedSize ? { x: x + 108, y: STAGE.floor - 70 } : undefined;
-    const counterTap = 0.5 + 0.5 * Math.sin(settlePhase * Math.PI * 2 / 0.42);
-    const boothTouch = s.place === 'booth' ? boothCounter({ x: placeX, y: STAGE.floor, scale: PLACE_SCALE }) : undefined;
     const actorOptions = {
-      who: s.who, x, y: actorY, facing: 1 as const, time: poseTime, scale: 1, shadow: true,
+      who: s.who, x, y: actorY, facing: 1 as const, time: t, scale: 1, shadow: true,
       look: t < s.arrive ? 'forward' as const : 'up' as const,
-      keys: reactionKeys(s.start, runEnd, dur, s.mood),
+      keys: reactionKeys(s.start, s.arrive, dur, s.mood),
       ...(held ? { handTarget: { x: held.x - 42, y: held.y - 4 }, reach: 0.88 } : {}),
-      ...(t >= s.arrive ? {
-        handTarget: boothTouch
-          ? { x: boothTouch.x + 10, y: boothTouch.y + boothTouch.h / 2 + (counterTap - 0.5) * 3 }
-          : { x: placeX - 130, y: STAGE.floor - 180 },
-        reach: 0.96,
-      } : {}),
       squash: 1 - 0.18 * Math.exp(-(((t - s.arrive) / 0.105) ** 2)),
     };
-    // Keep the destination fixed and visible throughout; the actor alone runs on event 1.
-    ctx.save();
-    ctx.translate(-entryOffset, 0);
     drawStage(ctx, { floorY: STAGE.floor, line: true });
-    ctx.restore();
+    // Keep the full-size destination fixed while the actor runs on event 1.
     drawItem(ctx, s.place, { x: placeX, y: STAGE.floor, t, scale: PLACE_SCALE, sign: s.sign, stock: 1, clerk: true });
     if (t >= s.start && t < s.arrive + 0.28) {
       const first = Math.max(0, s.start - 0.08);

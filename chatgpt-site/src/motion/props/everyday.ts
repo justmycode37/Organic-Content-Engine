@@ -89,14 +89,27 @@ function carSprite(color:'red'|'blue'){const base=color==='red'?PAL.red2:PAL.blu
 }));}
 export function drawCar(ctx:Ctx,o:Base&{color?:'red'|'blue'}){draw(ctx,carSprite(o.color??'red'),o);}
 
-function phoneSprite(direction:'up'|'down'){const line=direction==='up'?PAL.UP:PAL.DOWN;return cached(`phone-${direction}`,()=>make(`phone-chart-${direction}`,46,75,g=>{
+function phoneCandles(g:Grid,direction:'up'|'down'){
+  const closes=direction==='up'?[0.28,0.48,0.41,0.78]:[0.72,0.52,0.59,0.22];
+  let previous=closes[0]!-(closes[1]!-closes[0]!)*0.55;
+  const wickPairs=[[0.06,0.045],[0.045,0.065],[0.055,0.04],[0.07,0.05]] as const;
+  const yAt=(value:number)=>Math.round(48-value*22);
+  closes.forEach((close,index)=>{
+    const open=previous,[upper,lower]=wickPairs[index]!,high=Math.max(open,close)+upper,low=Math.min(open,close)-lower;
+    const rising=close>open,inkWick=rising?PAL.green4:PAL.red3,left=12+index*6,center=left+2;
+    const openY=yAt(open),closeY=yAt(close),highY=yAt(high),lowY=yAt(low);
+    const top=Math.min(openY,closeY),height=Math.max(3,Math.abs(openY-closeY)+1);
+    g.rect(center,highY,1,Math.max(1,lowY-highY+1),inkWick);
+    g.rect(left,top,4,height,PAL.ink);
+    g.rect(left+1,top+1,2,height-2,rising?PAL.DOWN:PAL.UP);
+    g.rect(left+1,top+1,1,1,rising?PAL.green1:PAL.red1);
+    previous=close;
+  });
+}
+function phoneSprite(direction:'up'|'down'){return cached(`phone-${direction}`,()=>make(`phone-chart-${direction}`,46,75,g=>{
   g.round(4,2,38,71,7,PAL.ink);g.round(7,4,32,67,5,PAL.grey4);g.round(9,7,28,59,3,PAL.blue4);g.round(11,13,24,45,2,PAL.paper);g.rect(19,9,8,2,PAL.grey2);g.ellipse(23,64,2,2,PAL.grey2);
   g.rect(14,22,18,2,PAL.paperShade);g.rect(14,49,18,2,PAL.paperShade);
-  if(direction==='up'){
-    g.line({x:14,y:45},{x:20,y:40},3,line);g.line({x:20,y:40},{x:25,y:42},3,line);g.line({x:25,y:42},{x:31,y:29},3,line);g.tri({x:28,y:31},{x:33,y:25},{x:33,y:33},line);
-  }else{
-    g.line({x:14,y:29},{x:20,y:34},3,line);g.line({x:20,y:34},{x:25,y:31},3,line);g.line({x:25,y:31},{x:31,y:44},3,line);g.tri({x:28,y:42},{x:33,y:48},{x:33,y:40},line);
-  }
+  phoneCandles(g,direction);
   g.rect(13,17,2,3,PAL.blue2);g.rect(17,17,2,3,PAL.blue2);g.rect(21,17,2,3,PAL.blue2);
 }));}
 export function drawPhoneChart(ctx:Ctx,o:Base&{direction?:'up'|'down';trend?:'up'|'down'}){draw(ctx,phoneSprite(o.direction??o.trend??'up'),o);}
@@ -214,7 +227,7 @@ export const GALLERY=[
   g('Pizza · slice taken',(c,x,y)=>drawPizza(c,{x,y,slices:6,taken:1}),PIZZA_SIZE.w,PIZZA_SIZE.h),
   g('Pizza · taking a slice',(c,x,y,t)=>drawPizza(c,{x,y,slices:6,taken:ease((t+.12)/.5)}),PIZZA_SIZE.w,PIZZA_SIZE.h),
   g('Car · red',(c,x,y)=>drawCar(c,{x,y,color:'red'}),CAR_SIZE.w,CAR_SIZE.h),g('Car · blue',(c,x,y)=>drawCar(c,{x,y,color:'blue'}),CAR_SIZE.w,CAR_SIZE.h),
-  g('Phone · rising chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'up'}),PHONE_SIZE.w,PHONE_SIZE.h),g('Phone · falling chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'down'}),PHONE_SIZE.w,PHONE_SIZE.h),
+  g('Phone · rising candlestick chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'up'}),PHONE_SIZE.w,PHONE_SIZE.h),g('Phone · falling candlestick chart',(c,x,y)=>drawPhoneChart(c,{x,y,direction:'down'}),PHONE_SIZE.w,PHONE_SIZE.h),
   g('Shopping cart · coloured goods',(c,x,y)=>drawShoppingCart(c,{x,y,items:4}),CART_SIZE.w,CART_SIZE.h),
   g('Gift box · gold ribbon',(c,x,y)=>drawGiftBox(c,{x,y}),GIFT_SIZE.w,GIFT_SIZE.h),
   g('Gold key',(c,x,y)=>drawKey(c,{x,y}),KEY_SIZE.w,KEY_SIZE.h),

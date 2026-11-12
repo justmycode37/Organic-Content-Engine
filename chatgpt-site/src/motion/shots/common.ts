@@ -14,6 +14,7 @@ import * as booth from '../props/booth.ts';
 import * as poster from '../props/poster.ts';
 import * as press from '../props/press.ts';
 import * as finance from '../props/finance.ts';
+import * as chart from '../props/chart.ts';
 import * as buildings from '../props/buildings.ts';
 import * as symbols from '../props/symbols.ts';
 import * as everyday from '../props/everyday.ts';
@@ -81,7 +82,7 @@ export const ITEMS = {
   share: I(finance.drawShare, 480, 372), contract: I(finance.drawContract, 420, 390), bond: I(finance.drawBond, 450, 390),
   piggy: I(finance.drawPiggyBank, 390, 336), moneyBag: I(finance.drawMoneyBag, 360, 420), gold: I(finance.drawGoldBars, 420, 300),
   card: I(finance.drawCreditCard, 432, 276), calculator: I(finance.drawCalculator, 360, 456), percent: I(finance.drawPercentBadge, 420, 264),
-  pie: I(finance.drawPieChart, 384, 384), barChart: I(finance.drawBarChart, 480, 360), candles: I(finance.drawCandlestickTrio, 420, 336),
+  pie: I(finance.drawPieChart, 384, 384), barChart: I(finance.drawBarChart, 480, 360), candles: I(chart.drawCandleChart, 420, 336, { state: { w: 384, h: 288, closes: 'up', count: 7, axes: true, dollar: true } }),
   basket: I(finance.drawDiversificationBasket, 420, 360), umbrella: I(finance.drawUmbrella, 420, 420, { state: { open: 1 } }), shield: I(finance.drawShield, 330, 390),
   lever: I(finance.drawLever, 510, 360), magnifier: I(finance.drawMagnifyingGlass, 360, 360), calendar: I(finance.drawCalendarPage, 390, 420),
   dice: I(finance.drawDice, 300, 300), crypto: I(finance.drawCryptoCoin, 330, 330),

@@ -113,8 +113,8 @@ try {
       const kitTimes = customTimes ? times : [0.12, 0.28, 0.44, 0.6, 0.78, 1];
       const renderKit = async ({ atTimes, strip }) => page.evaluate(({ atTimes, strip }) => {
         const kit = window.__kit_gallery;
-        const rows = ['SIGN', 'TAG', 'STAMP', 'BUBBLE', 'WORDS', 'ARROW', 'PRICE', 'LOOP', 'BAR', 'FX'];
-        const animated = ['ARROW', 'PRICE', 'LOOP', 'FX'];
+        const rows = ['SIGN', 'TAG', 'STAMP', 'BUBBLE', 'WORDS', 'ARROW', 'CANDLES', 'LOOP', 'BAR', 'FX'];
+        const animated = ['ARROW', 'CANDLES', 'LOOP', 'FX'];
         const cellW = strip ? 220 : 420;
         const cellH = strip ? 208 : 240;
         const cols = strip ? 12 : atTimes.length;
@@ -138,9 +138,10 @@ try {
             kit.label(ctx, words[col % words.length], cx, cy, { variant: variants[col % variants.length], maxWidth: cellW - 20 });
           }
           else if (name === 'ARROW') kit.arrow(ctx, { x: cx - 145, y: cy + 34 }, { x: cx + 142, y: cy - 38 }, { progress, curve: -18 });
-          else if (name === 'PRICE') {
-            kit.priceLine(ctx, [{ x: cx - 150, y: cy + 40 }, { x: cx - 76, y: cy + 5 }, { x: cx - 6, y: cy + 18 }, { x: cx + 55, y: cy - 54 }, { x: cx + 145, y: cy - 76 }], { progress, fill: true, baseline: cy + 72 });
-          } else if (name === 'LOOP') kit.loopArrow(ctx, cx, cy, 64, { progress, spin: time * 0.14 });
+          else if (name === 'CANDLES') kit.candles(ctx, cx - 155, cy - 68, 310, 184, {
+            closes: 'up', count: 7, progress, t: time, seed: 17, axes: true, dollar: true,
+          });
+          else if (name === 'LOOP') kit.loopArrow(ctx, cx, cy, 64, { progress, spin: time * 0.14 });
           else if (name === 'BAR') kit.bar(ctx, cx - 138, cy - 18, 276, 48, { progress, color: '#FF3B30', background: '#5A5D6B' });
           else if (name === 'FX') {
             kit.ring(ctx, cx, cy, 0, time, { r: 66, duration: 0.82 });
@@ -291,4 +292,4 @@ try {
   await browser.close();
 }
 
-function animatedKitNames() { return 'arrow, price line, loop arrow, and FX'; }
+function animatedKitNames() { return 'arrow, candlesticks, loop arrow, and FX'; }

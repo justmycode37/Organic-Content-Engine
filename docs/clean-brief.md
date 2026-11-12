@@ -91,17 +91,17 @@ Shot starts (s): 1 0.00 · 2 2.37 · 3 6.20 · 4 8.77 · 5 11.23 · 6 12.97 · 7
 |---|---|---|---|
 | 1 | borrowedasset | Hedgy sells a concert ticket that isn't his. | Hedgy holds a big concert ticket; a BORROWED tag hangs on it; he hands it to a buyer (person) who gives a banknote. |
 | 2 | shortsalehandoff | That's short selling: he borrows it, sells it, and owes the lender a ticket back. | Three clear beats left→right: LENDER person gives ticket to Hedgy (borrows) → Hedgy passes ticket to BUYER, cash comes back (sells) → an IOU slip with a ticket outline appears between Hedgy and LENDER (owes). |
-| 3 | pricestair | He bets prices will fall, so he can buy it back cheaper. | A big ticket with a price tag; a green line/arrow steps DOWN; price tag shrinks from big coin stack to small coin stack; Hedgy smug. |
+| 3 | pricestair | He bets prices will fall, so he can buy it back cheaper. | A big ticket with a price tag; a candlestick chart trends DOWN; price tag shrinks from big coin stack to small coin stack; Hedgy smug. |
 | 4 | vaultlock | His broker holds the sale money as collateral | BROKER person + big safe; the cash bundle goes into the safe; door closes, dial turns, padlock. |
 | 5 | waitclock | while he waits. | Big clock, hands sweep; Hedgy taps his foot, IOU in paw. |
 | 6 | announcement | Then the band announces a reunion | A big poster / megaphone: band (3 simple musicians) + REUNION; Hedgy shocked. |
 | 7 | crowdrush | and fans rush for the last tickets. | Ticket booth with a short stack of tickets; 3 big fans run in, tickets go 3 → 2 → 1 → SOLD OUT. |
-| 8 | priceride | The price jumps and Hedgy's losses grow, | Ticket price tag: red line shoots UP on a clean chart; ticket rises on it; Hedgy looks up worried, a red loss bar under him grows. |
+| 8 | priceride | The price jumps and Hedgy's losses grow, | Ticket price tag rides the latest close of a candlestick chart trending UP; Hedgy looks up worried, a red loss bar under him grows. |
 | 9 | collateralcall | so the broker demands more collateral. | BROKER holds out an open hand / points at the safe (now showing a "MORE" slot); Hedgy turns out an EMPTY wallet. |
 | 10 | forcedbuyback | He can't pay, so he must | Empty wallet flaps; Hedgy runs toward a BUY booth. |
 | 11 | buybackhandoff | buy a ticket back now. | Hedgy pays a tall pile of cash for ONE ticket (expensive) and it goes back to LENDER. |
-| 12 | minimarket | Those forced buys add demand and push prices higher, | Buyers queue at the booth, each buy bumps the red price arrow one step higher. |
-| 13 | demandfeedback | scaring other short sellers into buying back too. | 2–3 other "short seller" characters (hedgehog-like silhouettes or people with IOU slips) panic and run to the booth one by one; each makes the price step up again → a visible loop arrow. |
+| 12 | minimarket | Those forced buys add demand and push prices higher, | Buyers queue at the booth; each buy reveals another rising candle in the price chart. |
+| 13 | demandfeedback | scaring other short sellers into buying back too. | 2–3 other "short seller" characters (hedgehog-like silhouettes or people with IOU slips) panic and run to the booth one by one; each reveals another rising candle → a visible loop arrow. |
 | 14 | squeezerocket | That loop is a short squeeze. | The loop arrow tightens around the ticket price which rockets up; the short sellers get squeezed between rising price and the top; stamp SHORT SQUEEZE; ends matching the first frame of shot 1 for the loop. |
 
 Shot authors may restage details, but must keep: the narration sync events (`props.events`, kinds = sync
@@ -154,3 +154,6 @@ recognizable but STILL PIXEL ART."
   is smaller than 2 art px it does not exist. Fewer, bolder shapes.
 - Moving parts: separate sprites with float transforms; rotation of a pixel sprite is fine for motion,
   but resting states should sit at 0° / integer positions so the pixels look crisp.
+- Price charts are always candlestick charts. Candle bodies use market colours: green when the close is
+  above the open, red when the close is below the open; Hedgy's reaction and the LOSS/GAIN bar show
+  whether the move is good or bad for him.

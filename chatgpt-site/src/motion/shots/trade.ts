@@ -31,7 +31,7 @@ const PLACE_X = 410;
 const PAY_FLIGHT = 0.34;
 const ITEM_FLIGHT = 0.30;
 const ITEM_SCALE = 0.5;
-const HOLD_SCALE = 0.36;
+const HOLD_SCALE = 0.5;
 const HAND_FACE_GAP = 8;
 
 function orderedBeats(props: ShotProps, dur: number, fractions: readonly number[]): number[] {
@@ -206,7 +206,8 @@ export const tradeShot: ShotDef = {
       }
     }
 
-    if (t >= itemArrives - 0.02) ring(ctx, itemTo.x, itemTo.y, itemArrives, t, { r: 54, width: 8 });
+    const impactRingY = Math.min(STAGE.h - 58, itemTo.y + itemDims.h / 2 + 58);
+    if (t >= itemArrives - 0.02) ring(ctx, itemTo.x, impactRingY, itemArrives, t, { r: 54, width: 8 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), pileHit = s.price === 'high' ? 'thump' : 'coin';

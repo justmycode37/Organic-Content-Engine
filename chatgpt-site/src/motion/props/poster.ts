@@ -117,15 +117,28 @@ function posterArtwork(g: Grid, art: PosterArt) {
     g.line({ x: 64, y: 40 }, { x: 75, y: 40 }, 3, PAL.red2);
     g.line({ x: 62, y: 48 }, { x: 69, y: 54 }, 3, PAL.red2);
   } else {
-    // A bold rising/descending market chart in blue, without tiny axis clutter.
-    g.rect(16, 58, 5, 5, PAL.ink); g.rect(16, 20, 5, 43, PAL.ink); g.rect(16, 58, 58, 5, PAL.ink);
-    g.line({ x: 25, y: 51 }, { x: 34, y: 51 }, 4, PAL.blue3);
-    g.line({ x: 34, y: 51 }, { x: 34, y: 43 }, 4, PAL.blue3);
-    g.line({ x: 34, y: 43 }, { x: 46, y: 43 }, 4, PAL.blue3);
-    g.line({ x: 46, y: 43 }, { x: 46, y: 33 }, 4, PAL.blue3);
-    g.line({ x: 46, y: 33 }, { x: 59, y: 33 }, 4, PAL.blue3);
-    g.line({ x: 59, y: 33 }, { x: 59, y: 23 }, 4, PAL.blue3);
-    g.poly([{ x: 54, y: 25 }, { x: 59, y: 17 }, { x: 65, y: 25 }], PAL.blue3);
+    // A compact market chart: 4-cell candle bodies, ink outlines, and one-cell wicks.
+    g.rect(16, 20, 1, 43, PAL.grey3); g.rect(16, 62, 58, 1, PAL.grey3);
+    const bars = [
+      { open: 38, close: 43, high: 45, low: 36 },
+      { open: 43, close: 40, high: 45, low: 38 },
+      { open: 40, close: 49, high: 51, low: 39 },
+      { open: 49, close: 46, high: 52, low: 44 },
+      { open: 46, close: 58, high: 60, low: 44 },
+      { open: 58, close: 66, high: 68, low: 55 },
+    ];
+    const yAt = (price: number) => Math.round(58 - (price - 30) * 0.9);
+    bars.forEach((bar, index) => {
+      const center = 25 + index * 9, left = center - 2;
+      const rising = bar.close > bar.open;
+      const wick = yAt(bar.high), wickEnd = yAt(bar.low);
+      const open = yAt(bar.open), close = yAt(bar.close);
+      const top = Math.min(open, close), height = Math.max(3, Math.abs(open - close) + 1);
+      g.rect(center, wick, 1, Math.max(1, wickEnd - wick + 1), rising ? PAL.green4 : PAL.red3);
+      g.rect(left, top, 4, height, PAL.ink);
+      g.rect(left + 1, top + 1, 2, height - 2, rising ? PAL.DOWN : PAL.UP);
+      g.rect(left + 1, top + 1, 1, 1, rising ? PAL.green1 : PAL.red1);
+    });
   }
 }
 

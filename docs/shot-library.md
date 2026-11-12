@@ -43,8 +43,9 @@ Register it in `src/motion/shots/index.ts` with two small exact-string edits (on
   `stock`; safe `door`, `dial`, `contents`; wallet `open`, `empty`; ticket `tag`, `stamp`; poster `word`,
   `art`, `reveal`). Use `scale: 1` for hero objects and exactly `0.5` for carried/secondary ones.
   `itemParam(params, 'item', 'ticket')` reads an item id from params with a default.
-- Kit: `label` (sign/tag/stamp/bubble pixel plates), `arrow`, `loopArrow`, `priceLine` (thick pixel line,
-  red up / green down), `bar`, `connector`, fx `ring` `sparks` `poof` `speedLines`, motion `tween` `track`
+- Kit: `label` (sign/tag/stamp/bubble pixel plates), `arrow`, `loopArrow`, `candles` (pixel candlestick
+  chart; rising candle bodies green, falling bodies red), `priceLine` (thick pixel path for non-chart
+  arrows), `bar`, `connector`, fx `ring` `sparks` `poof` `speedLines`, motion `tween` `track`
   `arc` `spring` `squash` `bob` `phase` `ease`.
 
 ## Animation rules (the owner complained about stutter and clutter)
@@ -72,7 +73,7 @@ Register it in `src/motion/shots/index.ts` with two small exact-string edits (on
 | handoff (done) | A gives an item to B; optional return item | from, to, item, back, fromLabel, toLabel, tag |
 | present | an actor shows a hero item with a tag/label (hooks, definitions) | who, item, tag, label, mood |
 | stamp | a big word is stamped onto/under a hero item or the scene (naming the concept; end cards) | item, word, who, mood |
-| price | the price of an item moves: big pixel price line up or down with the item riding it; actor reacts; optional loss/gain bar | item, dir, steps, who, mood, bar |
+| price | the price of an item moves: candlestick chart up or down with the item riding its latest close; actor reacts; optional loss/gain bar | item, dir, steps, chart='candles', who, mood, bar |
 | compare | two things side by side: cheap vs expensive, before vs after, A vs B | left, right, leftLabel, rightLabel, winner, who |
 | store | an item goes into a container (safe, piggy, bank, wallet, crate) which shuts/locks | item, container, who, label |
 | wait | time passes: clock / hourglass / calendar races while an actor waits | timer, who, mood, label |
@@ -119,7 +120,10 @@ The first assembled reel showed shots that do not match each other. These are no
 4. FACES CLEAR. Nothing covers an actor's head — carried items sit at the paws (below the chin) or are
    held up beside/above the head with a gap.
 5. EVERYTHING IN FRAME. Actors and hero props stay fully inside x 24–696 (entrances/exits excepted).
-6. PRICE LINES are thick (kit `priceLine` width ≥ 30) and long — they should span most of the stage.
+6. Price charts are always candlestick charts. Never draw a price chart as a line or staircase. Candle
+   bodies are at least four art pixels wide, outlined in dark ink, with one-art-pixel wicks and market
+   colours (green when close > open, red when close < open). The actor's reaction and LOSS/GAIN bar show
+   whether the move is good or bad for Hedgy.
 7. NO DEAD HOLDS: after the last beat keep purposeful motion (reaction acting, item bob, a second small
    action), and start the first action within 0.25 s.
 8. No explanatory filler plates ("BIG NEWS JUST DROPPED", "STOCK 3" etc.) unless a param asks for a label.

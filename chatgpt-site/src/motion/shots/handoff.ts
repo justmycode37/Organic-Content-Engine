@@ -35,7 +35,7 @@ export const handoffShot: ShotDef = {
     const catchSquash = squash(t, landed, 0.16, 0.24), enter = ease.outBack(phase(t, 0, 0.2));
 
     // The return item goes back at paw height once the first item is on its way up.
-    const backStart = Math.max(s.back - 0.08, landed + 0.12), backU = s.backItem ? tween(t, backStart, TRAVEL, 0, 1, ease.inOutCubic) : 0;
+    const backStart = Math.max(s.back - TRAVEL + 0.04, landed + 0.12), backU = s.backItem ? tween(t, backStart, TRAVEL, 0, 1, ease.inOutCubic) : 0;
     const backPos = arc({ x: take.x + 6, y: PAW_Y + 22 }, { x: give.x - 6, y: PAW_Y + 22 }, 44, backU);
     const backShown = s.backItem ? ease.outBack(phase(t, backStart - 0.16, backStart)) : 0;
     const backSquash = squash(t, backStart + TRAVEL, 0.14, 0.22);
@@ -75,7 +75,7 @@ export const handoffShot: ShotDef = {
     if (s.backItem) sparks(ctx, give.x, PAW_Y, backStart + TRAVEL, t, { count: 4, seed: frame.seed + 7 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
-    const s = plan(props, Math.max(0.05, dur)), leave = s.give - 0.08, landed = leave + TRAVEL, backStart = Math.max(s.back - 0.08, landed + 0.12);
+    const s = plan(props, Math.max(0.05, dur)), leave = s.give - 0.08, landed = leave + TRAVEL, backStart = Math.max(s.back - TRAVEL + 0.04, landed + 0.12);
     return cuesIn(dur, [
       cue(0.03, 'pop', 0.6, FROM_X), cue(Math.max(0.05, leave - 0.3), 'rustle', 0.6, FROM_X), cue(leave, 'whump', 0.9, FROM_X), cue(landed, 'thump', 1.4, TO_X), cue(landed + 0.14, 'paper', 0.7, TO_X), cue(landed + 0.3, 'swish', 0.5, TO_X),
       ...(s.backItem ? [cue(backStart, 'slide', 0.7, TO_X), cue(backStart + TRAVEL, 'thump', 1.3, FROM_X), cue(backStart + TRAVEL + 0.1, 'coin', 0.6, FROM_X)] : []),

@@ -1,5 +1,6 @@
 import { Grid, PAL } from '../kit/pixel';
 import { ART, drawSprite } from '../kit/sprite';
+import { candles as drawStageCandles, type CandleOptions } from '../kit/stage';
 
 export const CHART_SIZE = { w: 720, h: 420 } as const;
 export const LOSS_BAR_SIZE = { w: 444, h: 144 } as const;
@@ -18,6 +19,7 @@ export interface PriceArrowOptions {
 export interface LossBarOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; level: number; label?: string }
 export interface GainBarOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; level: number; label?: string }
 export interface PriceBadgeOptions { x: number; y: number; t?: number; rot?: number; scale?: number; alpha?: number; level: number; dir: 'up' | 'down' }
+export type CandleChartOptions = ChartPanelOptions & Omit<CandleOptions, 't'> & { t?: number };
 
 const clamp = (v: number) => Math.max(0, Math.min(1, v));
 const TAU = Math.PI * 2;
@@ -45,6 +47,18 @@ export function drawChartPanel(ctx: CanvasRenderingContext2D, o: ChartPanelOptio
     g.outline();
   });
   drawSprite(ctx, panel, o.x, o.y, { scale: o.scale ?? 1, rot: o.rot, alpha: o.alpha });
+}
+
+/** Centre-anchored candlestick chart prop for galleries and shot items. */
+export function drawCandleChart(ctx: CanvasRenderingContext2D, o: CandleChartOptions) {
+  const w = o.w ?? 420, h = o.h ?? 300;
+  ctx.save();
+  ctx.translate(o.x, o.y);
+  if (o.rot) ctx.rotate(o.rot);
+  ctx.scale(o.scale ?? 1, o.scale ?? 1);
+  ctx.globalAlpha *= o.alpha ?? 1;
+  drawStageCandles(ctx, -w / 2, -h / 2, w, h, o);
+  ctx.restore();
 }
 
 function defaultPath(o: PriceArrowOptions): Point[] {
@@ -202,9 +216,9 @@ export function drawPriceBadge(ctx: CanvasRenderingContext2D, o: PriceBadgeOptio
 
 export const GALLERY: { name: string; draw(ctx: CanvasRenderingContext2D, x: number, y: number, t: number): void }[] = [
   { name: 'price chart axes', draw: (ctx, x, y) => drawChartPanel(ctx, { x, y, w: 350, h: 204 }) },
-  { name: 'price falls, green', draw: (ctx, x, y) => drawPriceArrow(ctx, { x, y, scale: 0.47, w: 600, h: 400, color: 'down', progress: 1 }) },
-  { name: 'price rises, red', draw: (ctx, x, y) => drawPriceArrow(ctx, { x, y, scale: 0.47, w: 600, h: 400, color: 'up', progress: 1 }) },
-  { name: 'price arrow drawing', draw: (ctx, x, y, t) => drawPriceArrow(ctx, { x, y, scale: 0.47, w: 600, h: 400, color: 'up', progress: clamp(0.08 + t * 2.5) }) },
+  { name: 'candles · price rises', draw: (ctx, x, y) => drawCandleChart(ctx, { x, y, scale: 0.68, w: 500, h: 340, closes: 'up', count: 9, axes: true, dollar: true, t: 1, seed: 2 }) },
+  { name: 'candles · price falls', draw: (ctx, x, y) => drawCandleChart(ctx, { x, y, scale: 0.68, w: 500, h: 340, closes: 'down', count: 9, axes: true, dollar: true, t: 1, seed: 7 }) },
+  { name: 'candles revealing', draw: (ctx, x, y, t) => drawCandleChart(ctx, { x, y, scale: 0.68, w: 500, h: 340, closes: 'up', count: 8, progress: clamp(0.08 + t * 2.5), axes: true, dollar: true, t, seed: 4 }) },
   { name: 'price loss bar · half', draw: (ctx, x, y) => drawLossBar(ctx, { x, y, level: 0.5, label: 'LOSS' }) },
   { name: 'price loss bar · full', draw: (ctx, x, y) => drawLossBar(ctx, { x, y, level: 1, label: 'LOSS' }) },
   { name: 'price loss bar building', draw: (ctx, x, y, t) => drawLossBar(ctx, { x, y, level: clamp(0.1 + t * 2.5), label: 'LOSS' }) },

@@ -4,7 +4,7 @@ import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
-import { bar, drawStage, label, priceLine } from '../kit/stage.ts';
+import { bar, candles, drawStage, label } from '../kit/stage.ts';
 import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemSize, isItem, num, pick, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -17,12 +17,10 @@ interface Plan {
   mood: 'worried' | 'happy' | 'shocked';
   word: string;
   mode: 'vise' | 'walls';
+  chart: 'candles';
 }
 
 const VISE = { x: STAGE.centre, left: 24, top: 632, bedTop: 656, width: 672, jawHeight: 150, jawStart: 175, jawTravel: 210 };
-const WALL_LINE = [
-  { x: 42, y: 810 }, { x: 192, y: 790 }, { x: 360, y: 765 }, { x: 528, y: 735 }, { x: 678, y: 700 },
-];
 const isActor = (value: unknown): value is ActorId => typeof value === 'string' && (ACTORS as readonly string[]).includes(value);
 
 const TOP_JAW = (() => {
@@ -125,6 +123,7 @@ function plan(props: ShotProps, dur: number): Plan {
     mood: pick(params, 'mood', ['worried', 'happy', 'shocked'] as const, 'worried'),
     word,
     mode: pick(params, 'mode', ['vise', 'walls'] as const, 'vise'),
+    chart: pick(params, 'chart', ['candles'] as const, 'candles'),
   };
 }
 
@@ -154,8 +153,12 @@ function closeAt(t: number, s: Plan): number {
   let close = 0.045 + 0.055 * ease.outCubic(phase(t, 0.02, s.hits[0]!));
   for (let index = 0; index < s.steps; index++) {
     const at = s.hits[index]!, from = index ? stepTarget(s.steps, index - 1) : 0.1;
-    if (t < at) break;
-    close = tween(t, at, stepDuration(s, index), from, stepTarget(s.steps, index), pressureEase);
+    const previousAt = index ? s.hits[index - 1]! : at;
+    const gap = at - previousAt;
+    const anticipation = index ? Math.min(gap, Math.max(0.14, gap - stepDuration(s, index - 1) - 0.4)) : 0;
+    const start = at - anticipation;
+    if (t < start) break;
+    close = tween(t, start, anticipation + stepDuration(s, index), from, stepTarget(s.steps, index), pressureEase);
   }
   if (t > last + 0.3) {
     const held = phase(t, last + 0.3, last + 0.7);
@@ -265,7 +268,7 @@ function drawStamp(ctx: Frame['ctx'], s: Plan, t: number) {
 export const squeezeShot: ShotDef = {
   name: 'squeeze',
   stage: 'clean',
-  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The screw turns, a short red price line climbs beside the vise, and victims react with wide eyes, sweat and a small tremble while the jaw presses their quills; a red-on-paper word stamp lands on the last event and pulses through the cut. walls mode uses a rising price floor and descending bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3). Events: 1–3 = successive pressure steps.',
+  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The screw turns beside a small rising candlestick chart, and victims react with wide eyes, sweat and a small tremble while the jaw presses their quills; a red-on-paper word stamp lands on the last event and pulses through the cut. walls mode shows the rising candle chart beside a descending pressure bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3), chart (candles, default candles). Events: 1–3 = successive pressure steps and candle reveals.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const close = closeAt(t, s), pressure = clamp((close - 0.035) / 0.835);
@@ -315,8 +318,6 @@ export const squeezeShot: ShotDef = {
 
     } else {
       drawStage(ctx, { floorY: STAGE.floor, line: false });
-      const floorPoints = WALL_LINE.map(point => ({ x: point.x, y: point.y - pressure * 18 }));
-      priceLine(ctx, floorPoints, { width: 36, progress: 1, head: 'arrow', color: PAL.UP });
       bar(ctx, 40, 250 + close * 120, 640, 44, { progress: 1, color: PAL.blue3, background: PAL.blue4, direction: 'right' });
 
       if (s.victim.kind === 'item') {
@@ -349,10 +350,6 @@ export const squeezeShot: ShotDef = {
           drawSweat(ctx, 455, s.mode === 'vise' ? VISE.bedTop : STAGE.floor, t, pressure, 1, sweatStart);
         } else drawSweat(ctx, STAGE.centre, VISE.bedTop, t, pressure, 1, sweatStart);
       }
-      const priceProgress = ease.outCubic(phase(t, s.hits[0]!, s.hits[1] ?? s.hits[0]! + 0.48));
-      priceLine(ctx, [
-        { x: 664, y: 626 }, { x: 674, y: 588 }, { x: 682, y: 548 },
-      ], { width: 24, progress: priceProgress, head: 'arrow', color: PAL.UP });
     } else if (s.victim.kind === 'actors') {
       const sweatStart = s.hits[0]! + 0.18;
       if (s.victim.actors.length > 1) {
@@ -360,6 +357,11 @@ export const squeezeShot: ShotDef = {
         drawSweat(ctx, 455, STAGE.floor, t, pressure, 1, sweatStart);
       } else drawSweat(ctx, STAGE.centre, STAGE.floor, t, pressure, 1, sweatStart);
     }
+    // Keep the mini candle column inside the frame with a little right margin.
+    candles(ctx, 568, 548, 126, 184, {
+      closes: 'up', count: s.steps, revealAt: s.hits.map(at => Math.max(-0.2, at - 0.18)),
+      revealDuration: 0.30, t, seed: frame.seed, colorUp: PAL.DOWN, colorDown: PAL.UP,
+    });
     drawStamp(ctx, s, t);
   },
   cues(props: ShotProps, dur: number): Cue[] {

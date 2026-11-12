@@ -47,6 +47,19 @@ smoothly. Use the house colors in `PAL` from `pixel.ts`. Characters come from `d
   It infers `PAL.UP` for rising prices and `PAL.DOWN` for falling prices, and returns the current
   `{x,y,progress,direction}` head position for a following prop. Optional area fill uses a flat darker
   palette color.
+- `candles(ctx,x,y,w,h,{closes,count,progress,revealAt,revealDuration,t,seed,colorUp,colorDown,axes,dollar})`
+  draws a cached candlestick chart on the ART grid and returns the newest visible close `{x,y,index,
+  direction,progress}` for a following prop. `closes` is either normalized/actual close targets or the
+  `'up'` / `'down'` trend shorthand. A seeded deterministic series supplies plausible OHLC: every candle
+  opens at the preceding close, with a directional synthetic open for the first candle and short high/
+  low wicks. `revealAt` gives each candle's reveal start time in seconds; pass `t` to grow its body from
+  open to close while its wick extends. Growth uses cached discrete sprite states, with candle pixels
+  placed on whole ART cells and a slight tick on the returned latest-close position. Candle bodies always
+  use market colors: rising close = green (`colorUp`, defaults to `PAL.DOWN`), falling close = red
+  (`colorDown`, defaults to `PAL.UP`). Each body is at least four art pixels wide with a one-art-pixel
+  ink outline and a visible one-art-pixel wick. `axes` adds minimal pixel axes; `dollar` adds the paper
+  `$` plate.
+- Price charts are always candlestick charts. `priceLine` remains available for non-chart arrows and paths.
 - `bar(ctx,x,y,w,h,{progress,color,background,direction})` grows an outlined pixel bar by art cells.
   `connector(ctx,from,to,{color,width,slack,curve})` draws a pixel catenary tether.
 - `assertInside(bounds, margin?)` and `assertGap(a,b,min)` throw on layout errors during scratch checks.
@@ -128,4 +141,4 @@ node scripts/prop-gallery.mjs /tmp/kit-frames.png --kit --kit-strip
 The prop gallery bundles each module independently and skips modules without `GALLERY`. Bundle failures
 are reported by filename without stopping the other props from rendering. `--kit` renders stage
 primitives and effects at several progress values; `--kit-strip` also writes a separate 12-frame strip
-for arrow, price line, loop arrow, and FX.
+for arrow, candles, loop arrow, and FX.

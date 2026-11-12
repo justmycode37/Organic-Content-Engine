@@ -112,7 +112,8 @@
   {
    "type": "shot",
    "duration": 2.466666666666667,
-   "transition": "match",
+   "transition": "push",
+   "transitionDir": "left",
    "shot": "store",
    "params": {
     "container": "safe",
@@ -144,13 +145,14 @@
   {
    "type": "shot",
    "duration": 1.7333333333333334,
-   "transition": "iris",
+   "transition": "cut",
    "shot": "wait",
    "params": {
     "timer": "clock",
     "who": "hedgy",
     "mood": "neutral",
-    "item": "none"
+    "item": "iou",
+    "fade": "hype"
    },
    "sync": [
     {
@@ -348,7 +350,7 @@
   {
    "type": "shot",
    "duration": 1.3,
-   "transition": "match",
+   "transition": "cut",
    "shot": "trade",
    "params": {
     "who": "hedgy",
@@ -427,7 +429,8 @@
   {
    "type": "shot",
    "duration": 2.6666666666666665,
-   "transition": "iris",
+   "transition": "push",
+   "transitionDir": "up",
    "shot": "loop",
    "params": {
     "nodes": [
@@ -470,8 +473,8 @@
   },
   {
    "type": "shot",
-   "duration": 3.2,
-   "transition": "match",
+   "duration": 3.92,
+   "transition": "cut",
    "shot": "squeeze",
    "params": {
     "victim": [
@@ -1179,7 +1182,8 @@
    30.556,
    31.111,
    31.667,
-   32.222
+   32.222,
+   32.778
   ]
  }
 }

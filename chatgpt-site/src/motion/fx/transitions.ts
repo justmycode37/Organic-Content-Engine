@@ -3,7 +3,7 @@ import { clamp, hash, type Cue, type Ctx, type Theme, type TransitionDirection, 
 export const TRANSITION_DURATIONS: Record<TransitionName, number> = {
   cut: 0,
   blocks: 0.42, wipe: 0.38, glitch: 0.32, zoom: 0.48, flash: 0.3, shutter: 0.38,
-  push: 0.42, whip: 0.3, zoomthrough: 0.52, shatter: 0.5, pixelsort: 0.46, melt: 0.48,
+  push: 0.3, whip: 0.3, zoomthrough: 0.52, shatter: 0.5, pixelsort: 0.46, melt: 0.48,
   iris: 0.24, cube: 0.52, flip: 0.42, dissolve: 0.44, slice: 0.38, ink: 0.52, match: 0.2,
 };
 /** Symmetric defaults kept for callers that used the original timing constants. */
@@ -64,13 +64,15 @@ function drawCleanScaled(ctx: Ctx, image: ImageLayer, height: number, focus: [nu
 
 /** Continuous two-plane slide; the incoming stage fills beneath both planes. */
 function drawCleanPush(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, direction: TransitionDirection, height: number) {
-  // quintic in-out: gentle start and a soft, fully settled stop (no jolt at the end of the move)
-  const u = Math.max(0, Math.min(1, progress)), p = u < 0.5 ? 16 * u ** 5 : 1 - ((-2 * u + 2) ** 5) / 2;
-  const [vx, vy] = entryVector(direction);
-  const dx = vx * W, dy = vy * height;
-  drawCleanLayer(ctx, incoming, height);
-  drawCleanLayer(ctx, outgoing, height, -dx * p, -dy * p);
-  drawCleanLayer(ctx, incoming, height, dx * (1 - p), dy * (1 - p));
+  // A "nudge", not a full-frame push: the outgoing shot drifts 7% out and fades while the incoming shot
+  // settles in from 7% on the other side. Nothing travels far, so the eye never has to chase the frame.
+  const u = Math.max(0, Math.min(1, progress));
+  const ease = (v: number) => 1 - (1 - v) ** 3;
+  const [vx, vy] = entryVector(direction), dist = 0.07;
+  const outFade = Math.max(0, 1 - u / 0.55), inFade = Math.min(1, Math.max(0, (u - 0.3) / 0.55));
+  const outMove = ease(Math.min(1, u / 0.6)), inMove = 1 - ease(Math.min(1, Math.max(0, (u - 0.3) / 0.7)));
+  if (outFade > 0) drawCleanLayer(ctx, outgoing, height, -vx * W * dist * outMove, -vy * height * dist * outMove, outFade);
+  if (inFade > 0) drawCleanLayer(ctx, incoming, height, vx * W * dist * inMove, vy * height * dist * inMove, inFade);
 }
 
 function drawCleanIris(ctx: Ctx, outgoing: ImageLayer, incoming: ImageLayer, progress: number, focus: [number, number], height: number) {

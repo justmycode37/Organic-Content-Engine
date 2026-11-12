@@ -3,7 +3,7 @@ import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase, tween } from '../kit/motion.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { measure } from '../kit/type.ts';
-import { ring, sparks } from '../kit/fx.ts';
+import { ring, sparks, speedLines } from '../kit/fx.ts';
 import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, pick, str } from './common.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
 import type { ShotDef } from './index.ts';
@@ -11,11 +11,10 @@ import type { ShotDef } from './index.ts';
 const MEDIUMS = ['poster', 'megaphone', 'phone'] as const;
 const ARTS = ['band', 'star', 'megaphone', 'chart'] as const;
 const MOODS = ['shocked', 'happy', 'worried'] as const;
-const HERO_X = 285;
+const HERO_X = 350;
 const HERO_Y = 382;
-const POSTER_X = 206;
-const POSTER_SCALE = 0.66;
-const ACTOR_X = 522;
+const POSTER_X = 290;
+const ACTOR_X = 580;
 const ACTOR_FLOOR = 770;
 
 type Medium = (typeof MEDIUMS)[number];
@@ -88,6 +87,11 @@ export const newsShot: ShotDef = {
     const revealProgress = phase(t, revealStart, revealEnd);
     const reveal = s.medium === 'poster' ? revealProgress : ease.outCubic(revealProgress);
     const headline = ease.outBack(phase(t, s.reactAt - 0.12, s.reactAt));
+    const posterPulse = t < s.announceAt - 0.08
+      ? 0
+      : t < s.announceAt
+        ? 0.02 * ease.outCubic(phase(t, s.announceAt - 0.08, s.announceAt))
+        : 0.02 * (1 - ease.outCubic(phase(t, s.announceAt, s.announceAt + 0.24)));
     const actorX = tween(t, s.reactAt - 0.1, 0.24, ACTOR_X, ACTOR_X - 10, ease.outBack);
     const actorJump = 38 * Math.sin(Math.PI * phase(t, s.reactAt, s.reactAt + 0.38));
     const settleAge = Math.max(0, t - s.reactAt - 0.18);
@@ -114,7 +118,14 @@ export const newsShot: ShotDef = {
 
     if (s.medium === 'poster') {
       drawItem(ctx, 'poster', {
-        x: POSTER_X, y: HERO_Y + mediumFloat, t, scale: POSTER_SCALE, reveal, word: ' ', art: s.art,
+        x: POSTER_X,
+        y: HERO_Y - 16 * (1 - ease.outCubic(revealProgress)) + mediumFloat,
+        t,
+        scale: 1 + posterPulse,
+        alpha: 1,
+        reveal: 1,
+        word: ' ',
+        art: s.art,
       });
     } else if (s.medium === 'megaphone') {
       const broadcast = reveal * (0.9 + 0.1 * Math.sin(Math.max(0, t - s.announceAt) * 4.4));
@@ -149,8 +160,15 @@ export const newsShot: ShotDef = {
     if (s.label) label(ctx, oneLine(s.label, 600), 360, 812, { variant: 'sign', maxWidth: 600, pop: headline });
 
     const effectY = s.medium === 'poster' ? HERO_Y + mediumFloat : 482 + mediumFloat * 0.65;
-    ring(ctx, HERO_X + 24, effectY, s.announceAt + 0.28, t, { r: 76, duration: 0.42 });
-    sparks(ctx, HERO_X + 24, effectY, s.announceAt + 0.24, t, { count: 5, seed: frame.seed, duration: 0.44 });
+    if (s.medium === 'poster') {
+      const burstX = POSTER_X + 270;
+      speedLines(ctx, burstX, effectY, { x: -1, y: 0 }, t, { t0: s.announceAt, count: 4, seed: frame.seed, duration: 0.32, length: 82, width: 12 });
+      speedLines(ctx, burstX - 12, effectY - 82, { x: -0.72, y: -0.7 }, t, { t0: s.announceAt, count: 3, seed: frame.seed + 1, duration: 0.32, length: 70, width: 10 });
+      speedLines(ctx, burstX - 12, effectY + 82, { x: -0.72, y: 0.7 }, t, { t0: s.announceAt, count: 3, seed: frame.seed + 2, duration: 0.32, length: 70, width: 10 });
+    } else {
+      ring(ctx, HERO_X + 24, effectY, s.announceAt, t, { r: 76, duration: 0.42 });
+      sparks(ctx, HERO_X + 24, effectY, s.announceAt, t, { count: 5, seed: frame.seed, duration: 0.44 });
+    }
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const d = Math.max(0.05, dur), s = plan(props, d);

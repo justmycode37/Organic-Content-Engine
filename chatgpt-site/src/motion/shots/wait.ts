@@ -13,9 +13,9 @@ const MOODS = ['neutral', 'worried', 'sad'] as const;
 type WaitMood = typeof MOODS[number];
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 const ACTOR_X = 140;
-const TIMER_X = 520;
+const TIMER_X = 462;
 const TIMER_Y = 378;
-const TIMER_SCALE: Record<TimerId, number> = { clock: 0.62, hourglass: 0.88, calendar: 0.78 };
+const TIMER_SCALE: Record<TimerId, number> = { clock: 1, hourglass: 0.88, calendar: 0.78 };
 
 const pendulum = new Grid(12, 18)
   .line({ x: 6, y: 0 }, { x: 6, y: 11 }, 2, PAL.grey3)
@@ -97,8 +97,31 @@ export const waitShot: ShotDef = {
         y: Math.min(maxY, belowChin) + checkLift + sighDrop + bob(t, 1.7, 2),
       };
     })() : undefined;
+    const drawTimer = () => {
+      if (s.timer === 'clock') {
+        drawItem(ctx, 'clock', {
+          x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.clock,
+          hour: 10, minute: 4 + race * 72 * dur, fast: true, rim: 'blue', bells: true,
+          rot: Math.sin(t * Math.PI * 2 / 1.1) * 0.028,
+        });
+        drawSprite(ctx, pendulum, TIMER_X, TIMER_Y + 225 * TIMER_SCALE.clock, {
+          anchor: [0.5, 0], scale: TIMER_SCALE.clock, rot: Math.sin(t * Math.PI * 2 / 0.84) * 0.38,
+        });
+      } else if (s.timer === 'hourglass') {
+        drawItem(ctx, 'hourglass', { x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.hourglass, p: race });
+      } else {
+        const turns = race * (1.4 + dur * 0.9), page = Math.floor(turns), fraction = turns - page;
+        const flip = ease.inOutCubic(phase(fraction, 0, 0.75));
+        drawItem(ctx, 'calendar', {
+          x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.calendar,
+          label: MONTHS[page % MONTHS.length], flip,
+        });
+      }
+      if (s.label) label(ctx, s.label.toUpperCase(), TIMER_X, 102, { variant: 'sign', maxWidth: 340 });
+    };
 
     drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: actorX, y: STAGE.floor - 2, w: 170 }, { x: TIMER_X, y: STAGE.floor - 4, w: 240 }] });
+    drawTimer();
     drawActor(ctx, {
       who: s.who, x: actorX, y: STAGE.floor, facing: 1, time: t, look,
       keys: actorKeys,
@@ -109,45 +132,24 @@ export const waitShot: ShotDef = {
     if (s.item && heldPos) drawItem(ctx, s.item, { x: heldPos.x, y: heldPos.y, t, scale: 0.5, rot: -0.035 + Math.sin(t * 2.1) * 0.025 });
 
     if (s.fade) {
-      const fadeStart = Math.max(0, s.sighAt - 0.12);
-      const rise = ease.outCubic(phase(t, fadeStart, s.sighAt));
-      const fadeOut = ease.inOutCubic(phase(t, s.sighAt, Math.min(dur, s.sighAt + 0.48)));
-      const fadeAlpha = 1 - fadeOut;
-      if (t >= fadeStart && fadeAlpha > 0.01) {
+      const fadeVisibleAt = Math.max(0, s.sighAt - 0.48);
+      const fadeStart = Math.max(0, s.sighAt - 0.02);
+      const fadeOut = ease.outCubic(phase(t, fadeStart, Math.min(dur, s.sighAt + 0.46)));
+      const fadeAlpha = t < fadeStart ? 1 : 1 - fadeOut;
+      if (t >= fadeVisibleAt && fadeAlpha > 0.01) {
         ctx.save();
         ctx.globalAlpha *= fadeAlpha;
         if (s.fade.item) {
           const fadeSize = itemSize(s.fade.item, 0.5);
           const fadeX = clamp(actorX, fadeSize.w / 2 + 24, STAGE.w - fadeSize.w / 2 - 24);
-          drawItem(ctx, s.fade.item, { x: fadeX, y: 306 + 28 * rise + 18 * fadeOut, t, scale: 0.5, rot: 0.04 * rise });
+          drawItem(ctx, s.fade.item, { x: fadeX, y: 306 + 18 * fadeOut, t, scale: 0.5, rot: 0.04 * fadeOut });
         } else if (s.fade.word) {
-          label(ctx, s.fade.word, actorX, 286 + 26 * rise + 18 * fadeOut, { variant: 'bubble', maxWidth: 240, pop: 0.68 + 0.06 * (1 - fadeOut) });
+          label(ctx, s.fade.word, 180, 110 + 18 * fadeOut, { variant: 'bubble', maxWidth: 300, pop: 1 });
         }
         ctx.restore();
       }
     }
 
-    if (s.timer === 'clock') {
-      drawItem(ctx, 'clock', {
-        x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.clock,
-        hour: 10, minute: 4 + race * 72 * dur, fast: true, rim: 'blue', bells: true,
-        rot: Math.sin(t * Math.PI * 2 / 1.1) * 0.028,
-      });
-      drawSprite(ctx, pendulum, TIMER_X, TIMER_Y + 225 * TIMER_SCALE.clock, {
-        anchor: [0.5, 0], scale: TIMER_SCALE.clock, rot: Math.sin(t * Math.PI * 2 / 0.84) * 0.38,
-      });
-    } else if (s.timer === 'hourglass') {
-      drawItem(ctx, 'hourglass', { x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.hourglass, p: race });
-    } else {
-      const turns = race * (1.4 + dur * 0.9), page = Math.floor(turns), fraction = turns - page;
-      const flip = ease.inOutCubic(phase(fraction, 0, 0.75));
-      drawItem(ctx, 'calendar', {
-        x: TIMER_X, y: TIMER_Y + bob(t, 2.8, 3), t, scale: TIMER_SCALE.calendar,
-        label: MONTHS[page % MONTHS.length], flip,
-      });
-    }
-
-    if (s.label) label(ctx, s.label.toUpperCase(), TIMER_X, 102, { variant: 'sign', maxWidth: 340 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur), mid = (s.checkAt + s.sighAt) / 2;
