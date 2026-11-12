@@ -106,7 +106,7 @@ export const presentShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const size = itemSize(s.item);
-    const itemX = Math.min(490, STAGE.w - 24 - size.w / 2);
+    const itemX = Math.min(480, STAGE.w - 32 - size.w / 2);
     const { x: actorX, scale: actorScale } = actorLayout(s.who, itemX, size.w);
     const restingY = ITEMS[s.item].base ? STAGE.floor - size.h / 2 : 450;
     const itemY = clamp(restingY, 24 + size.h / 2, 836 - size.h / 2);
@@ -160,7 +160,7 @@ export const presentShot: ShotDef = {
   cues(props: ShotProps, dur: number): Cue[] {
     const s = plan(props, Math.max(0.05, dur));
     const size = itemSize(s.item), itemY = clamp(450, 24 + size.h / 2, STAGE.floor - 32 - size.h / 2);
-    const { x: actorX } = actorLayout(s.who, Math.min(490, STAGE.w - 24 - size.w / 2), size.w);
+    const { x: actorX } = actorLayout(s.who, Math.min(480, STAGE.w - 32 - size.w / 2), size.w);
     const room = s.reveal === 'drop'
       ? itemY - (24 + size.h / 2)
       : STAGE.h - 24 - size.h / 2 - itemY;

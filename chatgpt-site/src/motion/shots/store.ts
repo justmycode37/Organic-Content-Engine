@@ -5,12 +5,12 @@ import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { ring, sparks } from '../kit/fx.ts';
-import { ACTORS, STAGE, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 const CONTAINERS = ['safe', 'piggy', 'bank', 'wallet', 'crate'] as const;
 type ContainerId = typeof CONTAINERS[number];
-const ACTOR_X = 126;
+const ACTOR_X = 140;
 const CONTAINER_X = 430;
 const ITEM_SCALE = 0.5;
 
@@ -112,7 +112,9 @@ export const storeShot: ShotDef = {
       { at: s.closeAt + 0.48, pose: 'hold' as const, expression: 'happy' as const, look: 'forward' as const },
       { at: patTwo, pose: 'tap' as const, expression: 'happy' as const, look: 'up' as const },
     ];
-    const actorBase = { who: s.who, x: ACTOR_X, y: STAGE.floor, facing: 1 as const, time: 0, keys: actorKeys };
+    const baseBounds = actorBounds({ who: s.who, x: ACTOR_X, y: STAGE.floor, facing: 1, time: 0, keys: actorKeys });
+    const baseCorrection = baseBounds.left < 28 ? 28 - baseBounds.left : baseBounds.right > 692 ? 692 - baseBounds.right : 0;
+    const actorBase = { who: s.who, x: ACTOR_X + baseCorrection, y: STAGE.floor, facing: 1 as const, time: 0, keys: actorKeys };
     const paw = actorPaw(actorBase), face = actorFace(actorBase);
     const approach = (at: number) => 62 * ease.outCubic(phase(at, 0, 0.46));
     const start = {
@@ -126,7 +128,10 @@ export const storeShot: ShotDef = {
     });
     const flightStart = holdPoint(s.putAt, 1);
     const travelP = ease.inOutCubic(phase(t, s.putAt, s.landedAt));
-    const itemPos = t < s.putAt ? holdPoint(t, prep) : arc(flightStart, g.entry, 66, travelP);
+    const flightPos = t < s.putAt ? holdPoint(t, prep) : arc(flightStart, g.entry, -60, travelP);
+    // The direct diagonal into the container can skim the actor's cheek for
+    // wide carried props. Bow the flight outward, then return to the opening.
+    const itemPos = { ...flightPos, x: flightPos.x + (t < s.putAt ? 0 : 28 * Math.sin(Math.PI * travelP)) };
     const vanish = ease.inOutCubic(phase(t, s.landedAt - 0.06, s.landedAt + 0.12));
     const itemSquash = squash(t, s.landedAt, 0.16, 0.18);
     const opening = ease.outCubic(phase(t, 0, Math.min(0.45, s.putAt + 0.04)));
@@ -146,8 +151,12 @@ export const storeShot: ShotDef = {
     const pulse = (from: number) => ease.outCubic(phase(t, from, from + 0.10)) * (1 - ease.inCubic(phase(t, from + 0.17, from + 0.27)));
     const patReach = Math.max(pulse(patOne), pulse(patTwo));
     const patTarget = { x: g.x - 114, y: g.y - (s.container === 'safe' ? 256 : 146) };
+    const placeRetreat = 62 * ease.inOutCubic(phase(t, s.putAt, s.landedAt));
+    const actorRawX = ACTOR_X + approach(t) - placeRetreat;
+    const actorBoundsNow = actorBounds({ who: s.who, x: actorRawX, y: STAGE.floor, facing: 1, time: t, keys: actorKeys });
+    const actorCorrection = actorBoundsNow.left < 28 ? 28 - actorBoundsNow.left : actorBoundsNow.right > 692 ? 692 - actorBoundsNow.right : 0;
     drawActor(ctx, {
-      who: s.who, x: ACTOR_X + approach(t), y: STAGE.floor, facing: 1, time: t, look: t < s.landedAt ? 'up' : 'forward',
+      who: s.who, x: actorRawX + actorCorrection, y: STAGE.floor, facing: 1, time: t, look: t < s.landedAt ? 'up' : 'forward',
       keys: actorKeys,
       handTarget: patReach > 0.02 ? patTarget : { x: itemPos.x - carriedSize.w / 2 + 12, y: itemPos.y },
       reach: Math.max(actorReach, patReach),

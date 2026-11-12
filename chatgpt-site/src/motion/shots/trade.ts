@@ -4,6 +4,7 @@ import { arc, clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
 import { boothCounter } from '../props/booth.ts';
+import type { HedgyKey } from '../actor/hedgy.ts';
 import { ACTORS, STAGE, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -25,11 +26,12 @@ interface TradePlan {
   second: number;
 }
 
-const ACTOR_X = 142;
-const PLACE_X = 414;
+const ACTOR_X = 148;
+const PLACE_X = 410;
 const PAY_FLIGHT = 0.20;
 const ITEM_FLIGHT = 0.25;
 const ITEM_SCALE = 0.5;
+const HAND_FACE_GAP = 36;
 
 function orderedBeats(props: ShotProps, dur: number, fractions: readonly number[]): number[] {
   const result = beats(props, dur, fractions).map(value => clamp(value, 0, dur));
@@ -71,20 +73,32 @@ function station(s: TradePlan) {
 function paymentId(s: TradePlan): ItemId { return s.price === 'high' ? 'cashPile' : s.tender; }
 function paymentScale(s: TradePlan) { return s.price === 'high' ? 1 : 0.5; }
 
-function heldGeometry(who: ActorId, t: number, item: ItemId) {
-  const actor = { who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, pose: 'hold' as const, facing: 1 as const };
-  const face = actorFace(actor), paw = actorPaw(actor), dims = itemSize(item, ITEM_SCALE);
-  const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + 14);
-  if (lowY + dims.h / 2 <= STAGE.floor - 4) {
-    const center = { x: Math.min(STAGE.w - dims.w / 2 - 24, paw.x + Math.min(48, dims.w * 0.24)), y: lowY };
-    return { center, hand: { x: center.x - dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims };
+function heldGeometry(who: ActorId, t: number, item: ItemId, keys: HedgyKey[]) {
+  const actor = { who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, pose: 'hold' as const, facing: 1 as const, keys };
+  const face = actorFace(actor), paw = actorPaw(actor), fullSize = itemSize(item);
+  const scale = Math.min(ITEM_SCALE, Math.max(0.15, (STAGE.h - 48 - face.y - face.r - HAND_FACE_GAP) / fullSize.h));
+  const dims = itemSize(item, scale);
+  const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + HAND_FACE_GAP);
+  if (lowY + dims.h / 2 <= STAGE.h - 36) {
+    const center = { x: Math.min(STAGE.w - dims.w / 2 - 36, paw.x + Math.min(64, dims.w * 0.34)), y: lowY };
+    return { center, hand: { x: center.x - dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims, scale };
   }
   const center = { x: face.x, y: Math.max(24 + dims.h / 2, face.y - face.r - dims.h / 2 - 16) };
-  return { center, hand: { x: center.x, y: center.y + dims.h / 2 + 8 }, dims };
+  return { center, hand: { x: center.x, y: center.y + dims.h / 2 + 8 }, dims, scale };
 }
 function amountPosition(t: number, start: number, from: Point, to: Point, height: number, duration: number) {
   const u = ease.inOutCubic(phase(t, start, start + duration));
   return { u, point: arc(from, to, height, u) };
+}
+
+function pawTransferPosition(t: number, start: number, duration: number, from: Point, to: Point, mode: Mode): Point {
+  const u = ease.inOutCubic(phase(t, start, start + duration));
+  if (mode === 'buy') {
+    if (u < 0.42) return { x: from.x, y: from.y + (to.y - from.y) * ease.inOutCubic(u / 0.42) };
+    return { x: from.x + (to.x - from.x) * ease.inOutCubic((u - 0.42) / 0.58), y: to.y };
+  }
+  if (u < 0.62) return { x: from.x + (to.x - from.x) * ease.inOutCubic(u / 0.62), y: from.y };
+  return { x: to.x, y: from.y + (to.y - from.y) * ease.inOutCubic((u - 0.62) / 0.38) };
 }
 
 interface Point { x: number; y: number }
@@ -95,27 +109,39 @@ export const tradeShot: ShotDef = {
   describe: 'An actor trades across a full-size booth or shop; a high price shows a full-size cash pile and a worried reaction. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (word, default MARKET), item (any item id, default ticket), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for a low price, default banknote), tag (optional word by the item, default none). Events for buy: 1 = payment crosses the counter, 2 = the item reaches the buyer. Events for sell: 1 = the item reaches the shop, 2 = payment reaches the seller.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), place = station(s);
-    const itemDims = itemSize(s.item, ITEM_SCALE), payId = paymentId(s), payScale = paymentScale(s), payDims = itemSize(payId, payScale);
-    const actorBase = { who: s.who, x: ACTOR_X, y: STAGE.floor, scale: 1, t, pose: 'hold' as const, facing: 1 as const };
-    const paw = actorPaw(actorBase), held = heldGeometry(s.who, t, s.item);
-    const tenderAtHand = { x: paw.x + 24, y: paw.y + 10 };
-    const itemHeld = held.center;
+    const payId = paymentId(s), payScale = paymentScale(s), payDims = itemSize(payId, payScale);
     const payStart = Math.max(0, s.first - 0.12);
     const itemStart = Math.max(0, s.second - 0.12);
+    const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
+    const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
+    const paymentArrives = payFlightStart + PAY_FLIGHT;
+    const itemArrives = itemFlightStart + ITEM_FLIGHT;
+    const actorKeys: HedgyKey[] = [
+      { at: 0, pose: s.mode === 'sell' ? 'hold' as const : 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'neutral' as const },
+      { at: payStart, pose: 'give' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'determined' as const },
+      ...(s.price === 'high' && s.mode === 'buy' ? [{ at: paymentArrives, pose: 'sweat' as const, expression: 'worried' as const }] : [{ at: paymentArrives + 0.04, pose: 'tap' as const }]),
+      { at: itemStart, pose: 'receive' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
+      { at: itemArrives + 0.04, pose: 'hold' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
+      { at: Math.max(itemArrives + 0.36, dur - 0.3), pose: 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
+    ].sort((a, b) => a.at - b.at);
+    const actorBase = { who: s.who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t, t, pose: 'hold' as const, facing: 1 as const, keys: actorKeys };
+    const face = actorFace(actorBase), paw = actorPaw(actorBase), held = heldGeometry(s.who, t, s.item, actorKeys);
+    const itemDims = held.dims;
+    const itemHeld = held.center;
+    const tenderAtHand = {
+      x: paw.x + Math.min(40, payDims.w * 0.22),
+      y: Math.min(STAGE.h - 24 - payDims.h / 2, Math.max(paw.y + payDims.h * 0.24, face.y + face.r + payDims.h / 2 + 12)),
+    };
     const payFloorY = STAGE.floor - payDims.h / 2;
     const payStation = { x: place.x + 96, y: payFloorY };
-    const highBuyStart = { x: place.x + 32, y: payFloorY };
+    const highBuyStart = { x: place.x + 56, y: payFloorY };
     const payActor = { x: ACTOR_X + 296, y: payFloorY };
     const payFrom = s.mode === 'buy' ? (s.price === 'high' ? highBuyStart : tenderAtHand) : payStation;
     const payTo = s.mode === 'buy' ? payStation : payActor;
-    const itemFrom = s.mode === 'buy' ? { x: place.x, y: place.centre + 18 } : itemHeld;
-    const itemTo = s.mode === 'buy' ? itemHeld : { x: place.x, y: place.centre + 18 };
-    const itemFlightStart = s.mode === 'buy' ? itemStart : payStart;
-    const payFlightStart = s.mode === 'buy' ? payStart : itemStart;
+    const itemFrom = s.mode === 'buy' ? { x: place.x + 56, y: place.centre + 18 } : itemHeld;
+    const itemTo = s.mode === 'buy' ? itemHeld : { x: place.x + 56, y: place.centre + 18 };
     const payFlight = amountPosition(t, payFlightStart, payFrom, payTo, 14, PAY_FLIGHT);
-    const itemFlight = amountPosition(t, itemFlightStart, itemFrom, itemTo, 22, ITEM_FLIGHT);
-    const paymentArrives = payFlightStart + PAY_FLIGHT;
-    const itemArrives = itemFlightStart + ITEM_FLIGHT;
+    const itemFlightPoint = pawTransferPosition(t, itemFlightStart, ITEM_FLIGHT, itemFrom, itemTo, s.mode);
     const paymentSquash = squash(t, paymentArrives, 0.14, 0.18);
     const itemSquash = squash(t, itemArrives, 0.14, 0.18);
 
@@ -134,14 +160,6 @@ export const tradeShot: ShotDef = {
       : s.mode === 'sell' && t >= payFlightStart
         ? { x: payTo.x - payDims.w * 0.34, y: payTo.y - 16 }
         : held.hand;
-    const actorKeys = [
-      { at: 0, pose: s.mode === 'sell' ? 'hold' as const : 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'neutral' as const },
-      { at: payStart, pose: 'give' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'determined' as const },
-      ...(s.price === 'high' && s.mode === 'buy' ? [{ at: paymentArrives, pose: 'sweat' as const, expression: 'worried' as const }] : [{ at: paymentArrives + 0.04, pose: 'tap' as const }]),
-      { at: itemStart, pose: 'receive' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-      { at: itemArrives + 0.04, pose: 'hold' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-      { at: Math.max(itemArrives + 0.36, dur - 0.3), pose: 'tap' as const, expression: s.price === 'high' && s.mode === 'buy' ? 'worried' as const : 'happy' as const },
-    ].sort((a, b) => a.at - b.at);
     drawActor(ctx, {
       who: s.who, x: ACTOR_X, y: STAGE.floor, scale: 1, time: t,
       look: t < itemStart ? 'forward' : 'down', keys: actorKeys,
@@ -165,9 +183,9 @@ export const tradeShot: ShotDef = {
 
     const itemVisible = s.mode === 'sell' ? 1 : phase(t, itemStart - 0.06, itemStart + 0.04);
     if (s.mode === 'sell' || t >= itemStart - 0.06) {
-      const itemPoint = t < itemFlightStart ? itemFrom : t < itemArrives ? itemFlight.point : itemTo;
+      const itemPoint = t < itemFlightStart ? itemFrom : t < itemArrives ? itemFlightPoint : itemTo;
       drawItem(ctx, s.item, {
-        x: itemPoint.x, y: itemPoint.y, t, scale: ITEM_SCALE,
+        x: itemPoint.x, y: itemPoint.y, t, scale: held.scale,
         sx: itemSquash.sx, sy: itemSquash.sy, alpha: itemVisible,
       });
       if (s.tag) {

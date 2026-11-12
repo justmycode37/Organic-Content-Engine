@@ -4,7 +4,7 @@ import { bob, clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { poof, ring, sparks } from '../kit/fx.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { measure } from '../kit/type.ts';
-import { ACTORS, ITEMS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
+import { ACTORS, ITEMS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
 import type { ShotDef } from './index.ts';
 
@@ -86,7 +86,7 @@ function layout(s: Plan) {
   const itemX = Math.min(470, STAGE.w - 24 - size.w / 2);
   const restingY = ITEMS[s.item].base ? STAGE.floor - size.h / 2 : 450;
   const itemY = clamp(restingY, 24 + size.h / 2, 836 - size.h / 2);
-  const actorX = clamp(itemX - size.w / 2 - 18, 150, 180);
+  const actorX = clamp(itemX - size.w / 2 - 18, 160, 188);
   const wordWidth = Math.min(560, measure(s.word).w + 36);
   const lineCount = Math.min(2, wordLineCount(s.word));
   const wordHeight = 78 + (lineCount - 1) * 60;
@@ -156,6 +156,8 @@ export const stampShot: ShotDef = {
       { at: Math.min(dur, s.hitAt + 0.3), pose: reactionPose(s.mood), expression: s.mood, look: 'up' },
       { at: s.reactionAt, pose: 'point', expression: s.mood, look: 'up' },
     ], dur, s.mood);
+    const actorBoundsNow = actorBounds({ who: s.who, x: actorX, y: STAGE.floor, facing: 1, scale: 1, time: t, keys: timeline.keys });
+    const actorCorrection = actorBoundsNow.left < 28 ? 28 - actorBoundsNow.left : actorBoundsNow.right > 692 ? 692 - actorBoundsNow.right : 0;
 
     drawStage(ctx, { floorY: STAGE.floor, line: true });
     drawItem(ctx, s.item, { x: itemX, y: itemY + itemIdleY, t, scale: 1, sx: itemHit.sx, sy: itemHit.sy });
@@ -169,7 +171,7 @@ export const stampShot: ShotDef = {
     label(ctx, s.word, 0, 0, { variant: 'stamp', maxWidth: 560, pop: stampScale });
     ctx.restore();
     drawActor(ctx, {
-      who: s.who, x: actorX, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys: timeline.keys,
+      who: s.who, x: actorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys: timeline.keys,
     });
   },
   cues(props: ShotProps, dur: number): Cue[] {

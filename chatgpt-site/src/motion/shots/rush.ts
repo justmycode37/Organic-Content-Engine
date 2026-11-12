@@ -1,10 +1,11 @@
 // rush — full-size buyers dash for a market stall; the final purchase closes it.
 import type { Cue, Frame, ShotProps } from '../core.ts';
-import { arc, clamp, ease, lerp, phase, tween } from '../kit/motion.ts';
+import { clamp, ease, lerp, phase, tween } from '../kit/motion.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { ring, sparks } from '../kit/fx.ts';
 import { boothWindow } from '../props/booth.ts';
-import { ACTORS, STAGE, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, num, pick, str, type ActorId, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, num, pick, str, type ActorId, type ItemId } from './common.ts';
+import type { HedgyKey } from '../actor/hedgy.ts';
 import type { ShotDef } from './index.ts';
 
 const DEFAULT_CROWD: ActorId[] = ['fan1', 'fan2', 'fan3'];
@@ -12,13 +13,14 @@ const PLACES = ['booth', 'bank', 'shop', 'exchange'] as const;
 type Place = (typeof PLACES)[number];
 const FLOOR = STAGE.floor;
 const PLACE_X = 414;
-const RUN_START_X = 124;
+const RUN_START_X = 140;
 const STEP_X = 218;
-const EXIT_X = 492;
+const EXIT_X = 450;
 const RUN_DURATION = 0.46;
 const EXIT_DURATION = 0.41;
 const TRANSFER_START = 0.32;
 const TRANSFER_END = 0.10;
+const HAND_FACE_GAP = 36;
 
 interface RushPlan {
   crowd: ActorId[];
@@ -68,27 +70,29 @@ function plan(props: ShotProps, dur: number): RushPlan {
 }
 
 function itemFlight(from: { x: number; y: number }, to: { x: number; y: number }, p: number) {
-  if (p < 0.60) {
-    const u = ease.inOutCubic(p / 0.60);
+  if (p < 0.48) {
+    const u = ease.inOutCubic(p / 0.48);
     return { x: from.x, y: lerp(from.y, to.y, u) };
   }
-  const u = ease.inOutCubic((p - 0.60) / 0.40);
-  return arc({ x: from.x, y: to.y }, to, 16, u);
+  const u = ease.inOutCubic((p - 0.48) / 0.52);
+  return { x: lerp(from.x, to.x, u), y: to.y };
 }
 
-function heldGeometry(who: ActorId, x: number, t: number, item: ItemId) {
-  const actor = { who, x, y: FLOOR, facing: 1 as const, time: t, pose: 'hold' as const };
-  const face = actorFace(actor), paw = actorPaw(actor), dims = itemSize(item, 0.5);
-  const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + 14);
-  if (lowY + dims.h / 2 <= FLOOR - 4) {
-    const center = { x: clamp(paw.x + Math.min(42, dims.w * 0.22), dims.w / 2 + 24, STAGE.w - dims.w / 2 - 24), y: lowY };
-    return { center, hand: { x: center.x - dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims };
+function heldGeometry(who: ActorId, x: number, t: number, item: ItemId, keys: HedgyKey[]) {
+  const actor = { who, x, y: FLOOR, facing: 1 as const, time: t, pose: 'hold' as const, keys };
+  const face = actorFace(actor), paw = actorPaw(actor), fullSize = itemSize(item);
+  const scale = Math.min(0.5, Math.max(0.15, (STAGE.h - 48 - face.y - face.r - HAND_FACE_GAP) / fullSize.h));
+  const dims = itemSize(item, scale);
+  const lowY = Math.max(paw.y + 16, face.y + face.r + dims.h / 2 + HAND_FACE_GAP);
+  if (lowY + dims.h / 2 <= STAGE.h - 36) {
+    const center = { x: clamp(paw.x + Math.min(42, dims.w * 0.22), dims.w / 2 + 36, STAGE.w - dims.w / 2 - 36), y: lowY };
+    return { center, hand: { x: center.x - dims.w * 0.34, y: center.y - dims.h * 0.18 }, dims, scale };
   }
   const center = {
     x: clamp(face.x, dims.w / 2 + 24, STAGE.w - dims.w / 2 - 24),
     y: Math.max(24 + dims.h / 2, face.y - face.r - dims.h / 2 - 16),
   };
-  return { center, hand: { x: center.x, y: center.y + dims.h / 2 + 8 }, dims };
+  return { center, hand: { x: center.x, y: center.y + dims.h / 2 + 8 }, dims, scale };
 }
 
 export const rushShot: ShotDef = {
@@ -102,7 +106,6 @@ export const rushShot: ShotDef = {
     const shutter = s.soldAt === undefined ? 0 : ease.outCubic(phase(t, s.soldAt, s.soldAt + 0.30));
     const sign = s.soldAt !== undefined && t >= s.soldAt + 0.04 ? s.endSign : s.sign;
     const window = s.place === 'booth' ? boothWindow({ x: PLACE_X, y: FLOOR, scale: 1 }) : undefined;
-    const sourceY = window ? window.y + window.h * 0.58 : FLOOR - 195;
 
     drawStage(ctx, { floorY: FLOOR, line: true, shadow: [{ x: PLACE_X, y: FLOOR - 3, w: 340 }] });
     drawItem(ctx, s.place, {
@@ -131,17 +134,6 @@ export const rushShot: ShotDef = {
       if (t < start) continue;
       const runEnd = Math.min(arrival, start + RUN_DURATION);
       const exitStart = arrival + 0.12, exitEnd = exitStart + EXIT_DURATION;
-      const x = t < runEnd
-        ? tween(t, start, Math.max(0.06, runEnd - start), RUN_START_X, STEP_X, ease.inOutCubic)
-        : t < exitStart ? STEP_X : t < exitEnd ? tween(t, exitStart, EXIT_DURATION, STEP_X, EXIT_X, ease.inOutCubic) : EXIT_X;
-      const presence = i === s.crowd.length - 1 ? 1 : 1 - phase(t, exitEnd - 0.04, exitEnd + 0.08);
-      const receivedAt = arrival + TRANSFER_END;
-      const held = heldGeometry(who, x, t, s.item);
-      const heldAtStep = heldGeometry(who, STEP_X, t, s.item);
-      const safeSourceX = Math.min(window ? window.x + window.w * 0.82 : PLACE_X + 130, STAGE.w - held.dims.w / 2 - 24);
-      const sourceAt = { x: safeSourceX, y: sourceY };
-      const itemP = ease.inOutCubic(phase(t, arrival - TRANSFER_START, receivedAt));
-      const itemPos = t < receivedAt ? itemFlight(sourceAt, heldAtStep.center, itemP) : held.center;
       const keys = [
         { at: start, pose: 'run' as const, expression: 'determined' as const },
         ...(runEnd < arrival - 0.06 ? [{ at: runEnd, pose: 'tap' as const, expression: 'determined' as const }] : []),
@@ -149,6 +141,19 @@ export const rushShot: ShotDef = {
         { at: arrival + 0.16, pose: hasStock ? 'hold' as const : 'tap' as const, expression: hasStock ? 'happy' as const : 'worried' as const },
         { at: exitStart, pose: hasStock ? 'run' as const : 'wave-off' as const, expression: hasStock ? 'happy' as const : 'sad' as const },
       ];
+      const rawX = t < runEnd
+        ? tween(t, start, Math.max(0.06, runEnd - start), RUN_START_X, STEP_X, ease.inOutCubic)
+        : t < exitStart ? STEP_X : t < exitEnd ? tween(t, exitStart, EXIT_DURATION, STEP_X, EXIT_X, ease.inOutCubic) : EXIT_X;
+      const actorBox = actorBounds({ who, x: rawX, y: FLOOR, scale: 1, facing: 1, time: t, keys });
+      const x = rawX + (actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0);
+      const presence = i === s.crowd.length - 1 ? 1 : 1 - phase(t, exitEnd - 0.04, exitEnd + 0.08);
+      const receivedAt = arrival + TRANSFER_END;
+      const held = heldGeometry(who, x, t, s.item, keys);
+      const heldAtStep = heldGeometry(who, STEP_X, t, s.item, keys);
+      const safeSourceX = Math.min(window ? window.x + window.w * 0.82 : PLACE_X + 130, STAGE.w - held.dims.w / 2 - 24);
+      const sourceAt = { x: safeSourceX, y: heldAtStep.center.y };
+      const itemP = ease.inOutCubic(phase(t, arrival - TRANSFER_START, receivedAt));
+      const itemPos = t < receivedAt ? itemFlight(sourceAt, heldAtStep.center, itemP) : held.center;
       const reached = hasStock && t >= arrival - 0.05;
       ctx.save();
       ctx.globalAlpha *= presence;
@@ -166,7 +171,7 @@ export const rushShot: ShotDef = {
         const pop = t < receivedAt ? 1 : 0.96 + 0.08 * ease.outBack(phase(t, receivedAt, receivedAt + 0.12));
         ctx.save();
         ctx.globalAlpha *= itemAlpha;
-        drawItem(ctx, s.item, { x: itemPos.x, y: itemPos.y, t, scale: 0.5 * pop, rot: Math.sin(itemP * Math.PI) * 0.045 });
+        drawItem(ctx, s.item, { x: itemPos.x, y: itemPos.y, t, scale: heldAtStep.scale * pop, rot: Math.sin(itemP * Math.PI) * 0.045 });
         ctx.restore();
         if (t >= receivedAt && t < receivedAt + 0.34) {
           ring(ctx, itemPos.x, itemPos.y, receivedAt, t, { r: 40, width: 7, duration: 0.30 });

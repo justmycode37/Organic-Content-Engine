@@ -133,7 +133,7 @@ export const equationShot: ShotDef = {
 
     if (s.who !== 'none') {
       const actorBase = actorBounds({ who: s.who, x: 0, y: STAGE.floor, scale: 1, facing: 1 });
-      const actorX = clamp(108, 24 - actorBase.left, 696 - actorBase.right);
+      const actorX = clamp(108, 32 - actorBase.left, 688 - actorBase.right);
       const keys: HedgyKey[] = [
         { at: 0, pose: 'think', expression: 'neutral', look: 'up' },
         { at: Math.min(0.12, dur), pose: 'point', expression: 'neutral', look: 'up' },
@@ -152,8 +152,10 @@ export const equationShot: ShotDef = {
         keys.push({ at, pose: index % 2 ? 'think' : 'point', expression: 'happy', look: 'up' });
       }
       keys.sort((a, b) => a.at - b.at);
+      const actorBox = actorBounds({ who: s.who, x: actorX, y: STAGE.floor, scale: 1, facing: 1, time: t, keys });
+      const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
       drawActor(ctx, {
-        who: s.who, x: actorX, y: STAGE.floor, scale: 1, facing: 1, time: t, look: 'up', keys,
+        who: s.who, x: actorX + actorCorrection, y: STAGE.floor, scale: 1, facing: 1, time: t, look: 'up', keys,
         handTarget: { x: cX - cSize.w * 0.32, y: cY - cSize.h * 0.2 },
         reach: phase(t, s.cAt - 0.18, s.cAt + 0.22),
       });

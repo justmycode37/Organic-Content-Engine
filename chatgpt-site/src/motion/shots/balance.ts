@@ -217,7 +217,7 @@ export const balanceShot: ShotDef = {
     if (s.who !== 'none') {
       const facing = s.actorSide === 'left' ? 1 : -1;
       const actorBase = actorBounds({ who: s.who, x: 0, y: STAGE.floor, scale: 1, facing });
-      const actorX = clamp(s.actorSide === 'left' ? 108 : 612, 24 - actorBase.left, 696 - actorBase.right);
+      const actorX = clamp(s.actorSide === 'left' ? 108 : 612, 32 - actorBase.left, 688 - actorBase.right);
       const actorTarget = s.actorSide === 'left' ? { x: l.leftX - 14, y: leftPanY - 38 } : { x: l.rightX + 14, y: rightPanY - 38 };
       const activeAt = s.actorSide === 'left' ? leftAt : rightAt;
       const hopA = Math.sin(phase(t, leftAt - 0.34, leftAt + 0.3) * Math.PI);
@@ -237,8 +237,11 @@ export const balanceShot: ShotDef = {
         actorKeys.push({ at, pose: index % 2 ? 'think' : 'lookup', expression: 'happy', look: 'up' });
       }
       actorKeys.sort((a, b) => a.at - b.at);
+      const actorY = STAGE.floor - (s.action === 'jump' ? hop : 0);
+      const actorBoundsNow = actorBounds({ who: s.who, x: actorX, y: actorY, scale: 1, facing, time: t, keys: actorKeys });
+      const actorCorrection = actorBoundsNow.left < 28 ? 28 - actorBoundsNow.left : actorBoundsNow.right > 692 ? 692 - actorBoundsNow.right : 0;
       drawActor(ctx, {
-        who: s.who, x: actorX, y: STAGE.floor - (s.action === 'jump' ? hop : 0), scale: 1,
+        who: s.who, x: actorX + actorCorrection, y: actorY, scale: 1,
         facing, time: t, look: 'up',
         keys: actorKeys,
         handTarget: actorTarget,
@@ -260,7 +263,7 @@ export const balanceShot: ShotDef = {
     const secondaryX = primarySide === 'left' ? l.rightX : l.leftX;
     const facing = s.actorSide === 'left' ? 1 : -1;
     const actorBase = actorBounds({ who: s.who === 'none' ? 'hedgy' : s.who, x: 0, y: STAGE.floor, scale: 1, facing });
-    const actorX = clamp(s.actorSide === 'left' ? 108 : 612, 24 - actorBase.left, 696 - actorBase.right);
+    const actorX = clamp(s.actorSide === 'left' ? 108 : 612, 32 - actorBase.left, 688 - actorBase.right);
     const list: Cue[] = [
       cue(0.03, 'creak', 0.55, l.pivotX),
       cue(Math.max(0, first - 0.08), 'slide', 0.7, primaryX),

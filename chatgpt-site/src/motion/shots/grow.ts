@@ -4,7 +4,7 @@ import { bob, clamp, ease, lerp, phase, squash } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite, type Sprite } from '../kit/sprite.ts';
 import { drawStage } from '../kit/stage.ts';
-import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 const GROW_ITEMS = ['tree', 'snowball', 'cashPile', 'piggy'] as const satisfies readonly ItemId[];
@@ -132,6 +132,8 @@ export const growShot: ShotDef = {
     const dims = heroSize(s.item), itemY = s.item === 'tree' ? STAGE.floor - 180 : STAGE.floor - dims.h / 2;
     const amount = valueAt(t, s), last = [...s.times].reverse().find(at => t >= at);
     const hit = last === undefined ? { sx: 1, sy: 1 } : squash(t, last + 0.025, 0.2, 0.28);
+    const itemDrawY = itemY + bob(t, 1.1, 9);
+    const safeSy = Math.min(hit.sy, (STAGE.h - 28 - itemDrawY) / (dims.h / 2));
     const keys = [
       { at: 0, pose: 'think' as const, expression: 'neutral' as const },
       { at: 0.14, pose: 'point' as const, expression: 'determined' as const },
@@ -148,6 +150,9 @@ export const growShot: ShotDef = {
       ...followThrough(s.times[s.times.length - 1]!, dur, s.dir),
     ];
     const handTarget = { x: 310, y: itemY + 26 };
+    const rawActorX = ACTOR_X + Math.sin(t * 1.6) * 10;
+    const actorBox = actorBounds({ who: s.who, x: rawActorX, y: STAGE.floor, facing: 1, scale: 1, time: t, keys });
+    const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
     const reach = last === undefined
       ? ease.outCubic(phase(t, 0.12, 0.38)) * 0.55
       : 0.42 + 0.28 * (1 - ease.outCubic(phase(t, last + 0.22, last + 0.42)));
@@ -168,17 +173,17 @@ export const growShot: ShotDef = {
 
     if (s.item === 'cashPile') {
       drawSprite(ctx, cashPileFor(amount), HERO_X + Math.sin(t * 1.7) * 3, itemY + bob(t, 1.1, 9), {
-        anchor: [0.5, 0.5], scale: 1, sx: hit.sx, sy: hit.sy,
+        anchor: [0.5, 0.5], scale: 1, sx: hit.sx, sy: safeSy,
       });
     } else {
       drawItem(ctx, s.item, {
-        x: HERO_X + Math.sin(t * 1.7) * 3, y: itemY + bob(t, 1.1, 9), t, scale: 1,
-        ...assetState(s.item, amount), sx: hit.sx, sy: hit.sy,
+        x: HERO_X + Math.sin(t * 1.7) * 3, y: itemDrawY, t, scale: 1,
+        ...assetState(s.item, amount), sx: hit.sx, sy: safeSy,
       });
     }
 
     drawActor(ctx, {
-      who: s.who, x: ACTOR_X + Math.sin(t * 1.6) * 10, y: STAGE.floor, facing: 1, scale: 1, time: t,
+      who: s.who, x: rawActorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t,
       look: 'up', keys, handTarget, reach,
     });
   },

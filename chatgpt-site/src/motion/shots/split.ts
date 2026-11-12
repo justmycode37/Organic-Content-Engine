@@ -4,7 +4,7 @@ import { arc, bob, clamp, ease, lerp, phase, squash } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage } from '../kit/stage.ts';
-import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, num, pick, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemSize, num, pick, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 const SPLIT_ITEMS = ['pie', 'pizza', 'basket', 'share'] as const satisfies readonly ItemId[];
@@ -79,10 +79,14 @@ function plan(props: ShotProps, dur: number): Plan {
 
 function drawPart(ctx: Frame['ctx'], s: Plan, index: number, x: number, y: number, t: number, alpha = 1, rot = 0, sx = 1, sy = 1): void {
   if (s.item === 'pizza' || s.item === 'pie') {
-    drawSprite(ctx, s.item === 'pizza' ? pizzaPart : piePart, x, y, { anchor: [0.5, 0.5], scale: 0.5, alpha, rot, sx, sy });
+    const part = s.item === 'pizza' ? pizzaPart : piePart;
+    const centerX = clamp(x, 36 + part.w * 0.25, STAGE.w - 36 - part.w * 0.25);
+    drawSprite(ctx, part, centerX, y, { anchor: [0.5, 0.5], scale: 0.5, alpha, rot, sx, sy });
     return;
   }
-  drawItem(ctx, s.outputs[index]!, { x, y, t, scale: 0.5, alpha, rot, sx, sy });
+  const dims = itemSize(s.outputs[index]!, 0.5);
+  const centerX = clamp(x, 36 + dims.w / 2, STAGE.w - 36 - dims.w / 2);
+  drawItem(ctx, s.outputs[index]!, { x: centerX, y, t, scale: 0.5, alpha, rot, sx, sy });
 }
 
 function sourceState(item: Plan['item']): Record<string, unknown> {
@@ -183,9 +187,12 @@ export const splitShot: ShotDef = {
       }
     }
 
+    const rawActorX = 112 + Math.sin(t * 2.8 + 0.4) * 24;
+    const actorBox = actorBounds({ who: s.who, x: rawActorX, y: STAGE.floor, facing: 1, scale: 1, time: t, keys });
+    const actorCorrection = actorBox.left < 28 ? 28 - actorBox.left : actorBox.right > 692 ? 692 - actorBox.right : 0;
     drawActor(ctx, {
-      who: s.who, x: 112 + Math.sin(t * 2.8 + 0.4) * 24, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys,
-      handTarget,
+      who: s.who, x: rawActorX + actorCorrection, y: STAGE.floor, facing: 1, scale: 1, time: t, look: 'up', keys,
+      handTarget: { x: handTarget.x + actorCorrection, y: handTarget.y },
       reach: ease.inOutCubic(phase(t, 0.14, 0.42)) * (t > payoffAt + 0.25 ? 0.5 : 0.76),
     });
   },

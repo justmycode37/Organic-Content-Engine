@@ -2,10 +2,9 @@
 // be shown in a vise, or between a rising red floor and a descending bar.
 import type { Cue, Frame, ShotProps } from '../core.ts';
 import { clamp, ease, phase, squash, tween } from '../kit/motion.ts';
-import { PAL } from '../kit/pixel.ts';
+import { Grid, PAL } from '../kit/pixel.ts';
+import { drawSprite } from '../kit/sprite.ts';
 import { bar, drawStage, label, priceLine } from '../kit/stage.ts';
-import { ring } from '../kit/fx.ts';
-import { pressGap } from '../props/press.ts';
 import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemSize, isItem, num, pick, type ActorId, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -20,11 +19,76 @@ interface Plan {
   mode: 'vise' | 'walls';
 }
 
-const PRESS = { x: STAGE.centre, y: 455, w: 672, h: 720 };
+const VISE = { x: STAGE.centre, left: 24, top: 632, bedTop: 656, width: 672, jawHeight: 150, jawStart: 135, jawTravel: 210 };
 const WALL_LINE = [
   { x: 42, y: 810 }, { x: 192, y: 790 }, { x: 360, y: 765 }, { x: 528, y: 735 }, { x: 678, y: 700 },
 ];
 const isActor = (value: unknown): value is ActorId => typeof value === 'string' && (ACTORS as readonly string[]).includes(value);
+
+const TOP_JAW = (() => {
+  const g = new Grid(112, 25);
+  g.round(1, 1, 110, 23, 3, PAL.ink);
+  g.round(3, 2, 106, 19, 2, PAL.grey4);
+  g.rect(5, 3, 102, 4, PAL.grey1);
+  g.rect(4, 7, 104, 10, PAL.grey3);
+  g.rect(4, 17, 104, 4, PAL.blue4);
+  g.rect(6, 18, 100, 2, PAL.blue2);
+  for (const x of [10, 25, 86, 101]) {
+    g.round(x, 9, 5, 5, 1, PAL.ink);
+    g.rect(x + 1, 10, 3, 2, PAL.grey1);
+  }
+  g.outline();
+  return g.sprite('squeeze:top-jaw');
+})();
+
+const LOWER_BED = (() => {
+  const g = new Grid(112, 35);
+  // Fixed bottom jaw with two cast supports standing on the stage floor.
+  g.rect(10, 20, 15, 12, PAL.ink); g.rect(12, 20, 11, 10, PAL.blue4); g.rect(13, 20, 3, 9, PAL.blue2);
+  g.rect(87, 20, 15, 12, PAL.ink); g.rect(89, 20, 11, 10, PAL.blue4); g.rect(90, 20, 3, 9, PAL.blue2);
+  g.round(6, 30, 100, 4, 1, PAL.ink); g.rect(9, 30, 94, 2, PAL.blue3);
+  g.round(1, 4, 110, 21, 3, PAL.ink);
+  g.round(3, 5, 106, 17, 2, PAL.blue4);
+  g.rect(5, 6, 102, 4, PAL.grey1);
+  g.rect(4, 10, 104, 8, PAL.grey3);
+  g.rect(4, 18, 104, 3, PAL.grey5);
+  g.rect(4, 21, 104, 2, PAL.blue2);
+  for (const x of [10, 25, 86, 101]) {
+    g.round(x, 9, 5, 5, 1, PAL.ink);
+    g.rect(x + 1, 10, 3, 2, PAL.grey1);
+  }
+  g.outline();
+  return g.sprite('squeeze:lower-bed');
+})();
+
+const SCREW = (() => {
+  const g = new Grid(9, 88);
+  g.round(2, 0, 5, 87, 2, PAL.ink);
+  g.rect(3, 0, 2, 87, PAL.blue3);
+  g.rect(4, 0, 1, 87, PAL.blue1);
+  for (let y = 5; y < 84; y += 7) g.line({ x: 2, y }, { x: 7, y: y + 4 }, 2, PAL.grey5);
+  g.outline();
+  return g.sprite('squeeze:threaded-screw');
+})();
+
+const HANDLE = (() => {
+  const g = new Grid(16, 16);
+  g.line({ x: 8, y: 1 }, { x: 8, y: 15 }, 4, PAL.ink);
+  g.line({ x: 1, y: 8 }, { x: 15, y: 8 }, 4, PAL.ink);
+  g.line({ x: 8, y: 2 }, { x: 8, y: 14 }, 2, PAL.red2);
+  g.line({ x: 2, y: 8 }, { x: 14, y: 8 }, 2, PAL.red2);
+  g.ellipse(8, 8, 3, 3, PAL.gold2); g.ellipse(7.5, 7.5, 1, 1, PAL.gold1);
+  g.outline();
+  return g.sprite('squeeze:turn-handle');
+})();
+
+const SWEAT = (() => {
+  const g = new Grid(7, 10);
+  g.poly([{ x: 3.5, y: 0 }, { x: 1, y: 5 }, { x: 1, y: 7 }, { x: 3.5, y: 9 }, { x: 6, y: 7 }, { x: 6, y: 5 }], PAL.blue2);
+  g.ellipse(3.5, 6.5, 1.6, 1.8, PAL.blue1);
+  g.outline();
+  return g.sprite('squeeze:sweat-drop');
+})();
 
 function parseVictim(value: unknown): Victim {
   if (isItem(value)) return { kind: 'item', item: value };
@@ -41,10 +105,10 @@ function parseVictim(value: unknown): Victim {
 function plan(props: ShotProps, dur: number): Plan {
   const params = props.params;
   const steps = Math.round(num(params, 'steps', 3, 2, 3));
-  const first = Math.min(0.18, Math.max(0.08, dur * 0.1));
-  const interval = Math.min(0.48, Math.max(0.24, dur * 0.2));
+  const first = Math.min(0.14, Math.max(0.06, dur * 0.06));
+  const interval = Math.min(0.4, Math.max(0.28, dur * 0.13));
   const fallback = Array.from({ length: steps }, (_, index) => Math.min(dur * 0.84, first + interval * index));
-  const rawHits = beats(props, dur, fallback).sort((a, b) => a - b);
+  const rawHits = beats(props, dur, fallback.map(at => at / dur)).sort((a, b) => a - b);
   const minGap = Math.min(0.16, Math.max(0.11, dur * 0.07));
   const hits: number[] = [];
   rawHits.forEach((raw, index) => {
@@ -71,7 +135,7 @@ function stepTarget(steps: number, index: number): number {
 function stepDuration(s: Plan, index: number): number {
   const next = s.hits[index + 1];
   if (next === undefined) return 0.42;
-  return Math.min(0.42, Math.max(0.14, (next - s.hits[index]!) * 0.86));
+  return Math.min(0.2, Math.max(0.14, (next - s.hits[index]!) * 0.5));
 }
 
 function pressureEase(progress: number): number {
@@ -87,15 +151,16 @@ function followThrough(t: number, s: Plan): number {
 
 function closeAt(t: number, s: Plan): number {
   const lastIndex = s.steps - 1, last = s.hits[lastIndex]!;
-  let close = 0.035 + 0.035 * ease.outCubic(phase(t, 0.035, s.hits[0]!));
+  let close = 0.045 + 0.055 * ease.outCubic(phase(t, 0.02, s.hits[0]!));
   for (let index = 0; index < s.steps; index++) {
-    const at = s.hits[index]!, from = index ? stepTarget(s.steps, index - 1) : 0.07;
+    const at = s.hits[index]!, from = index ? stepTarget(s.steps, index - 1) : 0.1;
     if (t < at) break;
     close = tween(t, at, stepDuration(s, index), from, stepTarget(s.steps, index), pressureEase);
   }
   if (t > last + 0.3) {
     const held = phase(t, last + 0.3, last + 0.7);
-    close += Math.sin((t - last) * Math.PI * 2 / 0.78) * 0.06 * ease.outCubic(held);
+    const tremble = ease.outCubic(held);
+    close += (Math.sin((t - last) * Math.PI * 2 / 0.54) * 0.1 - 0.07) * tremble;
   }
   return clamp(close, 0.02, 0.92);
 }
@@ -119,92 +184,128 @@ function impactSquash(t: number, s: Plan): number {
 function drawActorWithAlpha(ctx: Frame['ctx'], s: Plan, who: ActorId, x: number, y: number, facing: 1 | -1, t: number, alpha: number, pressure: number) {
   if (alpha <= 0.01) return;
   const strain = followThrough(t, s);
+  const lastHit = s.hits[s.steps - 1]!;
+  const trembleOn = ease.outCubic(phase(t, lastHit + 0.12, lastHit + 0.36));
+  const tremble = t > lastHit + 0.12 ? Math.sin(t * Math.PI * 2 / 0.2 + x) * 3.8 * trembleOn : 0;
+  const lift = t > lastHit + 0.12 ? Math.cos(t * Math.PI * 2 / 0.27 + x) * 2.2 * trembleOn : 0;
   ctx.save();
   ctx.globalAlpha *= alpha;
   drawActor(ctx, {
-    who, x, y, facing, scale: 1, time: t, look: 'up', keys: actorKeys(s),
-    squash: 1 - pressure * 0.045 - impactSquash(t, s) * 0.4 - strain * 0.06,
+    who, x: x + tremble, y: y + lift, facing, scale: 1, time: t, look: 'up', keys: actorKeys(s),
+    squash: 1 - pressure * 0.13 - impactSquash(t, s) * 0.25 - strain * 0.055,
   });
   ctx.restore();
 }
 
-function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, centreX: number, feetY: number, pressure: number) {
+function actorCluster(ctx: Frame['ctx'], s: Plan, t: number, feetY: number, pressure: number) {
   if (s.victim.kind !== 'actors') return;
   const actors = s.victim.actors;
   if (actors.length === 1) {
-    drawActorWithAlpha(ctx, s, actors[0]!, centreX, feetY, -1, t, 1, pressure);
+    drawActorWithAlpha(ctx, s, actors[0]!, STAGE.centre, feetY, 1, t, 1, pressure);
     return;
   }
 
-  // Two full-size victims fit cleanly at once. With a third id, the right-hand
-  // place changes over to that actor at the second ratchet beat.
-  const leftX = centreX - 132, rightX = centreX + 132;
+  // Two full-size victims keep a clear gap between their faces throughout the squeeze.
+  const leftX = 230, rightX = 490;
   drawActorWithAlpha(ctx, s, actors[0]!, leftX, feetY, -1, t, 1, pressure);
   if (actors.length === 2) {
     drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1, pressure);
     return;
   }
   const changeAt = s.hits[1] ?? s.hits[0]! + 0.25;
-  const swap = phase(t, changeAt - 0.12, changeAt + 0.12);
-  drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1 - swap, pressure);
-  drawActorWithAlpha(ctx, s, actors[2]!, rightX, feetY, 1, t, swap, pressure);
+  const leave = phase(t, changeAt, changeAt + 0.1);
+  const enter = phase(t, changeAt + 0.12, changeAt + 0.28);
+  if (t < changeAt + 0.1) drawActorWithAlpha(ctx, s, actors[1]!, rightX, feetY, 1, t, 1 - leave, pressure);
+  if (t >= changeAt + 0.12) drawActorWithAlpha(ctx, s, actors[2]!, rightX, feetY, 1, t, enter, pressure);
+}
+
+function drawSweat(ctx: Frame['ctx'], x: number, feetY: number, t: number, pressure: number, facingSide: 1 | -1) {
+  if (pressure < 0.12) return;
+  const pulse = 0.5 + 0.5 * Math.sin(t * Math.PI * 2 / 0.66 + facingSide);
+  const atX = x + facingSide * 74;
+  const atY = feetY - 235 + pulse * 9;
+  drawSprite(ctx, SWEAT, atX, atY, { scale: 0.82 + pulse * 0.12, rot: facingSide * 0.18, alpha: 0.7 + pulse * 0.3 });
+  if (pressure > 0.48) drawSprite(ctx, SWEAT, atX - facingSide * 14, atY + 34 + pulse * 8, { scale: 0.58, rot: -facingSide * 0.2, alpha: 0.45 + pulse * 0.25 });
+}
+
+function drawVise(ctx: Frame['ctx'], t: number, close: number, trembleAt: number) {
+  const jawY = VISE.jawStart + close * VISE.jawTravel;
+  drawSprite(ctx, SCREW, VISE.x + 275, 112, { anchor: [0.5, 0] });
+  drawSprite(ctx, LOWER_BED, VISE.x, VISE.top, { anchor: [0.5, 0] });
+  drawSprite(ctx, TOP_JAW, VISE.x, jawY);
+  const ratchet = Math.sin(t * Math.PI * 2 / 0.12) * phase(t, trembleAt, trembleAt + 0.24);
+  drawSprite(ctx, HANDLE, VISE.x + 275, jawY, { rot: close * Math.PI * 4 + ratchet * 0.03 });
 }
 
 function drawStamp(ctx: Frame['ctx'], s: Plan, t: number) {
   if (!s.word) return;
   const at = s.hits[s.steps - 1]! + 0.14;
-  const pop = ease.outBack(phase(t, at, at + 0.22));
+  const arrive = ease.outBack(phase(t, at, at + 0.22));
+  const pulse = t >= at + 0.22 ? 0.91 + 0.09 * Math.sin((t - at - 0.22) * Math.PI * 2 / 0.64) : 1;
+  const pop = arrive * pulse;
   label(ctx, s.word, STAGE.centre, 145, {
     variant: 'stamp', maxWidth: 520,
-    rot: -0.018 + (1 - clamp(pop)) * 0.025, pop,
+    rot: -0.018 + (1 - clamp(arrive)) * 0.025 + (pulse - 1) * 0.18, pop,
   });
 }
 
 export const squeezeShot: ShotDef = {
   name: 'squeeze',
   stage: 'clean',
-  describe: 'A vise ratchets down on an item or up to two full-size victims at a time; pressure increases in distinct steps before a red-on-paper word stamp lands. walls mode uses a rising price floor and descending bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3). Events: 1–3 = successive pressure steps.',
+  describe: 'A steel vise ratchets its top jaw down onto a full-size item or up to two full-size victims side by side; a third actor replaces the right-side victim at step 2. The threaded screw turns on each step while victims flatten, widen their eyes and sweat, then a red-on-paper word stamp pulses through the cut. walls mode uses a rising price floor and descending bar. params: victim (item id, actor id, or 1–3 actor ids; default ticket), who (watching actor or none, default hedgy), mood (worried|happy|shocked, default worried), word (stamp, default PRESSURE; empty hides it), mode (vise|walls, default vise), steps (2|3, default 3). Events: 1–3 = successive pressure steps.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const close = closeAt(t, s), pressure = clamp((close - 0.035) / 0.835);
     const showWatcher = s.who !== 'none' && (s.victim.kind === 'item' || s.victim.actors.length < 2);
 
     if (s.mode === 'vise') {
+      const jawBottom = VISE.jawStart + close * VISE.jawTravel + VISE.jawHeight / 2;
+      const bedTop = VISE.bedTop;
+      const gap = bedTop - jawBottom;
       drawStage(ctx, {
         floorY: STAGE.floor, line: true,
         shadow: [
-          { x: STAGE.centre, y: PRESS.y + PRESS.h / 2 - 4, w: 590 },
-          ...(showWatcher ? [{ x: 540, y: STAGE.floor + 4, w: 190 }] : []),
+          { x: STAGE.centre, y: STAGE.floor + 4, w: 590 },
+          ...(showWatcher ? [{ x: 112, y: STAGE.floor + 4, w: 190 }] : []),
         ],
       });
-      drawItem(ctx, 'press', { ...PRESS, t, scale: 1, close });
-      const gap = pressGap({ ...PRESS, close });
-      const centreX = gap.x + gap.w / 2;
-      const feetY = gap.y + gap.h;
+      drawVise(ctx, t, close, s.hits[s.steps - 1]! + 0.12);
 
       if (s.victim.kind === 'item') {
         const strain = followThrough(t, s);
+        const lastHit = s.hits[s.steps - 1]!;
+        const rattle = ease.outCubic(phase(t, lastHit + 0.12, lastHit + 0.36));
+        const itemShakeX = Math.sin(t * Math.PI * 2 / 0.18) * 10 * rattle;
+        const itemShakeY = Math.cos(t * Math.PI * 2 / 0.24) * 3 * rattle;
         const activeHit = [...s.hits].reverse().find(at => t >= at) ?? s.hits[0]!;
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
+        const dims = itemSize(s.victim.item, 1);
+        const itemX = showWatcher && dims.w <= 420 ? STAGE.centre + 65 : STAGE.centre;
+        const itemScaleY = Math.max(0.28, Math.min(1 - pressure * 0.34 - strain * 0.06, (gap - 18) / dims.h));
         drawItem(ctx, s.victim.item, {
-          x: centreX, y: gap.y + gap.h / 2, t, scale: 0.5,
-          sx: 1 - pressure * 0.5 - strain * 0.08,
-          sy: 1 + pressure * 0.08 + (1 - hit.sx) * 0.18 + strain * 0.07,
+          x: itemX + itemShakeX, y: (jawBottom + bedTop) / 2 + itemShakeY, t, scale: 1,
+          rot: Math.sin(t * Math.PI * 2 / 0.3) * 0.04 * rattle,
+          sx: 1 + pressure * 0.08 + (1 - hit.sx) * 0.08 + rattle * 0.025,
+          sy: itemScaleY + (1 - hit.sx) * 0.08 + strain * 0.03 + Math.sin(t * Math.PI * 2 / 0.24) * 0.025 * rattle,
+        });
+        if (showWatcher && dims.w <= 420) drawActor(ctx, {
+          who: s.who, x: 112, y: STAGE.floor, facing: 1, look: 'forward', scale: 1, time: t,
+          keys: [
+            { at: 0, pose: 'think', expression: 'worried' },
+            { at: s.hits[0]!, pose: 'sweat', expression: 'worried' },
+            { at: s.hits[s.steps - 1]! + 0.1, pose: s.mood === 'happy' ? 'celebrate' : 'panic', expression: s.mood === 'happy' ? 'happy' : 'shocked' },
+          ],
         });
       } else {
-        actorCluster(ctx, s, t, centreX, feetY, pressure);
+        actorCluster(ctx, s, t, bedTop, pressure);
+        if (s.victim.actors.length > 1) {
+          drawSweat(ctx, 230, bedTop, t, pressure, -1);
+          drawSweat(ctx, 490, bedTop, t, pressure, 1);
+        } else {
+          drawSweat(ctx, STAGE.centre, bedTop, t, pressure, 1);
+        }
       }
 
-      if (showWatcher) drawActor(ctx, {
-        who: s.who, x: 540, y: STAGE.floor, facing: -1, look: 'up', scale: 1, time: t,
-        keys: [
-          { at: 0, pose: 'think', expression: 'worried' },
-          { at: s.hits[0]!, pose: 'sweat', expression: 'worried' },
-          { at: s.hits[s.steps - 1]! + 0.1, pose: s.mood === 'happy' ? 'celebrate' : 'panic', expression: s.mood === 'happy' ? 'happy' : 'shocked' },
-        ],
-      });
-
-      s.hits.forEach(at => ring(ctx, centreX, feetY - 120, at, t, { r: 94, width: 12, color: PAL.gold2 }));
     } else {
       drawStage(ctx, { floorY: STAGE.floor, line: false });
       const floorPoints = WALL_LINE.map(point => ({ x: point.x, y: point.y - pressure * 18 }));
@@ -218,19 +319,22 @@ export const squeezeShot: ShotDef = {
         const activeHit = [...s.hits].reverse().find(at => t >= at) ?? s.hits[0]!;
         const hit = squash(t, activeHit + 0.02, 0.2, 0.28);
         drawItem(ctx, s.victim.item, {
-          x: itemX, y: itemY, t, scale: 0.5,
-          sx: 1 - pressure * 0.4 - strain * 0.08,
-          sy: 1 + pressure * 0.08 + (1 - hit.sx) * 0.18 + strain * 0.07,
+          x: itemX, y: itemY, t, scale: 1,
+          sx: 1 + pressure * 0.08,
+          sy: 1 - pressure * 0.34 - strain * 0.06 + (1 - hit.sx) * 0.08,
         });
       } else {
-        actorCluster(ctx, s, t, STAGE.centre, STAGE.floor, pressure);
+        actorCluster(ctx, s, t, STAGE.floor, pressure);
+        if (s.victim.actors.length > 1) {
+          drawSweat(ctx, 230, STAGE.floor, t, pressure, -1);
+          drawSweat(ctx, 490, STAGE.floor, t, pressure, 1);
+        } else drawSweat(ctx, STAGE.centre, STAGE.floor, t, pressure, 1);
       }
 
       if (showWatcher) drawActor(ctx, {
         who: s.who, x: 560, y: STAGE.floor, facing: -1, look: 'up', scale: 1, time: t,
         keys: [{ at: 0, pose: 'think' }, { at: s.hits[0]!, pose: 'sweat' }, { at: s.hits[s.steps - 1]! + 0.1, pose: 'panic' }],
       });
-      s.hits.forEach(at => ring(ctx, STAGE.centre, 565, at, t, { r: 94, width: 12, color: PAL.gold2 }));
     }
 
     drawStamp(ctx, s, t);

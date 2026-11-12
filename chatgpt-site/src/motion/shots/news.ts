@@ -13,6 +13,8 @@ const ARTS = ['band', 'star', 'megaphone', 'chart'] as const;
 const MOODS = ['shocked', 'happy', 'worried'] as const;
 const HERO_X = 285;
 const HERO_Y = 382;
+const POSTER_X = 206;
+const POSTER_SCALE = 0.66;
 const ACTOR_X = 522;
 const ACTOR_FLOOR = 770;
 
@@ -112,7 +114,7 @@ export const newsShot: ShotDef = {
 
     if (s.medium === 'poster') {
       drawItem(ctx, 'poster', {
-        x: HERO_X, y: HERO_Y + mediumFloat, t, scale: 1, reveal, word: ' ', art: s.art,
+        x: POSTER_X, y: HERO_Y + mediumFloat, t, scale: POSTER_SCALE, reveal, word: ' ', art: s.art,
       });
     } else if (s.medium === 'megaphone') {
       const broadcast = reveal * (0.9 + 0.1 * Math.sin(Math.max(0, t - s.announceAt) * 4.4));
@@ -137,10 +139,9 @@ export const newsShot: ShotDef = {
 
     drawReactingActor();
 
-    // Keep the announcement readable when the full-size character overlaps
-    // the poster's lower corner. This paper headline belongs to the poster.
-    if (s.medium === 'poster') label(ctx, s.word, HERO_X, 116 + mediumFloat, {
-      variant: 'sign', maxWidth: 500, pop: headline,
+    // The large word plate stays centered over its poster.
+    if (s.medium === 'poster') label(ctx, s.word, POSTER_X, 116 + mediumFloat, {
+      variant: 'sign', maxWidth: 420, pop: headline,
     });
 
     // Editorial copy is absent unless the spec explicitly asks for a label.

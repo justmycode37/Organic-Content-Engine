@@ -1,5 +1,6 @@
 // demand — one character asks another for an item, then sees the answer.
 import type { Cue, Frame, ShotProps } from '../core.ts';
+import type { HedgyKey } from '../actor/hedgy.ts';
 import { arc, clamp, ease, phase, squash, tween } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { ART, drawSprite } from '../kit/sprite.ts';
@@ -22,16 +23,77 @@ interface DemandPlan {
   outcome: Outcome;
 }
 
-const FROM_X = 145, TO_X = 575, BUBBLE_X = 360, BUBBLE_Y = 236;
+const FROM_X = 180, TO_X = 575, BUBBLE_X = 360, BUBBLE_Y = 236;
 const PAY_FROM = { x: 475, y: 690 }, PAY_TO = { x: 275, y: 680 }, PAY_TRAVEL = 0.46;
 
+const EMPTY_WALLET_INTERIOR = (() => {
+  const g = new Grid(56, 32);
+  g.round(0, 0, 56, 32, 4, PAL.wood4);
+  g.round(1, 1, 54, 30, 3, PAL.wood2);
+  g.rect(3, 2, 50, 2, PAL.wood1);
+  // Two unmistakable empty pockets, split by the wallet's center fold.
+  g.round(3, 5, 24, 24, 2, PAL.wood4);
+  g.round(4, 6, 22, 22, 1, PAL.wood3);
+  g.round(5, 9, 20, 18, 1, PAL.ink);
+  g.rect(5, 8, 20, 3, PAL.wood1);
+  g.round(29, 5, 24, 24, 2, PAL.wood4);
+  g.round(30, 6, 22, 22, 1, PAL.wood3);
+  g.round(32, 8, 18, 10, 1, PAL.wood4);
+  g.round(33, 9, 16, 8, 1, PAL.ink);
+  g.rect(33, 9, 16, 2, PAL.wood1);
+  g.round(32, 20, 18, 7, 1, PAL.wood4);
+  g.rect(33, 20, 16, 2, PAL.wood1);
+  g.rect(27, 4, 2, 24, PAL.wood4);
+  g.rect(28, 4, 1, 24, PAL.wood1);
+  for (let x = 5; x <= 50; x += 5) {
+    g.rect(x, 3, 2, 1, PAL.paperShade);
+    g.rect(x, 28, 2, 1, PAL.paperShade);
+  }
+  return g.sprite('demand:empty-wallet-interior');
+})();
+
+const WALLET_FLAP = (() => {
+  const g = new Grid(44, 32);
+  g.round(0, 0, 44, 32, 4, PAL.wood4);
+  g.round(1, 1, 42, 30, 3, PAL.wood2);
+  g.round(3, 3, 38, 26, 2, PAL.wood3);
+  g.rect(5, 4, 34, 2, PAL.wood1);
+  g.rect(21, 4, 2, 23, PAL.wood4);
+  g.rect(22, 4, 1, 23, PAL.wood1);
+  for (let x = 5; x <= 37; x += 5) {
+    g.rect(x, 3, 2, 1, PAL.paperShade);
+    g.rect(x, 28, 2, 1, PAL.paperShade);
+  }
+  g.round(27, 20, 13, 8, 2, PAL.wood4);
+  g.round(28, 21, 11, 6, 1, PAL.wood1);
+  g.ellipse(33.5, 24, 3.5, 3.5, PAL.wood4);
+  g.ellipse(33.5, 23.5, 2, 2, PAL.wood2);
+  g.outline();
+  return g.sprite('demand:plain-wallet-flap');
+})();
+
+function drawEmptyWallet(ctx: Frame['ctx'], x: number, y: number, open: number, flip: number, wobble: number): void {
+  const eased = open * open * (3 - 2 * open);
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(wobble);
+  // Pitch around the wallet's long edge so the empty interior flips without
+  // sweeping across either character's face.
+  ctx.scale(1, Math.cos(Math.PI * flip));
+  drawSprite(ctx, WALLET_FLAP, 0, 0, { alpha: 1 - eased });
+  drawSprite(ctx, EMPTY_WALLET_INTERIOR, 0, 0, { sx: 0.78 + eased * 0.22, alpha: eased });
+  ctx.restore();
+}
+
 function plan(props: ShotProps, dur: number): DemandPlan {
-  const [first, second] = beats(props, dur, [0.32, 0.68]);
+  const firstFallback = Math.min(0.25, Math.max(0.08, dur * 0.16));
+  const secondFallback = Math.min(dur * 0.68, firstFallback + Math.min(0.58, Math.max(0.34, dur * 0.18)));
+  const [first, second] = beats(props, dur, [firstFallback / dur, secondFallback / dur]);
   const rawWord = typeof props.params?.word === 'string' ? props.params.word.trim() : 'MORE';
   const word = rawWord.toUpperCase().replace(/[^A-Z0-9 $%+!?.,:'&/\-]/g, ' ').trim().slice(0, 8);
   return {
-    demandAt: first ?? dur * 0.32,
-    answerAt: Math.min(dur, Math.max(second ?? dur * 0.68, (first ?? dur * 0.32) + 0.34)),
+    demandAt: first ?? firstFallback,
+    answerAt: Math.min(dur, Math.max(second ?? secondFallback, (first ?? firstFallback) + 0.34)),
     from: pick(props.params, 'from', ACTORS, 'broker'),
     to: pick(props.params, 'to', ACTORS, 'hedgy'),
     fromLabel: str(props.params, 'fromLabel', '').trim(),
@@ -79,24 +141,24 @@ function drawWantedBubble(ctx: Frame['ctx'], s: DemandPlan, t: number, pop: numb
 export const demandShot: ShotDef = {
   name: 'demand',
   stage: 'clean',
-  describe: "A full-size demander steps in with an open-palm thrust toward a paper bubble showing the wanted item and word, while the other actor reveals a wallet; params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = demander thrusts and shows the wanted item; 2 = responder opens and overturns an empty wallet, pays with the item, or waves the demander off.",
+  describe: "A full-size demander steps in with an open-palm thrust toward a paper bubble showing the wanted item and word, while the responder opens a bifold wallet to show its empty pockets; params: from='broker' and to='hedgy' (any actor id in ACTORS), want='cash' (any item id in ITEMS), word='MORE' (short bubble word; empty hides it), outcome='empty'|'pay'|'refuse' (default empty), fromLabel='' and toLabel='' (optional name plates). Events: 1 = demander thrusts and shows the wanted item; 2 = responder flips and shakes the empty wallet, pays with the item, or waves the demander off.",
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const stepStart = Math.max(0, s.demandAt - 0.48);
-    const step = tween(t, stepStart, Math.max(0.01, s.demandAt - stepStart), 0, 1, ease.inOutCubic);
+    const stepStart = Math.max(0, s.demandAt - 0.62);
+    const step = tween(t, stepStart, Math.max(0.01, s.demandAt - stepStart), 0, 1, ease.outCubic);
     const fromX = 112 + (FROM_X - 112) * step;
     const answer = phase(t, s.answerAt, s.answerAt + 0.26);
     const speechIn = ease.outCubic(phase(t, s.demandAt - 0.02, s.demandAt + 0.3));
-    const speechOut = 1 - phase(t, s.answerAt + 0.52, s.answerAt + 0.82);
+    const speechOut = s.outcome === 'empty' ? 1 : 1 - phase(t, s.answerAt + 0.52, s.answerAt + 0.82);
     const speechPop = speechIn * Math.max(0, speechOut);
     const talkPhase = Math.max(0, t - s.demandAt);
-    const speechBob = t >= s.demandAt ? Math.sin(talkPhase * Math.PI * 2 / 1.1) * 4 : 0;
+    const speechBob = t >= s.demandAt ? Math.sin(talkPhase * Math.PI * 2 / 0.72) * 5 : 0;
     const payU = s.outcome === 'pay' ? tween(t, s.answerAt + 0.08, PAY_TRAVEL, 0, 1, ease.inOutCubic) : 0;
     const payPos = arc(PAY_FROM, PAY_TO, 42, payU);
     const payArrived = s.answerAt + 0.08 + PAY_TRAVEL;
     const payHit = squash(t, payArrived, 0.16, 0.18);
-    const thrustPulse = Math.sin(talkPhase * Math.PI * 2 / 0.72) * 7 * phase(t, s.demandAt, s.demandAt + 0.36);
-    const fromKeys = [
+    const thrustPulse = Math.sin(talkPhase * Math.PI * 2 / 0.46) * 5 * phase(t, s.demandAt, dur);
+    const fromKeys: HedgyKey[] = [
       { at: 0, pose: 'idle' as const, expression: 'neutral' as const },
       { at: stepStart, pose: 'walk' as const, expression: 'determined' as const },
       { at: s.demandAt, pose: 'push' as const, expression: 'determined' as const },
@@ -107,6 +169,15 @@ export const demandShot: ShotDef = {
         { at: payArrived, pose: 'hold' as const, expression: 'happy' as const },
       ] : []),
     ];
+    if (s.outcome === 'pay') {
+      for (let at = payArrived + 0.35, i = 0; at < dur - 0.08; at += 0.38, i++) {
+        fromKeys.push({ at, pose: i % 2 === 0 ? 'celebrate' : 'point', expression: 'happy' });
+      }
+    } else {
+      for (let at = s.answerAt + 0.92, i = 0; at < dur - 0.08; at += 0.4, i++) {
+        fromKeys.push({ at, pose: i % 2 === 0 ? 'point' : 'push', expression: s.outcome === 'empty' ? 'determined' : 'worried' });
+      }
+    }
     const fromTarget = s.outcome === 'pay' && t >= s.answerAt
       ? { x: payPos.x - 28, y: payPos.y + 18 }
       : { x: 345 + thrustPulse, y: 640 };
@@ -116,8 +187,9 @@ export const demandShot: ShotDef = {
       reach: s.outcome === 'pay' && t >= s.answerAt ? phase(t, s.answerAt, s.answerAt + 0.24) : phase(t, s.demandAt - 0.08, s.demandAt + 0.28),
     };
 
-    const toX = TO_X + (s.outcome === 'refuse' && t >= s.answerAt ? 7 * Math.sin((t - s.answerAt) * Math.PI * 2 / 0.58) : 0);
-    const toKeys = s.outcome === 'empty'
+    const toX = TO_X + (s.outcome === 'refuse' && t >= s.answerAt ? 7 * Math.sin((t - s.answerAt) * Math.PI * 2 / 0.42) : 0);
+    const responseBob = t >= s.answerAt ? Math.max(0, Math.sin((t - s.answerAt) * Math.PI * 2 / 0.44)) * 8 : 0;
+    const toKeys: HedgyKey[] = s.outcome === 'empty'
       ? [
         { at: 0, pose: 'idle' as const, expression: 'neutral' as const },
         { at: Math.max(0, s.answerAt - 0.2), pose: 'lookup' as const, expression: 'worried' as const },
@@ -137,13 +209,26 @@ export const demandShot: ShotDef = {
           { at: s.answerAt, pose: 'wave-off' as const, expression: 'worried' as const },
           { at: Math.min(dur, s.answerAt + 0.62), pose: 'point' as const, expression: 'worried' as const },
         ];
+    if (s.outcome === 'empty') {
+      for (let at = s.answerAt + 1.24, i = 0; at < dur - 0.08; at += 0.4, i++) {
+        toKeys.push({ at, pose: i % 2 === 0 ? 'sweat' : 'empty', expression: 'sad' });
+      }
+    } else if (s.outcome === 'pay') {
+      for (let at = payArrived + 0.42, i = 0; at < dur - 0.08; at += 0.38, i++) {
+        toKeys.push({ at, pose: i % 2 === 0 ? 'empty' : 'sweat', expression: 'sad' });
+      }
+    } else {
+      for (let at = s.answerAt + 1.1, i = 0; at < dur - 0.08; at += 0.4, i++) {
+        toKeys.push({ at, pose: i % 2 === 0 ? 'wave-off' : 'point', expression: 'worried' });
+      }
+    }
 
-    const walletX = 470, walletY = 708;
+    const walletX = 490, walletY = 720;
     const open = ease.outCubic(phase(t, s.answerAt, s.answerAt + 0.34));
-    const turn = Math.PI * ease.inOutCubic(phase(t, s.answerAt + 0.18, s.answerAt + 0.56));
-    const walletWobble = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.68) * 0.1 : 0;
-    const walletBob = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.72) * 5 : 0;
-    const payFloat = 7 * Math.sin((t - payArrived) * Math.PI * 2 / 0.86) * phase(t, payArrived, payArrived + 0.2);
+    const turn = ease.inOutCubic(phase(t, s.answerAt + 0.18, s.answerAt + 0.56));
+    const walletWobble = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.42) * 0.18 : 0;
+    const walletBob = t >= s.answerAt + 0.56 ? Math.sin((t - s.answerAt - 0.56) * Math.PI * 2 / 0.46) * 11 : 0;
+    const payFloat = 16 * Math.sin((t - payArrived) * Math.PI * 2 / 0.54) * phase(t, payArrived, payArrived + 0.2);
 
     drawStage(ctx, { floorY: STAGE.floor, line: true });
     // The wanted-item bubble enters above the heads; it never crosses either face.
@@ -151,21 +236,16 @@ export const demandShot: ShotDef = {
     if (s.outcome === 'pay' && t >= s.answerAt) {
       drawItem(ctx, s.want, { x: payPos.x, y: payPos.y + payFloat, t, scale: 0.5, rot: Math.sin(payU * Math.PI) * 0.08, sx: payHit.sx, sy: payHit.sy });
     }
+    const walletPop = s.outcome === 'empty' ? ease.outBack(phase(t, s.answerAt - 0.1, s.answerAt + 0.14)) : 0;
     drawActor(ctx, fromActor);
     drawActor(ctx, {
-      who: s.to, x: toX, y: STAGE.floor, facing: -1, time: t, scale: 1, shadow: true,
+      who: s.to, x: toX, y: STAGE.floor - responseBob, facing: -1, time: t, scale: 1, shadow: true,
       look: s.outcome === 'empty' && answer > 0 ? 'down' : 'forward', keys: toKeys,
       ...(s.outcome === 'empty' && answer > 0 ? { handTarget: { x: walletX - 12, y: walletY - 4 }, reach: ease.outCubic(answer) } : {}),
     });
+    if (walletPop > 0) drawEmptyWallet(ctx, walletX, walletY + walletBob, open, turn, walletWobble);
 
-    if (s.outcome === 'empty') {
-      const walletPop = ease.outBack(phase(t, s.answerAt - 0.1, s.answerAt + 0.14));
-      if (walletPop > 0) {
-        drawItem(ctx, 'wallet', { x: walletX, y: walletY + walletBob, t, scale: 0.5, open, empty: true, rot: turn + walletWobble, sy: 1 + 0.04 * Math.sin(Math.PI * answer) });
-        poof(ctx, walletX - 24, walletY + 22, s.answerAt + 0.72, t, { count: 4, seed: frame.seed, radius: 26, duration: 0.4, color: PAL.paperShade });
-        ring(ctx, walletX, walletY - 18, s.answerAt + 0.75, t, { r: 62, width: 8, duration: 0.36 });
-      }
-    }
+    if (walletPop > 0) poof(ctx, walletX - 24, walletY + 22, s.answerAt + 0.72, t, { count: 4, seed: frame.seed, radius: 26, duration: 0.4, color: PAL.paperShade });
     if (s.outcome === 'pay' && t >= s.answerAt) {
       ring(ctx, PAY_TO.x, PAY_TO.y, payArrived, t, { r: 66, width: 9, duration: 0.34 });
       sparks(ctx, PAY_TO.x, PAY_TO.y, payArrived, t, { count: 4, seed: frame.seed, duration: 0.34, size: 9 });

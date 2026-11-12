@@ -80,15 +80,15 @@ function compareTimes(props: ShotProps, dur: number): [number, number, number] {
 function layout(s: ComparePlan): Layout {
   const left = itemSize(s.left), right = itemSize(s.right);
   const sequential = left.w + right.w + 32 > STAGE.w - 48 || Math.max(left.h, right.h) > 400;
-  const leftX = 24 + left.w / 2;
-  const rightX = STAGE.w - 24 - right.w / 2;
+  const leftX = 32 + left.w / 2;
+  const rightX = STAGE.w - 32 - right.w / 2;
   const leftY = 300;
   const rightY = 300;
-  const focusX = clamp(275, 24 + Math.max(left.w, right.w) / 2, STAGE.w - 24 - Math.max(left.w, right.w) / 2);
-  const focusY = clamp(282, 24 + Math.max(left.h, right.h) / 2, 836 - Math.max(left.h, right.h) / 2);
+  const focusX = clamp(275, 32 + Math.max(left.w, right.w) / 2, STAGE.w - 32 - Math.max(left.w, right.w) / 2);
+  const focusY = clamp(282, 84 + Math.max(left.h, right.h) / 2, 776 - Math.max(left.h, right.h) / 2);
   const actorBase = actorBounds({ who: s.who === 'none' ? 'hedgy' : s.who, x: 0, y: STAGE.floor, scale: 1, facing: sequential ? -1 : 1 });
   const preferredActorX = sequential ? 610 : 108;
-  const actorX = clamp(preferredActorX, 24 - actorBase.left, 696 - actorBase.right);
+  const actorX = clamp(preferredActorX, 32 - actorBase.left, 684 - actorBase.right);
   return {
     sequential,
     leftX,
@@ -206,9 +206,11 @@ export const compareShot: ShotDef = {
       actorKeys.push({ at, pose: index % 2 ? 'think' : 'lookup', expression: s.winner === 'none' ? 'neutral' : 'happy', look: 'up' });
     }
     actorKeys.sort((a, b) => a.at - b.at);
+    const actorBox = s.who === 'none' ? undefined : actorBounds({ who: s.who, x: l.actorX, y: STAGE.floor, scale: 1, facing: l.actorFacing, time: t, keys: actorKeys });
+    const actorCorrection = actorBox && actorBox.left < 28 ? 28 - actorBox.left : actorBox && actorBox.right > 692 ? 692 - actorBox.right : 0;
     if (s.who !== 'none') drawActor(ctx, {
       who: s.who,
-      x: l.actorX,
+      x: l.actorX + actorCorrection,
       y: STAGE.floor,
       scale: 1,
       facing: l.actorFacing,

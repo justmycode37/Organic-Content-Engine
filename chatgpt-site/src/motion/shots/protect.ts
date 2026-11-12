@@ -5,7 +5,7 @@ import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage, label } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
-import { ACTORS, STAGE, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
+import { ACTORS, STAGE, actorBounds, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
 const GUARDS = ['umbrella', 'shield'] as const;
@@ -70,7 +70,7 @@ function plan(props: ShotProps, dur: number): Plan {
 function geometry(s: Plan): Geometry {
   if (s.target === 'actor') {
     return {
-      actorX: 545, targetX: 545, targetY: STAGE.floor, targetTop: STAGE.floor - 320,
+      actorX: 520, targetX: 520, targetY: STAGE.floor, targetTop: STAGE.floor - 320,
       guardX: s.guard === 'umbrella' ? 400 : 300,
       guardY: s.guard === 'umbrella' ? 300 : 460,
       guardScale: 1,
@@ -78,7 +78,7 @@ function geometry(s: Plan): Geometry {
     };
   }
   const dims = itemSize(s.item);
-  const targetX = clamp(STAGE.centre + 150, dims.w / 2 + 24, STAGE.w - dims.w / 2 - 24);
+  const targetX = clamp(STAGE.centre + 114, dims.w / 2 + 36, STAGE.w - dims.w / 2 - 43);
   const targetY = STAGE.floor - dims.h / 2, targetTop = targetY - dims.h / 2;
   const guardScale = 0.5;
   const guardY = clamp(targetTop - 35, STAGE.top + 90, 520);
@@ -126,6 +126,9 @@ export const protectShot: ShotDef = {
       { at: lastHit + 0.24, pose: (s.outcome === 'full' ? 'wave-off' : 'sweat') as 'wave-off' | 'sweat', expression: (s.outcome === 'full' ? 'happy' : 'worried') as 'happy' | 'worried' },
       ...followThrough(lastHit, dur, s.outcome),
     ];
+    const actorRawX = actorTarget ? g.actorX! + Math.sin(t * 1.55) * 20 : 0;
+    const actorBox = actorTarget ? actorBounds({ who: s.who, x: actorRawX, y: STAGE.floor, facing: -1, scale: 1, time: t, keys: actorKeys }) : undefined;
+    const actorCorrection = actorBox && actorBox.left < 28 ? 28 - actorBox.left : actorBox && actorBox.right > 692 ? 692 - actorBox.right : 0;
 
     drawStage(ctx, {
       floorY: STAGE.floor, line: true,
@@ -150,7 +153,7 @@ export const protectShot: ShotDef = {
         ...(s.guard === 'umbrella' ? { color: 'blue', open, rot: open * sway * 0.18 } : { rot: guardRot }),
       });
       drawActor(ctx, {
-        who: s.who, x: g.actorX! + Math.sin(t * 1.55) * 20, y: STAGE.floor, facing: -1, scale: 1, time: t,
+        who: s.who, x: actorRawX + actorCorrection, y: STAGE.floor, facing: -1, scale: 1, time: t,
         look: 'up', keys: actorKeys,
       });
     }
