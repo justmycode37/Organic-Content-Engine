@@ -3,7 +3,7 @@ import type { Cue, Frame, ShotProps } from '../core.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
 import { arc, bob, clamp, ease, lerp, phase } from '../kit/motion.ts';
 import { PAL } from '../kit/pixel.ts';
-import { drawStage, priceLine } from '../kit/stage.ts';
+import { candles, drawStage } from '../kit/stage.ts';
 import { ring } from '../kit/fx.ts';
 import { boothCounter } from '../props/booth.ts';
 import { ACTORS, STAGE, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, num, pick, str, type ActorId, type ItemId } from './common.ts';
@@ -16,6 +16,7 @@ interface QueuePlan {
   place: Place;
   sign: string;
   dir: Direction;
+  chart: 'candles';
   item: ItemId;
   times: number[];
 }
@@ -72,53 +73,10 @@ function plan(props: ShotProps, dur: number): QueuePlan {
     place: pick(props.params, 'place', ['booth', 'shop'] as const, 'booth'),
     sign,
     dir: pick(props.params, 'dir', ['up', 'down'] as const, 'up'),
+    chart: pick(props.params, 'chart', ['candles'] as const, 'candles'),
     item: itemParam(props.params, 'item', 'ticket'),
     times: orderedBeats(props, dur, crowd.length),
   };
-}
-
-function stagePoints(dir: Direction, count: number) {
-  const xStart = 60, seedRun = 60, xEnd = 330;
-  const run = (xEnd - xStart - seedRun) / count;
-  const fromY = dir === 'up' ? 420 : 140;
-  const toY = dir === 'up' ? 140 : 420;
-  const rise = (toY - fromY) / count;
-  let distance = 0;
-  const points: Point[] = [{ x: xStart, y: fromY }, { x: xStart + seedRun, y: fromY }];
-  distance += seedRun;
-  const ends: Point[] = [], distances: number[] = [];
-  for (let i = 0; i < count; i++) {
-    const x = xStart + seedRun + run * (i + 1);
-    const y = fromY + rise * (i + 1);
-    distance += run;
-    points.push({ x, y: points[points.length - 1]!.y });
-    distance += Math.abs(rise);
-    points.push({ x, y });
-    ends.push({ x, y });
-    distances.push(distance);
-  }
-  return { points, ends, distances, seed: seedRun, total: distance };
-}
-
-function progressAt(t: number, times: readonly number[], distances: readonly number[], seed: number, total: number): number {
-  let distance = seed;
-  for (let i = 0; i < times.length; i++) {
-    const at = times[i]!;
-    const previousAt = i === 0 ? 0 : times[i - 1]!;
-    const from = i === 0 ? seed : distances[i - 1]!;
-    const to = distances[i]!;
-    const start = Math.max(previousAt, at - 0.21);
-    if (t < at) {
-      const p = t <= start ? 0 : ease.inOutCubic(phase(t, start, at));
-      distance = lerp(from, to, p);
-      break;
-    }
-    distance = to;
-  }
-  const normalized = clamp(distance / total);
-  // priceLine applies ease-out cubic internally; invert it so the line head
-  // follows the same readable distance curve as the queued buyers.
-  return 1 - Math.cbrt(1 - normalized);
 }
 
 function slotAt(index: number): Slot {
@@ -182,11 +140,14 @@ function handoverFlight(from: Point, to: Point, p: number): Point {
 export const queueShot: ShotDef = {
   name: 'queue',
   stage: 'clean',
-  describe: 'Two or three full-size buyers form a horizontal floor queue beside a full-size booth or shop as a thick price staircase rises above them one step per purchase. params: crowd (2–3 actor ids or count, default fan1/fan2/fan3), steps (2–3 buyers when crowd is omitted, default 3), place (booth|shop, default booth), sign (word, default BUY), item (any item id, default ticket), dir (up|down, default up). Events: the next buyer receives the item at the paw, walks off left, and advances the price line one step.',
+  describe: 'Two or three full-size buyers queue beside a full-size booth or shop while a small candlestick chart starts with two candles and adds one market-color candle per purchase. params: crowd (2–3 actor ids or count, default fan1/fan2/fan3), steps (2–3 buyers when crowd is omitted, default 3), place (booth|shop, default booth), sign (word, default BUY), item (any item id, default ticket), dir (up|down, default up), chart (candles, default candles). Events: the next buyer receives the item at the paw, walks off left, and reveals one new candle.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    const path = stagePoints(s.dir, s.crowd.length);
-    const lineProgress = progressAt(t, s.times, path.distances, path.seed, path.total);
+    // Realistic history: a small rise, a red pullback, then one trend candle per purchase (bigger each time).
+    const seedCandles = 3, chartCount = seedCandles + s.crowd.length;
+    const history = [0.26, 0.34, 0.29], steps = [0.13, 0.17, 0.22];
+    const rising = [...history, ...steps.slice(0, s.crowd.length).reduce<number[]>((acc, step) => [...acc, (acc.at(-1) ?? history.at(-1)!) + step], [])];
+    const closes = s.dir === 'up' ? rising : rising.map(value => 1 - value);
     const placeCenterY = FLOOR - itemSize(s.place).h / 2;
     const counter = s.place === 'booth' ? boothCounter({ x: PLACE_X, y: FLOOR, scale: 1 }) : undefined;
     const service = counter
@@ -200,8 +161,18 @@ export const queueShot: ShotDef = {
       x: PLACE_X, y: placeCenterY, t, scale: 1,
       sign: s.sign, clerk: s.place === 'booth', stock: 0, stockKind: 'none',
     });
-    // The price staircase uses the open upper-left corner, above the queue.
-    const head = priceLine(ctx, path.points, { color: s.dir === 'up' ? PAL.UP : PAL.DOWN, progress: lineProgress, width: 42, head: 'arrow' });
+    // The chart lives in the open upper-left corner, above the queue.
+    const chartHead = candles(ctx, 40, 96, 352, 324, {
+      closes,
+      count: chartCount,
+      revealAt: [-3, -2, -1, ...s.times.map(at => Math.max(-0.2, at - Math.min(0.22, at * 0.6)))],
+      revealDuration: 0.28,
+      t,
+      seed: frame.seed,
+      axes: true,
+      colorUp: PAL.DOWN,
+      colorDown: PAL.UP,
+    });
 
     for (let i = 0; i < s.crowd.length; i++) {
       const who = s.crowd[i]!, event = s.times[i]!, last = i === s.crowd.length - 1;
@@ -289,17 +260,15 @@ export const queueShot: ShotDef = {
       }
     }
 
-    if (head) {
-      path.ends.forEach((point, i) => ring(ctx, point.x, point.y, s.times[i]!, t, { r: 32, width: 7, duration: 0.30 }));
-    }
+    const purchaseIndex = chartHead ? chartHead.index - seedCandles : -1;
+    if (chartHead && purchaseIndex >= 0) ring(ctx, chartHead.x, chartHead.y, s.times[purchaseIndex] ?? 0, t, { r: 24, width: 6, duration: 0.26 });
   },
   cues(props: ShotProps, dur: number): Cue[] {
     const safeDur = Math.max(0.05, dur), s = plan(props, safeDur);
-    const path = stagePoints(s.dir, s.crowd.length);
     return cuesIn(safeDur, [
       cue(0.03, 'clunk', 0.65, PLACE_X),
       ...s.times.flatMap((at, i) => [
-        cue(at, 'thump', 1.45, path.ends[i]!.x),
+        cue(at, 'thump', 1.45, 180 + 48 * i),
         cue(at, 'paper', 0.78, BUYER_STEP_X),
       ]),
     ]);

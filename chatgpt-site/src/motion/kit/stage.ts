@@ -331,6 +331,199 @@ export function priceLine(ctx: Ctx, points: readonly P[], options: PriceLineOpti
   return { x: headPoint.x, y: headPoint.y, progress: eased, direction };
 }
 
+export type CandleTrend = 'up' | 'down';
+export interface CandleOptions {
+  /** Explicit close targets, or a deterministic market trend used to make a plausible series. */
+  closes?: readonly number[] | CandleTrend;
+  count?: number;
+  /** Overall reveal, 0…1, used when `revealAt` is omitted. */
+  progress?: number;
+  /** Per-candle reveal start times in seconds. Pair with `t` for timed reveals. */
+  revealAt?: readonly number[];
+  revealDuration?: number;
+  t?: number;
+  seed?: number;
+  /** Market body colours: rising closes are green; falling closes are red. */
+  colorUp?: string;
+  colorDown?: string;
+  axes?: boolean;
+  dollar?: boolean;
+}
+export interface CandleHead { x: number; y: number; progress: number; index: number; direction: CandleTrend }
+
+interface CandleDatum { open: number; high: number; low: number; close: number }
+function seededUnit(seed: number): () => number {
+  let state = (Math.trunc(seed) | 0) || 0x6d2b79f5;
+  return () => {
+    state ^= state << 13; state ^= state >>> 17; state ^= state << 5;
+    return (state >>> 0) / 0xffffffff;
+  };
+}
+function interpolateSeries(values: readonly number[], index: number, count: number): number {
+  if (values.length <= 1) return values[0] ?? 0.5;
+  const at = count <= 1 ? values.length - 1 : index * (values.length - 1) / (count - 1);
+  const lo = Math.floor(at), hi = Math.min(values.length - 1, lo + 1);
+  return values[lo]! + (values[hi]! - values[lo]!) * (at - lo);
+}
+/**
+ * Plausible market candles. A trend is a drifting random walk, not a straight line: most candles go with the
+ * trend, but roughly every third one is a pullback in the other colour; bodies vary (a few big trend candles,
+ * some small ones, the odd doji), wicks show intrabar range, and the next open sits near — not always exactly at —
+ * the previous close. The LAST candle always goes with the trend, so the newest candle revealed on a narration
+ * beat is the move the story talks about.
+ */
+function candleData(options: CandleOptions, count: number): CandleDatum[] {
+  const random = seededUnit((options.seed ?? 0) * 7919 + count * 101 + 17), trend = options.closes === 'down' ? -1 : 1;
+  const explicit = Array.isArray(options.closes) ? options.closes.filter(Number.isFinite) : [];
+  if (explicit.length) {
+    // Explicit closes: follow them, but give each candle a realistic open and wicks.
+    let previous = explicit[0]! - (explicit.length > 1 ? explicit[1]! - explicit[0]! : 0.08) * 0.6;
+    return Array.from({ length: count }, (_, index) => {
+      const close = interpolateSeries(explicit, index, count), open = previous + (random() - 0.5) * 0.02;
+      const range = Math.abs(close - open) + 0.03;
+      previous = close;
+      return { open, close, high: Math.max(open, close) + range * (0.15 + random() * 0.45), low: Math.min(open, close) - range * (0.15 + random() * 0.45) };
+    });
+  }
+  // Choose which candles are pullbacks: about one in three, never two in a row, never the first or the last.
+  const pullback = Array.from({ length: count }, () => false);
+  for (let index = 1; index < count - 1; index++) if (!pullback[index - 1] && random() < 0.38) pullback[index] = true;
+  if (count >= 4 && !pullback.some(Boolean)) pullback[Math.max(1, Math.floor(count / 2) - 1)] = true;
+  const moves = pullback.map((pb, index) => {
+    const last = index === count - 1;
+    const size = pb ? 0.35 + random() * 0.45 : (random() < 0.22 ? 0.12 + random() * 0.15 : 0.7 + random() * 0.8) * (last ? 1.35 : 1);
+    return (pb ? -trend : trend) * size;
+  });
+  // Normalise so the series spans a healthy part of the chart.
+  const total = moves.reduce((sum, move) => sum + move, 0) || trend;
+  const scale = 0.62 / Math.abs(total);
+  let close = trend > 0 ? 0.2 : 0.82;
+  return moves.map(move => {
+    const open = close + (random() - 0.5) * 0.018; // tiny gap between candles
+    close = open + move * scale;
+    const body = Math.abs(close - open), range = Math.max(0.025, body);
+    const upper = range * (0.12 + random() * (move * trend > 0 ? 0.35 : 0.7)), lower = range * (0.12 + random() * (move * trend > 0 ? 0.7 : 0.35));
+    return { open, close, high: Math.max(open, close) + upper, low: Math.min(open, close) - lower };
+  });
+}
+function candleAxes(cols: number, rows: number): Sprite {
+  const key = `stage-candle-axes:${cols}x${rows}`;
+  const grid = new Grid(cols, rows);
+  const left = 3, top = 3, right = cols - 2, bottom = rows - 3;
+  grid.rect(left, top, 1, bottom - top + 1, PAL.grey3);
+  grid.rect(left, bottom, right - left + 1, 1, PAL.grey3);
+  for (let i = 1; i <= 3; i++) {
+    const yy = Math.round(top + (bottom - top) * i / 4);
+    const xx = Math.round(left + (right - left) * i / 4);
+    grid.rect(left, yy, 3, 1, PAL.grey3);
+    grid.rect(xx, bottom - 2, 1, 3, PAL.grey3);
+  }
+  return grid.sprite(key);
+}
+function candleDollar(): Sprite {
+  const grid = new Grid(16, 16);
+  grid.round(0, 0, 16, 16, 2, PAL.ink);
+  grid.round(1, 1, 14, 14, 1, PAL.paper);
+  const glyph = ['..######..', '.##....##.', '##......##', '##........', '.########.', '....####..', '........##', '##......##', '.##....##.', '..######..'];
+  for (let y = 0; y < glyph.length; y++) for (let x = 0; x < glyph[y]!.length; x++) if (glyph[y]![x] === '#') grid.rect(x + 3, y + 3, 1, 1, PAL.ink);
+  grid.rect(7, 1, 2, 14, PAL.ink);
+  return grid.sprite('stage-candle-dollar-plate');
+}
+function candleBodySprite(
+  width: number, height: number, openY: number, closeY: number, highY: number, lowY: number,
+  progress: number, color: string, light: string, wickColor: string, keyPrefix: string,
+): Sprite {
+  const growth = Math.max(0, Math.min(1.08, ease.outBack(progress, 0.65)));
+  const currentY = Math.max(0, Math.min(height - 1, Math.round(openY + (closeY - openY) * growth)));
+  let top = Math.min(openY, currentY), bottom = Math.max(openY, currentY);
+  if (bottom - top + 1 < 3) {
+    if (closeY < openY) top = Math.max(0, openY - 2);
+    else bottom = Math.min(height - 1, openY + 2);
+  }
+  const wickTop = Math.round(openY + (highY - openY) * progress);
+  const wickBottom = Math.round(openY + (lowY - openY) * progress);
+  const key = `${keyPrefix}:${Math.round(progress * 100)}:${currentY}:${wickTop}:${wickBottom}:${color}:${light}:${wickColor}`;
+  return makeSprite(key, width, height, ctx => {
+    const g = new Grid(width, height);
+    const wickX = Math.floor(width / 2);
+    // Ink wicks disappear against the near-black stage. Use the darkest market
+    // shade so each one-pixel wick stays visible while the body keeps its ink outline.
+    g.rect(wickX, Math.min(wickTop, wickBottom), 1, Math.max(1, Math.abs(wickBottom - wickTop) + 1), wickColor);
+    const bodyH = bottom - top + 1;
+    g.rect(0, top, width, bodyH, PAL.ink);
+    if (bodyH > 2 && width > 2) {
+      g.rect(1, top + 1, width - 2, bodyH - 2, color);
+      if (bodyH > 3) g.rect(1, top + 1, 1, 1, light);
+    }
+    for (let y = 0; y < g.rows; y++) for (let x = 0; x < g.cols; x++) {
+      const cell = g.get(x, y); if (!cell) continue;
+      ctx.fillStyle = cell; ctx.fillRect(x, y, 1, 1);
+    }
+  });
+}
+/** Draw a chunky pixel-art candlestick chart and return the newest visible close. */
+export function candles(ctx: Ctx, x: number, y: number, w: number, h: number, options: CandleOptions = {}): CandleHead | null {
+  const explicitCount = Array.isArray(options.closes) ? options.closes.length : 0;
+  const count = Math.max(1, Math.min(32, Math.round(options.count ?? (explicitCount || 6))));
+  const cols = Math.max(24, Math.ceil(w / ART)), rows = Math.max(20, Math.ceil(h / ART));
+  const withAxes = options.axes ?? false, left = withAxes ? 10 : 2, right = withAxes ? 3 : 2;
+  const top = withAxes ? 5 : 2, bottom = withAxes ? 7 : 2;
+  const plotCols = Math.max(1, cols - left - right), plotRows = Math.max(8, rows - top - bottom);
+  if (withAxes) drawSprite(ctx, candleAxes(cols, rows), x, y, { anchor: [0, 0] });
+  if (options.dollar) drawSprite(ctx, candleDollar(), x + ART * (withAxes ? 0 : 1), y - ART * 8, { anchor: [0, 0] });
+
+  const data = candleData(options, count);
+  const values = data.flatMap(candle => [candle.open, candle.high, candle.low, candle.close]);
+  let minValue = Math.min(...values), maxValue = Math.max(...values);
+  const span = Math.max(0.08, maxValue - minValue), pad = span * 0.1;
+  minValue -= pad; maxValue += pad;
+  const toCell = (value: number) => Math.max(1, Math.min(plotRows - 2, Math.round((maxValue - value) / (maxValue - minValue) * (plotRows - 1))));
+  const slot = plotCols / count;
+  const bodyWidth = Math.max(4, Math.min(14, Math.floor(slot * 0.68)));
+  const t = options.t ?? 0, duration = Math.max(0.08, options.revealDuration ?? 0.34);
+  const states = data.map((_, index) => {
+    const start = options.revealAt?.[index];
+    if (start !== undefined && Number.isFinite(start)) {
+      const p = (t - start) / duration;
+      return ease.outCubic(Math.max(0, Math.min(1, p)));
+    }
+    return ease.outCubic(Math.max(0, Math.min(1, (options.progress ?? 1) * count - index)));
+  });
+  const latest = states.reduce((found, state, index) => state > 0 ? index : found, -1);
+  if (latest < 0) return null;
+
+  let latestCloseY = 0, latestDirection: CandleTrend = 'up', latestX = 0;
+  for (let index = 0; index <= latest; index++) {
+    const p = states[index]!;
+    if (p <= 0) continue;
+    const candle = data[index]!, openY = toCell(candle.open), closeY = toCell(candle.close);
+    const highY = toCell(candle.high), lowY = toCell(candle.low);
+    const rising = candle.close >= candle.open;
+    const color = rising ? (options.colorUp ?? PAL.DOWN) : (options.colorDown ?? PAL.UP);
+    const light = rising ? PAL.green1 : PAL.red1;
+    const wickColor = rising ? PAL.green4 : PAL.red3;
+    const steps = Math.max(6, Math.min(24, Math.round(Math.abs(closeY - openY) * 1.25)));
+    const discrete = Math.round(p * steps) / steps;
+    const candleSprite = candleBodySprite(bodyWidth, plotRows, openY, closeY, highY, lowY, discrete, color, light,
+      wickColor, `stage-candle:${count}:${index}:${bodyWidth}x${plotRows}:${openY}:${closeY}:${highY}:${lowY}`);
+    // Resting candle sprites sit on whole art cells so their outlines stay crisp.
+    const cellX = left + Math.round(slot * index + (slot - bodyWidth) / 2);
+    const centerX = x + (left + slot * (index + 0.5)) * ART;
+    const tick = index === latest && p >= 1 ? Math.sin(t * Math.PI * 2 * 1.1 + (options.seed ?? 0)) * ART * 0.24 : 0;
+    drawSprite(ctx, candleSprite, x + cellX * ART, y + top * ART, { anchor: [0, 0] });
+    if (index === latest) {
+      const growth = Math.max(0, Math.min(1.08, ease.outBack(discrete, 0.65)));
+      latestDirection = rising ? 'up' : 'down';
+      // Let the carried marker tick while the cached candle itself stays crisp.
+      latestCloseY = y + (top + Math.round(openY + (closeY - openY) * growth) + 0.5) * ART + tick;
+      const previousX = index > 0 ? x + (left + slot * (index - 0.5)) * ART : centerX;
+      latestX = previousX + (centerX - previousX) * p;
+    }
+  }
+  const headState = states[latest]!;
+  return { x: latestX, y: latestCloseY, progress: headState, index: latest, direction: latestDirection };
+}
+
 export interface BarOptions { progress?: number; color?: string; background?: string; direction?: 'right' | 'left' | 'up' | 'down' }
 /** A bordered, art-grid bar that grows one stable art cell at a time. */
 export function bar(ctx: Ctx, x: number, y: number, w: number, h: number, { progress = 1, color = STAGE_WHITE, background, direction = 'right' }: BarOptions = {}): void {
