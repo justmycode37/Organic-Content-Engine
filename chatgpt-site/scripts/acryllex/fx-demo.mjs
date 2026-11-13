@@ -2,14 +2,14 @@
 //   node scripts/acryllex/fx-demo.mjs sheet <out.png> [item ...]
 //   node scripts/acryllex/fx-demo.mjs video <out.mp4> [item ...]
 // item: <effect>[:model[:hue]]          one-shot effect, e.g. heartbeat:heart:red
-//       in/<enter>[:model[:hue]]        entrance, e.g. in/ping:cube
+//       in/<enter>[:model[:hue]]        entrance, e.g. in/from-black:cube
 //       out/<exit>[:model[:hue]]        exit, e.g. out/to-black:brain
 //       tr/<transition>[:model[:hue]]   scene transition into this item (previous item's scene goes out)
 //       morph/<style>[:modelA[:hue[:modelB]]]  object-to-object morph
 import {stills,renderVideo} from './render.mjs';
 const [action,out,...items]=process.argv.slice(2);
 if(!['sheet','video'].includes(action)||!out)throw new Error('Usage: fx-demo.mjs sheet|video <out> [item ...]');
-export const EFFECTS=['heartbeat:heart:red','shockwave:cube:blue','ripple:raindrop:cyan','shake:alarm_clock_01:amber','squash:cube:green','recoil:cube:violet','hop:cube:orange','glint:smartphone:white','scan:brain:cyan','charge:led:amber','flicker:light_bulb:amber','glitch:laptop:green'];
+export const EFFECTS=['heartbeat:heart:red','shockwave:cube:blue','ripple:raindrop:cyan','shake:alarm_clock_01:amber','recoil:cube:violet','glint:smartphone:white','scan:brain:cyan','charge:led:amber','glitch:laptop:green'];
 const LEN=Number(process.env.ACX_LEN||2.6),AT=0.5,FRAMES=Number(process.env.ACX_FRAMES||6);
 const list=(items.length?items:EFFECTS).map(s=>{const [head,model='cube',hue='blue',modelB='egg']=s.split(':');const [type,name]=head.includes('/')?head.split('/'):['fx',head];return {type,name,model,hue,modelB,label:head};});
 const scenes=list.map(({type,name,model,hue,modelB,label})=>{

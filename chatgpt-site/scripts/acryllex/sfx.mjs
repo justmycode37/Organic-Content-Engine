@@ -32,11 +32,9 @@ export const ACRYLLEX_SFX={
  shockwave:{seconds:1.2,prompt:'A heavy blunt impact on a solid object followed by a deep resonant shock wave whoomp that rolls outward'},
  ripple:{seconds:1.2,prompt:'A soft liquid wobble, a drop hitting water with gentle spreading ripples, deep and smooth'},
  rattle:{seconds:0.6,prompt:'A small hard object rattles and shakes rapidly on a table, short'},
- squash:{seconds:0.5,prompt:'A soft rubbery squash and springy bounce back, deep and short'},
  glint:{seconds:0.7,prompt:'A bright clean glassy glint shine sweep, short sparkle'},
  scan:{seconds:1.3,prompt:'A smooth electronic scanner beam sweeping, soft rising digital hum'},
  charge:{seconds:1.4,prompt:'An electric charge building up with a rising whine, then a sharp powerful discharge zap'},
- flicker:{seconds:1.0,prompt:'A failing light bulb flickering with electric buzzing crackles'},
 };
 export const SFX_KINDS=Object.keys(ACRYLLEX_SFX);
 

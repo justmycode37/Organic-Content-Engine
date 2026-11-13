@@ -161,19 +161,28 @@ test('object effects validate, play and add sound cues',async()=>{
 });
 test('darkness entrances, exits and scene transitions validate and cue sound',async()=>{
  const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {fxReveal,fxUniforms,REVEAL_KINDS}=await import('../src/acryllex/effects.ts');
- const s=structuredClone(spec);s.scenes[0].objects[0].enter='from-black';s.scenes[0].objects[0].exit='scan-out';s.scenes[1].transition='black';s.scenes[1].transitionDur=1;s.scenes[2].transition='push-left';s.scenes[3].transition='glitch';
+ const s=structuredClone(spec);s.scenes[0].objects[0].enter='from-black';s.scenes[0].objects[0].exit='to-black';s.scenes[1].transition='black';s.scenes[1].transitionDur=1;s.scenes[2].transition='push-right';s.scenes[3].transition='glitch';
  assert.ok(specSchema.safeParse(s).success);
  const bad=structuredClone(s);bad.scenes[1].transition='fade-to-pink';assert.ok(!specSchema.safeParse(bad).success);
- const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='glitch'&&c.why.includes('transition')));assert.ok(cues.some(c=>c.kind==='scan'));
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='glitch'&&c.why.includes('transition')));assert.ok(cues.some(c=>c.kind==='dissolve'));
  const box=new THREE.Box3(new THREE.Vector3(-1,0,-1),new THREE.Vector3(1,2,1));
  for(const kind of REVEAL_KINDS){const u=fxUniforms();assert.ok(fxReveal(kind,.5,u,box),kind);}
  const u=fxUniforms();fxReveal('from-black',0,u,box);assert.equal(u.uFxDim.value,0);fxReveal('to-black',0,fxUniforms(),box);
 });
 test('morph styles validate, hand over cleanly and cue sound',async()=>{
  const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {morphPose,MORPH_STYLES,densify}=await import('../src/acryllex/effects.ts');
- const s=structuredClone(spec);s.scenes[0].objects.push({id:'b',model:'led',enter:'none'});s.scenes[0].events=[{at:'seven',target:'a',morph:'b',morphStyle:'implode'}];
+ const s=structuredClone(spec);s.scenes[0].objects.push({id:'b',model:'led',enter:'none'});s.scenes[0].events=[{at:'seven',target:'a',morph:'b',morphStyle:'blob'}];
  assert.ok(specSchema.safeParse(s).success);const bad=structuredClone(s);bad.scenes[0].events[0].morphStyle='melt';assert.ok(!specSchema.safeParse(bad).success);
- const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='charge'));assert.ok(cues.some(c=>c.why==='implode burst'));
- for(const style of MORPH_STYLES.filter(x=>x!=='particles')){assert.ok(morphPose(style,0.02,false).visible,style);assert.ok(morphPose(style,0.98,true).visible,style);assert.ok(!(morphPose(style,0.5,false).visible&&morphPose(style,0.5,true).visible)||style==='scan'||style==='fade',style);}
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='ripple'&&c.why.includes('blob')));
+ for(const style of MORPH_STYLES.filter(x=>x!=='particles')){assert.ok(morphPose(style,0.02,false).visible,style);assert.ok(morphPose(style,0.98,true).visible,style);assert.ok(!(morphPose(style,0.5,false).visible&&morphPose(style,0.5,true).visible)||style==='fade',style);}
  const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));densify([m]);assert.ok(m.geometry.attributes.position.count>200);
+});
+test('removed effects, entrances, transitions and morph styles are rejected',async()=>{
+ const {specSchema}=await import('../src/acryllex/schema.ts');
+ const tryScene=f=>{const s=structuredClone(spec);f(s.scenes[1]);return specSchema.safeParse(s).success;};
+ for(const fx of ['squash','hop','flicker'])assert.ok(!tryScene(sc=>{sc.events=[{at:'seven',target:'a',fx}];}),fx);
+ for(const enter of ['scan-in','ping'])assert.ok(!tryScene(sc=>{sc.objects[0].enter=enter;}),enter);
+ for(const exit of ['scan-out','ping-out'])assert.ok(!tryScene(sc=>{sc.objects[0].exit=exit;}),exit);
+ for(const tr of ['iris','blinds','push-left','push-up','dissolve'])assert.ok(!tryScene(sc=>{sc.transition=tr;}),tr);
+ for(const morphStyle of ['implode','scan'])assert.ok(!tryScene(sc=>{sc.objects.push({id:'b',model:'led',enter:'none'});sc.events=[{at:'seven',target:'a',morph:'b',morphStyle}];}),morphStyle);
 });
