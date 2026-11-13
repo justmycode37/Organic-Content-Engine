@@ -3,16 +3,16 @@ import {resolveAt,sceneDuration,type AcryllexSpec} from './spec.ts';
 export interface AutoCue {at:number;kind?:string;prompt?:string;gain?:number;length?:number;why?:string}
 
 const FX_LEN:Record<string,number>={materialize:0.75,assemble:1.15,pop:0.45,grow:0.8,drop:0.7,'slide-left':0.6,'slide-right':0.6,rise:0.8,dissolve:0.6,shatter:1.1,shrink:0.45,fall:0.8};
-const ENTER_SFX:Record<string,[string,number]>={materialize:['materialize',0.55],assemble:['assemble',0.8],pop:['pop',0.7],grow:['riser',0.5],drop:['drop',0.9],'slide-left':['whoosh',0.6],'slide-right':['whoosh',0.6],rise:['riser',0.5]};
+const ENTER_SFX:Record<string,[string,number]>={materialize:['materialize',0.55],assemble:['assemble',0.8],pop:['pop',0.7],grow:['riser',0.5],drop:['drop',0.9],'slide-left':['whoosh',0.6],'slide-right':['whoosh',0.6],rise:['riser',0.5],'from-black':['riser',0.45],'light-up':['power-on',0.6],ping:['shockwave',0.6],'scan-in':['scan',0.6]};
 const FX_SFX:Record<string,[string,number]>={heartbeat:['heartbeat',0.9],shockwave:['shockwave',0.95],ripple:['ripple',0.6],shake:['rattle',0.6],squash:['squash',0.6],recoil:['hit',0.6],hop:['pop',0.55],glint:['glint',0.5],scan:['scan',0.55],charge:['charge',0.8],flicker:['flicker',0.55],glitch:['glitch',0.6]};
-const EXIT_SFX:Record<string,[string,number]>={dissolve:['dissolve',0.5],shatter:['shatter',0.95],shrink:['swish',0.5],fall:['drop',0.8],'slide-left':['whoosh',0.5],'slide-right':['whoosh',0.5]};
+const EXIT_SFX:Record<string,[string,number]>={dissolve:['dissolve',0.5],shatter:['shatter',0.95],shrink:['swish',0.5],fall:['drop',0.8],'slide-left':['whoosh',0.5],'slide-right':['whoosh',0.5],'to-black':['dissolve',0.4],'scan-out':['scan',0.5],'ping-out':['dissolve',0.5]};
 
 /** Sounds implied by what the picture does. Times are global seconds. */
 export function autoCues(spec:AcryllexSpec):AutoCue[]{
  const out:AutoCue[]=[];let start=0;
  spec.scenes.forEach((s,i)=>{
   const dur=sceneDuration(s);const at=(a:unknown,f:number)=>start+resolveAt(s,a as string|number|undefined,dur,f);
-  if(i>0)out.push(s.transition&&s.transition!=='cut'?{at:start-0.12,kind:'whoosh',gain:0.6,why:'transition'}:{at:start,kind:'cut',gain:0.7,why:'cut on the beat'});
+  if(i>0)out.push(s.transition==='glitch'?{at:start,kind:'glitch',gain:0.7,why:'glitch transition'}:['black','iris','blinds','blink'].includes(s.transition??'')?{at:start-0.1,kind:'cut',gain:0.6,why:'through black'}:s.transition&&s.transition!=='cut'?{at:start-0.12,kind:'whoosh',gain:0.6,why:'transition'}:{at:start,kind:'cut',gain:0.7,why:'cut on the beat'});
   if(i>0)out.push({at:Math.max(0,start-0.3),kind:'swish',gain:0.4,why:'lead-in to cut'});
   s.objects.forEach((o,k)=>{
    const enter=o.enter??'materialize';
