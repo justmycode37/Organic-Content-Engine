@@ -188,6 +188,10 @@ export interface Scene {
  say:string;
  hue?:Hue;
  duration?:number;
+ /** Optional global frame clock for geometry, camera and lighting; text keeps its original timing. */
+ motionFPS?:number;
+ /** Global clock phase in seconds (default 0). */
+ motionPhase?:number;
  camera?:CameraMove;
  objects:SceneObject[];
  events?:SceneEvent[];

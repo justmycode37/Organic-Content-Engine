@@ -8,7 +8,27 @@ function modelContext(params,seed=37){
  return {params,seed,mat,mesh:(g,o)=>new THREE.Mesh(g,mat(o)),color:()=>new THREE.Color(1,1,1),num:(key,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number.isFinite(Number(params[key]))?Number(params[key]):f)),bool:(key,f)=>typeof params[key]==='boolean'?params[key]:f,str:(key,f,allowed)=>typeof params[key]==='string'&&(!allowed||allowed.includes(params[key]))?params[key]:f};
 }
 const spec={version:1,series:'ACRYLLEX',title:'t',scenes:Array.from({length:8},(_,i)=>({say:'One two three four five six seven eight nine ten eleven twelve thirteen.',hue:'blue',objects:[{id:'a',model:i%2?'led':'human',enter:'assemble'}],events:[{at:'seven',target:'a',set:{glow:1}}],text:[{text:'1993',style:'number',at:'ten'}]}))};
-test('catalogue has people, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
+test('catalogue has people, media subjects, fluids, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','human-male','human-female','footage','wave-footage','ocean-wave-media','fluid-sheet','fluid-jet','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
+test('anatomical bodies contain separate skinned meshes with valid normalized weights',async()=>{
+ const bodies=[];
+ for(const id of ['human-male','human-female']){
+  const data=await readFile(new URL(`../src/acryllex/assets/humans/${id}.glb`,import.meta.url));
+  assert.equal(data.readUInt32LE(0),0x46546c67);assert.equal(data.readUInt32LE(4),2);assert.equal(data.readUInt32LE(8),data.length);
+  const length=data.readUInt32LE(12),gltf=JSON.parse(data.subarray(20,20+length).toString());
+  assert.equal(gltf.asset.extras.id,id);assert.equal(gltf.asset.extras.commit,'a8bc2d54ff0ac92e78ff71431b1023eda42bf482');
+  assert.equal(gltf.asset.extras.license,'CC0-1.0');
+  const bin=data.subarray(28+length),skin=gltf.skins[0],body=gltf.meshes.find(m=>m.name==='Body').primitives[0];
+  assert.ok(skin.joints.length>=60);assert.ok(gltf.accessors[body.attributes.POSITION].count>10000);
+  const indices=gltf.accessors[body.attributes.JOINTS_0],weights=gltf.accessors[body.attributes.WEIGHTS_0];assert.equal(indices.count,weights.count);
+  const offset=a=>(gltf.bufferViews[a.bufferView].byteOffset??0)+(a.byteOffset??0);
+  for(let i=0;i<weights.count;i++){
+   let sum=0;for(let k=0;k<4;k++){const w=bin.readFloatLE(offset(weights)+(i*4+k)*4);assert.ok(Number.isFinite(w)&&w>=0&&w<=1);sum+=w;assert.ok(bin[offset(indices)+i*4+k]<skin.joints.length);}
+   assert.ok(Math.abs(sum-1)<1e-5,'Every skin vertex must have normalized bone weights');
+  }
+  bodies.push(data);
+ }
+ assert.notDeepEqual(bodies[0],bodies[1],'Female anatomy must use its own mesh');
+});
 test('spec schema and content checks',async()=>{const {specSchema,specProblems}=await import('../src/acryllex/schema.ts');const c=await loadCatalog();assert.ok(specSchema.safeParse(spec).success);assert.deepEqual(specProblems(spec,c.has),[]);
  assert.ok(specSchema.safeParse({...spec,look:{palette:{blue:'#1234c8'}}}).success);
  assert.ok(specSchema.safeParse({...spec,look:{textColor:'#c5c5c5'}}).success);
@@ -19,6 +39,10 @@ test('spec schema and content checks',async()=>{const {specSchema,specProblems}=
  assert.ok(!specSchema.safeParse({...spec,look:{noiseReference:.02}}).success);
  const grain=structuredClone(spec);grain.scenes[0].light={noise:.06,noiseReference:.015};assert.ok(specSchema.safeParse(grain).success);
  grain.scenes[0].light.noiseReference=.02;assert.ok(!specSchema.safeParse(grain).success);
+ const clocked=structuredClone(spec);clocked.scenes[0].motionFPS=25;clocked.scenes[0].motionPhase=1/60;
+ assert.ok(specSchema.safeParse(clocked).success);
+ for(const fps of [0,-1,Infinity,121]){clocked.scenes[0].motionFPS=fps;assert.ok(!specSchema.safeParse(clocked).success);}
+ clocked.scenes[0].motionFPS=25;clocked.scenes[0].motionPhase=Infinity;assert.ok(!specSchema.safeParse(clocked).success);
  const bad=structuredClone(spec);bad.scenes[0].objects[0].model='nope';bad.scenes[1].events[0].at='zebra';const p=specProblems(bad,c.has);assert.ok(p.some(x=>x.includes('unknown model')));assert.ok(p.some(x=>x.includes('zebra')));});
 test('automatic sound cues follow the picture',async()=>{const {autoCues}=await import('../src/acryllex/cues.ts');const cues=autoCues(spec);assert.ok(cues.some(c=>c.kind==='assemble'));assert.ok(cues.some(c=>c.kind==='power-on'));assert.ok(cues.every((c,i)=>i===0||c.at>=cues[i-1].at));});
 test('acryllex is a separate seeded account on Sol medium',async()=>{const {ACRYLLEX_POLICY}=await import('../worker/acryllex-policy.ts');assert.equal(ACRYLLEX_POLICY.models.all,'gpt-6.1-sol');assert.equal(ACRYLLEX_POLICY.models.effort,'medium');});
@@ -26,6 +50,67 @@ test('fractional dots preserve video dimensions and aspect ratio',async()=>{
  const f=await import('../src/acryllex/format.ts');f.setFormat({width:1164,height:670,cell:3.72});
  assert.equal(f.W,1164);assert.equal(f.H,670);assert.equal(f.CELL,3.72);
  assert.ok(f.COLS*f.CELL>=f.W);assert.ok(f.ROWS*f.CELL>=f.H);f.setFormat();
+});
+test('fluid sheets preserve an authored control grid and reuse their geometry buffers',async()=>{
+ const {fluidSheet}=await import('../src/acryllex/models/fluids.ts');
+ const grid=[[[0,0,0],[1,.3,0],[2,.2,0]],[[0,.6,1],[1,1.2,1],[2,.8,1]],[[0,1.4,2],[1,1.1,2],[2,.4,2]]];
+ const water=fluidSheet.build(modelContext({controlGrid:grid,amplitude:0,thickness:.02,uSegments:12,vSegments:10,foamCount:8}));
+ const mesh=water.root.getObjectByName('fluid-sheet-surface'),position=mesh.geometry.getAttribute('position'),normal=mesh.geometry.getAttribute('normal');
+ const point=i=>[position.getX(i),position.getY(i),position.getZ(i)];
+ for(const [index,expected] of [[0,grid[0][0]],[12,grid[0][2]],[130,grid[2][0]],[142,grid[2][2]]])point(index).forEach((v,k)=>assert.ok(Math.abs(v-expected[k])<1e-6));
+ const original=position.array.slice();
+ for(const t of [.4,2,.4]){
+  water.update({flow:2,amplitude:1,foam:1},t);
+  assert.equal(mesh.geometry.getAttribute('position'),position);assert.equal(mesh.geometry.getAttribute('normal'),normal);
+  assert.deepEqual(position.array,original,'Flow changes an undeformed authored sheet');
+ }
+ assert.equal(water.root.userData.fluidCore,'parametric-fluid-surface');
+ assert.equal(water.root.userData.fluidMode,'control-grid');
+});
+test('closed liquid jets keep both seams and normals continuous on reverse seeking',async()=>{
+ const {fluidJet}=await import('../src/acryllex/models/fluids.ts');
+ const water=fluidJet.build(modelContext({path:[[1,0,0],[0,.4,1],[-1,.8,0],[0,-.2,-1]],closedPath:true,radius:.08,amplitude:.004,uSegments:24,vSegments:12,foamCount:12}));
+ const mesh=water.root.getObjectByName('fluid-jet-surface'),position=mesh.geometry.getAttribute('position'),normal=mesh.geometry.getAttribute('normal');
+ const state={flow:-.7,radius:1.2,spread:.9,foam:1};water.update(state,.37);
+ const expected=position.array.slice(),expectedNormals=normal.array.slice(),foam=water.root.getObjectByName('fluid-jet-foam'),foamExpected=foam.instanceMatrix.array.slice();
+ water.update(state,1.29);water.update(state,.37);assert.deepEqual(position.array,expected);assert.deepEqual(normal.array,expectedNormals);assert.deepEqual(foam.instanceMatrix.array,foamExpected);
+ const match=(a,b)=>{for(let k=0;k<3;k++){assert.ok(Math.abs(position.getComponent(a,k)-position.getComponent(b,k))<1e-6);assert.ok(Math.abs(normal.getComponent(a,k)-normal.getComponent(b,k))<1e-6);}};
+ for(let v=0;v<=12;v++)match(v*25,v*25+24);
+ for(let u=0;u<=24;u++)match(u,12*25+u);
+ for(let i=0;i<normal.count;i++){const n=Math.hypot(normal.getX(i),normal.getY(i),normal.getZ(i));assert.ok(Number.isFinite(n)&&Math.abs(n-1)<2e-5);}
+ for(const v of [0,3,6,9]){
+  const i=v*25,radial=new THREE.Vector3(position.getX(i)-1,position.getY(i),position.getZ(i));
+  assert.ok(radial.dot(new THREE.Vector3(normal.getX(i),normal.getY(i),normal.getZ(i)))>0,'Liquid tube normals face inside the jet');
+ }
+});
+test('foam advection uses physical elapsed time at stopped and accelerated lifecycle rates',async()=>{
+ const {createFluidSurface,createFluidFoam}=await import('../src/acryllex/models/fluid-surface.ts');
+ const surface=createFluidSurface({uSegments:8,vSegments:8,flipNormals:true,sample:(u,v,t,out)=>out.set(u,0,v)}),material=new THREE.MeshStandardMaterial();
+ for(const speed of [0,.5,4]){
+  const clocks=[],foam=createFluidFoam({surface,count:1,seed:32,material,speed,lifetime:2,normalOffset:0,size:.03,seedUV:(_seed,out)=>out.set(.2,.3),flow:(_u,_v,t,out)=>{clocks.push(t);out.set(.1,-.05);}});
+  foam.update(.7);const matrix=new THREE.Matrix4();foam.mesh.getMatrixAt(0,matrix);const p=new THREE.Vector3(),q=new THREE.Quaternion(),scale=new THREE.Vector3();matrix.decompose(p,q,scale);assert.ok(scale.length()>0,'A stopped lifecycle should retain visible seeded foam');
+  const elapsed=clocks.length ? .7-Math.min(...clocks) : 0;
+  assert.ok(Math.abs(p.x-(.2+.1*elapsed))<1e-6);assert.ok(Math.abs(p.z-(.3-.05*elapsed))<1e-6);
+  assert.ok(clocks.every(t=>t<=.7));if(speed===0)assert.ok(clocks.every(t=>t===.7));
+  foam.dispose();
+ }
+ surface.dispose();material.dispose();
+});
+test('water optics preserves authored fluid geometry and releases owned environment textures',async()=>{
+ const {fluidSheet,fluidJet}=await import('../src/acryllex/models/fluids.ts');
+ for(const model of [fluidSheet,fluidJet]){
+  const params={uSegments:16,vSegments:8,foamCount:0,amplitude:.04},opaque=model.build(modelContext(params)),water=model.build(modelContext({...params,material:'water',opticalThickness:1.2,rippleAmplitude:.006}));
+  opaque.update({flow:1},.7);water.update({flow:1},.7);
+  const name=model===fluidSheet?'fluid-sheet-surface':'fluid-jet-surface',a=opaque.root.getObjectByName(name),b=water.root.getObjectByName(name);
+  assert.deepEqual(b.geometry.attributes.position.array,a.geometry.attributes.position.array);
+  assert.deepEqual(b.geometry.attributes.normal.array,a.geometry.attributes.normal.array);
+  assert.ok(b.material.isMeshPhysicalMaterial);assert.equal(b.material.metalness,0);assert.equal(b.material.ior,1.333);assert.equal(b.material.thickness,1.2);
+  assert.equal(b.castShadow,false);assert.equal(b.receiveShadow,true);
+  const shader={uniforms:{},vertexShader:'#include <worldpos_vertex>',fragmentShader:'#include <normal_fragment_maps>'};b.material.onBeforeCompile(shader,null);
+  assert.equal(shader.uniforms.waterOpticsTime.value,.7);water.update({flow:1},1.3);water.update({flow:1},.7);assert.equal(shader.uniforms.waterOpticsTime.value,.7);
+  let released=0;b.material.envMap.addEventListener('dispose',()=>released++);b.material.dispose();b.material.dispose();assert.equal(released,1);
+  for(const instance of [opaque,water])instance.root.traverse(o=>{if(o.isInstancedMesh)o.dispose();o.geometry?.dispose();if(o.material)for(const material of Array.isArray(o.material)?o.material:[o.material])material.dispose();});
+ }
 });
 test('rounded geometry keeps the specified bounds even for thin lids',async()=>{
  const {G}=await import('../src/acryllex/kit.ts');const g=G.rbox(.32,.21,.006,.004);g.computeBoundingBox();

@@ -1,10 +1,11 @@
 // Real 3D assets for ACRYLLEX: Poly Haven CC0 photoscans (downloaded on demand) + rigged/animated glTFs.
 import {access,mkdir,readFile,writeFile,copyFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
-import {spawnSync} from 'node:child_process';
 import {extname,resolve} from 'node:path';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {prepareFluidCaches} from './cache-assets.mjs';
+import {prepareFootage} from './media-assets.mjs';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 export const ASSET_DIR=join(ROOT,'.acryllex-assets');
@@ -43,9 +44,23 @@ export async function ensureAsset(entry,res='1k'){
 /** All assets a spec needs (plus the human rigs + clip sources when people appear). */
 export async function assetsForSpec(spec){
  const ids=new Set();
- const bodies=new Set(['human-xbot']);const HUMAN=/^(human|person|man|woman|child|people|scientist|engineer|worker|student|human-body)$/i;
- for(const s of spec.scenes??[])for(const o of s.objects??[]){ids.add(String(o.model));if(HUMAN.test(String(o.model))){const b=String(o.params?.body??'').toLowerCase(),f=String(o.params?.figure??(/woman/i.test(o.model)?'woman':'man')).toLowerCase();if(f!=='mannequin')bodies.add(b?`human-${b}`:f==='woman'?'human-megan':'human-brian');}}
+ const bodies=new Set(['human-xbot']);const PROFILES=new Map([
+  ...['human-male','anatomical-man','male-body','male-figure','man-anatomical'].map(id=>[id,'human-male']),
+  ...['human-female','anatomical-woman','female-body','female-figure','woman-anatomical'].map(id=>[id,'human-female']),
+ ]);const HUMAN=/^(human|person|man|woman|child|people|scientist|engineer|worker|student|human-body)$/i;
+ const isHuman=id=>HUMAN.test(id)||PROFILES.has(id);
+ for(const s of spec.scenes??[])for(const o of s.objects??[]){
+  const model=norm(o.model);ids.add(model);if(!isHuman(model))continue;
+  const profile=PROFILES.get(model),body=String(o.params?.body??'').toLowerCase();
+  if(profile&&!body&&String(o.params?.mesh??'anatomical')==='anatomical')continue;
+  const figure=String(o.params?.figure??(profile==='human-female'||/woman/i.test(model)?'woman':'man')).toLowerCase();
+  if(figure!=='mannequin')bodies.add(body?`human-${body}`:figure==='woman'?'human-megan':'human-brian');
+ }
  const out={};
+ for(const id of new Set([...ids].map(id=>PROFILES.get(id)).filter(Boolean))){
+  const rel=`humans/${id}.glb`;await mkdir(join(ASSET_DIR,'humans'),{recursive:true});
+  await copyFile(join(ROOT,'src/acryllex/assets',rel),join(ASSET_DIR,rel));out[id]=rel;
+ }
  // imported exact meshes: model "mesh" with params.url (https .glb) or params.file (local .glb)
  for(const s of spec.scenes??[])for(const o of s.objects??[]){
   if(!/^(mesh|glb|gltf|import|scan|custom-model)$/i.test(String(o.model)))continue;
@@ -55,24 +70,11 @@ export async function assetsForSpec(spec){
   if(!await exists(dest)){if(/^https:\/\//i.test(src))await download(src,dest);else{await mkdir(dirname(dest),{recursive:true});await copyFile(resolve(src),dest);}}
   out[`mesh:${src}`]=rel;
  }
- // footage layers: any video becomes tone atlases at dot resolution (model "footage", params.file)
- for(const s of spec.scenes??[])for(const o of s.objects??[]){
-  if(!/^(footage|video|clip)$/i.test(String(o.model)))continue;
-  const src=String(o.params?.file??'');if(!src)continue;
-  const cell=Math.max(2,Math.round(spec.format?.cell??3)),w=Math.round(Number(o.params?.cols)||(spec.format?.width??1080)/cell),h=Math.round(Number(o.params?.rows)||(spec.format?.height??1920)/cell);
-  const fps=Number(o.params?.fps)||30,crop=String(o.params?.crop??''),blur=Number(o.params?.blur??1.2);
-  const key=createHash('sha1').update(JSON.stringify([src,w,h,fps,crop,blur])).digest('hex').slice(0,16),dir=join(ASSET_DIR,'import',key),man=join(dir,'manifest.json');
-  if(!await exists(man)){await mkdir(dir,{recursive:true});const cols=8,rows=8;
-   const vf=`${crop?`crop=${crop},`:''}${blur>0?`gblur=sigma=${blur},`:''}fps=${fps},scale=${w}:${h}:flags=area,tile=${cols}x${rows}`;
-   const r=spawnSync('ffmpeg',['-v','error','-y','-i',resolve(src),'-vf',vf,'-an',join(dir,'a%03d.png')]);if(r.status!==0)throw new Error(`footage failed: ${r.stderr}`);
-   const d=spawnSync('ffprobe',['-v','error','-show_entries','format=duration','-of','csv=p=0',resolve(src)]);const dur=parseFloat(String(d.stdout))||0;
-   const {readdir}=await import('node:fs/promises');const atlases=(await readdir(dir)).filter(f=>/^a\d+\.png$/.test(f)).sort();
-   await writeFile(man,JSON.stringify({w,h,cols,rows,fps,frames:Math.max(1,Math.min(atlases.length*cols*rows,Math.round(dur*fps))),atlases:atlases.map(f=>`import/${key}/${f}`)}));}
-  out[`footage:${src}`]=`import/${key}/manifest.json`;
- }
+ Object.assign(out,await prepareFootage(spec,ASSET_DIR));
  for(const id of ids){
-  if(HUMAN.test(id)){for(const h of bodies){const e=await findAsset(h);if(e)out[e.id]=await ensureAsset(e);}continue;}
+  if(isHuman(id)){for(const h of bodies){const e=await findAsset(h);if(e)out[e.id]=await ensureAsset(e);}continue;}
   const e=await findAsset(id);if(e)out[e.id]=await ensureAsset(e);
  }
+ Object.assign(out,await prepareFluidCaches(spec,ASSET_DIR));
  return out;
 }

@@ -8,6 +8,8 @@ import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
 import {ditherThresholdGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
+import {sampleMotionTime} from './motion-clock.ts';
+import {isFootageModel} from './media-library.ts';
 import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,DENSE_FX,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
@@ -180,7 +182,7 @@ class SceneRuntime {
    if(!o||typeof o.id!=='string')continue;
    const def=findModel(String(o.model))??findModel('compose')!;
    const hue=hueColor(o.hue??this.spec.hue??'blue',this.palette);
-   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
+   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache')throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
    const inner=new THREE.Group(),outer=new THREE.Group(),shape=new THREE.Group();shape.add(built.root);inner.add(shape);outer.add(inner);this.scene.add(outer);
    const ctrl0:Record<string,number>={...(def.defaults??{}),...(o.controls??{})};
    if(o.stretch)shape.scale.fromArray(o.stretch);
@@ -195,8 +197,10 @@ class SceneRuntime {
    // origin:'model' keeps the model's own coordinates (explicit cameras, environments); default recentres on its bounds
    if(o.origin==='model')inner.position.set(0,0,0);else inner.position.set(-center.x,grounded?-box.min.y:-center.y,-center.z);
    const meshes:THREE.Mesh[]=[];built.root.traverse(c=>{if((c as THREE.Mesh).isMesh)meshes.push(c as THREE.Mesh);});
-   const fxU=fxUniforms(),owner={};
-   for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(x=>patchMaterial(x,fxU,owner));else m.material=patchMaterial(m.material,fxU,owner);}
+   const fxU=fxUniforms(),owner={},patched=new Map<THREE.Material,THREE.Material>();
+   // Foam layers and other model parts may share a material. Install each object's shader hooks once.
+   const patch=(material:THREE.Material)=>{let result=patched.get(material);if(!result){result=patchMaterial(material,fxU,owner);patched.set(material,result);}return result;};
+   for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(patch);else m.material=patch(m.material);}
    const mats=[...new Set(meshes.map(m=>m.material as THREE.MeshStandardMaterial))];
    const obj:Obj={spec:o,def,built,outer,inner,meshes,mats,baseColors:mats.map(m=>m.color.clone()),size,center,grounded,base:new THREE.Vector3(),baseRot:new THREE.Euler(...((o.rot??[0,0,0]).map(v=>deg(Number(v)||0)) as [number,number,number])),baseScale:clamp(Number(o.scale)||1,0.01,500),moves:[],turns:[],scales:[],controls:new Map(),ctrl0,hues:[],fx:[],poses:[],yaw:[],posable,clip:new THREE.Plane(new THREE.Vector3(0,-1,0),0),effects:[],fxU};
    this.objs.push(obj);this.byId.set(o.id,obj);
@@ -629,15 +633,16 @@ export class Engine {
  /** 1 on a beat, decaying to 0 before the next (0 when the reel has no beat grid). */
  beatPulse(t:number){const b=this.spec.beat;if(!b||!(b.period>0.2)||t<(b.from??0))return 0;const x=((t-b.phase)%b.period+b.period)%b.period;return Math.exp(-7*x/b.period);}
  renderInto(rt:THREE.WebGLRenderTarget,i:number,local:number){
-  const s=this.runtime(i);s.pulse=this.beatPulse(this.starts[i]!+local);s.update(local);
+  const s=this.runtime(i),clock=sampleMotionTime(local,this.starts[i]!,this.spec.scenes[i]!.motionFPS,this.spec.scenes[i]!.motionPhase);s.pulse=this.beatPulse(this.starts[i]!+clock);s.update(clock);
   this.renderer.setRenderTarget(rt);this.renderer.setClearColor(0x000000,0);this.renderer.clear();this.renderer.render(s.scene,s.camera);
  }
  frame(t:number,opts:{captions?:boolean}={}){
   const i=this.sceneAt(t),local=t-this.starts[i]!,sc=this.spec.scenes[i]!;
+  const motionLocal=sampleMotionTime(local,this.starts[i]!,sc.motionFPS,sc.motionPhase),motionGlobal=sc.motionFPS?this.starts[i]!+motionLocal:t;
   const aoMethod=sc.aoMethod??this.spec.look?.aoMethod??'plane';
   if(aoMethod!==this.aoMethod){this.aoMethod=aoMethod;this.post.fragmentShader=POST_FRAG(aoMethod);this.post.needsUpdate=true;}
   this.renderInto(this.rtA,i,local);
-  const hc=this.spec.look?.inkMode==='fixed'?this.runtime(i).inkHue(local):hueColor(sc.hue??'blue',this.spec.look?.palette),light=sampleLightTrack(sc.light?.keyframes??[],local,{contrast:sc.light?.contrast??LOOK.contrast,inkLo:sc.light?.inkLo??LOOK.inkLo,gamma:sc.light?.gamma??LOOK.gamma,blackPoint:sc.light?.blackPoint??LOOK.blackPoint,whitePoint:sc.light?.whitePoint??LOOK.whitePoint,exposure:sc.light?.exposure??1,ink:sc.light?.ink??LOOK.ink*Math.max(hc.r,hc.g,hc.b),softness:sc.light?.softness??0});
+  const hc=this.spec.look?.inkMode==='fixed'?this.runtime(i).inkHue(motionLocal):hueColor(sc.hue??'blue',this.spec.look?.palette),light=sampleLightTrack(sc.light?.keyframes??[],motionLocal,{contrast:sc.light?.contrast??LOOK.contrast,inkLo:sc.light?.inkLo??LOOK.inkLo,gamma:sc.light?.gamma??LOOK.gamma,blackPoint:sc.light?.blackPoint??LOOK.blackPoint,whitePoint:sc.light?.whitePoint??LOOK.whitePoint,exposure:sc.light?.exposure??1,ink:sc.light?.ink??LOOK.ink*Math.max(hc.r,hc.g,hc.b),softness:sc.light?.softness??0});
   {const rt=this.runtime(i),cam=rt.camera,u=this.post.uniforms;u.cNear!.value=cam.near;u.cFar!.value=cam.far;u.tanHalf!.value=Math.tan(deg(cam.fov/2));u.aoR!.value=(sc.aoRadius??rt.radius*0.06);u.aoStr!.value=LOOK.ao*(sc.ao??1.4);u.contrast!.value=Number(light.contrast)||LOOK.contrast;u.inkLo!.value=light.inkLo??LOOK.inkLo;u.gam!.value=light.gamma??LOOK.gamma;u.blackPoint!.value=light.blackPoint??LOOK.blackPoint;u.whitePoint!.value=light.whitePoint??LOOK.whitePoint;u.expo!.value=Number(light.exposure)||1;u.noiseAmt!.value=sc.light?.noise??LOOK.noise;u.noiseReference!.value=sc.light?.noiseReference??this.spec.look?.noiseReference??-1;}
   let mode=0,mixP=0,maskMode=0,maskK=1;
   const tr=sc.transition??'cut',D=transitionLen(sc),dur=sceneDuration(sc);
@@ -651,9 +656,9 @@ export class Engine {
   if(i>0&&tr in THROUGH&&local<D/2){maskMode=THROUGH[tr]!;maskK=smooth(local/(D/2));}
   else if(next&&trN in THROUGH&&local>dur-transitionLen(next)/2){maskMode=THROUGH[trN]!;maskK=smooth((dur-local)/(transitionLen(next)/2));}
   this.post.uniforms.maskMode!.value=maskMode;this.post.uniforms.maskK!.value=maskK;
-  const pulse=this.beatPulse(t);this.post.uniforms.boost!.value=1+0.22*pulse;
+  const pulse=this.beatPulse(motionGlobal);this.post.uniforms.boost!.value=1+0.22*pulse;
   this.post.uniforms.ink!.value=light.ink;this.post.uniforms.inkColor!.value.set(hc.r,hc.g,hc.b).divideScalar(Math.max(hc.r,hc.g,hc.b,1e-4));
-  this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=t;
+  this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=motionGlobal;
   this.renderer.setRenderTarget(null);this.renderer.setClearColor(0x000000,1);this.renderer.clear();this.renderer.render(this.postScene,this.postCam);
   const c=this.ctx2d;c.globalAlpha=1;c.fillStyle='#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';
   const rt=this.runtime(i);
@@ -663,7 +668,7 @@ export class Engine {
    const carried=(prior.text??[]).filter(item=>item.carry&&priorTime<=textEnd(prior,item.until,priorDuration));
    if(!carried.length)continue;
    let priorRuntime:SceneRuntime|undefined;
-   const previousCtx:TextCtx={...tctx,t:priorTime,dur:priorDuration,scene:prior,hue:this.spec.look?.palette?.[prior.hue??'blue']??HUES[prior.hue??'blue'],project:id=>{if(!priorRuntime){priorRuntime=this.runtime(previous);priorRuntime.update(priorTime);}return priorRuntime.project(id);}};
+   const previousCtx:TextCtx={...tctx,t:priorTime,dur:priorDuration,scene:prior,hue:this.spec.look?.palette?.[prior.hue??'blue']??HUES[prior.hue??'blue'],project:id=>{if(!priorRuntime){priorRuntime=this.runtime(previous);priorRuntime.update(sampleMotionTime(priorTime,this.starts[previous]!,prior.motionFPS,prior.motionPhase));}return priorRuntime.project(id);}};
    for(const item of carried)drawText(previousCtx,item);
   }
   for(const item of sc.text??[])drawText(tctx,item);
@@ -673,4 +678,4 @@ export class Engine {
  }
 }
 
-function disposeScene(s:THREE.Scene){s.traverse(o=>{const m=o as THREE.Mesh;if(m.geometry)m.geometry.dispose();const mat=m.material as THREE.Material|THREE.Material[]|undefined;if(Array.isArray(mat))mat.forEach(x=>x.dispose());else mat?.dispose();});}
+function disposeScene(s:THREE.Scene){s.traverse(o=>{if('shadow' in o&&o.shadow instanceof THREE.LightShadow)o.shadow.dispose();const m=o as THREE.Mesh;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();if(m.geometry)m.geometry.dispose();const mat=m.material as THREE.Material|THREE.Material[]|undefined;if(Array.isArray(mat))mat.forEach(x=>x.dispose());else mat?.dispose();});}

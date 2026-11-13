@@ -15,12 +15,12 @@ export const FPS=30;
 
 export async function openAcryllex(spec){
  const bundle=(await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
+ const assets=await assetsForSpec(spec);
  const browser=await chromium.launch({headless:true,executablePath:CHROME,args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
  const page=await browser.newPage();
  const errors=[];
  page.on('pageerror',e=>{errors.push(e.message);console.error(`Page error: ${e.message}`);});
- page.on('console',m=>{if(m.type()==='error'||m.type()==='warning')console.error(`[page] ${m.text()}`);});
- const assets=await assetsForSpec(spec);
+ page.on('console',m=>{if(m.type()==='error'||m.type()==='warning'&&/^(asset|model)\b.*failed/.test(m.text()))errors.push(m.text());if(m.type()==='error'||m.type()==='warning')console.error(`[page] ${m.text()}`);});
  const TYPES={gltf:'model/gltf+json',glb:'model/gltf-binary',bin:'application/octet-stream',jpg:'image/jpeg',png:'image/png',html:'text/html',json:'application/json'};
  await page.route('http://acx.local/**',async route=>{
   const url=new URL(route.request().url());
@@ -36,9 +36,9 @@ export async function openAcryllex(spec){
 }
 
 export async function stills(spec,outPath,times,scale=0.32,labels=null,cols=6){
- const {browser,page}=await openAcryllex(spec);
+ const {browser,page,errors}=await openAcryllex(spec);
  try{
-  if(times.length===1){await writeFile(outPath,Buffer.from(await page.evaluate(t=>window.acryllex.shot(t),times[0]),'base64'));return;}
+  if(times.length===1){const data=await page.evaluate(t=>window.acryllex.shot(t),times[0]);checkRenderErrors(errors);await writeFile(outPath,Buffer.from(data,'base64'));return;}
   const data=await page.evaluate(async([ts,scale,labels,maxCols])=>{
    const probe=new Image();await new Promise(r=>{probe.onload=r;probe.src='data:image/png;base64,'+window.acryllex.shot(ts[0],1);});
    const w=Math.round(probe.width*scale),h=Math.round(probe.height*scale),cols=Math.min(ts.length,maxCols),rows=Math.ceil(ts.length/cols);
@@ -50,29 +50,33 @@ export async function stills(spec,outPath,times,scale=0.32,labels=null,cols=6){
    }
    return sheet.toDataURL('image/png').split(',')[1];
   },[times,scale,labels,cols]);
-  await writeFile(outPath,Buffer.from(data,'base64'));
+  checkRenderErrors(errors);await writeFile(outPath,Buffer.from(data,'base64'));
  }finally{await browser.close();}
 }
 
 export async function renderVideo(spec,outPath,{fps=FPS,start=0,end}={}){
  if(!Number.isFinite(fps)||fps<1||fps>120||!Number.isFinite(start)||start<0)throw new Error('Invalid frame rate or start time');
- const {browser,page,info}=await openAcryllex(spec);
+ const {browser,page,info,errors}=await openAcryllex(spec);
  const duration=Math.min(end??info.duration,info.duration)-start;
  if(!Number.isFinite(duration)||duration<=0){await browser.close();throw new Error('Render range must intersect the video');}
  const frames=Math.ceil(duration*fps);
  const enc=spawn('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','image2pipe','-framerate',String(fps),'-i','pipe:0','-c:v','libx264','-preset','slow','-crf','14','-tune','grain','-pix_fmt','yuv420p','-r',String(fps),'-color_primaries','bt709','-color_trc','bt709','-colorspace','bt709','-movflags','+faststart',outPath],{stdio:['pipe','inherit','inherit']});
  const done=new Promise((res,rej)=>{enc.once('error',rej);enc.once('close',c=>c===0?res():rej(new Error(`ffmpeg exited ${c}`)));});
+ void done.catch(()=>{});
  try{
   const t0=Date.now();
   for(let f=0;f<frames;f+=10){
    const batch=await page.evaluate(([a,b,fps,start])=>{const out=[];for(let i=a;i<b;i++)out.push(window.acryllex.frame(start+i/fps));return out;},[f,Math.min(frames,f+10),fps,start]);
+   checkRenderErrors(errors);
    for(const b64 of batch)await new Promise((res,rej)=>enc.stdin.write(Buffer.from(b64,'base64'),e=>e?rej(e):res()));
    if(process.env.ACRYLLEX_PROGRESS&&f%90===0)console.error(`frame ${f}/${frames} (${((Date.now()-t0)/1000).toFixed(1)}s)`);
   }
   enc.stdin.end();await done;
- }finally{await browser.close();}
+ }catch(error){enc.stdin.destroy();enc.kill('SIGTERM');await done.catch(()=>{});throw error;}finally{await browser.close();}
  return {...info,duration,fps};
 }
+
+function checkRenderErrors(errors){if(errors.length)throw new Error(`GPU render failed: ${errors[0]}`);}
 
 if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  const [action,specPath,outPath,...args]=process.argv.slice(2);
