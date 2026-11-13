@@ -86,6 +86,8 @@ export interface SceneEvent {
  fxCount?:number;
  /** Point-cloud morph of the target into another object of the scene (declare that object with enter:"none"). */
  morph?:string;
+ /** How the morph looks: particles (swirling point cloud, default), blob (melts into a sphere that reshapes into the result), flip (card flip), implode (collapses to a point, bursts out as the result), scan (a scan line rewrites it), fade (dissolves through darkness). */
+ morphStyle?:'particles'|'blob'|'flip'|'implode'|'scan'|'fade';
  camera?:CameraMove;
  sfx?:string;
 }

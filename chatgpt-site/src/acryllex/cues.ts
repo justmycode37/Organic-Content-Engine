@@ -36,7 +36,7 @@ export function autoCues(spec:AcryllexSpec):AutoCue[]{
    if(e.show&&ENTER_SFX[e.show]){const [kind,gain]=ENTER_SFX[e.show]!;out.push({at:t,kind,gain,why:`show ${e.target}`});}
    if(e.hide&&EXIT_SFX[e.hide]){const [kind,gain]=EXIT_SFX[e.hide]!;out.push({at:t,kind,gain,why:`hide ${e.target}`});}
    if(e.fx&&FX_SFX[e.fx]){const [kind,gain]=FX_SFX[e.fx]!;const n=e.fx==='heartbeat'?Math.max(1,Math.round(Number(e.fxCount)||1)):1,len=Number(e.dur)>0?Number(e.dur):0.9;for(let r=0;r<n;r++)out.push({at:t+r*len,kind,gain,why:`${e.target} ${e.fx}`});}
-   if(e.morph)out.push({at:t,kind:'assemble',gain:0.8,why:`${e.target} morphs into ${e.morph}`});
+   if(e.morph){const style=e.morphStyle??'particles',len=Number(e.dur)||1;const kind=({blob:'ripple',flip:'swish',implode:'charge',scan:'scan',fade:'dissolve'} as Record<string,string>)[style]??'assemble';out.push({at:t,kind,gain:0.8,why:`${e.target} morphs into ${e.morph} (${style})`});if(style==='implode')out.push({at:t+len*0.5,kind:'shockwave',gain:0.9,why:'implode burst'});}
    if(e.camera)out.push({at:t,kind:'whoosh',gain:0.3,why:'camera move'});
   }
   for(const tx of s.text??[]){

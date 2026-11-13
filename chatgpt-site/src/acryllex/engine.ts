@@ -8,7 +8,7 @@ import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
 import {ditherThresholdGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
-import {fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,FX_DUR,REVEAL_DUR,type FxTrack,type FxUniforms} from './effects.ts';
+import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
 
@@ -339,8 +339,10 @@ class SceneRuntime {
    if(e.morph&&this.byId.has(e.morph)&&e.morph!==e.target){const b=this.byId.get(e.morph)!;const len=Math.max(0.25,Number(e.dur)||1.0);
     // B takes A's place: same spot, resting on the same level
     const pa=(o.moves.length?o.moves[o.moves.length-1]!.to:o.base).clone();const bottom=o.grounded?pa.y:pa.y-this.ext(o).y;if(!b.spec.pos)b.base.set(pa.x,b.grounded?bottom:bottom+this.ext(b).y,pa.z);
-    o.fx.push({kind:'morph',out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:'morph-in',out:false,t0:t,t1:t+len});}
-   if(e.fx){const runs=clamp(Math.round(Number(e.fxCount)||1),1,8),one=Number(e.dur)>0?clamp(Number(e.dur),0.1,6):FX_DUR[e.fx]??0.8;o.effects.push({kind:e.fx,t0:t,t1:t+one*runs,from:e.fxFrom??'front',amount:clamp(Number(e.fxAmount)||1,0.1,3),count:runs});}
+    const style=e.morphStyle??'particles';
+    if(style==='particles'){o.fx.push({kind:'morph',out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:'morph-in',out:false,t0:t,t1:t+len});}
+    else{if(style==='blob'){densify(o.meshes);densify(b.meshes);}o.fx.push({kind:`morph:${style}`,out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:`morph:${style}:in`,out:false,t0:t,t1:t+len,partner:o});}}
+   if(e.fx){const runs=clamp(Math.round(Number(e.fxCount)||1),1,8),one=Number(e.dur)>0?clamp(Number(e.dur),0.1,6):FX_DUR[e.fx]??0.8;if(e.fx==='shockwave'||e.fx==='ripple')densify(o.meshes);o.effects.push({kind:e.fx,t0:t,t1:t+one*runs,from:e.fxFrom??'front',amount:clamp(Number(e.fxAmount)||1,0.1,3),count:runs});}
    if(e.show)o.fx.push({kind:e.show,out:false,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.show))});
    if(e.hide)o.fx.push({kind:e.hide,out:true,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.hide))});
   }
@@ -416,7 +418,7 @@ class SceneRuntime {
     if(has('pos'))p.fromArray(v.pos);if(has('rot'))rot.set(...v.rot.map(deg) as [number,number,number]);if(has('scale'))scale=v.scale;
    }
    // entrance / exit effects
-   let rv:{kind:string;k:number}|null=null;
+   let rv:{kind:string;k:number}|null=null;let mo:{style:string;k:number;inbound:boolean;partner:Obj}|null=null;
    let reveal=1,vis=true,parts=0,partsOut=false,partsK=0,wipe=1;let wipeAxis:'y'|'left'|'right'='y';let morphTo:Obj|undefined;
    const first=o.fx.find(f=>!f.out);
    if(first&&t<first.t0)vis=false;
@@ -440,7 +442,7 @@ class SceneRuntime {
       case 'wipe-up':wipe=interpolate(kk,f.easing);break;
       case 'wipe-left':wipe=interpolate(kk,f.easing);wipeAxis='left';break;
       case 'wipe-right':wipe=interpolate(kk,f.easing);wipeAxis='right';break;
-      default:if(f.kind in REVEAL_DUR)rv={kind:f.kind,k:kk};
+      default:if(f.kind in REVEAL_DUR)rv={kind:f.kind,k:kk};else if(f.kind.startsWith('morph:')&&f.partner)mo={style:f.kind.split(':')[1]!,k:kk,inbound:true,partner:f.partner};
      }
     }else{
      switch(f.kind){
@@ -451,10 +453,11 @@ class SceneRuntime {
       case 'fall':p.y-=h*3*ease.in(kk);rot.z+=kk*0.8;break;
       case 'slide-left':p.x-=this.frameWidth*ease.in(kk);break;
       case 'slide-right':p.x+=this.frameWidth*ease.in(kk);break;
-      default:if(f.kind in REVEAL_DUR)rv={kind:f.kind,k:kk};
+      default:if(f.kind in REVEAL_DUR)rv={kind:f.kind,k:kk};else if(f.kind.startsWith('morph:')&&f.partner)mo={style:f.kind.split(':')[1]!,k:kk,inbound:false,partner:f.partner};
      }
     }
    }
+   if(mo){const mp=morphPose(mo.style,mo.k,mo.inbound);if(!mp.visible)reveal=0;scale*=mp.scale;rot.y+=mp.rotY;}
    let fxScale:THREE.Vector3|null=null;
    if(o.effects.length){const span=Math.max(o.size.x,o.size.y,o.size.z)*scale;const fp=fxPose(o.effects,t,span);p.add(fp.pos);rot.x+=fp.rot.x;rot.y+=fp.rot.y;rot.z+=fp.rot.z;fxScale=fp.scale;}
    o.outer.position.copy(p);o.outer.rotation.copy(rot);o.outer.scale.setScalar(Math.max(1e-4,scale));if(fxScale)o.outer.scale.multiply(fxScale);
@@ -471,7 +474,9 @@ class SceneRuntime {
    else if(o.mats[0]?.clippingPlanes?.length)for(const m of o.mats)m.clippingPlanes=[];
    o.inner.visible=vis&&reveal>0.002;
    const fxOn=o.effects.some(f=>t>=f.t0&&t<f.t1);
-   if(fxOn||rv){o.outer.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(o.inner);fxSurface(fxOn?o.effects:[],t,o.fxU,box);resetReveal(o.fxU);if(rv)fxReveal(rv.kind,rv.k,o.fxU,box);o.fxDirty=true;}
+   if(fxOn||rv||mo){o.outer.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(o.inner);fxSurface(fxOn?o.effects:[],t,o.fxU,box);resetReveal(o.fxU);if(rv)fxReveal(rv.kind,rv.k,o.fxU,box);
+    if(mo){mo.partner.outer.updateMatrixWorld(true);const pb=new THREE.Box3().setFromObject(mo.partner.inner);morphSurface(mo.style,mo.k,mo.inbound,o.fxU,mo.inbound?pb:box,box.clone().union(pb));}
+    o.fxDirty=true;}
    else if(o.fxDirty){fxSurface([],t,o.fxU,new THREE.Box3());resetReveal(o.fxU);o.fxDirty=false;}
    if(parts===2&&morphTo){this.ensureParticles(o);this.ensureParticles(morphTo);this.drawMorph(o,morphTo,partsK);}
    else if(parts){this.ensureParticles(o);this.drawParticles(o,partsK,partsOut,t);}else if(o.particles)o.particles.mesh.visible=false;
