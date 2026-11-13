@@ -29,6 +29,32 @@ test('anatomical bodies contain separate skinned meshes with valid normalized we
  }
  assert.notDeepEqual(bodies[0],bodies[1],'Female anatomy must use its own mesh');
 });
+test('authored human correctives reproduce shipped assets from unchanged pinned base data',async()=>{
+ const {gunzipSync,gzipSync}=await import('node:zlib');
+ const {parseGLB,encodeGLB,applyHumanCorrectives,sha256}=await import('./acryllex/repack-human-correctives.mjs');
+ for(const sex of ['male','female']){
+  const shipped=await readFile(new URL(`../src/acryllex/assets/humans/human-${sex}.glb`,import.meta.url));
+  const payloadBytes=await readFile(new URL(`../src/acryllex/assets/humans/human-${sex}-fields.json.gz`,import.meta.url));
+  const payload=JSON.parse(gunzipSync(payloadBytes)),output=parseGLB(shipped);
+  const base=encodeGLB(Buffer.from(payload.baseJsonChunk,'base64'),output.bin.subarray(0,payload.baseBinaryBytes)),original=parseGLB(base);
+  assert.equal(sha256(base),payload.baseSHA256);assert.deepEqual(applyHumanCorrectives(base,payloadBytes),shipped);
+  const body=output.doc.meshes.find(m=>m.name==='Body'),baseBody=original.doc.meshes.find(m=>m.name==='Body');
+  assert.deepEqual(body.primitives[0].attributes,baseBody.primitives[0].attributes);
+  assert.deepEqual(output.doc.skins,original.doc.skins);assert.deepEqual(output.doc.nodes,original.doc.nodes);
+  assert.deepEqual(output.doc.asset.extras.recipe,original.doc.asset.extras.recipe);
+  const config=body.extras.humanPoseCorrectives;
+  assert.equal(config.version,1);assert.equal(config.driver,'anatomical-contact-v1');
+  assert.equal(config.targets.length,50);assert.equal(body.primitives[0].targets.length,config.targets.length);
+  for(const target of body.primitives[0].targets)for(const name of ['POSITION','NORMAL']){
+   const accessor=output.doc.accessors[target[name]];
+   assert.equal(accessor.componentType,5126);assert.equal(accessor.type,'VEC3');
+   assert.equal(accessor.count,output.doc.accessors[body.primitives[0].attributes.POSITION].count);
+  }
+  const wrong=Buffer.from(base);wrong[wrong.length-1]^=1;
+  assert.throws(()=>applyHumanCorrectives(wrong,payloadBytes),/pinned base/);
+  assert.throws(()=>applyHumanCorrectives(base,gzipSync(JSON.stringify({...payload,outputSHA256:'wrong'}))),/authored output/);
+ }
+});
 test('spec schema and content checks',async()=>{const {specSchema,specProblems}=await import('../src/acryllex/schema.ts');const c=await loadCatalog();assert.ok(specSchema.safeParse(spec).success);assert.deepEqual(specProblems(spec,c.has),[]);
  assert.ok(specSchema.safeParse({...spec,look:{palette:{blue:'#1234c8'}}}).success);
  assert.ok(specSchema.safeParse({...spec,look:{textColor:'#c5c5c5'}}).success);
@@ -272,7 +298,13 @@ test('removed effects, entrances, transitions and morph styles are rejected',asy
  for(const morphStyle of ['implode','scan'])assert.ok(!tryScene(sc=>{sc.objects.push({id:'b',model:'led',enter:'none'});sc.events=[{at:'seven',target:'a',morph:'b',morphStyle}];}),morphStyle);
 });
 
-test('male and female rigs preserve proportions, posed skin and independent material controls',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,18);});
+test('male and female rigs preserve proportions, posed skin and independent material controls',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,30);});
+test('human correction adapter leaves assets without corrective metadata untouched',async()=>{
+ const {createPoseCorrectives}=await import('../src/acryllex/models/human-correctives.ts');
+ const rig=new Proxy({},{get(){throw new Error('No-metadata actor read the rig');}});
+ const adapter=createPoseCorrectives(rig,new THREE.Group());
+ assert.equal(adapter.available,false);assert.equal(adapter.update(),undefined);assert.equal(adapter.update(false),undefined);
+});
 
 test('authored limb velocity preserves an earlier reach when later keys are refined',async()=>{
  const {sampleChannel,parseTrack,TrackPlayer}=await import('../src/acryllex/models/human-motion.ts');

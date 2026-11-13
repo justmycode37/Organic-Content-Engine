@@ -31,6 +31,50 @@ try{
  await preloadAssets({'human-male':'test/male.glb','human-female':'test/female.glb','human-xbot':'test/male.glb'});
  globalThis.fetch=originalFetch;
  for(const id of ['human-male','human-female']){
+  const corrected=body(id,{ground:false,poseCorrectives:true}),disabled=body(id,{ground:false,poseCorrectives:false}),defaultSkin=body(id,{ground:false});
+  const staticPose=name=>({from:name,to:name,k:1,time:.6,travel:0,speed:0});
+  corrected.update({},.6,staticPose('type'));disabled.update({},.6,staticPose('type'));defaultSkin.update({},.6,staticPose('type'));
+  assert.deepEqual(skinPoints(defaultSkin),skinPoints(disabled),'Corrective fields must remain opt-in');
+  const correctionSkin=skinPoints(corrected),baseSkin=skinPoints(disabled);
+  let maximumCorrection=0;for(let i=0;i<baseSkin.length;i+=3)maximumCorrection=Math.max(maximumCorrection,Math.hypot(...[0,1,2].map(k=>correctionSkin[i+k]-baseSkin[i+k])));
+  assert.ok(maximumCorrection>.001&&maximumCorrection<.1,'Public pose corrections must change the actual bent skin within their authored scale');
+  const transforms=p=>p.rig.nodes.filter(n=>n.o.isBone).flatMap(n=>[...n.o.position,...n.o.quaternion,...n.o.scale]);
+  assert.deepEqual(transforms(corrected),transforms(disabled),'Skin corrections must not change the skeleton');
+  disabled.root.traverse(o=>{if(o.isSkinnedMesh)assert.ok((o.morphTargetInfluences??[]).every(w=>w===0));});
+  checks.push(id+': public correction control changes real bent skin while preserving the skeleton and disabled base');
+  corrected.update({},.6,staticPose('crouch'));assert.deepEqual(skinPoints(disabled),baseSkin,'Posing one corrective instance changed another body');
+  corrected.update({},.6,staticPose('type'));assert.deepEqual(skinPoints(corrected),correctionSkin,'Reverse updates changed corrected skin');
+  checks.push(id+': corrected public updates preserve independent instances and reverse actual skin');
+  const grounded=body(id);
+  for(const name of ['sit','type','type-lean','crouch']){
+   grounded.update({},.6,staticPose(name));assert.ok(Math.abs(footMinimum(grounded))<1e-6,'Neutral static skin must reach its measured floor');
+   for(const side of ['Left','Right']){
+    const knee=grounded.rig.nodes[grounded.rig.need(side+'Leg')].o.quaternion,e=new THREE.Euler().setFromQuaternion(knee,'XYZ');
+    assert.ok(Math.abs(e.x*180/Math.PI-(name==='crouch'?130:88))<1e-5&&Math.abs(e.y)+Math.abs(e.z)<1e-6,'Floor placement twisted a static knee');
+   }
+  }
+  const proportional=body(id,{height:1.2,foot:.9,headScale:1.12}),proportionalFloor=footMinimum(proportional);
+  for(const name of ['type','crouch']){proportional.update({},.6,staticPose(name));assert.ok(Math.abs(footMinimum(proportional)-proportionalFloor)<1e-6,'Static floor lost uniform stature/foot controls');}
+  checks.push(id+': default neutral seated/crouched poses settle actual soles without knee-plane IK');
+  for(const k of [0,.25,.5,.75,1]){
+   grounded.update({},.6,{...staticPose('type'),from:'type',to:'crouch',k});
+   const skin=skinPoints(grounded);assert.ok(Math.abs(footMinimum(grounded))<1e-6);
+   grounded.update({},.6,staticPose('sleep'));grounded.update({},.6,{...staticPose('type'),from:'type',to:'crouch',k});
+   assert.deepEqual(skinPoints(grounded),skin,'Static floor reads a previous lying/body transform');
+  }
+  checks.push(id+': static local blends and actual floor placement seek independently of prior lying transforms');
+  const height=id==='human-male'?1.8:1.65;
+  for(const delta of [.1,-.05]){
+   const edited=body(id,{poseAdjustments:{type:{y:-.44+delta}}});edited.update({},.6,staticPose('type'));
+   assert.ok(Math.abs(footMinimum(edited)-delta*height/1.84)<1e-6,'Static placement erased an explicit authored y delta');
+  }
+  checks.push(id+': explicit static y edits retain their height-scaled delta after floor placement');
+  const legacy=body(id,{staticPoseBase:'idle',staticFloor:'none'});
+  for(const name of ['stand','walk','unknown-pose']){
+   const p={...staticPose(name),travel:.7,speed:name==='walk'?1:0};grounded.update({},.6,p);legacy.update({},.6,p);
+   assert.deepEqual(skinPoints(grounded),skinPoints(legacy),'Neutral static defaults altered mocap or idle fallback');
+  }
+  checks.push(id+': pure mocap and unknown idle fallback retain their exact legacy skin');
   const normal=body(id),scaled=body(id,{headScale:1.12,foot:.9});
   const regions=body(id,{headTone:.55,regionTones:{torso:1.15,pelvis:.85,legs:.8}}),unity=body(id,{regionTones:{torso:1,pelvis:1,legs:1}}),albedo=[];
   assert.deepEqual(skinPoints(regions),skinPoints(normal),'Material regions must not alter the actual skin');
