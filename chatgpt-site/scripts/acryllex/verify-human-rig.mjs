@@ -65,6 +65,17 @@ try{
   assert.deepEqual(skinPoints(normal),untouched,'One posed instance changed another body');
   checks.push(id+': separate instances retain their original skin');
   scaled.rig.reset();scaled.rig.applyPose(emptyPose());scaled.rig.solve();const target=scaled.rig.pos('RightArm').clone().add(new THREE.Vector3(0,-.22,.17));scaled.rig.ik('Right','arm',target,{pole:target.clone().add(new THREE.Vector3(0,-.2,-.15))});scaled.rig.write();assert.ok(scaled.rig.pos('RightHand').distanceTo(target)<.001,JSON.stringify({id,error:scaled.rig.pos('RightHand').distanceTo(target),target:target.toArray(),actual:scaled.rig.pos('RightHand').toArray()}));checks.push(id+': reachable IK target is met within1mm with fixed arm lengths');
+  const upper=scaled.rig.restPos('RightArm').distanceTo(scaled.rig.restPos('RightForeArm')),fore=scaled.rig.restPos('RightForeArm').distanceTo(scaled.rig.restPos('RightHand')),reach=upper+fore;
+  function nearExtension(distance,softness){
+   const rig=scaled.rig;rig.reset();rig.applyPose(emptyPose());rig.solve();const origin=rig.pos('RightArm').clone(),aim=origin.clone().addScaledVector(new THREE.Vector3(0,-.2,1).normalize(),distance);
+   rig.ik('Right','arm',aim,{softness,pole:origin.clone().add(new THREE.Vector3(.1,-1,0))});rig.write();scaled.root.updateMatrixWorld(true);
+   assert.ok(Math.abs(rig.pos('RightArm').distanceTo(rig.pos('RightForeArm'))-upper)<1e-5);assert.ok(Math.abs(rig.pos('RightForeArm').distanceTo(rig.pos('RightHand'))-fore)<1e-5);
+   const actual=rig.nodes[rig.need('RightHand')].o.getWorldPosition(new THREE.Vector3()),expected=scaled.root.localToWorld(rig.pos('RightHand').clone());assert.ok(actual.distanceTo(expected)<1e-5);
+   return {actual,skin:skinPoints(scaled)};
+  }
+  for(const delta of [-.02,-.006,0,.006,.02]){const hard=nearExtension(reach+delta,0),soft=nearExtension(reach+delta,.012);assert.ok(hard.actual.distanceTo(soft.actual)<=3*.012/16+1e-5,'Soft reach exceeded its actual endpoint budget');}
+  const softSkin=nearExtension(reach,.012).skin;nearExtension(reach+.02,.012);assert.deepEqual(nearExtension(reach,.012).skin,softSkin,'Reverse soft reach changed the actual deformed skin');
+  checks.push(id+': soft reach preserves actual fixed-length joints, bounded endpoints and reverse skin posing');
  }
  return {passed:checks.length,checks};
 }finally{globalThis.fetch=originalFetch;if(originalProgress===undefined)delete globalThis.ProgressEvent;else globalThis.ProgressEvent=originalProgress;}
