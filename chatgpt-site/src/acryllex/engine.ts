@@ -8,6 +8,7 @@ import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
 import {ditherThresholdGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
+import {fxUniforms,patchMaterial,fxPose,fxSurface,FX_DUR,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
 
@@ -101,6 +102,7 @@ interface Obj {
  particles?:{mesh:THREE.InstancedMesh;target:Float32Array;scatter:Float32Array;n:number;cube:number};
  posable:boolean;
  clip:THREE.Plane;
+ effects:FxTrack[];fxU:FxUniforms;
 }
 
 function ctxFor(def:ModelDef,o:SceneObject,hue:THREE.Color,palette:Partial<Record<Hue,string>>):ModelCtx{
@@ -182,8 +184,10 @@ class SceneRuntime {
    // origin:'model' keeps the model's own coordinates (explicit cameras, environments); default recentres on its bounds
    if(o.origin==='model')inner.position.set(0,0,0);else inner.position.set(-center.x,grounded?-box.min.y:-center.y,-center.z);
    const meshes:THREE.Mesh[]=[];built.root.traverse(c=>{if((c as THREE.Mesh).isMesh)meshes.push(c as THREE.Mesh);});
+   const fxU=fxUniforms(),owner={};
+   for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(x=>patchMaterial(x,fxU,owner));else m.material=patchMaterial(m.material,fxU,owner);}
    const mats=[...new Set(meshes.map(m=>m.material as THREE.MeshStandardMaterial))];
-   const obj:Obj={spec:o,def,built,outer,inner,meshes,mats,baseColors:mats.map(m=>m.color.clone()),size,center,grounded,base:new THREE.Vector3(),baseRot:new THREE.Euler(...((o.rot??[0,0,0]).map(v=>deg(Number(v)||0)) as [number,number,number])),baseScale:clamp(Number(o.scale)||1,0.01,500),moves:[],turns:[],scales:[],controls:new Map(),ctrl0,hues:[],fx:[],poses:[],yaw:[],posable,clip:new THREE.Plane(new THREE.Vector3(0,-1,0),0)};
+   const obj:Obj={spec:o,def,built,outer,inner,meshes,mats,baseColors:mats.map(m=>m.color.clone()),size,center,grounded,base:new THREE.Vector3(),baseRot:new THREE.Euler(...((o.rot??[0,0,0]).map(v=>deg(Number(v)||0)) as [number,number,number])),baseScale:clamp(Number(o.scale)||1,0.01,500),moves:[],turns:[],scales:[],controls:new Map(),ctrl0,hues:[],fx:[],poses:[],yaw:[],posable,clip:new THREE.Plane(new THREE.Vector3(0,-1,0),0),effects:[],fxU};
    this.objs.push(obj);this.byId.set(o.id,obj);
   }
   this.place();
@@ -321,6 +325,7 @@ class SceneRuntime {
     // B takes A's place: same spot, resting on the same level
     const pa=(o.moves.length?o.moves[o.moves.length-1]!.to:o.base).clone();const bottom=o.grounded?pa.y:pa.y-this.ext(o).y;if(!b.spec.pos)b.base.set(pa.x,b.grounded?bottom:bottom+this.ext(b).y,pa.z);
     o.fx.push({kind:'morph',out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:'morph-in',out:false,t0:t,t1:t+len});}
+   if(e.fx){const runs=clamp(Math.round(Number(e.fxCount)||1),1,8),one=Number(e.dur)>0?clamp(Number(e.dur),0.1,6):FX_DUR[e.fx]??0.8;o.effects.push({kind:e.fx,t0:t,t1:t+one*runs,from:e.fxFrom??'front',amount:clamp(Number(e.fxAmount)||1,0.1,3),count:runs});}
    if(e.show)o.fx.push({kind:e.show,out:false,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.show))});
    if(e.hide)o.fx.push({kind:e.hide,out:true,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.hide))});
   }
@@ -432,7 +437,9 @@ class SceneRuntime {
      }
     }
    }
-   o.outer.position.copy(p);o.outer.rotation.copy(rot);o.outer.scale.setScalar(Math.max(1e-4,scale));
+   let fxScale:THREE.Vector3|null=null;
+   if(o.effects.length){const span=Math.max(o.size.x,o.size.y,o.size.z)*scale;const fp=fxPose(o.effects,t,span);p.add(fp.pos);rot.x+=fp.rot.x;rot.y+=fp.rot.y;rot.z+=fp.rot.z;fxScale=fp.scale;}
+   o.outer.position.copy(p);o.outer.rotation.copy(rot);o.outer.scale.setScalar(Math.max(1e-4,scale));if(fxScale)o.outer.scale.multiply(fxScale);
    o.outer.visible=vis;
    for(const m of o.mats){m.opacity*=clamp(reveal);}
    // Local wipes follow the authored model instead of expanding a world-aligned bounding box.
@@ -445,6 +452,8 @@ class SceneRuntime {
     for(const m of o.mats)m.clippingPlanes=[o.clip];}
    else if(o.mats[0]?.clippingPlanes?.length)for(const m of o.mats)m.clippingPlanes=[];
    o.inner.visible=vis&&reveal>0.002;
+   if(o.effects.some(f=>t>=f.t0&&t<f.t1)){o.outer.updateMatrixWorld(true);fxSurface(o.effects,t,o.fxU,new THREE.Box3().setFromObject(o.inner));}
+   else if(o.effects.length)fxSurface([],t,o.fxU,new THREE.Box3());
    if(parts===2&&morphTo){this.ensureParticles(o);this.ensureParticles(morphTo);this.drawMorph(o,morphTo,partsK);}
    else if(parts){this.ensureParticles(o);this.drawParticles(o,partsK,partsOut,t);}else if(o.particles)o.particles.mesh.visible=false;
   }

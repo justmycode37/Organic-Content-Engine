@@ -10,6 +10,10 @@ export type Vec3=[number,number,number];
 
 export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'none';
 export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'none';
+/** One-shot object effects (see effects.ts). */
+export type FxKind='heartbeat'|'shockwave'|'ripple'|'shake'|'squash'|'recoil'|'hop'|'glint'|'scan'|'charge'|'flicker'|'glitch';
+/** Where a shock wave / ripple starts or where a hit comes from: a side of the object, or a direction from its centre (-1..1 per axis). */
+export type FxFrom='top'|'bottom'|'left'|'right'|'front'|'back'|'center'|Vec3;
 export type Idle='none'|'turn'|'spin'|'spin-slow'|'float'|'pulse'|'sway'|'wobble'|'orbit';
 
 export interface ObjectKeyframe {
@@ -74,6 +78,12 @@ export interface SceneEvent {
  hue?:Hue;
  show?:Enter;
  hide?:Exit;
+ /** One-shot effect on the target: heartbeat (pounds like a heart), shockwave (a bright wave runs over the surface as it absorbs a hit), ripple, shake, squash, recoil, hop, glint (light sweep), scan (scan line), charge (powers up and releases), flicker, glitch. `dur` is one run; `fxCount` repeats it. */
+ fx?:FxKind;
+ fxFrom?:FxFrom;
+ /** Strength multiplier (default 1). */
+ fxAmount?:number;
+ fxCount?:number;
  /** Point-cloud morph of the target into another object of the scene (declare that object with enter:"none"). */
  morph?:string;
  camera?:CameraMove;

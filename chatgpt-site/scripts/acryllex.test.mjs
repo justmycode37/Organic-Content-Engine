@@ -150,3 +150,12 @@ tintHeadAlbedo(a,.55);assert.notEqual(a.geometry,geometry,'Tint mutates a cached
 const colors=a.geometry.getAttribute('color');for(const [i,expected] of [ .55,.775,1,.8875].entries())for(let j=0;j<3;j++)assert.ok(Math.abs(colors.getComponent(i,j)-expected)<1e-6,'Head/neck bone weights do not blend gray albedo correctly');
 
 });
+test('object effects validate, play and add sound cues',async()=>{
+ const {specSchema,specProblems}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {fxPose,FX_KINDS}=await import('../src/acryllex/effects.ts');
+ const s=structuredClone(spec);s.scenes[0].events=[{at:'seven',target:'a',fx:'heartbeat',fxCount:2},{at:'ten',target:'a',fx:'shockwave',fxFrom:'top',fxAmount:1.5}];
+ assert.ok(specSchema.safeParse(s).success);assert.deepEqual(specProblems(s),[]);
+ const bad=structuredClone(s);bad.scenes[0].events[0].fx='explode';assert.ok(!specSchema.safeParse(bad).success);
+ const cues=autoCues(s);assert.equal(cues.filter(c=>c.kind==='heartbeat').length,2);assert.ok(cues.some(c=>c.kind==='shockwave'));
+ for(const kind of FX_KINDS){const track=[{kind,t0:0,t1:1,from:'front',amount:1,count:1}];const after=fxPose(track,1.2,1);assert.deepEqual(after.scale.toArray(),[1,1,1]);assert.deepEqual(after.pos.toArray(),[0,0,0]);}
+ const beat=fxPose([{kind:'heartbeat',t0:0,t1:.9,from:'front',amount:1,count:1}],.08,1);assert.ok(beat.scale.x>1.1);
+});
