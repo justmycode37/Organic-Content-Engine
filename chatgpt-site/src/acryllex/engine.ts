@@ -471,7 +471,9 @@ class SceneRuntime {
    o.inner.visible=vis&&reveal>0.002;
    const fxOn=o.effects.some(f=>t>=f.t0&&t<f.t1);
    if(fxOn||rv||mo){o.outer.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(o.inner);fxSurface(fxOn?o.effects:[],t,o.fxU,box);resetReveal(o.fxU);if(rv)fxReveal(rv.kind,rv.k,o.fxU,box);
-    if(mo){mo.partner.outer.updateMatrixWorld(true);const pb=new THREE.Box3().setFromObject(mo.partner.inner);morphSurface(mo.style,mo.k,mo.inbound,o.fxU,mo.inbound?pb:box);}
+    if(mo){mo.partner.outer.updateMatrixWorld(true);
+     // exact vertex bounds: a turning object's loose box swells and would make the blob ball pulse in size
+     const own=new THREE.Box3().setFromObject(o.inner,true),pb=new THREE.Box3().setFromObject(mo.partner.inner,true);morphSurface(mo.style,mo.k,mo.inbound,o.fxU,mo.inbound?pb:own);}
     o.fxDirty=true;}
    else if(o.fxDirty){fxSurface([],t,o.fxU,new THREE.Box3());resetReveal(o.fxU);o.fxDirty=false;}
    if(parts===2&&morphTo){this.ensureParticles(o);this.ensureParticles(morphTo);this.drawMorph(o,morphTo,partsK);}

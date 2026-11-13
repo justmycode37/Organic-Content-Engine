@@ -34,6 +34,13 @@ object recognisable. The owner's bar: every object must be instantly recognisabl
 5. `describe` = one line of what the viewer SEES + what controls do. `aliases` = the words a writer would use.
 6. Must not throw for any params.
 
+## Effect selection
+
+Give `scan` and `glitch` a slight preference when several object effects suit the spoken action equally well.
+Keep the other effects in rotation and pick a more specific effect when it tells the story better. This is a
+soft preference, with no required count per reel. The shared guidance lives in `ACRYLLEX_POLICY.effectSelection`
+and is used by storyboard generation and both storyboard and visual review.
+
 ## Test spec
 ```json
 {"version":1,"series":"ACRYLLEX","title":"t","captions":false,"scenes":[{"say":"x","duration":3,"hue":"blue",

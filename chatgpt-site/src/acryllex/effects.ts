@@ -38,6 +38,7 @@ uniform vec3 uFxO;uniform float uFxR;uniform float uFxW;uniform float uFxA;unifo
 uniform vec3 uFxSD;uniform float uFxSP;uniform float uFxSW;uniform float uFxST;uniform float uMbK;
 uniform float uDsA;uniform float uDsW;uniform float uDsS;uniform float uDsB;uniform float uDsC;uniform float uDsT;uniform float uDsV;
 varying vec3 vFxWp;
+float fxHash2(vec2 p){vec3 p3=fract(vec3(p.xyx)*.1031);p3+=dot(p3,p3.yzx+33.33);return fract((p3.x+p3.y)*p3.z);}
 float fxHash3(vec3 p){return fract(sin(dot(p,vec3(12.9898,78.233,37.719)))*43758.5453);}
 float fxSweep(vec3 p){float sx=(dot(p,uFxSD)-uFxSP)/max(uFxSW,1e-5);return exp(-sx*sx)+(sx<0.?uFxST*exp(sx/6.):0.);}
 /** How strongly the dots at p are disrupted: whole object, inside the wave band, the sweep band, mid-morph. */
@@ -69,7 +70,7 @@ vec3 fxDelta=vec3(0.);
  if(uDsV>0.){
   float wf=0.;if(uFxMode>0){vec3 r=wp-uFxO;wf=fxProfile((length(r)-uFxR)/max(uFxW,1e-5));}
   float z=fxZone(wp,wf);
-  if(z>.01){fxOn=true;vec3 cell=floor(wp/max(uDsC*.6,1e-5));d+=wn*(fxHash3(cell+uDsT*1.37)-.5)*2.*uDsV*z;}
+  if(z>.01){fxOn=true;vec3 cell=floor(wp/max(uDsC*.28,1e-5));d+=wn*(fxHash3(cell+uDsT*1.37)-.5)*uDsV*z;}
  }
  if(uFxGl>0.){
   fxOn=true;float band=floor(wp.y/max(uFxGlB,1e-5));float h=fxHash(band*1.73+uFxT*7.1);
@@ -103,14 +104,16 @@ if(uFxMode>0&&uFxA+uFxG>0.){
  fxWaveGlow=uFxG*abs(f);
  if(uFxMode==1)fxWaveDim=clamp(uFxG*.6*exp(-(x+1.7)*(x+1.7)*.7),0.,.85);
 }
-// random tile disruption: chunky world-space cells drop out, spark or catch the light at random, re-rolled ~20x a second
+// random dot disruption: single dots drop out, flare or shift density at random, re-rolled ~20x a second
 if(uDsA+uDsW+uDsS+uDsB>0.){
  float z=fxZone(vFxWp,fxWaveF);
  if(z>.005){
-  vec3 cell=floor(vFxWp/max(uDsC,1e-5));float n=fxHash3(cell+uDsT*1.37),m=fxHash3(cell*1.7+uDsT*2.11+5.);
-  if(n<z*.42)fxDark=1.;else if(n>1.-z*.3)fxSpark=1.4+m;
-  vec3 jit=vec3(fxHash3(cell+11.1+uDsT),fxHash3(cell+23.7+uDsT),fxHash3(cell+31.3+uDsT))-.5;
-  normal=normalize(normal+jit*1.6*z);
+  // one cell = one output dot (SS render pixels), so the noise never forms blocks
+  vec2 dc=floor(gl_FragCoord.xy/3.);vec2 tk=uDsT*vec2(17.31,29.17);
+  float n=fxHash2(dc+tk),m=fxHash2(dc*1.37+tk+71.3);
+  float drop=step(n,z*.36),flare=step(1.-z*.26,n);
+  fxDark=max(drop,(1.-drop-flare)*z*m*.75);
+  fxSpark=flare*(1.1+m*1.6);
  }
 }
 `;
@@ -140,7 +143,7 @@ export function patchMaterial(mat:THREE.Material,u:FxUniforms,owner:object):THRE
    .replace('#include <opaque_fragment>','outgoingLight*=uFxDim*(1.-fxWaveDim)*(1.-fxDark);\n#include <opaque_fragment>');
  };
  const key=m.customProgramCacheKey.bind(m);
- m.customProgramCacheKey=()=>key()+'|acx-fx6';
+ m.customProgramCacheKey=()=>key()+'|acx-fx7';
  m.needsUpdate=true;
  return m;
 }
