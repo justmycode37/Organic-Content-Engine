@@ -1,6 +1,7 @@
 import type {ModelDef} from './types.ts';
 import {person} from './person.ts';
-import {ASSETS,findAsset,assetModel,importedMesh,footage} from '../assets.ts';
+import {humanMale,humanFemale} from './realistic-humans.ts';
+import {ASSETS,findAsset,assetModel,importedMesh,footage,waveFootage} from '../assets.ts';
 import * as tech from './tech.ts';
 import * as basic from './basic.ts';
 import * as biology from './biology.ts';
@@ -17,10 +18,12 @@ import * as objects from './objects.ts';
 import * as computing from './computing.ts';
 import * as reference from './reference.ts';
 import * as shapes from './shapes.ts';
+import * as fluids from './fluids.ts';
+import {fluidCache} from './fluid-cache.ts';
 
 /** Every model module exports ModelDefs; add new modules here. */
 // reference/shapes first so their ids win over older packs
-const MODULES:Record<string,unknown>[]=[{person,importedMesh,footage},reference,shapes,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
+const MODULES:Record<string,unknown>[]=[{person,humanMale,humanFemale,importedMesh,footage,waveFootage,fluidCache},reference,fluids,shapes,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
 
 export const MODELS:ModelDef[]=MODULES.flatMap(m=>Object.values(m).filter((v):v is ModelDef=>!!v&&typeof v==='object'&&'id' in v&&'build' in v&&typeof (v as ModelDef).build==='function'));
 

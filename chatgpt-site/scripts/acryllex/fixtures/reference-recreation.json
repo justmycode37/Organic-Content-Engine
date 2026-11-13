@@ -1093,7 +1093,7 @@
                 "floors": 5,
                 "buildDelay": 0.15379,
                 "buildSpeed": 0.31659,
-                "buildPower": 1.0
+                "buildPower": 1
               },
               {
                 "x": -1.4,
@@ -1108,7 +1108,7 @@
                 "floors": 4,
                 "buildDelay": 0.31001,
                 "buildSpeed": 0.38453,
-                "buildPower": 1.0
+                "buildPower": 1
               },
               {
                 "x": 0.1,
@@ -1122,7 +1122,7 @@
                 "columns": 8,
                 "buildDelay": 0.265,
                 "buildSpeed": 0.41214,
-                "buildPower": 1.0
+                "buildPower": 1
               },
               {
                 "x": 1.85,
@@ -1134,7 +1134,7 @@
                 "tiers": 1,
                 "fillDelay": 0.35,
                 "floors": 7,
-                "buildDelay": 0.0,
+                "buildDelay": 0,
                 "buildSpeed": 0.76917,
                 "buildPower": 3.5036
               },
@@ -1148,7 +1148,7 @@
                 "tiers": 1,
                 "fillDelay": 0.65,
                 "floors": 10,
-                "buildDelay": 0.0,
+                "buildDelay": 0,
                 "buildSpeed": 1.1406,
                 "buildPower": 7.95115
               },
@@ -1161,7 +1161,7 @@
                 "z": 0,
                 "tiers": 1,
                 "fillDelay": 0.9,
-                "buildDelay": 0.0,
+                "buildDelay": 0,
                 "buildSpeed": 1.19266,
                 "buildPower": 5.23141
               },
@@ -1176,7 +1176,7 @@
                 "fillDelay": 0.95,
                 "buildDelay": 0.19054,
                 "buildSpeed": 0.91396,
-                "buildPower": 8.0
+                "buildPower": 8
               },
               {
                 "x": 7.25,
@@ -1189,7 +1189,7 @@
                 "fillDelay": 0.95,
                 "buildDelay": 0.67859,
                 "buildSpeed": 0.49702,
-                "buildPower": 1.0
+                "buildPower": 1
               }
             ],
             "span": 16,
@@ -1665,7 +1665,7 @@
           "at": 2.208333333333332,
           "until": 4.3583333333333325,
           "erase": false,
-          "size": 106.0,
+          "size": 106,
           "cps": 80,
           "glitch": [
             2.208333333333332,
@@ -1811,13 +1811,13 @@
       "duration": 2.53,
       "camera": {
         "pos": [
-          -0.85,
-          3.72,
-          10
+          0,
+          0,
+          9.812557855452422
         ],
         "look": [
-          -0.25,
-          3.42,
+          0,
+          0,
           0
         ],
         "fov": 34,
@@ -1826,7 +1826,7 @@
       "objects": [
         {
           "id": "wave",
-          "model": "curl-wave",
+          "model": "wave-footage",
           "origin": "model",
           "pos": [
             0,
@@ -1837,17 +1837,17 @@
           "enterAt": 0.44,
           "idle": "none",
           "params": {
-            "form": "hybrid",
-            "waterGain": 1,
-            "lipGain": 0.9,
-            "tubeGain": 0.7,
-            "faceGain": 1.05,
-            "emission": 0.6,
-            "foamGain": 1.1,
-            "foamEmission": 0.55,
-            "foamSize": 1,
-            "lipShading": 0,
-            "streakWidth": 1
+            "sourceStart": 4,
+            "sourceDuration": 2.12,
+            "fps": 25,
+            "height": 6,
+            "monochrome": true,
+            "preserveAspect": true,
+            "blur": 0,
+            "timeOrigin": 0.58,
+            "mirrorX": true,
+            "asset": "ocean-breaker",
+            "sampleScale": 3
           },
           "keyframes": [
             {
@@ -1977,53 +1977,21 @@
         }
       ],
       "light": {
-        "dir": [
-          0.3,
-          0.8,
-          1
-        ],
-        "key": 0.35,
-        "ambient": 0.1,
+        "key": 0,
+        "fill": 0,
         "rim": 0,
-        "contrast": 0.9,
-        "exposure": 1.1,
-        "blackPoint": 0.01,
-        "whitePoint": 1.15,
-        "gamma": 0.65,
-        "inkLo": 0.35,
+        "ambient": 0,
+        "contrast": 1.5,
+        "exposure": 1.05,
+        "gamma": 1.05,
+        "blackPoint": 0.02,
+        "whitePoint": 0.95,
         "softness": 0,
-        "points": [
-          {
-            "pos": [
-              -1.2,
-              3.2,
-              0.1
-            ],
-            "intensity": 3.5,
-            "distance": 2.2,
-            "decay": 2
-          }
-        ]
+        "points": []
       },
-      "events": [
-        {
-          "at": 0,
-          "dur": 2.5,
-          "camera": {
-            "pos": [
-              -0.75,
-              3.42,
-              9.85
-            ],
-            "look": [
-              0.15,
-              3.12,
-              0
-            ],
-            "fov": 34
-          }
-        }
-      ]
+      "events": [],
+      "ground": false,
+      "ao": 0
     },
     {
       "say": "we've levelled up",
@@ -2220,13 +2188,13 @@
       "duration": 4.11,
       "camera": {
         "pos": [
-          0,
-          -0.55,
+          -0.2,
+          -1.4227400611881014,
           1.2
         ],
         "look": [
           0,
-          -0.55,
+          3.797672916222558,
           -10
         ],
         "fov": 70,
@@ -2247,31 +2215,232 @@
           "controls": {
             "fly": 0,
             "depth": 0,
-            "ceiling": 0
+            "ceiling": 0,
+            "floor": 0
           },
           "origin": "model",
           "params": {
-            "radius": 1.6,
+            "radius": 1.8679654322958712,
             "fog": 7,
-            "spacing": 2.6,
-            "direction": "backward",
-            "phase": -0.22229999999999972,
-            "exponent": 3,
+            "spacing": 1.6974682916859638,
+            "direction": "forward",
+            "phase": 0.08373824664362806,
+            "exponent": 2,
             "revealStart": 0.25,
             "fadePower": 0.45,
             "wallTone": 0.55,
-            "ratio": 1.04,
+            "ratio": 0.856546899817883,
             "sideWidth": 0.14,
             "sideLength": 1.2,
             "sideGlow": 0.1,
             "lampPower": 0,
             "sideAngle": 45,
-            "acceleration": 6.666,
-            "timeOrigin": 2.398,
-            "ceilingLength": 0.9,
+            "acceleration": 0,
+            "timeOrigin": 1.4,
+            "ceilingLength": 0.32,
             "floorLength": 0.6,
             "ribInset": 0.14,
-            "ribTone": 0.7
+            "ribTone": 0.7,
+            "ribs": false,
+            "sideLights": false,
+            "floorLight": false,
+            "wallRoughness": 0.425,
+            "wallMetalness": 0.25,
+            "ceilingPower": 1.6,
+            "ceilingInset": 0.15,
+            "ceilingWidth": 1.0887988715686343,
+            "floorRoughness": 0.5,
+            "floorMetalness": 0,
+            "ceilingDistance": 0,
+            "floorRatio": 0.9,
+            "ceilingCone": 178,
+            "ceilingPenumbra": 0.05,
+            "travelPath": [
+              [
+                2.2333335000000005,
+                0
+              ],
+              [
+                2.2733334999999997,
+                0.14621767612318357
+              ],
+              [
+                2.313333499999999,
+                0.5063078782985359
+              ],
+              [
+                2.3533335000000015,
+                1.42636775936886
+              ],
+              [
+                2.3933335000000007,
+                1.7331388324905375
+              ],
+              [
+                2.4333335,
+                2.612859985737106
+              ],
+              [
+                2.473333499999999,
+                2.9509846701593285
+              ],
+              [
+                2.5133335000000017,
+                3.7046219474151854
+              ],
+              [
+                2.553333500000001,
+                4.0922229692736645
+              ],
+              [
+                2.5933335,
+                4.552268563801924
+              ],
+              [
+                2.633333499999999,
+                5.354924344027216
+              ],
+              [
+                2.673333500000002,
+                5.779101423531104
+              ],
+              [
+                2.713333500000001,
+                6.785608271049493
+              ],
+              [
+                2.7533335,
+                7.2602669811337055
+              ],
+              [
+                2.7933334999999992,
+                7.8412784675678315
+              ],
+              [
+                2.833333500000002,
+                8.763043943644714
+              ],
+              [
+                2.873333500000001,
+                9.35727674281455
+              ],
+              [
+                2.9133335000000002,
+                10.381171135073446
+              ],
+              [
+                2.9533334999999994,
+                11.024523111215228
+              ],
+              [
+                2.993333500000002,
+                11.657553054913743
+              ],
+              [
+                3.0333335000000012,
+                12.770490242969855
+              ],
+              [
+                3.0733335000000004,
+                13.43302502039853
+              ],
+              [
+                3.1133334999999995,
+                14.680329466673859
+              ],
+              [
+                3.1933335000000014,
+                15.939720922087774
+              ],
+              [
+                3.2333335000000005,
+                17.255672044030938
+              ],
+              [
+                3.2733334999999997,
+                17.99164493145072
+              ],
+              [
+                3.313333499999999,
+                19.369982121401616
+              ],
+              [
+                3.3533335000000015,
+                20.16470157737028
+              ],
+              [
+                3.3933335000000007,
+                20.7777207213677
+              ],
+              [
+                3.4333335,
+                22.31647068392697
+              ],
+              [
+                3.473333499999999,
+                23.14362111739621
+              ],
+              [
+                3.5133335000000017,
+                24.743669569078936
+              ],
+              [
+                3.553333500000001,
+                25.53414189095032
+              ],
+              [
+                3.5933335,
+                27.147639763298702
+              ],
+              [
+                3.673333500000002,
+                28.780663326944545
+              ],
+              [
+                3.713333500000001,
+                30.448999083194174
+              ],
+              [
+                3.7533335,
+                31.23627220712632
+              ],
+              [
+                3.7933334999999992,
+                32.87445007513475
+              ],
+              [
+                3.833333500000002,
+                33.78593824999536
+              ],
+              [
+                3.873333500000001,
+                34.450518658661274
+              ],
+              [
+                3.9133335000000002,
+                36.00034188341812
+              ],
+              [
+                3.9533334999999994,
+                37.082423046217066
+              ],
+              [
+                3.993333500000002,
+                38.68906285921323
+              ]
+            ],
+            "ceilingSamples": 1,
+            "travelInterpolation": "pchip",
+            "travelExtrapolate": true,
+            "floorBeamPower": 60,
+            "floorBeamX": -0.12,
+            "floorBeamY": -0.8,
+            "floorBeamZ": 1,
+            "floorBeamTargetZ": -1,
+            "floorBeamCone": 12,
+            "ceilingOffset": 0.2,
+            "floorBeamConeY": 35,
+            "ceilingMountInset": 0.15
           },
           "enterDur": 0.8
         }
@@ -2341,25 +2510,14 @@
         "key": 0,
         "fill": 0,
         "rim": 0,
-        "ambient": 0.16,
+        "ambient": 0.13,
         "contrast": 1,
         "exposure": 1.9,
         "gamma": 1.2,
         "blackPoint": 0.05,
         "whitePoint": 0.75,
         "softness": 0.95,
-        "points": [
-          {
-            "pos": [
-              0,
-              0.325,
-              -0.95
-            ],
-            "intensity": 0.6,
-            "distance": 8,
-            "decay": 2
-          }
-        ]
+        "points": []
       },
       "events": [
         {
@@ -2379,10 +2537,30 @@
             "ceiling": 1
           },
           "easing": "linear"
+        },
+        {
+          "at": 1.4,
+          "dur": 1.2,
+          "target": "tun",
+          "set": {
+            "floor": 1
+          },
+          "easing": "linear"
+        },
+        {
+          "at": 3.22,
+          "dur": 0.81,
+          "target": "tun",
+          "set": {
+            "floor": 0
+          },
+          "easing": "linear"
         }
       ],
       "ao": 0.7,
-      "aoRadius": 0.12
+      "aoRadius": 0.12,
+      "motionFPS": 25,
+      "motionPhase": 0.0133335
     },
     {
       "say": "revisit first principles",

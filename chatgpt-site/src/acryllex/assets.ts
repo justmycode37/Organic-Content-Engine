@@ -2,27 +2,86 @@ import * as THREE from 'three';
 import {GLTFLoader,type GLTF} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import catalogJson from './assets/catalog.json' with {type:'json'};
+import {preloadMeshCaches} from './mesh-cache.ts';
+import {footageVariantKey} from './media-key.ts';
+import {resolveFootageParams} from './media-library.ts';
 import {defineModel,type ModelDef,type ModelCtx} from './models/types.ts';
 
 export interface AssetEntry {id:string;src:'polyhaven'|'three'|'url';url?:string;ph?:string;file?:string;name:string;tags:string[];cat?:string;desc?:string;size:number[];anim?:boolean}
 export const ASSETS=(catalogJson as {assets:AssetEntry[]}).assets;
 export const ASSET_BASE='http://acx.local/a/';
 const GLTFS=new Map<string,GLTF>();
-interface Footage {w:number;h:number;cols:number;rows:number;fps:number;frames:number;tex:THREE.Texture[]}
+interface FootageManifest {w:number;h:number;cols:number;rows:number;fps:number;frames:number;atlases:string[];[key:string]:unknown}
+interface Footage extends FootageManifest {tex:THREE.Texture[]}
 const FOOTAGE=new Map<string,Footage>();
+// Prepared variants may share decoded images, but never instance UV transforms.
+const FOOTAGE_LOADS=new Map<string,Promise<Footage>>();
+const FOOTAGE_LEGACY_MAPS=new Set<string>();
+
+function footageManifest(value:unknown):FootageManifest{
+ const m=value as FootageManifest|null;
+ if(!m||typeof m!=='object'||Array.isArray(m))throw new Error('invalid manifest');
+ for(const key of ['w','h','cols','rows','frames'] as const)if(!Number.isSafeInteger(m[key])||m[key]<=0)throw new Error(`invalid ${key}`);
+ if(typeof m.fps!=='number'||!Number.isFinite(m.fps)||m.fps<=0)throw new Error('invalid fps');
+ if(!Array.isArray(m.atlases)||!m.atlases.length||m.atlases.some(a=>typeof a!=='string'||!a.trim()))throw new Error('invalid atlases');
+ const per=m.cols*m.rows,capacity=per*m.atlases.length;
+ if(!Number.isSafeInteger(capacity)||!Number.isSafeInteger(m.w*m.cols)||!Number.isSafeInteger(m.h*m.rows)||m.frames>capacity)throw new Error('frame count or atlas dimensions exceed capacity');
+ return m;
+}
+
+async function loadFootage(path:string,loader:THREE.TextureLoader):Promise<Footage>{
+ let pending=FOOTAGE_LOADS.get(path);
+ if(!pending){
+  pending=(async()=>{
+   const tex:THREE.Texture[]=[];
+   try{
+    const response=await fetch(ASSET_BASE+path);
+    if(!response.ok)throw new Error(`manifest HTTP ${response.status}`);
+    const man=footageManifest(await response.json());
+    for(const atlas of man.atlases){
+     const t=await loader.loadAsync(ASSET_BASE+atlas);tex.push(t);
+     if(t.image.width!==man.w*man.cols||t.image.height!==man.h*man.rows)throw new Error(`atlas ${atlas} dimensions do not match manifest`);
+     t.magFilter=THREE.NearestFilter;t.minFilter=THREE.LinearFilter;t.generateMipmaps=false;t.colorSpace=THREE.NoColorSpace;t.repeat.set(1/man.cols,1/man.rows);
+    }
+    return {...man,tex};
+   }catch(err){for(const t of tex)t.dispose();throw new Error(`footage ${path}: ${err instanceof Error?err.message:String(err)}`);}
+  })();
+  FOOTAGE_LOADS.set(path,pending);
+  void pending.catch(()=>{if(FOOTAGE_LOADS.get(path)===pending)FOOTAGE_LOADS.delete(path);});
+ }
+ return pending;
+}
+
+/** Absolute clip sampling; only tiny arithmetic noise at a frame boundary is snapped. */
+export function footageFrameIndex(seconds:number,fps:number,count:number,loop=false){
+ if(!Number.isFinite(seconds)||!Number.isFinite(fps)||fps<=0||!Number.isSafeInteger(count)||count<1)throw new Error('footage: invalid sample time, fps or frame count');
+ if(!loop){
+  if(seconds<=0)return 0;
+  if(seconds>=(count-1)/fps)return count-1;
+  return Math.min(count-1,Math.floor(seconds*fps+1e-7));
+ }
+ const duration=count/fps;
+ if(!Number.isFinite(duration)||duration<=0)throw new Error('footage: invalid clip duration');
+ const frame=Math.floor((seconds%duration)*fps+1e-7);
+ return ((frame%count)+count)%count;
+}
 const norm=(s:string)=>s.toLowerCase().trim().replace(/[\s_]+/g,'-');
 const BY_ID=new Map<string,AssetEntry>();for(const a of ASSETS){BY_ID.set(norm(a.id),a);if(a.ph)BY_ID.set(norm(a.ph),a);}
 export function findAsset(id:string){return BY_ID.get(norm(String(id).replace(/^(ph|asset):/,'')))??null;}
 
 /** Load the glTFs the producer prepared (map id → path under the asset base). */
 export async function preloadAssets(paths:Record<string,string>){
+ await preloadMeshCaches(paths,ASSET_BASE);
  const loader=new GLTFLoader();
  const tl=new THREE.TextureLoader();
- for(const [id,path] of Object.entries(paths)){if(!id.startsWith('footage:')||FOOTAGE.has(id))continue;
-  try{const man=await (await fetch(ASSET_BASE+path)).json() as Omit<Footage,'tex'>&{atlases:string[]};
-   const tex=await Promise.all(man.atlases.map(async a=>{const t=await tl.loadAsync(ASSET_BASE+a);t.magFilter=THREE.NearestFilter;t.minFilter=THREE.LinearFilter;t.generateMipmaps=false;t.colorSpace=THREE.NoColorSpace;t.repeat.set(1/man.cols,1/man.rows);return t;}));
-   FOOTAGE.set(id,{...man,tex});}catch(err){console.warn(`footage ${id} failed`,err);}}
- await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')).map(async([id,path])=>{if(GLTFS.has(id))return;try{GLTFS.set(id,await loader.loadAsync(ASSET_BASE+path));}catch(err){console.warn(`asset ${id} failed`,err);}}));
+ const footagePaths=Object.entries(paths).filter(([id])=>id.startsWith('footage:'));
+ const loadedFootage=await Promise.all(footagePaths.map(async([id,path])=>[id,await loadFootage(path,tl)] as const));
+ for(const legacy of FOOTAGE_LEGACY_MAPS)if(footagePaths.some(([id])=>id.startsWith(legacy+':[')))FOOTAGE_LEGACY_MAPS.delete(legacy);
+ for(const [id,clip] of loadedFootage){
+  if(footagePaths.some(([key])=>key.startsWith(id+':[')))FOOTAGE_LEGACY_MAPS.delete(id);else FOOTAGE_LEGACY_MAPS.add(id);
+  FOOTAGE.set(id,clip);
+ }
+ await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')&&!id.startsWith('fluid-cache:')).map(async([id,path])=>{if(GLTFS.has(id))return;try{GLTFS.set(id,await loader.loadAsync(ASSET_BASE+path));}catch(err){console.warn(`asset ${id} failed`,err);}}));
 }
 export function gltf(id:string){return GLTFS.get(id);}
 
@@ -89,21 +148,43 @@ export const importedMesh=defineModel({
 
 /**
  * Footage layer: any video (stock clip, screen recording, a render from another tool) shown as dots inside the scene.
- * The picture's brightness drives dot density and its own colours are kept, so real-world motion is reproduced exactly.
+ * Brightness drives dot density. Monochrome preparation gives one ink; an alpha matte removes the background.
  */
 export const footage=defineModel({
  id:'footage',aliases:['video','clip'],
- describe:'A video file played as dots on a flat screen in the scene: params.file (local video), params.crop ("W:H:X:Y" in source pixels), params.start seconds into the clip, params.height metres (default 2; width follows the frame aspect). Fills the frame exactly with camera pos [0,0,height/(2*tan(fov/2))]. Use for subjects that must move exactly like real footage (waves, crowds, animals, people).',
- params:{file:'local video path',crop:'W:H:X:Y',start:'seconds offset',height:'metres (default 2)',fps:'frame rate (default 30)',loop:'true|false'},
+ describe:'A fixed-view video played as dots on a flat screen; it does not reconstruct a new 3D viewpoint. params.file selects prepared footage, start selects seconds into that clip, timeOrigin is its scene-local playback origin, and height is metres (default2; width follows manifest w/h). For an exact camera view use object pos[0,0,0], origin:"model", and camera pos[0,0,height/(2*tan(fov/2))].',
+ params:{asset:'licensed subject preset: ocean-breaker or ocean-barrel (instead of file/url)',file:'local video/image path or HTTPS URL',url:'alternative HTTPS video/image URL',crop:'W:H:X:Y',start:'seconds into the prepared clip (default0)',timeOrigin:'scene-local playback origin seconds (default0)',height:'metres (default2)',fps:'prepared frame rate (default30)',loop:'true|false',sampleScale:'source samples per output dot (1..4; library presets3); does not change output dot size',cols:'prepared frame width pixels (optional)',rows:'prepared frame height pixels (optional)',blur:'preparation blur pixels (default1.2)',monochrome:'true prepares BT709 luma for one scene ink',sourceStart:'trim source from this second before preparation',sourceDuration:'optional source trim duration seconds',preserveAspect:'true preserves source/crop aspect during preparation',alphaFile:'optional explicit alpha-mask image/video',invertAlpha:'true inverts the explicit alpha mask',mirrorX:'true mirrors image and alpha together',mirrorY:'true flips image and alpha together'},
  controls:{speed:'playback speed (default 1)'},defaults:{speed:1},
  build(ctx){
-  const f=FOOTAGE.get(`footage:${String(ctx.params.file??'')}`);const H2=ctx.num('height',2,0.05,100);const root=new THREE.Group();
-  if(!f){root.add(ctx.mesh(new THREE.PlaneGeometry(H2,H2),{tone:0.2}));return {root,grounded:false};}
-  const mat=new THREE.MeshBasicMaterial({map:f.tex[0]!,alphaHash:true,toneMapped:false});mat.userData.tone=1;mat.userData.explicit=true;
+  const params=resolveFootageParams('footage',ctx.params),file=String(params.file??params.url??''),legacy=`footage:${file}`;
+  if(!file.trim())throw new Error('footage: params.file is required');
+  const f=FOOTAGE.get(footageVariantKey(file,params))??(FOOTAGE_LEGACY_MAPS.has(legacy)?FOOTAGE.get(legacy):undefined);
+  if(!f)throw new Error(`footage ${file}: requested media variant was not preloaded`);
+  const H2=ctx.num('height',2,0.05,100),root=new THREE.Group();
+  const textures=f.tex.map(shared=>{const tex=shared.clone();tex.matrixAutoUpdate=false;return tex;});
+  const mat=new THREE.MeshBasicMaterial({map:textures[0]!,alphaHash:true,toneMapped:false});mat.userData.tone=1;mat.userData.explicit=true;
   root.add(new THREE.Mesh(new THREE.PlaneGeometry(H2*f.w/f.h,H2),mat));
-  const start=ctx.num('start',0,0,1e6),loop=ctx.bool('loop',false),per=f.cols*f.rows;
-  return {root,grounded:false,update(c,t){
-   let i=Math.floor((start+t*(c.speed??1))*f.fps+1e-3);i=loop?((i%f.frames)+f.frames)%f.frames:Math.max(0,Math.min(f.frames-1,i));
-   const tex=f.tex[Math.min(f.tex.length-1,Math.floor(i/per))]!;const k=i%per;tex.offset.set((k%f.cols)/f.cols,1-(Math.floor(k/f.cols)+1)/f.rows);mat.map=tex;}};
+  const start=ctx.num('start',0,0,1e6),timeOrigin=ctx.num('timeOrigin',0,-1e6,1e6),loop=ctx.bool('loop',false),per=f.cols*f.rows;
+  let last=-1,disposed=false;
+  const dispose=()=>{if(disposed)return;disposed=true;mat.removeEventListener('dispose',dispose);mat.map=null;for(const t of textures)t.dispose();textures.length=0;};
+  mat.addEventListener('dispose',dispose);
+  const update=(c:Record<string,number>,t:number)=>{
+   if(disposed)return;
+   const speed=c.speed??1;
+   if(!Number.isFinite(t)||!Number.isFinite(speed))throw new Error(`footage ${file}: playback time and speed must be finite`);
+   const i=footageFrameIndex(start+(t-timeOrigin)*speed,f.fps,f.frames,loop);
+   if(i===last)return;last=i;
+   const tex=textures[Math.floor(i/per)]!,k=i%per;
+   tex.offset.set((k%f.cols)/f.cols,1-(Math.floor(k/f.cols)+1)/f.rows);tex.updateMatrix();mat.map=tex;
+  };
+  update({},0);
+  return {root,grounded:false,update};
  },
+});
+
+/** The same reusable media path with a documented, licensed ocean subject and a black background matte. */
+export const waveFootage=defineModel({
+ ...footage,id:'wave-footage',aliases:['ocean-wave-media'],
+ describe:'A recognizable moving ocean breaker with sky and background removed to black. Licensed fixed-view video with single-ink density preparation. Defaults to the AI-generated ocean-breaker preset; asset ocean-barrel selects an inside view of unverified capture origin. Recommended scene light: contrast1.5, gamma1.05, blackPoint.02, whitePoint.95, exposure1.05, softness0. It cannot rotate to a new 3D viewpoint.',
+ build(ctx){return footage.build({...ctx,params:{asset:'ocean-breaker',...ctx.params}});},
 });
