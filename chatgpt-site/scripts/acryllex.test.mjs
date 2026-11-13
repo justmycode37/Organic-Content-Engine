@@ -340,6 +340,17 @@ test('authored limb velocity preserves an earlier reach when later keys are refi
  for(const t of [1.8,2.025,1.8]){player.apply(rig,t);assert.deepEqual(actual,sampleChannel(refined,t).map(v=>v*1.8),'Parsed position velocities did not reach the compiled IK track in stature units');}
 });
 
+test('zero additive human offsets leave the underlying pose untouched',async()=>{
+ const {parseTrack,TrackPlayer}=await import('../src/acryllex/models/human-motion.ts');
+ const player=new TrackPlayer(parseTrack({keys:[{t:0,offset:{spine:[0,0,0],y:0}},{t:1,offset:{spine:[12,0,0],y:.02}},{t:2,offset:{spine:[0,0,0],y:0}}]}));
+ for(const t of [-1,0,2,2.01,10])assert.equal(player.offsets(t),null,'An inactive offset would reapply the rig');
+ assert.deepEqual(player.offsets(1),{spine:[12,0,0],y:.02});
+ const tiny=new TrackPlayer(parseTrack({keys:[{t:0,offset:{head:[-1e-15,0,0],y:0}}]}));
+ assert.deepEqual(tiny.offsets(0),{head:[-1e-15,0,0],y:0},'A genuine small offset must not be thresholded away');
+ const vertical=new TrackPlayer(parseTrack({keys:[{t:0,offset:{spine:[0,0,0],y:-.01}}]}));
+ assert.deepEqual(vertical.offsets(0),{spine:[0,0,0],y:-.01});
+});
+
 test('soft reach retains its safety limit and bounded C2 transition',async()=>{
  const {softenReach}=await import('../src/acryllex/models/human-motion.ts');
  const limit=.5,width=.012,step=1e-6;
