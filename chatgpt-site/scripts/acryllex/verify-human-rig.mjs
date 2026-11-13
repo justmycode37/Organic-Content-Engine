@@ -32,6 +32,14 @@ try{
  globalThis.fetch=originalFetch;
  for(const id of ['human-male','human-female']){
   const normal=body(id),scaled=body(id,{headScale:1.12,foot:.9});
+  const regions=body(id,{headTone:.55,regionTones:{torso:1.15,pelvis:.85,legs:.8}}),unity=body(id,{regionTones:{torso:1,pelvis:1,legs:1}}),albedo=[];
+  assert.deepEqual(skinPoints(regions),skinPoints(normal),'Material regions must not alter the actual skin');
+  assert.deepEqual(skinPoints(unity),skinPoints(normal));
+  regions.root.traverse(o=>{if(!o.isSkinnedMesh)return;const c=o.geometry.getAttribute('color');assert.ok(c);albedo.push(...c.array);if(o.name==='Eyes')for(const v of c.array)assert.ok(Math.abs(v-.55)<1e-5,'Region controls must preserve the existing head tint');});
+  assert.ok(albedo.some(v=>v>1.05)&&albedo.some(v=>v<.85),'Region controls must brighten and darken real vertex albedo');
+  assert.ok(albedo.every(Number.isFinite));
+  for(const p of [normal,unity])p.root.traverse(o=>{if(o.isSkinnedMesh)assert.equal(o.geometry.getAttribute('color'),undefined,'Unity/default regions must leave shared albedo untouched');});
+  checks.push(id+': material regions affect independent albedo, preserve head tint and keep skin/default geometry unchanged');
   assert.ok(Math.abs(scaled.rig.nodes[scaled.rig.need('Head')].o.scale.x/normal.rig.nodes[normal.rig.need('Head')].o.scale.x-1.12)<1e-7);
   for(const side of ['Left','Right'])assert.ok(Math.abs(scaled.rig.nodes[scaled.rig.need(side+'Foot')].o.scale.x-.9)<1e-7);
   const a=eyeBounds(normal),b=eyeBounds(scaled);for(const key of ['x','y','z'])assert.ok(Math.abs(b[key]/a[key]-1.12)<1e-4,'Uniform head control must alter the actual eye skin, not just a stored parameter');

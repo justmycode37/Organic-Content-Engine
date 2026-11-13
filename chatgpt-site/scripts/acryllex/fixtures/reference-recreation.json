@@ -1965,6 +1965,11 @@
                   }
                 }
               ]
+            },
+            "regionTones": {
+              "torso": 1.15,
+              "pelvis": 0.85,
+              "legs": 0.8
             }
           },
           "pos": [

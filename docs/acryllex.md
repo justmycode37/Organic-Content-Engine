@@ -246,3 +246,7 @@ tracks. Other scenes, furniture, camera and fixed-ink styling are preserved. Sou
 and late elbow estimates, late hand height and back shading remain different; no 99% match is established.
 Run `node scripts/acryllex/verify-human-rig.mjs` for offline male/female skin/rig regression checks. Actual GPU
 rendering and full-motion reference comparison remain necessary for visual acceptance.
+
+`regionTones:{torso,pelvis,legs}` optionally adjusts continuous material albedo through skin weights. All
+values default to1; it composes with `headTone`, leaves geometry and motion unchanged, and still renders
+with a single fixed ink. Use multiple poses to assess local density and contrast before grading a body.

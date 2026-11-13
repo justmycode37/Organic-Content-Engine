@@ -31,6 +31,22 @@ export function tintHeadAlbedo(root:THREE.Object3D,tone:number){
  });
 }
 
+/** Pose-independent material regions blend through the skin weights and preserve the existing head/vertex albedo. */
+function tintRegionAlbedo(root:THREE.Object3D,input:unknown){
+ if(!input||typeof input!=='object'||Array.isArray(input))return;
+ const values=input as Record<string,unknown>,tone=(name:string)=>typeof values[name]==='number'&&Number.isFinite(values[name])?clamp(values[name] as number,.1,2):1;
+ const torso=tone('torso'),pelvis=tone('pelvis'),legs=tone('legs');if(torso===1&&pelvis===1&&legs===1)return;
+ root.traverse(o=>{const mesh=o as THREE.SkinnedMesh;if(!mesh.isSkinnedMesh)return;
+  const indices=mesh.geometry.getAttribute('skinIndex'),weights=mesh.geometry.getAttribute('skinWeight');if(!indices||!weights)return;
+  const tones=mesh.skeleton.bones.map(b=>{const n=bare(b.name);return /^Spine/.test(n)?torso:n==='Hips'?pelvis:/^(Left|Right)(UpLeg|Leg|Foot|Toe)/.test(n)?legs:1;});
+  const previous=mesh.geometry.getAttribute('color'),colors=new Float32Array(indices.count*3);
+  for(let i=0;i<indices.count;i++){let sum=0,total=0;for(let j=0;j<Math.min(4,indices.itemSize);j++){const w=weights.getComponent(i,j);sum+=w*(tones[indices.getComponent(i,j)]??1);total+=w;}
+   const factor=total>0?sum/total:1;for(let j=0;j<3;j++)colors[i*3+j]=(previous?.getComponent(i,j)??1)*factor;}
+  mesh.geometry=mesh.geometry.clone();mesh.geometry.setAttribute('color',new THREE.BufferAttribute(colors,3));
+  for(const material of Array.isArray(mesh.material)?mesh.material:[mesh.material]){material.vertexColors=true;material.needsUpdate=true;}
+ });
+}
+
 /** A preset body: the anatomical library figures pass their own asset, natural height and defaults. */
 export interface PersonPreset {
  /** Preloaded asset id of an anatomical body (bones named like Mixamo, any bind pose). */
@@ -57,6 +73,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  if(anatomical){const hair=ctx.num('hairTone',.8,.1,2),hairShown=ctx.bool('hair',false);
   inst.root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;if(m.name==='Hair'){m.visible=hairShown;m.material=ctx.mat({tone:skinTone*hair,rough:.85});}else m.material=ctx.mat({tone:skinTone,rough:ctx.num('rough',.55,.05,1)});});}
  tintHeadAlbedo(inst.root,ctx.num('headTone',1,.1,2));
+ tintRegionAlbedo(inst.root,ctx.params.regionTones);
  const root=new THREE.Group(),body=new THREE.Group();root.add(body);body.add(inst.root);
  bindPose(inst.root);
  // body height → metres, uniformly: a figure is never squeezed along one axis
@@ -122,7 +139,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  return {root,grounded:true,update,landmarks,rig,setTrack};
 }
 
-export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true prevents upright/static soles sinking below the skin-derived bind floor',fingerCurl:'resting finger curl in degrees'};
+export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',regionTones:'optional {torso,pelvis,legs} material multipliers 0.1 .. 2, default 1; blend continuously through skin weights, compose with headTone and keep the output ink fixed',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true prevents upright/static soles sinking below the skin-derived bind floor',fingerCurl:'resting finger curl in degrees'};
 export const PERSON_POSES=[...new Set([...Object.keys(MOCAP),...Object.keys(HUMAN_POSES)])];
 
 export const person=defineModel({
