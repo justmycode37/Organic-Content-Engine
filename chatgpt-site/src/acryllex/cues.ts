@@ -4,6 +4,7 @@ export interface AutoCue {at:number;kind?:string;prompt?:string;gain?:number;len
 
 const FX_LEN:Record<string,number>={materialize:0.75,assemble:1.15,pop:0.45,grow:0.8,drop:0.7,'slide-left':0.6,'slide-right':0.6,rise:0.8,dissolve:0.6,shatter:1.1,shrink:0.45,fall:0.8};
 const ENTER_SFX:Record<string,[string,number]>={materialize:['materialize',0.55],assemble:['assemble',0.8],pop:['pop',0.7],grow:['riser',0.5],drop:['drop',0.9],'slide-left':['whoosh',0.6],'slide-right':['whoosh',0.6],rise:['riser',0.5]};
+const FX_SFX:Record<string,[string,number]>={heartbeat:['heartbeat',0.9],shockwave:['shockwave',0.95],ripple:['ripple',0.6],shake:['rattle',0.6],squash:['squash',0.6],recoil:['hit',0.6],hop:['pop',0.55],glint:['glint',0.5],scan:['scan',0.55],charge:['charge',0.8],flicker:['flicker',0.55],glitch:['glitch',0.6]};
 const EXIT_SFX:Record<string,[string,number]>={dissolve:['dissolve',0.5],shatter:['shatter',0.95],shrink:['swish',0.5],fall:['drop',0.8],'slide-left':['whoosh',0.5],'slide-right':['whoosh',0.5]};
 
 /** Sounds implied by what the picture does. Times are global seconds. */
@@ -34,6 +35,7 @@ export function autoCues(spec:AcryllexSpec):AutoCue[]{
    if(e.hue)out.push({at:t,kind:'shimmer',gain:0.45,why:'colour change'});
    if(e.show&&ENTER_SFX[e.show]){const [kind,gain]=ENTER_SFX[e.show]!;out.push({at:t,kind,gain,why:`show ${e.target}`});}
    if(e.hide&&EXIT_SFX[e.hide]){const [kind,gain]=EXIT_SFX[e.hide]!;out.push({at:t,kind,gain,why:`hide ${e.target}`});}
+   if(e.fx&&FX_SFX[e.fx]){const [kind,gain]=FX_SFX[e.fx]!;const n=e.fx==='heartbeat'?Math.max(1,Math.round(Number(e.fxCount)||1)):1,len=Number(e.dur)>0?Number(e.dur):0.9;for(let r=0;r<n;r++)out.push({at:t+r*len,kind,gain,why:`${e.target} ${e.fx}`});}
    if(e.morph)out.push({at:t,kind:'assemble',gain:0.8,why:`${e.target} morphs into ${e.morph}`});
    if(e.camera)out.push({at:t,kind:'whoosh',gain:0.3,why:'camera move'});
   }
