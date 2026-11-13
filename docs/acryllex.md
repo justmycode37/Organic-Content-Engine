@@ -257,5 +257,23 @@ Omit it to retain the default Catmull-Rom tangents. Weight and rotation channels
 
 A limb key can also supply `softness` in the track's position units (default0). This rounds off full
 extension while retaining fixed segment lengths and the existing reach safety limit. A width of0.012m
-permits at most2.25mm of endpoint retreat from the hard limit; use zero for a locked contact. Validate
+permits at most2.25mm of additional endpoint retreat compared with hard-clamped reach; use zero for a locked contact. Validate
 the actual skinned hand and furniture contact as well as the wrist point.
+
+Anatomical `human-male` and `human-female` presets default to `staticPoseBase:"neutral"` and
+`staticFloor:"skin"`. Named static poses use an arms-down anatomical frame and blend local joint
+rotations; actual foot skin settles the pelvis before authored track channels. The scanned `human`
+avatars keep their idle-based pose contract. Use `staticPoseBase:"idle", staticFloor:"none"` for the
+previous anatomical behavior. `ground:false` disables automatic floor contact.
+
+Skin placement consumes base bank y, including cheer's2cm lift. Explicit `poseAdjustments.y` keeps
+its height-scaled difference from the bank y. Track offsets/IK run afterward, followed by the existing
+sole-plane guard for keyed tracks when ground is enabled. Review transitions with conflicting authored
+floor/hips constraints. The floor support minimum can change vertices; derivative smoothness is not guaranteed.
+
+`poseCorrectives:true` opts into the anatomical assets' sparse hip/knee POSITION/NORMAL fields;
+the default is false. Reviewed seated/forward-arm crouch controls improve contact without changing
+bone dimensions or protected head/hand/foot skin. Deep/custom bends retain limitations, and holding
+the last calibration beyond hip120°/knee145° can worsen intersections. These fields do not provide
+global collision avoidance or an anatomical accuracy percentage. See the anatomical asset README
+for source, license, rebuild and motion limits.

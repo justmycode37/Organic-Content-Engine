@@ -19,7 +19,7 @@ const DEG=Math.PI/180;
 const V=()=>new THREE.Vector3(),Qn=()=>new THREE.Quaternion();
 const _m=new THREE.Matrix4(),_e=new THREE.Euler(),_a=V(),_b=V(),_c=V(),_q=Qn(),_q2=Qn();
 
-/** C2 roundoff of a reach limit. The endpoint falls short of the hard limit by at most 3*width/16. */
+/** C2 roundoff of a reach limit. Additional retreat from hard-clamped reach is at most 3*width/16. */
 export function softenReach(distance:number,limit:number,softness=0){
  const width=Number.isFinite(softness)?Math.max(0,Math.min(softness,limit*.5)):0;
  if(width<=0)return Math.min(distance,limit);
@@ -191,7 +191,7 @@ export class HumanRig {
  }
 
  /**
-  * Two-bone IK for an arm or a leg: the wrist/ankle is placed at `target` (rig space) with fixed segment lengths.
+ * Two-bone IK for an arm or a leg: solves towards `target` in rig space with fixed segment lengths and optional soft reach.
   * `pole` is a rig-space point the elbow/knee bends towards (default: where the current pose already bends).
   * `weight` blends from the forward-kinematic pose. Returns how far the target is beyond reach (0 when reachable).
   */

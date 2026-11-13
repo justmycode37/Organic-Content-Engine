@@ -1,10 +1,11 @@
 // Builds the ACRYLLEX anatomical bodies (human-male, human-female) from MakeHuman's CC0 base mesh, macro targets, rig and weights.
-//   node scripts/acryllex/build-humans.mjs [--src <dir with MakeHuman data>] [--out <dir>]
+//   node scripts/acryllex/build-humans.mjs [--src <dir with MakeHuman data>] [--out <dir>] [--base]
 // Sources are fetched at a pinned commit when --src is absent. Output: one skinned .glb per body in metres, Y up, facing +Z,
 // feet on y=0, with identity bone rest rotations (a bone's local translation is its model-space offset).
 import {readFile,writeFile,mkdir,access} from 'node:fs/promises';
 import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
+import {applyHumanCorrectives} from './repack-human-correctives.mjs';
 
 export const MAKEHUMAN_COMMIT='a8bc2d54ff0ac92e78ff71431b1023eda42bf482';
 const REMOTE=`https://raw.githubusercontent.com/makehumancommunity/makehuman/${MAKEHUMAN_COMMIT}/makehuman/data/`;
@@ -139,5 +140,9 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  const arg=k=>{const i=process.argv.indexOf(k);return i>0?process.argv[i+1]:undefined;};
  const src=arg('--src')??join(SITE,'.acryllex-assets','makehuman',MAKEHUMAN_COMMIT),out=arg('--out')??join(SITE,'src/acryllex/assets/humans');
  await mkdir(out,{recursive:true});
- for(const id of Object.keys(RECIPES)){const {glb,report}=await buildBody(id,src);await writeFile(join(out,`${id}.glb`),glb);console.log(JSON.stringify({...report,bytes:glb.length}));}
+ for(const id of Object.keys(RECIPES)){
+  const {glb,report}=await buildBody(id,src);
+  const result=process.argv.includes('--base')?glb:applyHumanCorrectives(glb,await readFile(join(SITE,'src/acryllex/assets/humans',`${id}-fields.json.gz`)));
+  await writeFile(join(out,`${id}.glb`),result);console.log(JSON.stringify({...report,bytes:result.length,correctives:!process.argv.includes('--base')}));
+ }
 }

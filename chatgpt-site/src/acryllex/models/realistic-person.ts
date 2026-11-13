@@ -5,6 +5,9 @@ import {defineModel,type ModelCtx,type PoseState} from './types.ts';
 import {gltf,instance} from '../assets.ts';
 import {HUMAN_POSES,humanPoses,humanPoseOffsets} from './human.ts';
 import {HumanRig,MocapSource,TrackPlayer,applyOffsets,bindPose,emptyPose,groundFeet,parseTrack,SIDES,type OffsetPose} from './human-motion.ts';
+import {createPoseCorrectives} from './human-correctives.ts';
+import {neutralArms,blendLocalEndpoints} from './human-static.ts';
+import {createStaticFloor} from './human-floor.ts';
 
 /**
  * Real people: rigged bodies driven by motion capture, named poses and optional keyed pose/IK tracks.
@@ -64,6 +67,15 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  const scanned=body0?`human-${body0}`:figure==='woman'?'human-megan':figure==='mannequin'?CLIP_SOURCE:'human-brian';
  const anatomical=!!preset.asset&&!body0&&ctx.str('mesh','anatomical',['anatomical','scanned'] as const)==='anatomical'&&!!gltf(preset.asset);
  const id=anatomical?preset.asset!:scanned;
+ const neutralBase=ctx.str('staticPoseBase',anatomical?'neutral':'idle',['neutral','idle'] as const)==='neutral';
+ const staticFloorPolicy=ctx.str('staticFloor',anatomical?'skin':'none',['none','skin'] as const);
+ if(anatomical&&neutralBase){
+  // Counterbalance a deep squat from the arms-down base; preserve explicit per-joint edits.
+  const edit=offsets.crouch;
+  poses.crouch={...poses.crouch,shL:edit?.shL??[-115,0,8],shR:edit?.shR??[-115,0,-8],elL:edit?.elL??[-5,0,0],elR:edit?.elR??[-5,0,0]};
+ }
+ const isStatic=(name:string)=>!MOCAP[name]&&!!poses[name];
+
  const real=id!==CLIP_SOURCE;
  // evenly shaded body (like a body scan in the reference): clothing textures read as holes in the dots, so they are off unless asked for
  const skinTone=ctx.num('tone',1,.1,2);
@@ -90,8 +102,10 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
   if(foot!==1||head!==1)inst.root.traverse(o=>{const n=bare(o.name);if(!(o as THREE.Bone).isBone)return;if(/^(Left|Right)Foot$/.test(n))o.scale.setScalar(foot);if(n==='Head')o.scale.multiplyScalar(head);});}
  // bindPose has already run above. Capture the authored uniform head/foot proportions instead of resetting them again.
  const rig=new HumanRig(root,inst.root,{bindPose:false});
+ const correctives=createPoseCorrectives(rig,inst.root),poseCorrectives=ctx.bool('poseCorrectives',false);
  // Converted scans need not put their bind-pose soles at local Y=0. Contacts use the measured skin floor.
  const groundFloor=Math.min(...SIDES.map(S=>rig.point(S+'Sole')?.y??0));
+ const floorContact=anatomical&&neutralBase&&staticFloorPolicy==='skin'?createStaticFloor(rig,inst.root):null;
  // hair, brow and nose so the mannequin's head reads as a person
  if(!real||!gltf(id)){const hb=rig.nodes[rig.need('Head')]!.o;hb.updateWorldMatrix(true,false);const ws=hb.getWorldScale(new THREE.Vector3());
   const g=new THREE.Group();g.scale.setScalar(body.scale.y/Math.max(1e-6,ws.x));hb.add(g);
@@ -118,17 +132,50 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
    const time=n==='walk'?((walkCycle%1+1)%1)*dur:n==='run'?((pose.travel/3.2)*dur)%dur:t%dur;
    mix[n]=[(mix[n]?.[0]??0)+v,time];};
   for(const [clip,v] of [[clipA,1-k],[clipB,k]] as [string,number][]){if(clip==='walk'){add('walk',v*stride);add('idle',v*(1-stride));}else add(clip,v);}
-  rig.reset();rig.applyPose(source.sample(mix,sampled));
   const PA=(MOCAP[from]?offsets[from]:poses[from]) as OffsetPose|undefined,PB=(MOCAP[to]?offsets[to]:poses[to]) as OffsetPose|undefined;
-  applyOffsets(rig,PA,PB,k);
+  if(neutralBase&&(isStatic(from)||isStatic(to))){
+   const endpoint=(name:string,P:OffsetPose|undefined)=>()=>{
+    rig.reset();
+    if(isStatic(name)){rig.applyPose(emptyPose());neutralArms(rig);}
+    else{
+     for(const key of Object.keys(mix))delete mix[key];
+     const clip=MOCAP[name]??'idle';if(clip==='walk'){add('walk',stride);add('idle',1-stride);}else add(clip,1);
+     rig.applyPose(source.sample(mix,sampled));
+    }
+    applyOffsets(rig,P,undefined,0);
+   };
+   if(from===to)endpoint(from,PA)();else blendLocalEndpoints(rig,endpoint(from,PA),endpoint(to,PB),k);
+  }else{
+   rig.reset();rig.applyPose(source.sample(mix,sampled));
+   applyOffsets(rig,PA,PB,k);
+  }
   const ya=PA?.y??0,yb=PB?.y??0,la=PA?.lie??0,lb=PB?.lie??0,lie=lerp(la,lb,k);
   // sitting/crouching heights were authored for a 1.84 m figure; they move the pelvis, not the floor
   rig.hipsPos.y+=lerp(ya,yb,k)*(target/1.84);
+  let settled=false;
+  const uprightStatic=(name:string,P:OffsetPose|undefined)=>isStatic(name)&&(P?.lie??0)<=0;
+  if(ground&&floorContact?.valid){
+   const weight=(uprightStatic(from,PA)?1-k:0)+(uprightStatic(to,PB)?k:0);
+   if(weight>0){
+    settled=true;
+    const delta=(name:string)=>{const edit=offsets[name];if(edit?.y===undefined)return 0;return MOCAP[name]?edit.y:edit.y-(HUMAN_POSES[name]?.y??0);};
+    const authored=(delta(from)*(1-k)+delta(to)*k)*(target/1.84);
+    rig.hipsPos.y-=authored;
+    const uprightMocap=(name:string,P:OffsetPose|undefined)=>!isStatic(name)&&(P?.lie??0)<=0;
+    const mocapWeight=(uprightMocap(from,PA)?1-k:0)+(uprightMocap(to,PB)?k:0);
+    if(mocapWeight>0){
+     rig.solve();const base=rig.readPose(),restore=()=>{rig.reset();rig.applyPose(base);};
+     blendLocalEndpoints(rig,restore,()=>{restore();groundFeet(rig,groundFloor);},mocapWeight);
+    }
+    floorContact.settle(weight);rig.hipsPos.y+=authored;
+   }
+  }
   for(const S of SIDES)rig.fingerCurl[S]=deg(curl);
   const extra=track?.offsets(t);if(extra){applyOffsets(rig,extra,undefined,0);rig.hipsPos.y+=extra.y??0;}
   track?.apply(rig,t,pose.travel);
-  // keep the soles on the floor for upright poses; lying figures are placed by the body rotation below
-  if(ground&&lie<=0)groundFeet(rig,groundFloor);
+  // Keyed tracks retain the final sole guard; unkeyed settled statics keep their knee plane.
+  if(ground&&lie<=0&&(!settled||track))groundFeet(rig,groundFloor);
+  correctives.update(poseCorrectives);
   rig.write();
   body.rotation.z=deg(90)*lie;body.position.set(0,0.13*lie,0);
  };
@@ -139,7 +186,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  return {root,grounded:true,update,landmarks,rig,setTrack};
 }
 
-export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',regionTones:'optional {torso,pelvis,legs} material multipliers 0.1 .. 2, default 1; blend continuously through skin weights, compose with headTone and keep the output ink fixed',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, velocity, softness, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true prevents upright/static soles sinking below the skin-derived bind floor',fingerCurl:'resting finger curl in degrees'};
+export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',staticPoseBase:'neutral (anatomical default) | idle (scan default); static neutral poses use arms-down anatomical frames and local endpoint blends',staticFloor:'skin (anatomical default) | none; with ground=true, skin settles upright neutral static feet before authored tracks. Consumes bank y placement; explicit y edits remain relative to bank y',poseCorrectives:'false (default); true enables authored hip/knee skin corrections for reviewed bends on anatomical assets. Extreme/custom bends require contact review',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',regionTones:'optional {torso,pelvis,legs} material multipliers 0.1 .. 2, default 1; blend continuously through skin weights, compose with headTone and keep the output ink fixed',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, velocity, softness, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true enables floor contact; neutral skin placement preserves explicit y edits, and keyed tracks retain the final sole-plane guard',fingerCurl:'resting finger curl in degrees'};
 export const PERSON_POSES=[...new Set([...Object.keys(MOCAP),...Object.keys(HUMAN_POSES)])];
 
 export const person=defineModel({
