@@ -38,13 +38,14 @@ function run(bin,args){return new Promise((res,rej)=>{const c=spawn(bin,args,{st
 export function sfxLibrary(cacheDir,key,{cap=60,onUsage}={}){
  let generated=0;
  /** Raw clip for a prompt (generated once, cached forever). */
- async function raw(prompt,seconds){
+ async function raw(prompt,seconds,attempt=0){
   const file=join(cacheDir,`sfx-${hash({prompt,seconds})}.mp3`);
   if(await exists(file))return file;
   if(generated>=cap)throw new Error(`SFX generation cap (${cap}) reached`);
   generated++;
   const r=await fetch('https://api.elevenlabs.io/v1/sound-generation?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text:prompt+STYLE,duration_seconds:Math.max(0.5,Math.min(22,seconds)),prompt_influence:0.6}),signal:AbortSignal.timeout(120000)});
   onUsage?.({provider:'elevenlabs',endpoint:'sound-generation',status:r.status,seconds});
+  if(r.status===429&&attempt<4){generated--;await new Promise(res=>setTimeout(res,12000*(attempt+1)));return raw(prompt,seconds,attempt+1);}
   if(!r.ok)throw new Error(`ElevenLabs sound-generation failed (${r.status})`);
   await mkdir(cacheDir,{recursive:true});await writeFile(file,Buffer.from(await r.arrayBuffer()));return file;
  }

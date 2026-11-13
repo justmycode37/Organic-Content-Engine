@@ -8,9 +8,18 @@ export type Hue='blue'|'azure'|'red'|'white'|'amber'|'green'|'cyan'|'violet'|'or
 export type At=string|number;
 export type Vec3=[number,number,number];
 
-export type Enter='materialize'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'none';
+export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'none';
 export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'none';
-export type Idle='none'|'spin'|'spin-slow'|'float'|'pulse'|'sway'|'wobble'|'orbit';
+export type Idle='none'|'turn'|'spin'|'spin-slow'|'float'|'pulse'|'sway'|'wobble'|'orbit';
+
+export interface ObjectKeyframe {
+ at:number;
+ pos?:Vec3;
+ rot?:Vec3;
+ scale?:number;
+ /** Interpolation into this key. Rotations use unwrapped degrees for authored turns. */
+ easing?:'linear'|'smooth'|'hold';
+}
 
 export interface SceneObject {
  id:string;
@@ -24,23 +33,37 @@ export interface SceneObject {
  /** Rotation in degrees (x,y,z); y turns the object to face left/right. */
  rot?:Vec3;
  scale?:number;
+ /** Independent axis dimensions, applied in the object's local coordinates. */
+ stretch?:Vec3;
+ /** Absolute transform keys override events for keyed channels only. */
+ keyframes?:ObjectKeyframe[];
  hue?:Hue;
  enter?:Enter;
+ /** Wipe axes are world-aligned by default; local follows the object's authored orientation. */
+ enterSpace?:'world'|'local';
  enterAt?:At;
+ enterDur?:number;
  exit?:Exit;
  exitAt?:At;
+ exitDur?:number;
  idle?:Idle;
  /** Initial control values (model specific, 0..1 unless documented). */
  controls?:Record<string,number>;
  /** Initial pose for posable models (human). */
  pose?:string;
+ /** 'model' keeps authored geometry coordinates; 'center' positions recentered geometry at pos exactly. */
+ origin?:'center'|'model';
  /** Exclude from automatic camera framing (e.g. a large floor or backdrop). */
  frame?:boolean;
+ /** Explicit shadow-map participation; disabled maps leave authored shading and ambient occlusion. */
+ castShadow?:boolean;
+ receiveShadow?:boolean;
 }
 
 export interface SceneEvent {
  at:At;
  dur?:number;
+ easing?:'linear'|'smooth'|'hold';
  target?:string;
  /** set: tween model controls; pose: change pose; move: travel; turn: rotate; scale; glow; hue; show/hide effects. */
  set?:Record<string,number>;
@@ -51,6 +74,8 @@ export interface SceneEvent {
  hue?:Hue;
  show?:Enter;
  hide?:Exit;
+ /** Point-cloud morph of the target into another object of the scene (declare that object with enter:"none"). */
+ morph?:string;
  camera?:CameraMove;
  sfx?:string;
 }
@@ -65,21 +90,86 @@ export interface CameraMove {
  amount?:number;
  /** Where the subject's centre sits vertically on screen (0 top .. 1 bottom), default 0.5. */
  screenY?:number;
+ /** Explicit camera: position and look-at point in world metres (overrides automatic framing). */
+ pos?:Vec3;
+ look?:Vec3;
+ /** Vertical field of view in degrees (default 36). */
+ fov?:number;
+ /** Tracking shot: camera travels with this object id. */
+ follow?:string;
 }
 
-export type TextStyle='headline'|'highlight'|'tag'|'prefix'|'mono'|'number'|'label';
+export type TextStyle='headline'|'highlight'|'tag'|'prefix'|'mono'|'number'|'label'|'plate';
 export interface TextItem {
  text:string;
  style?:TextStyle;
  /** Word(s) inside the text drawn in a hue box. */
  highlight?:string;
+ /** Hide a boxed word prefix after this scene-local time, retaining the suffix position. */
+ prefixUntil?:At;
  at?:At;
+ /** Numeric end may extend past the scene cut to time deletion; text remains scoped to its scene. */
  until?:At;
+ /** Continue this text into following scenes until its explicit numeric end; default stays scene-scoped. */
+ carry?:boolean;
  pos?:'top'|'upper'|'center'|'lower'|'bottom'|'left'|'right'|'top-left'|'top-right'|'bottom-left'|'bottom-right'|[number,number];
  size?:number;
+ weight?:number;
+ font?:'plex-mono'|'roboto-mono'|'oswald'|'roboto-condensed';
+ widthScale?:number;
+ /** Horizontal and vertical padding in font-size units for highlights and tags. */
+ boxPadding?:[number,number];
+ /** Offset highlight/tag backgrounds in font-size units without moving glyphs. */
+ boxOffset?:[number,number];
+ /** Optional text raster softness in output pixels. */
+ softness?:number;
  hue?:Hue;
  /** Attach the label to an object (follows it on screen). */
  follow?:string;
+ /** Alignment for tuple positions (fractions default to left). */
+ align?:'left'|'center'|'right';
+ /** Typing speed in characters per second (default ~13). */
+ cps?:number;
+ /** Step character-count keys in scene-local time, including spaces; overrides automatic typing and deletion. */
+ reveal?:[At,number][];
+ /** Absolute position (frame fractions) and zoom keys, with independent channels. */
+ keyframes?:{at:At;pos?:[number,number];zoom?:number;easing?:'linear'|'smooth'|'hold'}[];
+ /** Draw the letters in the scene hue instead of grey. */
+ tint?:boolean;
+ /** Black plate behind the line (text over busy backgrounds). */
+ plate?:boolean;
+ /** Step zoom keyframes [[at, scale], ...] (snaps with a small overshoot). */
+ zoom?:[At,number][];
+ /** Keep the visual centre fixed as the font grows. Default anchors the baseline. */
+ zoomAnchor?:'baseline'|'center';
+ /** Extra dither-glitch moments; glitchWord limits the glitch to one word. */
+ glitch?:At[];
+ /** Optional glitch cell pitch in output pixels, independent of text zoom. */
+ glitchCell?:number;
+ /** Include the highlight/tag padding in the glitch envelope. */
+ glitchBox?:boolean;
+ glitchWord?:string;
+ /** Glitch as the line lands (default: boxed/highlighted text only). */
+ glitchOnLand?:boolean;
+ /** Hide the typing cursor. */
+ cursor?:boolean;
+ /** Cursor width relative to font size (default .03). */
+ cursorWidth?:number;
+ cursorLead?:number;
+ cursorHold?:boolean;
+ cursorPeriod?:number;
+ cursorPhase?:number;
+ /** false keeps the text on screen until the cut instead of deleting it. */
+ erase?:boolean;
+ /** Seconds used to delete the line immediately before until. */
+ eraseDur?:number;
+}
+
+/** Post-lighting controls; exposure changes dot coverage, ink changes brightness. */
+export interface LightKeyframe {
+ at:number;
+ exposure?:number;contrast?:number;gamma?:number;inkLo?:number;ink?:number;blackPoint?:number;whitePoint?:number;softness?:number;
+ easing?:'linear'|'smooth'|'hold';
 }
 
 export interface Scene {
@@ -91,6 +181,16 @@ export interface Scene {
  events?:SceneEvent[];
  text?:TextItem[];
  transition?:'cut'|'dissolve'|'wipe'|'flash';
+ /** Light rig for this scene: key direction (camera space, x right y up z toward viewer) and levels. */
+ light?:{dir?:Vec3;key?:number;fill?:number;rim?:number;ambient?:number;contrast?:number;blackPoint?:number;whitePoint?:number;inkLo?:number;gamma?:number;exposure?:number;ink?:number;softness?:number;noise?:number;noiseReference?:number;
+  /** Local lights in world coordinates; intensity uses the same PI scaling as the directional rig. */
+  points?:{pos:Vec3;intensity:number;distance?:number;decay?:number;active?:[number,number];fade?:number}[];
+  keyframes?:LightKeyframe[]};
+ /** Ambient-occlusion strength (default 1.4) and radius in metres (default 6% of the scene size). */
+ ao?:number;
+ aoRadius?:number;
+ /** Override the renderer's occlusion kernel for this scene. */
+ aoMethod?:'plane'|'legacy';
  /** Optional ground plane drawn as sparse dots. */
  ground?:boolean;
  /** Filled in by the producer: spoken word timings relative to scene start. */
@@ -103,11 +203,17 @@ export interface AcryllexSpec {
  title:string;
  musicBrief?:string;
  captions?:boolean;
+ /** Filled in by the producer: the music's beat grid (seconds). Picture pulses on it. */
+ beat?:{period:number;phase:number;from?:number};
  scenes:Scene[];
+ /** Output size and dot pitch; default 1080x1920 portrait, 4 px dots. */
+ format?:{width?:number;height?:number;cell?:number;textScale?:number};
+ /** Renderer calibration: dither gamma/noise/gap(px)/ink brightness/silhouette fuzz and light levels. */
+ look?:{inkMode?:'fixed'|'shaded';textColor?:string;palette?:Partial<Record<Hue,string>>;contrast?:number;blackPoint?:number;whitePoint?:number;inkLo?:number;shadows?:number;ao?:number;aoMethod?:'plane'|'legacy';gamma?:number;noise?:number;noiseReference?:number;gap?:number;ink?:number;fuzz?:number;dotRoundness?:number;dotSoftness?:number;key?:number;fill?:number;rim?:number;ambient?:number;dir?:number[]};
 }
 
 export const HUES:Record<Hue,string>={
- blue:'#4a3cff',azure:'#2a72ff',red:'#ec1c4f',white:'#e6e6e6',amber:'#ffb21f',green:'#22e07a',cyan:'#25d4ff',violet:'#9d4bff',orange:'#ff6a1f',pink:'#ff4fb8',
+ blue:'#3f32f5',azure:'#2c6ce8',red:'#d4174a',white:'#cdcdcd',amber:'#ffb21f',green:'#22e07a',cyan:'#25d4ff',violet:'#9d4bff',orange:'#ff6a1f',pink:'#ff4fb8',
 };
 export const TEXT_GREY='#d9d9d9';
 

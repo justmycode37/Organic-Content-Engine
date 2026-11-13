@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {mergeGeometries} from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import {RoundedBoxGeometry} from 'three/examples/jsm/geometries/RoundedBoxGeometry.js';
 
 // ---------- maths ----------
 export const clamp=(v:number,a=0,b=1)=>Math.max(a,Math.min(b,v));
@@ -41,11 +42,8 @@ export const G={
  box:(w:number,h:number,d:number)=>new THREE.BoxGeometry(w,h,d),
  /** Box with bevelled edges; edges catch light and read as a real object. */
  rbox:(w:number,h:number,d:number,r=Math.min(w,h,d)*0.12,seg=3)=>{
-  const shape=new THREE.Shape();const x=-w/2+r,y=-h/2+r,ww=w-2*r,hh=h-2*r;
-  shape.moveTo(x,y-r);shape.lineTo(x+ww,y-r);shape.quadraticCurveTo(x+ww+r,y-r,x+ww+r,y);shape.lineTo(x+ww+r,y+hh);shape.quadraticCurveTo(x+ww+r,y+hh+r,x+ww,y+hh+r);shape.lineTo(x,y+hh+r);shape.quadraticCurveTo(x-r,y+hh+r,x-r,y+hh);shape.lineTo(x-r,y);shape.quadraticCurveTo(x-r,y-r,x,y-r);
-  const depth=Math.max(0.0001,d-2*r);
-  const g=new THREE.ExtrudeGeometry(shape,{depth,bevelEnabled:true,bevelSize:r*0.98,bevelThickness:r,bevelSegments:seg,curveSegments:seg*2});
-  g.translate(0,0,-depth/2);return g;
+  // Radius cannot inflate thin panels or change the requested external dimensions.
+  return new RoundedBoxGeometry(w,h,d,Math.max(1,seg),Math.max(0,Math.min(r,w/2,h/2,d/2)));
  },
  sphere:(r:number,ws=32,hs=20)=>new THREE.SphereGeometry(r,ws,hs),
  ellipsoid:(rx:number,ry:number,rz:number,ws=32,hs=20)=>{const g=new THREE.SphereGeometry(1,ws,hs);g.scale(rx,ry,rz);return g;},
@@ -91,4 +89,20 @@ export function roughen(g:THREE.BufferGeometry,amount:number,freq=3,seed=1){
   p.setXYZ(i,v.x+nn.getX(i)*d,v.y+nn.getY(i)*d,v.z+nn.getZ(i)*d);
  }
  p.needsUpdate=true;g.computeVertexNormals();return g;
+}
+
+/** Continuous camera-depth fading for environments, including self-lit surfaces. */
+export function depthFade(material:THREE.MeshStandardMaterial,near=0,far=10,power=1){
+ const uniforms={near:{value:near},far:{value:far},power:{value:power}};
+ const original=material.onBeforeCompile,key=material.customProgramCacheKey();
+ material.onBeforeCompile=(shader,renderer)=>{
+  original.call(material,shader,renderer);
+  Object.assign(shader.uniforms,{acxFadeNear:uniforms.near,acxFadeFar:uniforms.far,acxFadePower:uniforms.power});
+  shader.vertexShader='varying float vAcxFadeDepth;\n'+shader.vertexShader;
+  shader.vertexShader=shader.vertexShader.replace('#include <project_vertex>','#include <project_vertex>\n vAcxFadeDepth=-mvPosition.z;');
+  shader.fragmentShader='varying float vAcxFadeDepth;uniform float acxFadeNear;uniform float acxFadeFar;uniform float acxFadePower;\n'+shader.fragmentShader;
+  shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>','#include <opaque_fragment>\n gl_FragColor.rgb*=pow(1.-smoothstep(acxFadeNear,max(acxFadeNear+0.0001,acxFadeFar),vAcxFadeDepth),acxFadePower);');
+ };
+ material.customProgramCacheKey=()=>`acx-depth-fade-v1:${key}`;
+ return uniforms;
 }

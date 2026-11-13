@@ -222,3 +222,34 @@ export const moon=defineModel({
   for(let i=0;i<p.count;i++){v.set(p.getX(i),p.getY(i),p.getZ(i));let d=0;for(const c of craters){const a=v.angleTo(c.c)/c.s;if(a<1.25)d+=a<1?-(1-a*a)*0.05*c.s*3:0.02*c.s*3*(1.25-a)*4;}v.multiplyScalar(1+d);p.setXYZ(i,v.x,v.y,v.z);}
   g.computeVertexNormals();const r=new THREE.Group();r.add(ctx.mesh(g,{tone:0.9}));return {root:r,grounded:false};},
 });
+
+function bananaGeo(len=0.2,fat=0.019,seed=0){
+ const N=48,M=20,R=len*0.62,span=1.75;const pos:number[]=[],idx:number[]=[];
+ for(let i=0;i<=N;i++){const t=i/N,a=(t-0.5)*span;
+  // body swells in the middle, tapers to the stem (t=0) and the blossom tip (t=1)
+  const r=fat*(0.36+0.64*Math.pow(Math.sin(Math.PI*clamp(t*0.94+0.03)),0.55))*(t<0.08?0.6+5*t:1)*(t>0.95?1-(t-0.95)*9:1)*(1+0.03*Math.sin(seed+t*9));
+  const cx=Math.sin(a)*R,cy=-Math.cos(a)*R+R;const nx=Math.sin(a),ny=-Math.cos(a);
+  for(let j=0;j<M;j++){const th=j/M*Math.PI*2;const rr=r*(1+0.07*Math.cos(5*th));const u=Math.cos(th)*rr,v=Math.sin(th)*rr;pos.push(cx+nx*u,cy+ny*u,v);}
+ }
+ for(let i=0;i<N;i++)for(let j=0;j<M;j++){const a=i*M+j,b=i*M+(j+1)%M,c=a+M,d=b+M;idx.push(a,c,b,b,c,d);}
+ const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setIndex(idx);g.computeVertexNormals();return g;
+}
+export const banana=defineModel({
+ id:'banana',aliases:['bananas','banana-bunch','fruit-banana'],
+ describe:'A ripe banana: curved, five-ridged body tapering to a woody stem and a dark blossom tip (real yellow by default). count 2-6 makes a hand of bananas joined at the stem.',
+ params:{count:'1..6',color:'default yellow; set "hue" to use the scene hue'},size:'0.2 m',
+ build(ctx){
+  const n=Math.round(ctx.num('count',1,1,6));const col=(ctx.str('color','yellow') as string)==='hue'?undefined:'#ffd21f';
+  const root=new THREE.Group();
+  for(let i=0;i<n;i++){
+   const g=new THREE.Group();const body=ctx.mesh(bananaGeo(0.2,0.0195,i*1.7),{color:col,tone:1,rough:0.5});g.add(body);
+   const a=-0.5*1.75,R=0.2*0.62;const sx=Math.sin(a)*R,sy=-Math.cos(a)*R+R;
+   g.add(ctx.mesh(at(G.cyl(0.0052,0.0068,0.034,10),[sx-0.012,sy+0.013,0],[0,0,-50]),{color:col,tone:0.55}));
+   g.add(ctx.mesh(at(G.sphere(0.0046,10,8),[-sx+0.002,sy+0.002,0]),{tone:0.25,color:col}));
+   if(n>1){g.position.set(0,0,0);g.rotation.set(deg((i-(n-1)/2)*16),deg((i-(n-1)/2)*7),0);g.position.z=(i-(n-1)/2)*0.03;}
+   root.add(g);
+  }
+  root.rotation.z=deg(8);
+  return {root,grounded:true};
+ },
+});
