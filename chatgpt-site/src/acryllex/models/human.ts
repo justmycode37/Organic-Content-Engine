@@ -15,6 +15,7 @@ export const HUMAN_POSES:Record<string,Pose>={
  idle:STAND,
  sit:SIT,
  type:{...SIT,shL:[-42,0,10],shR:[-42,0,-10],elL:[-62,0,-8],elR:[-62,0,8],head:[12,0,0],spine:[10,0,0]},
+ 'type-lean':{...SIT,spine:[26,0,0],neck:[6,0,0],head:[4,0,0],shL:[-58,0,10],shR:[-58,0,-10],elL:[-52,0,-8],elR:[-52,0,8]},
  'sit-think':{...SIT,shR:[-48,0,-12],elR:[-128,0,14],wrR:[20,0,0],head:[10,0,-6],spine:[14,0,0]},
  'sit-slump':{...SIT,spine:[24,0,0],neck:[14,0,0],head:[22,0,0],shL:[-6,0,4],shR:[-6,0,-4],elL:[-30,0,0],elR:[-30,0,0]},
  lie:{lie:1,y:0,shL:[0,0,4],shR:[0,0,-4],elL:[-6,0,0],elR:[-6,0,0],hipL:[-6,0,0],hipR:[-6,0,0],knL:[10,0,0],knR:[10,0,0],head:[-4,0,0]},
@@ -38,6 +39,29 @@ export const HUMAN_POSES:Record<string,Pose>={
  fall:{lie:1,y:0,shL:[-30,0,60],shR:[-30,0,-60],elL:[-20,0,0],elR:[-20,0,0],hipL:[-20,0,10],hipR:[10,0,-10],knL:[30,0,0],knR:[20,0,0]},
 };
 
+/** Explicit offsets only, so mocap poses can be corrected without adding the static stand pose. */
+export function humanPoseOffsets(params:Record<string,unknown>):Record<string,Pose>{
+ const poses:Record<string,Pose>=Object.create(null);
+ const edits=params.poseAdjustments;
+ if(!edits||typeof edits!=='object'||Array.isArray(edits))return poses;
+ for(const [name,value] of Object.entries(edits)){
+  if(!value||typeof value!=='object'||Array.isArray(value))continue;
+  const input=value as Record<string,unknown>,p:Pose={};
+  for(const joint of JOINTS){const a=input[joint];if(Array.isArray(a)&&a.length===3&&a.every(v=>typeof v==='number'&&Number.isFinite(v)))p[joint]=a.map(v=>clamp(v,-360,360)) as J;}
+  if(typeof input.y==='number'&&Number.isFinite(input.y))p.y=clamp(input.y,-2,2);
+  if(typeof input.lie==='number'&&Number.isFinite(input.lie))p.lie=clamp(input.lie,0,1);
+  poses[name]=p;
+ }
+ return poses;
+}
+
+/** Per-model pose edits in degrees/metres, without changing the shared pose bank. */
+export function humanPoses(params:Record<string,unknown>):Record<string,Pose>{
+ const poses:Record<string,Pose>=Object.assign(Object.create(null),HUMAN_POSES);
+ for(const [name,edit] of Object.entries(humanPoseOffsets(params)))poses[name]={...(poses[name]??STAND),...edit};
+ return poses;
+}
+
 function cycle(phase:number,run:boolean):Pose{
  const s=Math.sin(phase),c=Math.cos(phase),a=run?1.5:1;
  const legL=-s*26*a,legR=s*26*a;
@@ -58,11 +82,13 @@ function mix(a:Pose,b:Pose,k:number):Pose{
 }
 
 export function buildHuman(ctx:ModelCtx){
+ const poses=humanPoses(ctx.params),walkDistance=ctx.num('walkDistance',1.15,0.2,4),walkPhase=ctx.num('walkPhase',0,-100,100);
+ const walkClock=ctx.str('walkClock','distance',['distance','time'] as const),walkPeriod=ctx.num('walkPeriod',1.2,.2,4);
  const figure=ctx.str('figure','man',['man','woman','child','elder'] as const);
  const hair=ctx.str('hair',figure==='woman'?'long':'short',['short','long','bun','none','cap'] as const);
  const woman=figure==='woman',child=figure==='child',elder=figure==='elder';
  const shoulder=woman?0.175:0.2,hipW=woman?0.105:0.095;
- const skin={tone:1},cloth={tone:0.82},pants={tone:0.55},dark={tone:0.42};
+ const headTone=ctx.num('headTone',1,.1,2),skin={tone:1},headSkin={tone:headTone},headDark={tone:.42*headTone},cloth={tone:0.82},pants={tone:0.55},dark={tone:0.42};
  const root=new THREE.Group();
  const g=(name:string,p:[number,number,number],parent:THREE.Object3D)=>{const o=new THREE.Group();o.name=name;o.position.set(...p);parent.add(o);return o;};
  const body=g('body',[0,0,0],root);
@@ -74,17 +100,17 @@ export function buildHuman(ctx:ModelCtx){
   :[[0.0,-0.02],[0.15,0.0],[0.14,0.12],[0.165,0.26],[0.185,0.38],[0.18,0.44],[0.13,0.49],[0.06,0.52],[0,0.53]];
  const torso=G.lathe(torsoProfile,36);torso.scale(1,1,0.6);spine.add(ctx.mesh(torso,cloth));
  const neck=g('neck',[0,0.5,0],spine);
- neck.add(ctx.mesh(at(G.cyl(0.048,0.055,0.12,18),[0,0.04,0]),skin));
+ neck.add(ctx.mesh(at(G.cyl(0.048,0.055,0.12,18),[0,0.04,0]),headSkin));
  const head=g('head',[0,0.09,0],neck);
- const skull=G.ellipsoid(0.094,0.118,0.108,32,24);head.add(ctx.mesh(at(skull,[0,0.1,0.005]),skin));
- head.add(ctx.mesh(at(G.ellipsoid(0.06,0.05,0.06),[0,0.03,0.035]),skin)); // jaw
- head.add(ctx.mesh(at(G.cone(0.018,0.045,10),[0,0.085,0.113],[80,0,0]),skin)); // nose
- head.add(ctx.mesh(at(G.ellipsoid(0.018,0.03,0.012),[0.094,0.09,0]),skin));head.add(ctx.mesh(at(G.ellipsoid(0.018,0.03,0.012),[-0.094,0.09,0]),skin));
+ const skull=G.ellipsoid(0.094,0.118,0.108,32,24);head.add(ctx.mesh(at(skull,[0,0.1,0.005]),headSkin));
+ head.add(ctx.mesh(at(G.ellipsoid(0.06,0.05,0.06),[0,0.03,0.035]),headSkin)); // jaw
+ head.add(ctx.mesh(at(G.cone(0.018,0.045,10),[0,0.085,0.113],[80,0,0]),headSkin)); // nose
+ head.add(ctx.mesh(at(G.ellipsoid(0.018,0.03,0.012),[0.094,0.09,0]),headSkin));head.add(ctx.mesh(at(G.ellipsoid(0.018,0.03,0.012),[-0.094,0.09,0]),headSkin));
  if(hair!=='none'){
-  const capG=new THREE.SphereGeometry(0.104,28,16,0,Math.PI*2,0,Math.PI*0.52);capG.scale(1,1.05,1.08);head.add(ctx.mesh(at(capG,[0,0.115,-0.008],[-14,0,0]),dark));
-  if(hair==='long')head.add(ctx.mesh(at(G.ellipsoid(0.11,0.16,0.07),[0,0.02,-0.065]),dark));
-  if(hair==='bun')head.add(ctx.mesh(at(G.sphere(0.05,16,12),[0,0.2,-0.08]),dark));
-  if(hair==='cap')head.add(ctx.mesh(at(G.cyl(0.08,0.08,0.012,24),[0,0.17,0.08],[10,0,0],[1,1,1.3]),dark));
+  const capG=new THREE.SphereGeometry(0.104,28,16,0,Math.PI*2,0,Math.PI*0.52);capG.scale(1,1.05,1.08);head.add(ctx.mesh(at(capG,[0,0.115,-0.008],[-14,0,0]),headDark));
+  if(hair==='long')head.add(ctx.mesh(at(G.ellipsoid(0.11,0.16,0.07),[0,0.02,-0.065]),headDark));
+  if(hair==='bun')head.add(ctx.mesh(at(G.sphere(0.05,16,12),[0,0.2,-0.08]),headDark));
+  if(hair==='cap')head.add(ctx.mesh(at(G.cyl(0.08,0.08,0.012,24),[0,0.17,0.08],[10,0,0],[1,1,1.3]),headDark));
  }
  const arm=(side:1|-1)=>{
   const sh=g(side>0?'shL':'shR',[side*shoulder,0.43,0],spine);
@@ -111,9 +137,9 @@ export function buildHuman(ctx:ModelCtx){
  if(child)head.scale.setScalar(1.25);
  const hipsBase=hips.position.y;
  const poseOf=(name:string,time:number,travel:number)=>{
-  if(name==='walk'||name==='run'){const stride=name==='run'?1.6:1.15;return cycle(travel/stride*Math.PI*2+time*(travel?0:0),name==='run');}
-  if(name==='wave'){const p={...HUMAN_POSES.wave!};p.elR=[-28-18*Math.sin(time*9),0,0];return p;}
-  return HUMAN_POSES[name]??STAND;
+  if(name==='walk'||name==='run'){const stride=name==='run'?1.6:walkDistance,cycles=name==='walk'&&walkClock==='time'?time/walkPeriod:travel/stride;return cycle((cycles+walkPhase)*Math.PI*2,name==='run');}
+  if(name==='wave'){const p={...poses.wave!};p.elR=[-28-18*Math.sin(time*9),0,0];return p;}
+  return poses[name]??STAND;
  };
  return {root,grounded:true,update(_c:Record<string,number>,t:number,pose:PoseState){
   const moving=pose.speed>0.05;
@@ -133,7 +159,7 @@ export function buildHuman(ctx:ModelCtx){
 export const human=defineModel({
  id:'human',aliases:['person','man','woman','child','people','scientist','engineer','worker','student'],
  describe:'A realistic full-body person (mannequin-like, readable silhouette) that can walk, run, sit, type, sleep, point, think, wave and more; 1.75 m tall. Place on a chair/bed with near+side:"on".',
- params:{figure:'man | woman | child | elder',hair:'short | long | bun | none | cap'},
+ params:{figure:'man | woman | child | elder',hair:'short | long | bun | none | cap',walkDistance:'metres per complete gait cycle (default 1.15)',walkClock:'distance (default) follows travel; time uses a fixed walkPeriod in seconds',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1)',poseAdjustments:'per-pose joint rotations [x,y,z] in degrees and optional y offset in metres'},
  poses:Object.keys(HUMAN_POSES),
  size:'1.75 m',
  build:buildHuman,

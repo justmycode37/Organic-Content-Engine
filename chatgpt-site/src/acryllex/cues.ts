@@ -11,7 +11,8 @@ export function autoCues(spec:AcryllexSpec):AutoCue[]{
  const out:AutoCue[]=[];let start=0;
  spec.scenes.forEach((s,i)=>{
   const dur=sceneDuration(s);const at=(a:unknown,f:number)=>start+resolveAt(s,a as string|number|undefined,dur,f);
-  if(i>0)out.push(s.transition&&s.transition!=='cut'?{at:start-0.12,kind:'whoosh',gain:0.45,why:'transition'}:{at:start,kind:'cut',gain:0.4,why:'cut'});
+  if(i>0)out.push(s.transition&&s.transition!=='cut'?{at:start-0.12,kind:'whoosh',gain:0.6,why:'transition'}:{at:start,kind:'cut',gain:0.7,why:'cut on the beat'});
+  if(i>0)out.push({at:Math.max(0,start-0.3),kind:'swish',gain:0.4,why:'lead-in to cut'});
   s.objects.forEach((o,k)=>{
    const enter=o.enter??'materialize';
    if(enter.startsWith('walk-in')){const t=at(o.enterAt,0.08+k*0.12);out.push({at:t,kind:'footsteps',gain:0.5,length:1.6,why:`${o.id} walks in`});}
@@ -33,6 +34,7 @@ export function autoCues(spec:AcryllexSpec):AutoCue[]{
    if(e.hue)out.push({at:t,kind:'shimmer',gain:0.45,why:'colour change'});
    if(e.show&&ENTER_SFX[e.show]){const [kind,gain]=ENTER_SFX[e.show]!;out.push({at:t,kind,gain,why:`show ${e.target}`});}
    if(e.hide&&EXIT_SFX[e.hide]){const [kind,gain]=EXIT_SFX[e.hide]!;out.push({at:t,kind,gain,why:`hide ${e.target}`});}
+   if(e.morph)out.push({at:t,kind:'assemble',gain:0.8,why:`${e.target} morphs into ${e.morph}`});
    if(e.camera)out.push({at:t,kind:'whoosh',gain:0.3,why:'camera move'});
   }
   for(const tx of s.text??[]){
