@@ -250,3 +250,12 @@ rendering and full-motion reference comparison remain necessary for visual accep
 `regionTones:{torso,pelvis,legs}` optionally adjusts continuous material albedo through skin weights. All
 values default to1; it composes with `headTone`, leaves geometry and motion unchanged, and still renders
 with a single fixed ink. Use multiple poses to assess local density and contrast before grading a body.
+
+Limb keys can supply `velocity:[x,y,z]` in the track's position units per second. This pins the position
+tangent at that key, so refining a later hand/foot path can preserve the preceding movement exactly.
+Omit it to retain the default Catmull-Rom tangents. Weight and rotation channels keep their existing interpolation.
+
+A limb key can also supply `softness` in the track's position units (default0). This rounds off full
+extension while retaining fixed segment lengths and the existing reach safety limit. A width of0.012m
+permits at most2.25mm of endpoint retreat from the hard limit; use zero for a locked contact. Validate
+the actual skinned hand and furniture contact as well as the wrist point.

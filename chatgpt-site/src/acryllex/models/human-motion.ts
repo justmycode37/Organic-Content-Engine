@@ -19,6 +19,14 @@ const DEG=Math.PI/180;
 const V=()=>new THREE.Vector3(),Qn=()=>new THREE.Quaternion();
 const _m=new THREE.Matrix4(),_e=new THREE.Euler(),_a=V(),_b=V(),_c=V(),_q=Qn(),_q2=Qn();
 
+/** C2 roundoff of a reach limit. The endpoint falls short of the hard limit by at most 3*width/16. */
+export function softenReach(distance:number,limit:number,softness=0){
+ const width=Number.isFinite(softness)?Math.max(0,Math.min(softness,limit*.5)):0;
+ if(width<=0)return Math.min(distance,limit);
+ const start=limit-width;if(distance<=start)return distance;if(distance>=limit+width)return limit;
+ const u=(distance-start)/(2*width);return start+2*width*(u-u*u*u+.5*u*u*u*u);
+}
+
 /** Orientation whose X axis is `x` and whose Y axis is `yHint` made perpendicular to it. */
 export function frameQuat(x:THREE.Vector3,yHint:THREE.Vector3,out=Qn()){
  const X=_a.copy(x).normalize(),Y=_b.copy(yHint).addScaledVector(X,-yHint.dot(X));
@@ -187,11 +195,11 @@ export class HumanRig {
   * `pole` is a rig-space point the elbow/knee bends towards (default: where the current pose already bends).
   * `weight` blends from the forward-kinematic pose. Returns how far the target is beyond reach (0 when reachable).
   */
- ik(S:Side,limb:'arm'|'leg',target:THREE.Vector3,opt:{pole?:THREE.Vector3;weight?:number}={}){
+ ik(S:Side,limb:'arm'|'leg',target:THREE.Vector3,opt:{pole?:THREE.Vector3;weight?:number;softness?:number}={}){
   const w=opt.weight??1;if(w<=0)return 0;if(this.dirty)this.solve();
   const [a,b,c]=limb==='arm'?[S+'Arm',S+'ForeArm',S+'Hand']:[S+'UpLeg',S+'Leg',S+'Foot'];
   const ia=this.need(a),ib=this.need(b),ic=this.need(c),p0=this.P[ia]!,l1=this.P[ib]!.distanceTo(p0),l2=this.P[ic]!.distanceTo(this.P[ib]!);
-  const d=target.clone().sub(p0),raw=d.length(),dist=Math.min(Math.max(raw,Math.abs(l1-l2)+1e-4),(l1+l2)*0.9995);d.normalize();
+  const d=target.clone().sub(p0),raw=d.length(),reach=opt.softness&&opt.softness>0?softenReach(raw,(l1+l2)*.9995,opt.softness):raw,dist=Math.min(Math.max(reach,Math.abs(l1-l2)+1e-4),(l1+l2)*0.9995);d.normalize();
   const hint=(opt.pole?opt.pole.clone():this.P[ib]!.clone()).sub(p0);hint.addScaledVector(d,-hint.dot(d));
   if(hint.lengthSq()<1e-10){hint.set(0,limb==='arm'?-1:0,limb==='arm'?-0.3:1);hint.addScaledVector(d,-hint.dot(d));}
   hint.normalize();
@@ -292,7 +300,7 @@ export function applyOffsets(rig:HumanRig,a:OffsetPose|undefined,b:OffsetPose|un
 }
 
 // ---------- data-driven pose / IK tracks ----------
-export interface LimbKey {pos?:Vec3;pole?:Vec3;weight?:number;/** hand: wrist bend relative to the forearm; foot: pitch/yaw/roll from flat (degrees) */rot?:Vec3;curl?:number}
+export interface LimbKey {pos?:Vec3;/** Optional position derivative in track units per second; pins the adjacent path tangent. */velocity?:Vec3;/** Reach-limit roundoff width in track units, default0. */softness?:number;pole?:Vec3;weight?:number;/** hand: wrist bend relative to the forearm; foot: pitch/yaw/roll from flat (degrees) */rot?:Vec3;curl?:number}
 export interface TrackKey {
  t:number;
  /** 0 = the underlying motion (mocap + named pose) alone, 1 = the keyed trunk fully replaces it. */
@@ -312,22 +320,22 @@ export interface MotionTrack {keys:TrackKey[];/** 'metres' (default) or 'stature
  /** 'model' (default): positions ride with the figure. 'path': z is measured along the walked path from the figure's start, so keyed feet, hands and hips stay put in the world while the figure (and a following camera) still travels. */
  space?:'model'|'path'}
 
-type Sample={t:number;v:number[]};
-function channel(keys:TrackKey[],pick:(k:TrackKey)=>readonly number[]|number|undefined):Sample[]{const out:Sample[]=[];for(const k of keys){const v=pick(k);if(v===undefined)continue;out.push({t:k.t,v:typeof v==='number'?[v]:[...v]});}return out;}
-/** Catmull-Rom through the keys (non-uniform times), held outside the keyed range. `linear` avoids overshoot for weights. */
+type Sample={t:number;v:number[];velocity?:number[]};
+function channel(keys:TrackKey[],pick:(k:TrackKey)=>readonly number[]|number|undefined,velocity?:(k:TrackKey)=>readonly number[]|undefined):Sample[]{const out:Sample[]=[];for(const k of keys){const v=pick(k);if(v===undefined)continue;const d=velocity?.(k);out.push({t:k.t,v:typeof v==='number'?[v]:[...v],...(d?{velocity:[...d]}:{})});}return out;}
+/** Cubic Hermite through the keys (non-uniform times), with Catmull-Rom tangents unless a velocity is authored; held outside the keyed range. `linear` avoids overshoot for weights. */
 export function sampleChannel(s:Sample[],t:number,linear=false):number[]|null{
  if(!s.length)return null;if(t<=s[0]!.t)return s[0]!.v;const last=s[s.length-1]!;if(t>=last.t)return last.v;
  let i=0;while(s[i+1]!.t<t)i++;
  const p1=s[i]!,p2=s[i+1]!,p0=s[i-1]??p1,p3=s[i+2]??p2,h=p2.t-p1.t,u=(t-p1.t)/h;
  if(linear){const e=u*u*(3-2*u);return p1.v.map((a,j)=>a+(p2.v[j]!-a)*e);}
  const u2=u*u,u3=u2*u;
- return p1.v.map((a,j)=>{const b=p2.v[j]!,m1=p0===p1?(b-a)/h:(b-p0.v[j]!)/(p2.t-p0.t),m2=p3===p2?(b-a)/h:(p3.v[j]!-a)/(p3.t-p1.t);
+ return p1.v.map((a,j)=>{const b=p2.v[j]!,m1=p1.velocity?.[j]??(p0===p1?(b-a)/h:(b-p0.v[j]!)/(p2.t-p0.t)),m2=p2.velocity?.[j]??(p3===p2?(b-a)/h:(p3.v[j]!-a)/(p3.t-p1.t));
   return (2*u3-3*u2+1)*a+(u3-2*u2+u)*h*m1+(-2*u3+3*u2)*b+(u3-u2)*h*m2;});
 }
 export function parseTrack(input:unknown):MotionTrack|null{
  if(!input||typeof input!=='object')return null;const raw=(input as {keys?:unknown}).keys;if(!Array.isArray(raw))return null;
  const num=(v:unknown)=>typeof v==='number'&&Number.isFinite(v),vec=(v:unknown):Vec3|undefined=>Array.isArray(v)&&v.length===3&&v.every(num)?[v[0],v[1],v[2]] as Vec3:undefined;
- const limb=(v:unknown):LimbKey|undefined=>{if(!v||typeof v!=='object')return undefined;const o=v as Record<string,unknown>;const out:LimbKey={};const p=vec(o.pos),q=vec(o.pole),r=vec(o.rot);if(p)out.pos=p;if(q)out.pole=q;if(r)out.rot=r;if(num(o.weight))out.weight=o.weight as number;if(num(o.curl))out.curl=o.curl as number;return out;};
+ const limb=(v:unknown):LimbKey|undefined=>{if(!v||typeof v!=='object')return undefined;const o=v as Record<string,unknown>;const out:LimbKey={};const p=vec(o.pos),q=vec(o.pole),r=vec(o.rot),dv=vec(o.velocity);if(dv)out.velocity=dv;if(p)out.pos=p;if(q)out.pole=q;if(r)out.rot=r;if(num(o.weight))out.weight=o.weight as number;if(num(o.curl))out.curl=o.curl as number;if(num(o.softness))out.softness=o.softness as number;return out;};
  const keys:TrackKey[]=[];
  for(const k of raw){if(!k||typeof k!=='object'||!num((k as TrackKey).t))continue;const o=k as Record<string,unknown>;const key:TrackKey={t:o.t as number};
   if(num(o.weight))key.weight=o.weight as number;
@@ -359,7 +367,7 @@ export class TrackPlayer {
   c.floor=channel(K,k=>k.floor);c.floorWeight=channel(K,k=>k.floorWeight);
   for(const k of K)for(const j of Object.keys(k.offset??{}))if(!this.offsetJoints.includes(j))this.offsetJoints.push(j);
   for(const j of this.offsetJoints)c['off.'+j]=channel(K,k=>k.offset?(j==='y'?k.offset.y??0:(k.offset[j] as readonly number[]|undefined)??[0,0,0]):undefined);
-  for(const l of ['handL','handR','footL','footR'] as const){c[l+'.pos']=channel(K,k=>k[l]?.pos);c[l+'.pole']=channel(K,k=>k[l]?.pole);c[l+'.weight']=channel(K,k=>k[l]?.weight);c[l+'.rot']=channel(K,k=>k[l]?.rot);c[l+'.curl']=channel(K,k=>k[l]?.curl);}
+  for(const l of ['handL','handR','footL','footR'] as const){c[l+'.pos']=channel(K,k=>k[l]?.pos,k=>k[l]?.velocity);c[l+'.pole']=channel(K,k=>k[l]?.pole);c[l+'.weight']=channel(K,k=>k[l]?.weight);c[l+'.rot']=channel(K,k=>k[l]?.rot);c[l+'.curl']=channel(K,k=>k[l]?.curl);c[l+'.softness']=channel(K,k=>k[l]?.softness);}
  }
  apply(rig:HumanRig,t:number,travel=0){
   const c=this.ch,unit=this.track.units==='stature'?this.stature:1,s=(name:string,linear=false)=>sampleChannel(c[name]!,t,linear),dz=this.track.space==='path'?-travel:0;
@@ -387,7 +395,7 @@ export class TrackPlayer {
   for(const [key,S,limb] of [['footL','Left','leg'],['footR','Right','leg'],['handL','Left','arm'],['handR','Right','arm']] as [LimbEnd,Side,'arm'|'leg'][]){
    const lw=Math.min(1,Math.max(0,s(key+'.weight',true)?.[0]??(c[key+'.pos']!.length?1:0))),p=s(key+'.pos'),rot=s(key+'.rot'),curl=s(key+'.curl',true);
    const end=rig.need(S+(limb==='arm'?'Hand':'Foot')),sign=S==='Left'?1:-1;
-   if(lw>0&&p){const pole=s(key+'.pole');rig.ik(S,limb,new THREE.Vector3(p[0]!*unit,p[1]!*unit,p[2]!*unit+dz),{weight:lw,pole:pole?new THREE.Vector3(pole[0]!*unit,pole[1]!*unit,pole[2]!*unit+dz):undefined});rig.solve();}
+   if(lw>0&&p){const pole=s(key+'.pole');rig.ik(S,limb,new THREE.Vector3(p[0]!*unit,p[1]!*unit,p[2]!*unit+dz),{weight:lw,softness:Math.max(0,s(key+'.softness',true)?.[0]??0)*unit,pole:pole?new THREE.Vector3(pole[0]!*unit,pole[1]!*unit,pole[2]!*unit+dz):undefined});rig.solve();}
    if(rot&&lw>0){
     if(limb==='arm'){ // [pronation, deviation, flexion] from the straight, thumb-up wrist; mirrored so both hands read alike
      const fore=rig.get(rig.need(S+'ForeArm'),Qn());rig.set(end,rig.get(end,Qn()).slerp(fore.multiply(HALF_TURN_X).multiply(eulerQuat([sign*rot[0]!,sign*rot[1]!,-sign*rot[2]!],Qn())),lw));}

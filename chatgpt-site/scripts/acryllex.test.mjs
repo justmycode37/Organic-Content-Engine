@@ -272,4 +272,25 @@ test('removed effects, entrances, transitions and morph styles are rejected',asy
  for(const morphStyle of ['implode','scan'])assert.ok(!tryScene(sc=>{sc.objects.push({id:'b',model:'led',enter:'none'});sc.events=[{at:'seven',target:'a',morph:'b',morphStyle}];}),morphStyle);
 });
 
-test('male and female rigs preserve proportions, posed skin and independent material controls',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,16);});
+test('male and female rigs preserve proportions, posed skin and independent material controls',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,18);});
+
+test('authored limb velocity preserves an earlier reach when later keys are refined',async()=>{
+ const {sampleChannel,parseTrack,TrackPlayer}=await import('../src/acryllex/models/human-motion.ts');
+ const original=[{t:0,v:[0,0,0]},{t:1,v:[1,2,0]},{t:2,v:[3,1,0]},{t:3,v:[4,3,0]}];
+ const refined=structuredClone(original);refined[2].velocity=[1.5,.5,0];refined.splice(3,0,{t:2.05,v:[3.15,.8,0]});
+ for(let frame=0;frame<=120;frame++)assert.deepEqual(sampleChannel(refined,frame/60),sampleChannel(original,frame/60),'A later detail changed the preceding reach');
+ const track=parseTrack({units:'stature',keys:refined.map(k=>({t:k.t,weight:0,handR:{pos:k.v,softness:.012,...(k.velocity?{velocity:k.velocity}:{})}}))});
+ assert.ok(track);const player=new TrackPlayer(track,1.8);let actual;
+ const rig={solve(){},need:n=>n,ik(side,limb,target,options){assert.equal(side,'Right');assert.equal(limb,'arm');assert.equal(options.softness,.012*1.8);actual=target.toArray();}};
+ for(const t of [1.8,2.025,1.8]){player.apply(rig,t);assert.deepEqual(actual,sampleChannel(refined,t).map(v=>v*1.8),'Parsed position velocities did not reach the compiled IK track in stature units');}
+});
+
+test('soft reach retains its safety limit and bounded C2 transition',async()=>{
+ const {softenReach}=await import('../src/acryllex/models/human-motion.ts');
+ const limit=.5,width=.012,step=1e-6;
+ for(let i=0;i<=1000;i++){const d=.45+i*.0001,hard=Math.min(d,limit),soft=softenReach(d,limit,width);assert.ok(soft<=hard+1e-12);assert.ok(hard-soft<=3*width/16+1e-12);assert.equal(softenReach(d,limit),hard);}
+ for(const [d,slope]of [[limit-width,1],[limit+width,0]]){
+  const a=softenReach(d-step,limit,width),b=softenReach(d,limit,width),c=softenReach(d+step,limit,width);
+  assert.ok(Math.abs((c-a)/(2*step)-slope)<1e-7);assert.ok(Math.abs((c-2*b+a)/step**2)<.01);
+ }
+});
