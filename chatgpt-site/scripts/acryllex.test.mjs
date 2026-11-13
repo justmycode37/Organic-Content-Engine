@@ -271,3 +271,5 @@ test('removed effects, entrances, transitions and morph styles are rejected',asy
  for(const tr of ['iris','blinds','push-left','push-up','dissolve'])assert.ok(!tryScene(sc=>{sc.transition=tr;}),tr);
  for(const morphStyle of ['implode','scan'])assert.ok(!tryScene(sc=>{sc.objects.push({id:'b',model:'led',enter:'none'});sc.events=[{at:'seven',target:'a',morph:'b',morphStyle}];}),morphStyle);
 });
+
+test('male and female rigs preserve proportions and measured posed skin',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,14);});

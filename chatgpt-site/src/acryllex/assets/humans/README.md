@@ -13,7 +13,9 @@ the upstream commit and records its recipes, weighted targets and source metadat
 Use `--src <data-directory>` to reuse downloaded source data and `--out <directory>` for another output.
 
 The meshes and normalized rig were authored in the delegated Fable modelling task. Integration adds
-explicit `human-male` / `human-female` model IDs while leaving the original `human` renderer intact.
+explicit `human-male` / `human-female` model IDs. The public `human` renderer now uses the same normalized
+rig with existing scanned bodies; uniform proportions, real finger transforms and sole-plane constraints
+replace the old anisotropic spine scaling. Sol6.1 human integration/fitting followed the original Fable task.
 Anatomical and reference-motion review is still in progress. Passing loader, skinning and seeking
 checks is not a claim of visual or anatomical acceptance.
 
