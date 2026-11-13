@@ -8,6 +8,29 @@ function modelContext(params,seed=37){
  return {params,seed,mat,mesh:(g,o)=>new THREE.Mesh(g,mat(o)),color:()=>new THREE.Color(1,1,1),num:(key,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number.isFinite(Number(params[key]))?Number(params[key]):f)),bool:(key,f)=>typeof params[key]==='boolean'?params[key]:f,str:(key,f,allowed)=>typeof params[key]==='string'&&(!allowed||allowed.includes(params[key]))?params[key]:f};
 }
 const spec={version:1,series:'ACRYLLEX',title:'t',scenes:Array.from({length:8},(_,i)=>({say:'One two three four five six seven eight nine ten eleven twelve thirteen.',hue:'blue',objects:[{id:'a',model:i%2?'led':'human',enter:'assemble'}],events:[{at:'seven',target:'a',set:{glow:1}}],text:[{text:'1993',style:'number',at:'ten'}]}))};
+test('flat source coverage retains alpha and cached texture ownership with independent materials',async()=>{
+ const {plainMaterial,realMaterial}=await import('../src/acryllex/assets.ts');
+ const base=modelContext({}),ctx={...base,mat:o=>{const m=base.mat(o);m.alphaHash=true;return m;}};
+ const texture=new THREE.DataTexture(new Uint8Array([255,0,0,0,0,0,0,255]),2,1,THREE.RGBAFormat);
+ texture.offset.set(.1,.2);texture.repeat.set(.5,.75);texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;
+ const source=new THREE.MeshStandardMaterial({map:texture,transparent:true,opacity:.8,depthWrite:false,side:THREE.DoubleSide});
+ const sourceState=()=>({opacity:source.opacity,transparent:source.transparent,side:source.side,map:source.map,offset:texture.offset.toArray(),repeat:texture.repeat.toArray(),flipY:texture.flipY,colorSpace:texture.colorSpace});
+ const before=sourceState(),legacy=plainMaterial(source,ctx,.7),a=plainMaterial(source,ctx,.7,true),b=plainMaterial(source,ctx,.7,true);
+ assert.equal(legacy.map,null);assert.equal(legacy.transparent,false);assert.equal(legacy.alphaHash,true);
+ assert.equal(a.map,texture);assert.equal(a.alphaMap,null);assert.equal(a.transparent,true);assert.equal(a.alphaHash,false,'BLEND must not apply a second stochastic coverage pass');
+ assert.equal(a.depthWrite,false);assert.equal(a.opacity,.8);assert.equal(a.side,legacy.side,'Coverage must not change source sidedness policy');
+ assert.deepEqual(a.color,legacy.color,'Source RGB must not replace the scene-hue albedo');
+ assert.notEqual(a.customProgramCacheKey(),legacy.customProgramCacheKey());
+ a.opacity=.2;a.color.setScalar(.1);assert.equal(b.opacity,.8);assert.deepEqual(b.color,legacy.color);
+ let disposed=0;texture.addEventListener('dispose',()=>disposed++);a.dispose();b.dispose();legacy.dispose();assert.equal(disposed,0,'Instance materials do not own the cached source texture');
+ assert.deepEqual(sourceState(),before);
+ const opaque=source.clone();opaque.transparent=false;opaque.alphaTest=0;const untouched=plainMaterial(opaque,ctx,.7,true);assert.equal(untouched.map,null,'Opaque source images must not acquire alpha coverage');
+ const mask=source.clone();mask.transparent=false;mask.alphaTest=.5;mask.opacity=1;mask.depthWrite=true;
+ const cutout=plainMaterial(mask,ctx,.7,true);assert.equal(cutout.alphaTest,.5);assert.equal(cutout.alphaHash,true,'Opaque masks keep the entrance dissolve');
+ const textured=realMaterial(source,ctx,.7,.4,true),oldTextured=realMaterial(source,ctx,.7,.4);
+ assert.equal(textured.map,texture);assert.equal(textured.transparent,true);assert.equal(textured.alphaHash,false);assert.notEqual(textured.customProgramCacheKey(),oldTextured.customProgramCacheKey());
+ for(const m of [source,opaque,mask,untouched,cutout,textured,oldTextured])m.dispose();texture.dispose();assert.equal(disposed,1);
+});
 test('catalogue has people, media subjects, fluids, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','human-male','human-female','footage','wave-footage','ocean-wave-media','fluid-sheet','fluid-jet','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
 test('anatomical bodies contain separate skinned meshes with valid normalized weights',async()=>{
  const bodies=[];

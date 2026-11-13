@@ -277,3 +277,12 @@ bone dimensions or protected head/hand/foot skin. Deep/custom bends retain limit
 the last calibration beyond hip120°/knee145° can worsen intersections. These fields do not provide
 global collision avoidance or an anatomical accuracy percentage. See the anatomical asset README
 for source, license, rebuild and motion limits.
+
+Human models preserve source transparency with `sourceAlpha:true` (default). Flat-colour hair and
+eyelashes sample only the original RGBA alpha, keeping the scene-hue albedo and final fixed ink.
+BLEND surfaces retain their authored blend/depth settings and disable the extra stochastic alpha
+pass. Opaque masks retain the existing entrance dissolve. Source maps and UV settings are shared
+read-only, with no derived textures. Face-culling policy is unchanged. `sourceAlpha:false` retains
+the previous material conversion; general asset `instance()` calls opt in through its final options
+argument. Transparent meshes follow the existing engine shadow policy. This corrects lost coverage;
+hairstyle, likeness and local density still require reference review.

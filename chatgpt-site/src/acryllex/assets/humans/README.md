@@ -52,6 +52,11 @@ Other body folds remain, including shoulder, head and toe intersections; the con
 global collision solver. The female walking skin changes by up to0.535mm with fields enabled, while
 the inherited finger/thigh gait contacts remain.
 
+Scanned human surfaces use `sourceAlpha:true` by default. Hair/eyelash transparency is preserved
+even with flat scene-hue colours; source texture RGB is not restored. The original maps and UV
+settings remain shared read-only, with no new textures. `sourceAlpha:false` reproduces the previous
+conversion. Face-culling policy stays unchanged. The bundled opaque anatomical skins are unaffected.
+
 The bundled `Hair` object is an upstream helper made of long guide strips. It is hidden by default
 because it is not a finished short hairstyle. `hair:true` exposes it for authoring; hiding it does not
 change Body or Eyes vertices. Hair modelling and the reference pose remain under review.
