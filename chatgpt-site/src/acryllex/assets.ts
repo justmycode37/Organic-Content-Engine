@@ -85,8 +85,37 @@ export async function preloadAssets(paths:Record<string,string>){
 }
 export function gltf(id:string){return GLTFS.get(id);}
 
+const hasSourceAlpha=(src:THREE.Material|undefined)=>!!src&&(src.transparent||src.alphaTest>0||src.alphaHash);
+/** Keep authored coverage separate from the scene-hue albedo. Cached source materials/textures stay read-only. */
+function sourceAlphaFlags(src:THREE.MeshStandardMaterial,material:THREE.MeshStandardMaterial){
+ material.alphaMap=src.alphaMap;material.alphaTest=src.alphaTest;material.opacity=src.opacity;
+ material.transparent=src.transparent;material.depthWrite=src.depthWrite;material.depthTest=src.depthTest;
+ material.premultipliedAlpha=src.premultipliedAlpha;material.blending=src.blending;material.forceSinglePass=src.forceSinglePass;
+ // BLEND already applies fractional coverage. Opaque masks retain the existing stochastic entrance dissolve.
+ if(src.transparent)material.alphaHash=src.alphaHash;
+}
+
+/** Uniform scene-hue albedo, with optional original RGBA alpha; no derived texture or source RGB contribution. */
+export function plainMaterial(src:THREE.Material|undefined,ctx:ModelCtx,tone=0.95,sourceAlpha=false){
+ const material=ctx.mat({tone,rough:.55}),s=src as THREE.MeshStandardMaterial|undefined;
+ if(!sourceAlpha||!hasSourceAlpha(s))return material;
+ sourceAlphaFlags(s!,material);
+ if(s!.map){
+  material.map=s!.map;
+  const previous=material.onBeforeCompile,previousKey=material.customProgramCacheKey();
+  material.onBeforeCompile=function(shader,renderer){
+   previous.call(this,shader,renderer);
+   shader.fragmentShader=shader.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
+    diffuseColor.a*=texture2D(map,vMapUv).a;
+   #endif`);
+  };
+  material.customProgramCacheKey=()=>`${previousKey}|acx-plain-alpha-v1`;
+ }
+ return material;
+}
+
 /** Turn a scanned material into the ACRYLLEX look: the texture's luminance becomes surface detail in the scene hue. */
-export function realMaterial(src:THREE.Material|undefined,ctx:ModelCtx,tone=0.95,detail=0.7){
+export function realMaterial(src:THREE.Material|undefined,ctx:ModelCtx,tone=0.95,detail=0.7,sourceAlpha=false){
  const s=src as THREE.MeshStandardMaterial|undefined;
  const m=ctx.mat({tone});
  if(s?.map){m.map=s.map;}
@@ -94,19 +123,21 @@ export function realMaterial(src:THREE.Material|undefined,ctx:ModelCtx,tone=0.95
  if(s?.alphaMap)m.alphaMap=s.alphaMap;
  if(s&&s.alphaTest>0)m.alphaTest=s.alphaTest;
  m.side=s?.side??THREE.FrontSide;
+ const alpha=sourceAlpha&&hasSourceAlpha(s);if(alpha)sourceAlphaFlags(s!,m);
  m.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <map_fragment>',`#ifdef USE_MAP
   vec4 acxTexel=texture2D(map,vMapUv);float acxL=dot(acxTexel.rgb,vec3(0.299,0.587,0.114));
   diffuseColor.rgb*=clamp(1.0+(acxL-0.45)*${(1.6*detail).toFixed(2)},${(1-0.75*detail).toFixed(2)},1.2);
+  ${alpha?'diffuseColor.a*=acxTexel.a;':''}
  #endif`);};
- m.customProgramCacheKey=()=>`acx-real-${detail}`;
+ m.customProgramCacheKey=()=>`acx-real-${detail}${alpha?'-alpha-v1':''}`;
  return m;
 }
 
-/** Clone a loaded asset with ACRYLLEX materials. */
-export function instance(id:string,ctx:ModelCtx,tone=0.95,plain=false,detail=0.7){
+/** Clone a loaded asset with ACRYLLEX materials. Source alpha is opt-in for general assets. */
+export function instance(id:string,ctx:ModelCtx,tone=0.95,plain=false,detail=0.7,options:{sourceAlpha?:boolean}={}){
  const g=GLTFS.get(id);if(!g)return null;
  const root=SkeletonUtils.clone(g.scene) as THREE.Object3D;
- root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;m.frustumCulled=false;const mats=Array.isArray(m.material)?m.material:[m.material];const conv=mats.map(x=>plain?ctx.mat({tone,rough:0.55}):realMaterial(x,ctx,tone,detail));m.material=Array.isArray(m.material)?conv:conv[0]!;});
+ root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;m.frustumCulled=false;const mats=Array.isArray(m.material)?m.material:[m.material];const conv=mats.map(x=>plain?plainMaterial(x,ctx,tone,!!options.sourceAlpha):realMaterial(x,ctx,tone,detail,!!options.sourceAlpha));m.material=Array.isArray(m.material)?conv:conv[0]!;});
  return {root,animations:g.animations};
 }
 
