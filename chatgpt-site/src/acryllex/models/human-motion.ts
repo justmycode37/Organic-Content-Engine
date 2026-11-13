@@ -356,8 +356,8 @@ export class TrackPlayer {
  private ch:Record<string,Sample[]>={};private offsetJoints:string[]=[];
  /** Keyed gait phase (cycles) at t, or null when the track does not time the gait. Linear between keys: steady cadence per segment. */
  gait(t:number){const s=this.ch.gait!;if(!s.length)return null;if(t<=s[0]!.t)return s[0]!.v[0]!;const last=s[s.length-1]!;if(t>=last.t)return last.v[0]!;let i=0;while(s[i+1]!.t<t)i++;const a=s[i]!,b=s[i+1]!;return a.v[0]!+(b.v[0]!-a.v[0]!)*(t-a.t)/(b.t-a.t);}
- /** Additive offsets at t (null when none are keyed). */
- offsets(t:number):OffsetPose|null{if(!this.offsetJoints.length)return null;const out:OffsetPose={};for(const j of this.offsetJoints){const v=sampleChannel(this.ch['off.'+j]!,t);if(!v)continue;if(j==='y')out.y=v[0]!;else out[j]=v;}return out;}
+ /** Additive offsets at t; an absent or exactly zero pose leaves the underlying rig untouched. */
+ offsets(t:number):OffsetPose|null{if(!this.offsetJoints.length)return null;const out:OffsetPose={};let active=false;for(const j of this.offsetJoints){const v=sampleChannel(this.ch['off.'+j]!,t);if(!v)continue;if(v.some(x=>x!==0))active=true;if(j==='y')out.y=v[0]!;else out[j]=v;}return active?out:null;}
  constructor(track:MotionTrack,stature=1){
   this.track=track;this.stature=stature;
   const K=track.keys,c=this.ch;
