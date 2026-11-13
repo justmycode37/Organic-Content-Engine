@@ -209,7 +209,9 @@ prefer a clothed scanned, rigged body with supported pose controls; verify anato
 `human-male` and `human-female` load separate adult figure meshes with a shared rig and pose/IK track
 interface. Their proportions scale uniformly with `height`; joint rotation does not stretch the torso
 or head. These are unclothed figure-study models. `mesh:"scanned"` selects the clothed scanned body.
-The original `human` model retains its existing implementation while the new reference pose is fitted.
+The public `human` model uses the same proportion-preserving rig with the existing scanned bodies.
+Legacy `build` spine scaling and the female width squeeze are removed; choose a different body asset instead
+of stretching the torso. `height` scales the whole body uniformly, and uniform head/foot controls survive posing.
 Runtime checks establish valid skinning and deterministic seeking; they do not establish a99% visual match.
 
 The bundled bodies derive from MakeHuman's CC0 assets at commit
@@ -226,3 +228,21 @@ captions and scene cuts retain their authored timing. Omit `motionFPS` for conti
 For example, `"motionFPS":25,"motionPhase":0.016666666666666666` gives a25fps motion clock whose first
 global tick is at1/60s, useful when matching footage recorded at a different display cadence. Each scene
 opts in independently. Verify with `node scripts/acryllex/verify-motion-clock.mjs`.
+
+## Human rig and contact tracks
+
+Human poses retain fixed arm/leg lengths through mocap, named poses and keyed IK tracks. Finger curl is part
+of forward kinematics, so queried finger bones agree with the transforms written to the actual skin. Hidden
+anatomy helper meshes are excluded from height and head measurements. Inspect the visible deformed mesh;
+a projected joint alone is not proof of a fingertip or sole contact.
+
+A track key may supply `floor` and `floorWeight` to prevent sole penetration independently of its torso/IK
+blend. `ground:true` uses the measured bind-skin floor for upright poses. These are floor constraints, not a
+claim that all fingers touch a keyboard or that any arbitrary pose fits any chair. Fit furniture contacts in
+the shot while keeping natural proportions and limb lengths.
+
+The reference opening now uses the scanned Remy body with source-fitted reach, release, sit and typing
+tracks. Other scenes, furniture, camera and fixed-ink styling are preserved. Source identity, some early hip
+and late elbow estimates, late hand height and back shading remain different; no 99% match is established.
+Run `node scripts/acryllex/verify-human-rig.mjs` for offline male/female skin/rig regression checks. Actual GPU
+rendering and full-motion reference comparison remain necessary for visual acceptance.

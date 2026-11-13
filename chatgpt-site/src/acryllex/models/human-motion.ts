@@ -53,6 +53,7 @@ export interface HumanPose {
 export const emptyPose=():HumanPose=>({hips:Qn(),spine:[],neck:[],head:Qn(),limbs:new Map(),hipsOffset:V()});
 
 export class HumanRig {
+ readonly space:THREE.Object3D;readonly skin:THREE.Object3D;
  readonly nodes:Node[]=[];readonly index=new Map<string,number>();
  readonly spine:number[]=[];readonly neck:number[]=[];
  /** Model orientation / position of every node after solve(). */
@@ -68,8 +69,9 @@ export class HumanRig {
  private dirty=true;
 
  /** `space` is the object whose local coordinates are rig space (it must contain `skin`). The bodies are measured in bind pose. */
- constructor(readonly space:THREE.Object3D,readonly skin:THREE.Object3D){
-  bindPose(skin);space.updateMatrixWorld(true);
+ constructor(space:THREE.Object3D,skin:THREE.Object3D,options:{bindPose?:boolean}={}){
+  this.space=space;this.skin=skin;
+  if(options.bindPose!==false)bindPose(skin);space.updateMatrixWorld(true);
   const inv=new THREE.Matrix4().copy(space.matrixWorld).invert(),sq=space.getWorldQuaternion(Qn()).invert();
   const walk=(o:THREE.Object3D,parent:number)=>{
    const i=this.nodes.length,restQ=o.getWorldQuaternion(Qn()).premultiply(sq),restP=o.getWorldPosition(V()).applyMatrix4(inv);
@@ -120,11 +122,12 @@ export class HumanRig {
  private measureAnchors(){
   const head=new THREE.Box3(),feet:Record<Side,THREE.Box3>={Left:new THREE.Box3(),Right:new THREE.Box3()};const v=V();
   this.skin.traverse(o=>{const mesh=o as THREE.SkinnedMesh;if(!mesh.isSkinnedMesh)return;const pos=mesh.geometry.getAttribute('position'),si=mesh.geometry.getAttribute('skinIndex'),sw=mesh.geometry.getAttribute('skinWeight');if(!pos||!si||!sw)return;
+   for(let p:THREE.Object3D|null=o;p;p=p.parent)if(!p.visible)return;
    const kind=mesh.skeleton.bones.map(b=>{const n=bare(b.name);return /^(Head|HeadTop_End)$/.test(n)?1:/^Left(Foot|ToeBase|Toe_End)$/.test(n)?2:/^Right(Foot|ToeBase|Toe_End)$/.test(n)?3:0;});
-   const toRig=new THREE.Matrix4().copy(this.space.matrixWorld).invert().multiply(mesh.matrixWorld);
+   const toRig=new THREE.Matrix4().copy(this.space.matrixWorld).invert().multiply(mesh.matrixWorld);mesh.skeleton.update();
    const step=Math.max(1,Math.floor(pos.count/6000));
    for(let i=0;i<pos.count;i+=step){const w=[0,0,0,0];for(let j=0;j<4;j++)w[kind[si.getComponent(i,j)]??0]!+=sw.getComponent(i,j);
-    const k=w[1]!>0.7?1:w[2]!>0.7?2:w[3]!>0.7?3:0;if(!k)continue;v.fromBufferAttribute(pos,i).applyMatrix4(toRig);
+    const k=w[1]!>0.7?1:w[2]!>0.7?2:w[3]!>0.7?3:0;if(!k)continue;mesh.getVertexPosition(i,v).applyMatrix4(toRig);
     (k===1?head:k===2?feet.Left:feet.Right).expandByPoint(v);}});
   const put=(name:string,bone:string,p:THREE.Vector3)=>{const i=this.index.get(bone);if(i!==undefined)this.anchors.set(name,{bone:i,d:p.clone().sub(this.nodes[i]!.restP)});};
   if(!head.isEmpty()){const c=head.getCenter(V());put('headCenter','Head',c);put('headTop','Head',new THREE.Vector3(c.x,head.max.y,c.z));put('faceFront','Head',new THREE.Vector3(c.x,c.y,head.max.z));put('chin','Head',new THREE.Vector3(c.x,head.min.y,c.z+(head.max.z-c.z)*.55));}
@@ -167,6 +170,7 @@ export class HumanRig {
    if(n.parent<0){q.copy(n.restQ);p.copy(n.restP);continue;}
    const pq=this.Q[n.parent]!;const t=this.target[i];
    if(t)q.copy(t);else q.copy(pq).multiply(n.restLocalQ);
+   const axis=this.fingerAxis.get(i);if(axis){const side:Side=n.name.startsWith('Left')?'Left':'Right',curl=this.fingerCurl[side];if(curl)q.multiply(_q.setFromAxisAngle(axis,curl*(n.name.includes('Thumb')?0.35:1)));}
    if(i===hips)p.copy(this.hipsPos);else p.copy(n.off).applyQuaternion(pq).add(this.P[n.parent]!);}
   this.dirty=false;return this;
  }
@@ -228,7 +232,6 @@ export class HumanRig {
   const hips=this.index.get('Hips')!;
   for(let i=0;i<this.nodes.length;i++){const n=this.nodes[i]!;if(n.parent<0||!(n.o as THREE.Bone).isBone)continue;
    n.o.quaternion.copy(_q.copy(this.Q[n.parent]!).invert()).multiply(this.Q[i]!);
-   const axis=this.fingerAxis.get(i);if(axis){const S:Side=n.name.startsWith('Left')?'Left':'Right',curl=this.fingerCurl[S];if(curl)n.o.quaternion.multiply(_q.setFromAxisAngle(axis,curl*(n.name.includes('Thumb')?0.35:1)));}
    if(i===hips){const pn=this.nodes[n.parent]!;n.o.position.copy(this.hipsPos).sub(this.hipsRest).applyQuaternion(_q.copy(pn.restQ).invert()).divideScalar(this.unit).add(n.restLocalP);}
   }
  }
@@ -300,6 +303,8 @@ export interface TrackKey {
  handL?:LimbKey;handR?:LimbKey;footL?:LimbKey;footR?:LimbKey;
  /** Gait phase in cycles at this time (one cycle = two steps); replaces the walk clock so foot strikes can be timed exactly. */
  gait?:number;
+ /** Optional sole plane in rig-space units; floorWeight enables it independently of the trunk/IK blends. */
+ floor?:number;floorWeight?:number;
  /** Additive joint offsets (degrees, like poseAdjustments) and `y` in metres, layered on the underlying motion. */
  offset?:OffsetPose;
 }
@@ -330,6 +335,7 @@ export function parseTrack(input:unknown):MotionTrack|null{
   for(const c of ['spine','neck','head'] as const){const v=vec(o[c]);if(v)key[c]=v;}
   for(const c of ['handL','handR','footL','footR'] as const){const v=limb(o[c]);if(v)key[c]=v;}
   if(num(o.gait))key.gait=o.gait as number;
+  if(num(o.floor))key.floor=o.floor as number;if(num(o.floorWeight))key.floorWeight=o.floorWeight as number;
   if(o.offset&&typeof o.offset==='object'){const off:OffsetPose={};for(const [j,val] of Object.entries(o.offset as Record<string,unknown>)){if(j==='y'&&num(val))off.y=val as number;else{const q=vec(val);if(q)off[j]=q;}}key.offset=off;}
   keys.push(key);}
  if(!keys.length)return null;keys.sort((a,b)=>a.t-b.t);
@@ -338,16 +344,19 @@ export function parseTrack(input:unknown):MotionTrack|null{
 
 /** Compiled track: evaluate it at a time and lay it over whatever pose the rig already holds. */
 export class TrackPlayer {
+ readonly track:MotionTrack;private stature:number;
  private ch:Record<string,Sample[]>={};private offsetJoints:string[]=[];
  /** Keyed gait phase (cycles) at t, or null when the track does not time the gait. Linear between keys: steady cadence per segment. */
  gait(t:number){const s=this.ch.gait!;if(!s.length)return null;if(t<=s[0]!.t)return s[0]!.v[0]!;const last=s[s.length-1]!;if(t>=last.t)return last.v[0]!;let i=0;while(s[i+1]!.t<t)i++;const a=s[i]!,b=s[i+1]!;return a.v[0]!+(b.v[0]!-a.v[0]!)*(t-a.t)/(b.t-a.t);}
  /** Additive offsets at t (null when none are keyed). */
  offsets(t:number):OffsetPose|null{if(!this.offsetJoints.length)return null;const out:OffsetPose={};for(const j of this.offsetJoints){const v=sampleChannel(this.ch['off.'+j]!,t);if(!v)continue;if(j==='y')out.y=v[0]!;else out[j]=v;}return out;}
- constructor(readonly track:MotionTrack,private stature=1){
+ constructor(track:MotionTrack,stature=1){
+  this.track=track;this.stature=stature;
   const K=track.keys,c=this.ch;
   c.weight=channel(K,k=>k.weight);c.hipsPos=channel(K,k=>k.hips?.pos);c.hipsRot=channel(K,k=>k.hips?.rot);
   c.spine=channel(K,k=>k.spine);c.neck=channel(K,k=>k.neck);c.head=channel(K,k=>k.head);
   c.gait=channel(K,k=>k.gait);
+  c.floor=channel(K,k=>k.floor);c.floorWeight=channel(K,k=>k.floorWeight);
   for(const k of K)for(const j of Object.keys(k.offset??{}))if(!this.offsetJoints.includes(j))this.offsetJoints.push(j);
   for(const j of this.offsetJoints)c['off.'+j]=channel(K,k=>k.offset?(j==='y'?k.offset.y??0:(k.offset[j] as readonly number[]|undefined)??[0,0,0]):undefined);
   for(const l of ['handL','handR','footL','footR'] as const){c[l+'.pos']=channel(K,k=>k[l]?.pos);c[l+'.pole']=channel(K,k=>k[l]?.pole);c[l+'.weight']=channel(K,k=>k[l]?.weight);c[l+'.rot']=channel(K,k=>k[l]?.rot);c[l+'.curl']=channel(K,k=>k[l]?.curl);}
@@ -387,6 +396,8 @@ export class TrackPlayer {
     rig.solve();}
    if(curl&&limb==='arm')rig.fingerCurl[S]=curl[0]!*DEG;
   }
+  const floor=s('floor'),floorWeight=Math.min(1,Math.max(0,s('floorWeight',true)?.[0]??1));
+  if(floor&&floorWeight>0)groundFeet(rig,floor[0]!*unit,floorWeight);
  }
 }
 const HALF_TURN_X=new THREE.Quaternion(1,0,0,0),FLAT_FOOT=frameQuat(new THREE.Vector3(0,0,1),new THREE.Vector3(1,0,0));

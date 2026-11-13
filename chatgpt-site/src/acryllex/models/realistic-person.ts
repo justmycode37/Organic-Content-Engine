@@ -60,7 +60,9 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  const root=new THREE.Group(),body=new THREE.Group();root.add(body);body.add(inst.root);
  bindPose(inst.root);
  // body height → metres, uniformly: a figure is never squeezed along one axis
- inst.root.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(inst.root,true);const h=Math.max(0.5,box.max.y-box.min.y);
+ inst.root.updateMatrixWorld(true);const box=new THREE.Box3();
+ inst.root.traverse(o=>{const mesh=o as THREE.Mesh;if(!mesh.isMesh)return;let visible=true;for(let p:THREE.Object3D|null=o;p;p=p.parent)if(!p.visible){visible=false;break;}if(visible)box.expandByObject(mesh,true);});
+ const h=Math.max(0.5,box.max.y-box.min.y);
  const natural=preset.height??(figure==='woman'||/megan|kate|louise/.test(id)?1.68:figure==='child'?1.15:1.8);
  const target=ctx.num('height',natural,0.4,2.4);body.scale.setScalar(target/h);
  const stride=ctx.num('stride',0.72,0.3,1);
@@ -69,7 +71,10 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  // non-uniform scale on a rotating chain sheared the chest and head.
  {const foot=ctx.num('foot',anatomical?1:0.82,0.5,1.2),head=ctx.num('headScale',1,0.75,1.3);
   if(foot!==1||head!==1)inst.root.traverse(o=>{const n=bare(o.name);if(!(o as THREE.Bone).isBone)return;if(/^(Left|Right)Foot$/.test(n))o.scale.setScalar(foot);if(n==='Head')o.scale.multiplyScalar(head);});}
- const rig=new HumanRig(root,inst.root);
+ // bindPose has already run above. Capture the authored uniform head/foot proportions instead of resetting them again.
+ const rig=new HumanRig(root,inst.root,{bindPose:false});
+ // Converted scans need not put their bind-pose soles at local Y=0. Contacts use the measured skin floor.
+ const groundFloor=Math.min(...SIDES.map(S=>rig.point(S+'Sole')?.y??0));
  // hair, brow and nose so the mannequin's head reads as a person
  if(!real||!gltf(id)){const hb=rig.nodes[rig.need('Head')]!.o;hb.updateWorldMatrix(true,false);const ws=hb.getWorldScale(new THREE.Vector3());
   const g=new THREE.Group();g.scale.setScalar(body.scale.y/Math.max(1e-6,ws.x));hb.add(g);
@@ -106,8 +111,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
   const extra=track?.offsets(t);if(extra){applyOffsets(rig,extra,undefined,0);rig.hipsPos.y+=extra.y??0;}
   track?.apply(rig,t,pose.travel);
   // keep the soles on the floor for upright poses; lying figures are placed by the body rotation below
-  const static0=!MOCAP[from]&&!!PA,static1=!MOCAP[to]&&!!PB;
-  if(ground&&lie<=0)groundFeet(rig,0,1-(static0?1-k:0)-(static1?k:0));
+  if(ground&&lie<=0)groundFeet(rig,groundFloor);
   rig.write();
   body.rotation.z=deg(90)*lie;body.position.set(0,0.13*lie,0);
  };
@@ -118,7 +122,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  return {root,grounded:true,update,landmarks,rig,setTrack};
 }
 
-export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, pole, weight, rot, curl}}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); positions are reached with fixed limb lengths',ground:'true keeps the lowest sole on the floor in upright poses',fingerCurl:'resting finger curl in degrees'};
+export const PERSON_PARAMS:Record<string,string>={stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true prevents upright/static soles sinking below the skin-derived bind floor',fingerCurl:'resting finger curl in degrees'};
 export const PERSON_POSES=[...new Set([...Object.keys(MOCAP),...Object.keys(HUMAN_POSES)])];
 
 export const person=defineModel({
