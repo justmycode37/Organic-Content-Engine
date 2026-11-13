@@ -8,8 +8,8 @@ export type Hue='blue'|'azure'|'red'|'white'|'amber'|'green'|'cyan'|'violet'|'or
 export type At=string|number;
 export type Vec3=[number,number,number];
 
-export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'none';
-export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'none';
+export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'from-black'|'light-up'|'ping'|'scan-in'|'none';
+export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'to-black'|'scan-out'|'ping-out'|'none';
 /** One-shot object effects (see effects.ts). */
 export type FxKind='heartbeat'|'shockwave'|'ripple'|'shake'|'squash'|'recoil'|'hop'|'glint'|'scan'|'charge'|'flicker'|'glitch';
 /** Where a shock wave / ripple starts or where a hit comes from: a side of the object, or a direction from its centre (-1..1 per axis). */
@@ -190,7 +190,10 @@ export interface Scene {
  objects:SceneObject[];
  events?:SceneEvent[];
  text?:TextItem[];
- transition?:'cut'|'dissolve'|'wipe'|'flash';
+ /** Into this scene. dissolve, wipe, push-left/right/up and glitch mix the two scenes; black/iris/blinds/blink close the last scene to black and open this one from black. */
+ transition?:'cut'|'dissolve'|'wipe'|'flash'|'push-left'|'push-right'|'push-up'|'glitch'|'black'|'iris'|'blinds'|'blink';
+ /** Transition length in seconds (default 0.4; through-black 0.8, split across the cut). */
+ transitionDur?:number;
  /** Light rig for this scene: key direction (camera space, x right y up z toward viewer) and levels. */
  light?:{dir?:Vec3;key?:number;fill?:number;rim?:number;ambient?:number;contrast?:number;blackPoint?:number;whitePoint?:number;inkLo?:number;gamma?:number;exposure?:number;ink?:number;softness?:number;noise?:number;noiseReference?:number;
   /** Local lights in world coordinates; intensity uses the same PI scaling as the directional rig. */

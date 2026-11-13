@@ -159,3 +159,13 @@ test('object effects validate, play and add sound cues',async()=>{
  for(const kind of FX_KINDS){const track=[{kind,t0:0,t1:1,from:'front',amount:1,count:1}];const after=fxPose(track,1.2,1);assert.deepEqual(after.scale.toArray(),[1,1,1]);assert.deepEqual(after.pos.toArray(),[0,0,0]);}
  const beat=fxPose([{kind:'heartbeat',t0:0,t1:.9,from:'front',amount:1,count:1}],.08,1);assert.ok(beat.scale.x>1.1);
 });
+test('darkness entrances, exits and scene transitions validate and cue sound',async()=>{
+ const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {fxReveal,fxUniforms,REVEAL_KINDS}=await import('../src/acryllex/effects.ts');
+ const s=structuredClone(spec);s.scenes[0].objects[0].enter='from-black';s.scenes[0].objects[0].exit='scan-out';s.scenes[1].transition='black';s.scenes[1].transitionDur=1;s.scenes[2].transition='push-left';s.scenes[3].transition='glitch';
+ assert.ok(specSchema.safeParse(s).success);
+ const bad=structuredClone(s);bad.scenes[1].transition='fade-to-pink';assert.ok(!specSchema.safeParse(bad).success);
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='glitch'&&c.why.includes('transition')));assert.ok(cues.some(c=>c.kind==='scan'));
+ const box=new THREE.Box3(new THREE.Vector3(-1,0,-1),new THREE.Vector3(1,2,1));
+ for(const kind of REVEAL_KINDS){const u=fxUniforms();assert.ok(fxReveal(kind,.5,u,box),kind);}
+ const u=fxUniforms();fxReveal('from-black',0,u,box);assert.equal(u.uFxDim.value,0);fxReveal('to-black',0,fxUniforms(),box);
+});

@@ -23,6 +23,7 @@ export function fxUniforms(){
   uFxGl:{value:0},uFxGlB:{value:0.1},uFxT:{value:0},
   uFxSD:{value:new THREE.Vector3(0,1,0)},uFxSP:{value:0},uFxSW:{value:0.1},uFxSG:{value:0},uFxST:{value:0},
   uFxE:{value:0},uFxDim:{value:1},
+  uRvMode:{value:0},uRvO:{value:new THREE.Vector3()},uRvD:{value:new THREE.Vector3(0,1,0)},uRvP:{value:0},uRvW:{value:0.05},uRvG:{value:0},
  };
 }
 export type FxUniforms=ReturnType<typeof fxUniforms>;
@@ -59,6 +60,16 @@ vec3 fxDelta=vec3(0.);
 `;
 const FRAG_PARS=WAVE_PARS+`
 uniform vec3 uFxSD;uniform float uFxSP;uniform float uFxSW;uniform float uFxSG;uniform float uFxST;uniform float uFxE;uniform float uFxDim;
+uniform int uRvMode;uniform vec3 uRvO;uniform vec3 uRvD;uniform float uRvP;uniform float uRvW;uniform float uRvG;
+`;
+/** Reveal masks: keep the surface inside a growing sphere (1) or below a moving plane (2), with a bright edge. */
+const FRAG_REVEAL=`
+float fxRevealGlow=0.;
+if(uRvMode>0){
+ float s=uRvMode==1?length(vFxWp-uRvO):dot(vFxWp,uRvD);float e=(uRvP-s)/max(uRvW,1e-5);
+ if(e<0.)discard;
+ fxRevealGlow=uRvG*exp(-e*e*.8);
+}
 `;
 /** Per-pixel wave: the band glows and tilts the shading normal, so even a flat low-poly face shows the ring. */
 const FRAG_NORMAL=`
@@ -73,7 +84,7 @@ if(uFxMode>0&&uFxA+uFxG>0.){
 }
 `;
 const FRAG_GLOW=`
-{float sx=(dot(vFxWp,uFxSD)-uFxSP)/max(uFxSW,1e-5);totalEmissiveRadiance+=diffuseColor.rgb*(fxWaveGlow+uFxE+uFxSG*(exp(-sx*sx)+(sx<0.?uFxST*exp(sx/6.):0.)));}
+{float sx=(dot(vFxWp,uFxSD)-uFxSP)/max(uFxSW,1e-5);totalEmissiveRadiance+=diffuseColor.rgb*(fxWaveGlow+fxRevealGlow+uFxE+uFxSG*(exp(-sx*sx)+(sx<0.?uFxST*exp(sx/6.):0.)));}
 `;
 
 /** Install the effect hooks on a standard material. Materials already patched for another object are cloned first. */
@@ -92,12 +103,13 @@ export function patchMaterial(mat:THREE.Material,u:FxUniforms,owner:object):THRE
    .replace('#include <skinning_vertex>','#include <skinning_vertex>\ntransformed+=fxDelta;');
   shader.fragmentShader=shader.fragmentShader
    .replace('#include <common>','#include <common>\n'+FRAG_PARS)
+   .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n'+FRAG_REVEAL)
    .replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+FRAG_NORMAL)
    .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+FRAG_GLOW)
    .replace('#include <opaque_fragment>','outgoingLight*=uFxDim*(1.-fxWaveDim);\n#include <opaque_fragment>');
  };
  const key=m.customProgramCacheKey.bind(m);
- m.customProgramCacheKey=()=>key()+'|acx-fx3';
+ m.customProgramCacheKey=()=>key()+'|acx-fx4';
  m.needsUpdate=true;
  return m;
 }
@@ -173,3 +185,26 @@ function originOn(box:THREE.Box3,from:string){
  return c;
 }
 function extent(box:THREE.Box3,dir:THREE.Vector3):[number,number]{let lo=Infinity,hi=-Infinity;for(let i=0;i<8;i++){const v=new THREE.Vector3(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z).dot(dir);lo=Math.min(lo,v);hi=Math.max(hi,v);}return [lo,hi];}
+
+/** Entrances / exits that come out of or go into darkness (object-level transitions). */
+export const REVEAL_KINDS=['from-black','light-up','ping','scan-in','to-black','scan-out','ping-out'] as const;
+export const REVEAL_DUR:Record<string,number>={'from-black':0.9,'light-up':0.9,ping:0.9,'scan-in':1.0,'to-black':0.8,'scan-out':0.9,'ping-out':0.8};
+
+/** Apply one reveal (k 0..1 of the entrance, or of the exit) on top of fxSurface. Returns false for other kinds. */
+export function fxReveal(kind:string,k:number,u:FxUniforms,box:THREE.Box3):boolean{
+ const size=box.getSize(new THREE.Vector3()),c=box.getCenter(new THREE.Vector3()),span=Math.max(size.x,size.y,size.z,1e-3);
+ const far=(o:THREE.Vector3)=>{let f=0;for(let i=0;i<8;i++)f=Math.max(f,o.distanceTo(new THREE.Vector3(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z)));return f;};
+ switch(kind){
+  // dots thin out in Bayer order: the object emerges from / sinks into darkness
+  case 'from-black':u.uFxDim.value*=Math.pow(smooth(k),1.3);return true;
+  case 'to-black':u.uFxDim.value*=Math.pow(1-smooth(k),1.3);return true;
+  // a light sweeps over it from the left: darkness on one side, a bright edge, lit on the other
+  case 'light-up':{const dir=new THREE.Vector3(1,0.15,0.3).normalize();const [lo,hi]=extentOf(box,dir);u.uRvMode.value=2;u.uRvD.value.copy(dir);u.uRvW.value=span*0.08;u.uRvP.value=lerp(lo-span*0.02,hi+span*0.3,ease.inOut(k));u.uRvG.value=1.0*(1-smooth((k-.75)/.25));return true;}
+  case 'ping':case 'ping-out':{const o=c.clone();o.z=box.max.z;const R=far(o)*1.04;const kk=kind==='ping'?ease.out(k):1-ease.inOut(k);u.uRvMode.value=1;u.uRvO.value.copy(o);u.uRvW.value=span*0.07;u.uRvP.value=lerp(0,R+span*0.1,kk);u.uRvG.value=2.0*(kind==='ping'?1-smooth((k-.7)/.3):1-smooth(1-k-.0));return true;}
+  case 'scan-in':{u.uRvMode.value=2;u.uRvD.value.set(0,1,0);u.uRvW.value=span*0.035;u.uRvP.value=lerp(box.min.y-span*0.01,box.max.y+span*0.08,ease.inOutSine(k));u.uRvG.value=2.4*(1-smooth((k-.85)/.15));return true;}
+  case 'scan-out':{u.uRvMode.value=2;u.uRvD.value.set(0,-1,0);u.uRvW.value=span*0.035;u.uRvP.value=-lerp(box.min.y-span*0.08,box.max.y+span*0.01,ease.inOutSine(k));u.uRvG.value=2.4*smooth(k/.1);return true;}
+ }
+ return false;
+}
+export function resetReveal(u:FxUniforms){u.uRvMode.value=0;u.uRvG.value=0;}
+function extentOf(box:THREE.Box3,dir:THREE.Vector3){return extent(box,dir);}
