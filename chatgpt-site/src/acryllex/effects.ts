@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import {clamp,lerp,ease,smooth} from './kit.ts';
+import {TessellateModifier} from 'three/examples/jsm/modifiers/TessellateModifier.js';
 import type {FxKind,FxFrom} from './spec.ts';
 
 /**
@@ -23,6 +24,7 @@ export function fxUniforms(){
   uFxGl:{value:0},uFxGlB:{value:0.1},uFxT:{value:0},
   uFxSD:{value:new THREE.Vector3(0,1,0)},uFxSP:{value:0},uFxSW:{value:0.1},uFxSG:{value:0},uFxST:{value:0},
   uFxE:{value:0},uFxDim:{value:1},
+  uMbK:{value:0},uMbC:{value:new THREE.Vector3()},uMbR:{value:1},
   uRvMode:{value:0},uRvO:{value:new THREE.Vector3()},uRvD:{value:new THREE.Vector3(0,1,0)},uRvP:{value:0},uRvW:{value:0.05},uRvG:{value:0},
  };
 }
@@ -38,7 +40,7 @@ float fxProfile(float x){
 }
 `;
 const VERT_PARS=WAVE_PARS+`
-uniform float uFxGl;uniform float uFxGlB;uniform float uFxT;
+uniform float uMbK;uniform vec3 uMbC;uniform float uMbR;uniform float uFxGl;uniform float uFxGlB;uniform float uFxT;
 float fxHash(float n){return fract(sin(n*127.1+311.7)*43758.5453);}
 `;
 const VERT_BODY=`
@@ -46,8 +48,13 @@ vec3 fxDelta=vec3(0.);
 {
  vec4 fxW4=modelMatrix*vec4(position,1.);vec3 wp=fxW4.xyz;mat3 m3=mat3(modelMatrix);
  vec3 wn=normalize(m3*objectNormal+vec3(1e-6));vec3 d=vec3(0.);bool fxOn=false;
+ if(uMbK>0.){
+  fxOn=true;vec3 q=wp-uMbC;vec3 qn=normalize(q+vec3(1e-5,2e-5,3e-5));
+  float wob=1.+.06*sin(qn.x*7.+qn.y*5.+uMbK*9.)*uMbK;vec3 sp=uMbC+qn*uMbR*wob;
+  d+=(sp-wp)*uMbK;wn=normalize(mix(wn,qn,uMbK));
+ }
  if(uFxMode>0&&uFxA+uFxG>0.){
-  vec3 r=wp-uFxO;float dist=length(r);float x=(dist-uFxR)/max(uFxW,1e-5);
+  vec3 r=wp+d-uFxO;float dist=length(r);float x=(dist-uFxR)/max(uFxW,1e-5);
   fxOn=true;d+=wn*uFxA*fxProfile(x);
  }
  if(uFxGl>0.){
@@ -109,7 +116,7 @@ export function patchMaterial(mat:THREE.Material,u:FxUniforms,owner:object):THRE
    .replace('#include <opaque_fragment>','outgoingLight*=uFxDim*(1.-fxWaveDim);\n#include <opaque_fragment>');
  };
  const key=m.customProgramCacheKey.bind(m);
- m.customProgramCacheKey=()=>key()+'|acx-fx4';
+ m.customProgramCacheKey=()=>key()+'|acx-fx5';
  m.needsUpdate=true;
  return m;
 }
@@ -206,5 +213,50 @@ export function fxReveal(kind:string,k:number,u:FxUniforms,box:THREE.Box3):boole
  }
  return false;
 }
-export function resetReveal(u:FxUniforms){u.uRvMode.value=0;u.uRvG.value=0;}
+export function resetReveal(u:FxUniforms){u.uRvMode.value=0;u.uRvG.value=0;u.uMbK.value=0;}
 function extentOf(box:THREE.Box3,dir:THREE.Vector3){return extent(box,dir);}
+
+/** Object-to-object morph styles besides the point-cloud default. */
+export const MORPH_STYLES=['particles','blob','flip','implode','scan','fade'] as const;
+export type MorphStyle=typeof MORPH_STYLES[number];
+
+/** Transform part of a styled morph for the source (inbound=false) or the result (inbound=true). */
+export function morphPose(style:string,k:number,inbound:boolean){
+ const out={visible:true,scale:1,rotY:0};
+ const first=k<0.5,h=inbound?(k-0.5)*2:k*2;
+ if(style==='blob'){out.visible=inbound?!first:first;}
+ if(style==='fade')out.visible=inbound?k>0.36:k<0.64;
+ if(style==='flip'){out.visible=inbound?!first:first;out.rotY=inbound?-(1-ease.out(h))*Math.PI/2:ease.in(h)*Math.PI/2;}
+ if(style==='implode'){if(inbound){out.visible=!first;out.scale=Math.max(0.001,ease.outBack(clamp(h)));}else{out.visible=k<0.45;out.scale=Math.max(0.001,1-ease.in(clamp(k/0.45))*0.97);}}
+ return out;
+}
+
+/** Shader part of a styled morph. `box` is the source's world bounds (shared by both sides), `both` covers source and result. */
+export function morphSurface(style:string,k:number,inbound:boolean,u:FxUniforms,box:THREE.Box3,both:THREE.Box3){
+ const size=box.getSize(new THREE.Vector3()),span=Math.max(size.x,size.y,size.z,1e-3);
+ switch(style){
+  case 'blob':{const h=inbound?(k-0.5)*2:k*2;u.uMbK.value=inbound?1-ease.inOut(clamp(h)):ease.inOut(clamp(h));u.uMbC.value.copy(box.getCenter(new THREE.Vector3()));u.uMbR.value=(size.x+size.y+size.z)/6*0.95;u.uFxE.value+=0.45*Math.sin(Math.PI*k);break;}
+  case 'implode':{if(!inbound)u.uFxE.value+=1.3*ease.in(clamp(k/0.45));else{const h=clamp((k-0.5)*2);u.uFxE.value+=0.9*Math.pow(1-h,2);
+   u.uFxMode.value=1;u.uFxO.value.copy(box.getCenter(new THREE.Vector3()));u.uFxW.value=span*0.09;u.uFxR.value=lerp(0,span*0.9,ease.out(h));u.uFxA.value=span*0.03*(1-h);u.uFxG.value=1.2*(1-h);}break;}
+  case 'scan':{const y=lerp(both.min.y-span*0.03,both.max.y+span*0.03,ease.inOutSine(k));u.uRvMode.value=2;u.uRvW.value=span*0.03;u.uRvG.value=2.2*smooth(k/.08)*smooth((1-k)/.08);
+   if(inbound){u.uRvD.value.set(0,1,0);u.uRvP.value=y;}else{u.uRvD.value.set(0,-1,0);u.uRvP.value=-y;}break;}
+  case 'flip':{u.uFxE.value+=0.5*Math.pow(Math.sin(Math.PI*k),6);break;}
+  case 'fade':{u.uFxDim.value*=inbound?smooth((k-0.35)/0.65):1-smooth(k/0.65);break;}
+ }
+}
+
+/** Split long edges of low-poly meshes so vertex effects (blob morph, shock-wave bumps) can bend them smoothly. */
+export function densify(meshes:THREE.Mesh[]){
+ for(const m of meshes){
+  if((m as THREE.SkinnedMesh).isSkinnedMesh||m.userData.densified)continue;
+  const g=m.geometry,count=g.attributes.position?.count??0;if(count<3||count>6000)continue;
+  g.computeBoundingSphere();const r=g.boundingSphere?.radius??1;
+  try{
+   const src=g.index?g.toNonIndexed():g.clone();for(const name of Object.keys(src.attributes))if(!['position','normal','uv'].includes(name))src.deleteAttribute(name);
+   if(!src.attributes.normal)src.computeVertexNormals();
+   const out=new TessellateModifier(r/9,7).modify(src);
+   if(out.attributes.position!.count>90000){out.dispose();continue;}
+   m.geometry=out;m.userData.densified=true;
+  }catch{/* keep the original geometry */}
+ }
+}

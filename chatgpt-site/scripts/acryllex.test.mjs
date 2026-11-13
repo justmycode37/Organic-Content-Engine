@@ -169,3 +169,11 @@ test('darkness entrances, exits and scene transitions validate and cue sound',as
  for(const kind of REVEAL_KINDS){const u=fxUniforms();assert.ok(fxReveal(kind,.5,u,box),kind);}
  const u=fxUniforms();fxReveal('from-black',0,u,box);assert.equal(u.uFxDim.value,0);fxReveal('to-black',0,fxUniforms(),box);
 });
+test('morph styles validate, hand over cleanly and cue sound',async()=>{
+ const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {morphPose,MORPH_STYLES,densify}=await import('../src/acryllex/effects.ts');
+ const s=structuredClone(spec);s.scenes[0].objects.push({id:'b',model:'led',enter:'none'});s.scenes[0].events=[{at:'seven',target:'a',morph:'b',morphStyle:'implode'}];
+ assert.ok(specSchema.safeParse(s).success);const bad=structuredClone(s);bad.scenes[0].events[0].morphStyle='melt';assert.ok(!specSchema.safeParse(bad).success);
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='charge'));assert.ok(cues.some(c=>c.why==='implode burst'));
+ for(const style of MORPH_STYLES.filter(x=>x!=='particles')){assert.ok(morphPose(style,0.02,false).visible,style);assert.ok(morphPose(style,0.98,true).visible,style);assert.ok(!(morphPose(style,0.5,false).visible&&morphPose(style,0.5,true).visible)||style==='scan'||style==='fade',style);}
+ const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));densify([m]);assert.ok(m.geometry.attributes.position.count>200);
+});
