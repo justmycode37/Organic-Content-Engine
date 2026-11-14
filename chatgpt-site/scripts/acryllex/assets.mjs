@@ -6,6 +6,7 @@ import {dirname,join} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {prepareFluidCaches} from './cache-assets.mjs';
 import {prepareFootage} from './media-assets.mjs';
+import {prepareRecordedMotions} from './recorded-motion-assets.mjs';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 export const ASSET_DIR=join(ROOT,'.acryllex-assets');
@@ -76,5 +77,6 @@ export async function assetsForSpec(spec){
   const e=await findAsset(id);if(e)out[e.id]=await ensureAsset(e);
  }
  Object.assign(out,await prepareFluidCaches(spec,ASSET_DIR));
+ Object.assign(out,await prepareRecordedMotions(spec,ASSET_DIR));
  return out;
 }

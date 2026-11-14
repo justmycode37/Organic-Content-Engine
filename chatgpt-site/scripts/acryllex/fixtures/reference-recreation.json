@@ -20384,7 +20384,23 @@
               "pelvis": 0.85,
               "legs": 0.8
             },
-            "sourceAlpha": true
+            "sourceAlpha": true,
+            "headAccentLight": {
+              "position": [
+                -0.08074661078529355,
+                1.5707077662066498,
+                0.28167631288402206
+              ],
+              "target": [
+                0.7192533892147065,
+                1.22070776620665,
+                0.03167631288402206
+              ],
+              "intensity": 1,
+              "innerAngleDeg": 12,
+              "outerAngleDeg": 20,
+              "distance": 3
+            }
           },
           "pos": [
             -2.4499999999999997,
