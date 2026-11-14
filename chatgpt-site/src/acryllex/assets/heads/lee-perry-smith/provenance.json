@@ -1,0 +1,21 @@
+{
+  "title": "Infinite, 3D Head Scan",
+  "author": "Lee Perry-Smith / Infinite Realities",
+  "license": "CC-BY-3.0",
+  "licenseURL": "https://creativecommons.org/licenses/by/3.0/",
+  "source": "https://raw.githubusercontent.com/mrdoob/three.js/r180/examples/models/gltf/LeePerrySmith/",
+  "sourceFiles": {
+    "LeePerrySmith.glb": "402b8a8ac9f03232e6d64b5962929703a069daf99d3c49ac8eb0e48bedc9c576",
+    "LeePerrySmith_License.txt": "7cf4da43a6ae6d32f7f7d063fe129a19468af6f4fe7c53b937f83959709fcb50",
+    "Infinite-Level_02_Tangent_SmoothUV.jpg": "36925e51ad9b324b94e8faf4692da1b4132809f2762bb8d5bd549ffd215d4ca6",
+    "Map-COL.jpg": "e976d73b31407f8d0967412bf468019ed26a5d5a32cf5811aabff7e816458a65"
+  },
+  "output": "head.glb",
+  "outputSHA256": "898f1a8168af0d55406fa59a76cf69f13afd87f5a9c426835853d7edaba1e536",
+  "adaptations": [
+    "Repackaged original mesh with supplied photographic colour and tangent-space normal maps.",
+    "Texture orientation and normal-channel convention baked by Three.js GLTFExporter.",
+    "No generated anatomy, added facial expressions, or rig."
+  ],
+  "scope": "Closed-eye neutral bust; rigid head/neck motion only. Shared library material ignores source RGB unless explicit detail is enabled."
+}

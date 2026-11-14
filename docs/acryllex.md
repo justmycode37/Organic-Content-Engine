@@ -1,10 +1,108 @@
-# ACRYLLEX — dithered-3D explainer reels (model library contract)
+# ACRYLLEX — pixel-style explainer reels (asset and model library contract)
 
 Separate account from Hedgy. Reels explain things people are curious about (why we dream, why the blue LED
-was so hard). Look: real 3D objects (three.js) rendered as ordered-dither square dots in ONE hue per scene on
-black (see `chatgpt-site/src/acryllex/engine.ts`, post shader). Brightness = dot density, so **shape and
-shading are everything**: silhouettes, bevels, holes, ridges and tone contrast between parts are what make an
-object recognisable. The owner's bar: every object must be instantly recognisable by a stranger, high quality.
+was so hard). Real subjects come from licensed photos, moving footage, scans or editable 3D and pass through
+the shared pixel renderer on pure black (see `chatgpt-site/src/acryllex/engine.ts`, post shader). Use
+`look.inkMode:"fixed"`: occupied dots have the same ink RGB in light and shadow; **contrast is a density
+difference**. Preserve sparse details, dense highlights and dark openings without dimming individual dots.
+Silhouette, local shading and real motion make the subject recognisable. Every subject must read instantly
+to a stranger with the sound off.
+
+## Choose the asset for the shot
+
+Complex natural subjects default to licensed photo/video-backed library assets. A curling wave, breaking
+foam, spray, smoke, an animal or a filmed human action usually needs moving footage. A photo is appropriate
+for a static subject/view; moving or deforming a still does not reproduce fluid motion. Prefer an accurate
+source over a crude assembly of primitive shapes.
+
+Use a clothed scanned, rigged human when poses, articulation or interactions must be edited. Real 3D remains
+useful for editable mechanical shapes, object interactions and shots that need a new camera viewpoint.
+Choose a scan or a well-modelled subject with supported controls; do not force every subject into primitives.
+Fixed-view footage is a flat layer and cannot provide unseen sides or a new 3D camera angle.
+
+Remove the sky and background so they are black or transparent. An already isolated source, existing alpha,
+or an explicitly prepared mask is required: the media renderer does not automatically segment backgrounds.
+Check the whole moving clip for edge fringes and unwanted background dots, especially around foam and hair.
+
+## Photos and moving footage
+
+The generic `footage` model (aliases `video`, `clip`) accepts a licensed library preset in `params.asset`,
+a local image/video path in `params.file`, or an HTTPS source in `params.url`. Choose a preset or custom
+file/URL; combining them is an error. Use verified library paths/URLs; missing or invalid media fails clearly.
+A still image prepares as one frame and stays static. Preparation is handled by
+`scripts/acryllex/media-assets.mjs`; client playback is in `src/acryllex/assets.ts`.
+
+`model:"wave-footage"` (alias `ocean-wave-media`) defaults to `params.asset:"ocean-breaker"`, the
+AI-generated outside-view wave. `params.asset:"ocean-barrel"` selects an inside-view alternative of unverified
+capture origin. Sources download on demand into the private render cache; the library supplies aligned mattes,
+monochrome preparation and provenance in `src/acryllex/media-library.ts`. Retain the source/view/clip-duration
+limitations in those records. Neither is filmed evidence or an exact reference reconstruction. Custom subjects
+use `file`/`url`.
+
+For the usual single-ink look set `monochrome:true`, `preserveAspect:true` and `look.inkMode:"fixed"`.
+Preparation converts RGB to BT709 luminance once; luminance drives dot density in the scene ink. RGB is
+preserved by default for backward compatibility, so explicitly select monochrome for normal ACRYLLEX media.
+Keep the same ink through highlights and shadows; do not paint different grey/colour dots to simulate shade.
+Do not blur the finished dot image to compensate for source detail. The approved outside-wave grade uses
+scene light `{contrast:1.5,gamma:1.05,blackPoint:0.02,whitePoint:0.95,exposure:1.05,softness:0}`.
+This is source-specific grading; keep the shared output dot pitch and ink unchanged.
+
+| Input | Meaning |
+| --- | --- |
+| `asset` | Licensed library preset: `ocean-breaker` or `ocean-barrel`; choose this instead of `file`/`url`. |
+| `file` / `url` | Verified local path or HTTPS image/video source; `file` takes precedence. |
+| `sourceStart`, `sourceDuration` | Source trim in seconds before preparation; a still starts at zero. |
+| `crop` | Source crop `W:H:X:Y`, before scaling. |
+| `cols`, `rows` | Prepared **frame** width/height in pixels, not the atlas tile counts. With `preserveAspect:true`, supply one dimension to derive the other from source/crop aspect. If both are set, keep their ratio correct. |
+| `sampleScale` | Source samples per output dot, 1–4; generic default1, media presets3. Retains fine source luminance before the shared dot pass without changing output dot size. Explicit `cols`/`rows` override prepared dimensions. |
+| `fps` | Prepared playback frame rate, default 30; finite 0.1–120. |
+| `blur` | Source preparation blur in pixels, default 1.2; use only source-justified softness and retain fine detail. |
+| `monochrome` | `true` prepares one luminance image for the scene ink; default preserves RGB. |
+| `alphaFile`, `invertAlpha` | Optional aligned image/video mask. White keeps the subject, black removes background; invert if necessary. The source trim/crop/scale also apply to the mask. This is a supplied mask, not automatic segmentation. |
+| `mirrorX`, `mirrorY` | Optional preparation flips; image and mask flip together. |
+| `height` | Flat layer height in metres, default 2; width follows prepared manifest `w/h`, independent of output aspect. |
+| `start`, `timeOrigin`, `loop` | Seconds into the prepared clip, scene-local playback origin (default 0), and optional loop. Separate these from source trimming. |
+| `controls.speed` | Playback rate, default 1; zero holds, negative reverses. |
+
+Sampling uses `start + (sceneLocalTime - timeOrigin) * speed`. Nonlooping clips clamp to first/last frame;
+loops wrap in either direction. Instances share decoded images but have independent playback transforms.
+Different crop/trim/mono/mask variants of the same file have separate preparation keys. Preparation records
+source hashes and enforces frame/resource limits; trim long sources to the needed shot.
+
+Use explicit `origin:"model"`, `pos:[0,0,0]`, `idle:"none"` and a front-facing fixed camera. For height `H`
+and vertical field of view `fov`, place the camera at `[0,0,H/(2*tan(fov/2))]`, looking at `[0,0,0]` (convert
+degrees to radians for the calculation). Match source/crop and output aspect when the layer should fill
+the whole frame. For example, with a licensed source and aligned mask already prepared for the shot:
+
+```json
+{"version":1,"series":"ACRYLLEX","title":"Wave","captions":false,
+ "format":{"width":1164,"height":670,"cell":3.72},"look":{"inkMode":"fixed"},
+ "scenes":[{"say":"The wave curls and breaks.","duration":3,"hue":"azure","ground":false,
+  "camera":{"move":"static","pos":[0,0,2.747477419],"look":[0,0,0],"fov":40},
+  "objects":[{"id":"wave","model":"footage","origin":"model","pos":[0,0,0],
+   "enter":"none","idle":"none","params":{"file":"/absolute/path/to/licensed-wave.mov",
+    "alphaFile":"/absolute/path/to/aligned-wave-mask.mov","sourceStart":0,"sourceDuration":3,
+    "monochrome":true,"preserveAspect":true,"cols":582,"height":2,"timeOrigin":0}}]}]}
+```
+
+The paths above are illustrative, not bundled assets. Choose a clip whose real action lands on the spoken
+word; synchronize its trim/start/origin instead of adding arbitrary scene events to continuous motion.
+Run `node scripts/acryllex/verify-media-prepare.mjs` for portable preparation checks and
+`node scripts/acryllex/verify-media29.mjs` for synthetic GPU playback, instance isolation and disposal.
+
+## Reusable source and license records
+
+Keep an asset record beside each reusable library item: subject/action description, source page, direct
+download URL or original local path, creator, exact license/version, attribution requirements, and any
+required releases for its intended use. Record whether capture is filmed, rendered, generated or unverified;
+do not describe an unverified clip as filmed evidence. Retain acquisition date, original source hash, and the crop, trim,
+mask and preparation recipe. Record a mask's source/license too, or the authored recipe/model and its version.
+Preserve the original source and the ability to regenerate derived assets. Download access alone does not
+establish reuse permission; verify the license before adding an asset and never invent a license claim.
+
+Keep these records in the asset catalogue and production provenance; do not add unsupported fields to the
+strict reel spec. Reuse approved assets across shots and reels. A source clip provides subject motion, while
+text, timing, composition and the pixel renderer remain editable parts of the reel.
 
 ## Files
 - `src/acryllex/kit.ts` — maths + geometry helpers `G` (box, rbox, sphere, ellipsoid, cyl, cone, capsule, torus,
@@ -17,22 +115,34 @@ object recognisable. The owner's bar: every object must be instantly recognisabl
   matters to the story (LED colours, red blood, green leaf…; hex or hue name). `glow` makes it self-lit with a
   dot halo, scaled by control `glow` (or `glowControl`). `ctx.num/str/bool` read params safely.
 - `src/acryllex/models/*.ts` — packs. Each exports ModelDefs; already registered in `models/index.ts`.
-- `src/acryllex/models/human.ts` — posable person (reference for quality + animation via `update`).
+- `src/acryllex/models/person.ts` — active skinned human and motion retargeting; `human.ts` supplies named poses.
+- `src/acryllex/models/realistic-humans.ts` — opt-in anatomical male/female meshes, using `realistic-person.ts` and `human-motion.ts`; reference pose fitting remains in progress.
+- `src/acryllex/models/fluid-surface.ts` — reusable continuous surfaces, editable grids/splines, sampled flow and surface-bound foam.
+- `src/acryllex/assets.ts`, `src/acryllex/media-key.ts`, `src/acryllex/media-library.ts`, `scripts/acryllex/media-assets.mjs` — shared photo/video library, preparation identity and deterministic fixed-view playback.
 - `scripts/acryllex/render.mjs shot <spec.json> <out.png> <t...>` — stills/contact sheet (GPU Chrome).
 
 ## Rules for a model
 1. Real-world proportions in metres, y up, front faces +z, origin at bottom centre (grounded) or centre
    (`grounded:false` for floating things like planets, cells, molecules). Tiny things (cells, atoms) use a
    display size ~0.2–1.5 m.
-2. Recognisable at reel size from a 3/4 view AND front/side: exaggerate the defining features slightly
-   (a cat's ears + tail + whiskers-muzzle, a car's wheels + windows + cabin, an eye's iris + pupil + cornea).
-3. Detail via geometry, not texture; 300–20k triangles; use `tone` differences (0.35–1) to separate parts
-   (iris darker than sclera, windows darker than body). Avoid huge flat dark areas (they vanish).
+2. Preserve natural proportions and defining silhouettes from front, side and 3/4 views. Check anatomy,
+   articulation and contact against reference frames; avoid compensating for placement errors by stretching a body.
+3. Allocate geometry where silhouette, curvature and articulation need it; use detailed meshes and surface
+   relief when necessary. With `look.inkMode:"fixed"`, one ink RGB carries light and shadow through local dot
+   density. Measure dense highlights, sparse shadows and dark openings separately; preserve their contrast.
 4. Animation through `controls` (0..1 sliders, documented, with `defaults`) and idle motion in `update` using
    `t` (wings flap, tail wags, wheels spin, heart beats). Pure function of controls and t; no Math.random/Date
    (use `rng(ctx.seed)`), no allocation-heavy work per frame (mutate existing objects).
 5. `describe` = one line of what the viewer SEES + what controls do. `aliases` = the words a writer would use.
-6. Must not throw for any params.
+6. Tolerate ordinary procedural params within documented limits. Missing/invalid external assets must fail
+   clearly, rather than exporting a silent primitive placeholder.
+
+## Effect selection
+
+Give `scan` and `glitch` a slight preference when several object effects suit the spoken action equally well.
+Keep the other effects in rotation and pick a more specific effect when it tells the story better. This is a
+soft preference, with no required count per reel. The shared guidance lives in `ACRYLLEX_POLICY.effectSelection`
+and is used by storyboard generation and both storyboard and visual review.
 
 ## Test spec
 ```json
@@ -41,3 +151,203 @@ object recognisable. The owner's bar: every object must be instantly recognisabl
 ```
 Camera angles: front, three-quarter, three-quarter-left, side, top, high, low. Render several angles/hues
 (blue, red, white) and LOOK at the PNGs; iterate until a stranger would name the object instantly.
+
+## Reusable fluids
+
+Licensed moving footage is the default for a natural breaking wave or similarly complex fluid motion.
+Use these editable surface/cache tools when custom geometry, interaction or a new viewpoint is required;
+their availability does not make a procedural approximation the preferred source for every fluid shot.
+
+The public `fluid-sheet` model supports ocean, ripple, cascade and fan forms, or an authored `controlGrid` /
+swept `path` with a custom `section`. `fluid-jet` supports a spline path or ballistic launch and a jet/splash
+section. Both use the same surface and foam core as the reference wave. Keep shot-specific shape,
+motion and lighting data in the preset. Demonstrate the core on other water forms, authored control grids
+or splines, and alternate viewpoints. Procedural water surfaces do not imply a physical fluid solver.
+
+Both models also accept `material:"water"` for shared dielectric reflection/transmission and advected
+world-space normal relief. `rippleAmplitude`, `rippleFrequency` and `rippleFlow` control that fine relief;
+larger folds require geometry or a simulation. `opticalThickness` controls absorption separately from
+the sheet's geometric `thickness`. Clear water receives shadows; opaque foam casts and receives them.
+The material owns and releases its procedural environment. The existing opaque material remains the default.
+
+For a shot that specifically needs editable simulated liquid motion and changing topology, the optional
+Blender4.5LTS workflow is `scripts/acryllex/fluid-bake.py`:
+
+```sh
+python3 scripts/acryllex/fluid-bake.py --write-example recipe.json --preset dam-break
+blender --background --threads 2 --python scripts/acryllex/fluid-bake.py -- \
+  --recipe recipe.json --output /tmp/acryllex-liquid --stage all
+```
+
+The editable recipe supports FLIP/APIC, initial liquid volumes, inflows/outflows and colliders. All authored
+and exported positions use Y-up metres. The bake exports real mesh positions, normals, triangle indices
+and foam/spray positions, with an editable `.blend` and recipe beside the result. Initial conditions,
+mesh resolution, flow, foam and lighting still need visual review; a successful solve does not establish realism.
+
+Use a prepared cache in a storyboard object:
+
+```json
+{"id":"water","model":"fluid-cache","origin":"model","pos":[0,0,0],"enter":"none","idle":"none",
+ "params":{"file":"/tmp/acryllex-liquid/manifest.json","material":"water","rippleAmplitude":0.006}}
+```
+
+Set an explicit camera for the authored simulation coordinates. Cache playback accepts `start`, `speed`,
+`timeOrigin`, optional `fps` and `loop`. The default material is opaque; the opt-in water material uses
+`thickness` for optical thickness because cache geometry is already authored. The `acryllex-fluid-cache-v1`
+manifest references little-endian ACF1 geometry frames. Local preparation validates paths, indices,
+finite values and resource budgets before loading. Default limits are256MiB per cache and512MiB resident.
+Playback keeps GPU buffer capacities stable while updating active counts and bounds for changing topology.
+
+Run `node scripts/acryllex/verify-fluid-cache.mjs` for portable generated-cache checks and
+`node scripts/acryllex/verify-fluid-render.mjs` for native GPU rendering, fixed-ink and reverse-seeking checks.
+
+## Anatomical humans
+
+For a fixed human view/action, prefer licensed footage or a static photo as appropriate. For editable poses,
+prefer a clothed scanned, rigged body with supported pose controls; verify anatomy and contact in the shot.
+
+`human-male` and `human-female` load separate adult figure meshes with a shared rig and pose/IK track
+interface. Their proportions scale uniformly with `height`; joint rotation does not stretch the torso
+or head. These are unclothed figure-study models. `mesh:"scanned"` selects the clothed scanned body.
+The public `human` model uses the same proportion-preserving rig with the existing scanned bodies.
+Legacy `build` spine scaling and the female width squeeze are removed; choose a different body asset instead
+of stretching the torso. `height` scales the whole body uniformly, and uniform head/foot controls survive posing.
+Runtime checks establish valid skinning and deterministic seeking; they do not establish a99% visual match.
+
+The bundled bodies derive from MakeHuman's CC0 assets at commit
+`a8bc2d54ff0ac92e78ff71431b1023eda42bf482`. Rebuild with
+`node scripts/acryllex/build-humans.mjs`; recipes and source metadata are embedded in each GLB.
+See `src/acryllex/assets/humans/README.md` and its asset license for provenance.
+
+## Motion sampling
+
+Scenes may set `motionFPS` (positive, at most120) and `motionPhase` (global seconds, default0). This samples
+geometry, object controls, camera, lighting and scene ink animation together on one frame clock. Text,
+captions and scene cuts retain their authored timing. Omit `motionFPS` for continuous motion.
+
+For example, `"motionFPS":25,"motionPhase":0.016666666666666666` gives a25fps motion clock whose first
+global tick is at1/60s, useful when matching footage recorded at a different display cadence. Each scene
+opts in independently. Verify with `node scripts/acryllex/verify-motion-clock.mjs`.
+
+## Human rig and contact tracks
+
+Human poses retain fixed arm/leg lengths through mocap, named poses and keyed IK tracks. Finger curl is part
+of forward kinematics, so queried finger bones agree with the transforms written to the actual skin. Hidden
+anatomy helper meshes are excluded from height and head measurements. Inspect the visible deformed mesh;
+a projected joint alone is not proof of a fingertip or sole contact.
+
+A track key may supply `floor` and `floorWeight` to prevent sole penetration independently of its torso/IK
+blend. `ground:true` uses the measured bind-skin floor for upright poses. These are floor constraints, not a
+claim that all fingers touch a keyboard or that any arbitrary pose fits any chair. Fit furniture contacts in
+the shot while keeping natural proportions and limb lengths.
+
+The reference opening now uses the scanned Remy body with source-fitted reach, release, sit and typing
+tracks. Other scenes, furniture, camera and fixed-ink styling are preserved. Source identity, some early hip
+and late elbow estimates, late hand height and back shading remain different; no 99% match is established.
+Run `node scripts/acryllex/verify-human-rig.mjs` for offline male/female skin/rig regression checks. Actual GPU
+rendering and full-motion reference comparison remain necessary for visual acceptance.
+
+`regionTones:{torso,pelvis,legs}` optionally adjusts continuous material albedo through skin weights. All
+values default to1; it composes with `headTone`, leaves geometry and motion unchanged, and still renders
+with a single fixed ink. Use multiple poses to assess local density and contrast before grading a body.
+
+Limb keys can supply `velocity:[x,y,z]` in the track's position units per second. This pins the position
+tangent at that key, so refining a later hand/foot path can preserve the preceding movement exactly.
+Omit it to retain the default Catmull-Rom tangents. Weight and rotation channels keep their existing interpolation.
+
+A limb key can also supply `softness` in the track's position units (default0). This rounds off full
+extension while retaining fixed segment lengths and the existing reach safety limit. A width of0.012m
+permits at most2.25mm of additional endpoint retreat compared with hard-clamped reach; use zero for a locked contact. Validate
+the actual skinned hand and furniture contact as well as the wrist point.
+
+Anatomical `human-male` and `human-female` presets default to `staticPoseBase:"neutral"` and
+`staticFloor:"skin"`. Named static poses use an arms-down anatomical frame and blend local joint
+rotations; actual foot skin settles the pelvis before authored track channels. The scanned `human`
+avatars keep their idle-based pose contract. Use `staticPoseBase:"idle", staticFloor:"none"` for the
+previous anatomical behavior. `ground:false` disables automatic floor contact.
+
+Skin placement consumes base bank y, including cheer's2cm lift. Explicit `poseAdjustments.y` keeps
+its height-scaled difference from the bank y. Track offsets/IK run afterward, followed by the existing
+sole-plane guard for keyed tracks when ground is enabled. Review transitions with conflicting authored
+floor/hips constraints. The floor support minimum can change vertices; derivative smoothness is not guaranteed.
+
+`poseCorrectives:true` opts into the anatomical assets' sparse hip/knee POSITION/NORMAL fields;
+the default is false. Reviewed seated/forward-arm crouch controls improve contact without changing
+bone dimensions or protected head/hand/foot skin. Deep/custom bends retain limitations, and holding
+the last calibration beyond hip120°/knee145° can worsen intersections. These fields do not provide
+global collision avoidance or an anatomical accuracy percentage. See the anatomical asset README
+for source, license, rebuild and motion limits.
+
+Human models preserve source transparency with `sourceAlpha:true` (default). Flat-colour hair and
+eyelashes sample only the original RGBA alpha, keeping the scene-hue albedo and final fixed ink.
+BLEND surfaces retain their authored blend/depth settings and disable the extra stochastic alpha
+pass. Opaque masks retain the existing entrance dissolve. Source maps and UV settings are shared
+read-only, with no derived textures. Face-culling policy is unchanged. `sourceAlpha:false` retains
+the previous material conversion; general asset `instance()` calls opt in through its final options
+argument. Transparent meshes follow the existing engine shadow policy. This corrects lost coverage;
+hairstyle, likeness and local density still require reference review.
+
+A scene can override the final dot grid with `raster: {cell: 3.2, dotRoundness: 1, dotSoftness: 0.5}`. Cell pitch is 1–24 output pixels, roundness 0–1 and edge softness 0–2; all fields are optional and finite. Omitted fields restore the format cell and global look values on every frame. This changes only the post-render ink grid: source render targets, lighting, models and the global format resolution stay the same. During a direct scene transition, the incoming scene controls the raster for both sampled images, as it does the shared post-light settings.
+
+## Camera direction
+
+`chatgpt-site/src/acryllex/camera-direction.ts` holds the shot vocabulary (establish, hero, front, profile, plan/top, high, low, macro-contact, waterline, insert, reveal), `cameraProblems` (repeated-view, flat-source honesty, orbit/spin and pumping linter) and `planCameras` (deterministic repair). The generation pipeline (`worker/acryllex-generation.ts`) adds `CAMERA_DIRECTION_RULES` to the visual prompts and runs the planner on storyboard, storyboard-review and visual-review output, logging changes as `<step>CameraPlan`. Only cameras, camera-only events and excess rotating idles are touched; pixel size, ink, dither, contrast and lighting are never changed. Flat references/footage stay at their captured front view and vary only through genuine alternate source views or push/pull/insert/reveal framing. Tests: `scripts/acryllex-camera-direction.test.mjs`.
+
+## Shot transitions
+
+`chatgpt-site/src/acryllex/shot-transitions.ts` makes every viewpoint change a deliberate edit, using the engine's existing semantics only (no renderer change). `directCameras` runs it after `planCameras`; storyboard, storyboard-review and visual-review output must also pass `transitionProblems`, and `SHOT_TRANSITION_RULES` is part of the visual prompt.
+
+- **30° / shot-size rule.** A new shot of the same subject (shared model, or same flat source) changes the view direction by ≥30° (engine yaw/pitch table) or the size by ≥1.3x (or screenY by ≥0.15). Smaller changes between scenes are jump cuts: the incoming scene gets a distinct shot, preferring a new angle, without creating camera-direction problems or swallowing that scene's own in-scene cut. Explicit `pos/look` and `follow` cameras are never replaced.
+- **In-scene angle change = hard cut.** A camera event that changes angle by ≥30° becomes `easing:"hold"`, `dur:0.04`: the camera steps on one frame at the motivating word (no slow swing that reads as an orbit/morph). Same-angle push-in/pull-out stays smooth, 0.5–1.4 s. Nudges (<30° and <1.3x) are dropped; object actions on the same event stay. Every shot around an in-scene cut lasts ≥0.7 s (events are moved or dropped).
+- **Clean scene transitions.** On a same-subject viewpoint change, `flash`, `blink`, `glitch` and `push-right` become `cut`; `wipe`/`black` survive with durations capped at 0.6 s / 1.0 s. Boundaries that change subject keep the authored transition.
+- **Flat footage** stays at its captured front view; same-source variety is a real framing step (insert/reveal) or another genuine source.
+- Hard in-scene cuts get a `cut` sound exactly on the frame they land (`cues.ts`) instead of a camera whoosh.
+
+Demo with measured cut frames: `node scripts/acryllex/shot-transition-demo.mjs ../acryllex-showcases/shot-transitions.mp4` (writes `.json` with the plan log and `.cuts.json` with expected vs measured frames). Tests: `scripts/acryllex-shot-transitions.test.mjs`.
+
+
+## Realism without changing the recording style
+
+`style:"reference-recording"` selects the owner-supplied recording calibration in `src/acryllex/style-profile.ts`. The generation pipeline applies it after storyboard generation and both review steps; the engine also applies it for direct callers. Specs without the field retain their existing style. The profile fixes deep blue/red ink, the native 3.72-pixel pitch at 1164 pixels wide, rounded structured dots, optical edge response and shared directional lighting/density. Output width scales the raster and optics together. Scene overrides cannot silently replace these values; explicit narrative point lights remain supported. Source geometry, motion, cameras and composition are preserved. This is a calibrated starting profile, not a proof of an exact perceptual match for every subject.
+
+Neutral imported materials retain authored normal/bump relief, proportions, skin weights and morph targets while excluding photographic colour/baked lighting. `head-mesh` now defaults to the licensed Lee Perry-Smith / Infinite Realities scan, including the complete head, neck and shoulders with captured normal relief. The source has closed eyes and supports rigid bust yaw/pitch only; it has no expression or neck rig. Explicit `body` or `source:"body"` retains the older body-head extraction. Bundled inputs, original licence, hashes and adaptation notes are in `src/acryllex/assets/heads/`; rebuild with `node scripts/acryllex/build-head-scan.mjs`. GPU verification compares the original and repackaged source under four identical camera/light arrangements, and checks that source RGB cannot affect neutral shading. That establishes source fidelity, not independent photographic likeness or arbitrary facial realism. `hand-mesh` now defaults to the bundled CC0 anatomical MakeHuman/MPFB hand source. Its main axis, resting finger fan, palmar front and flexion direction were checked against multiple real hand photographs. Independent curl and spread controls preserve segment lengths. `rest:"source"` retains the authored bind pose, and `source:"xr"` explicitly selects the legacy MIT WebXR source. It does not solve arbitrary object contact. Source assets, licences and hashes are in `src/acryllex/assets/hands/`. Generic `mesh` imports accept exact source clips (`clips:"all"` synchronizes face/head/eyes), existing `morph:<name>` targets, Meshopt compression and KTX2 textures. Missing sources/clips/morphs fail clearly. Decoders are prepared locally. Captured clips hold their final pose unless looping is explicit. Each absolute update restores omitted morph overrides to authored values before applying source clips and explicit controls; removed smiles/blinks cannot leak into subsequent poses or reverse seeks.
+
+Photo/video reference subjects remain useful shape and action evidence. The new catalogue entries explicitly state that their contrast/density has not been approved against the supplied recording. They cannot provide unobserved camera angles or invented poses. References decode sRGB before the shared density response and retain source proportions. Production review must compare source anatomy and the final dots separately; source transport tests cannot establish style approval.
+
+The default camera is static and default object idle is none. The recording profile adds gentle asynchronous local dot activity (`raster.activity:0.06`, `activityRate:12`); pairs share one phase and permute existing thresholds within 2×2 tiles. This keeps the threshold multiset and avoids synchronized whole-image flicker. `activity:0` freezes the texture. A music grid never changes camera distance, subject scale or the activity clock. Explicit story-driven motion remains available.
+
+`water-glass` includes hollow glass walls, base/rim, liquid volume, a curved surface/meniscus and a hollow straw. Camera-dependent apparent depth uses Snell's law at the top water/air surface. It excludes cylindrical wall lensing, caustics and full light transport; side views retain the straight physical straw where the planar construction is invalid. `optical-ray` supplies thin Snell-law paths and total internal reflection, without default glowing capsules.
+
+Verification: `npm test` includes source-preserving extraction, real bundled hand bind shape, independent controls/reverse seeking, clip/morph synchronization, profile immutability and material-relief checks. `node scripts/acryllex/verify-realism.mjs` checks nonempty GPU frames, absence of default beat motion and recorded-source playback/seek fidelity. None of these proves that an arbitrary object or interaction can be synthesized photorealistically. The full multi-subject video in `artifacts/acryllex-realism/style-library-trials.mp4` is a review sample. Its FaceCap mesh is an external evaluation asset, not a shipped or approved library identity.
+
+
+`models/rigid-skin.ts` bakes inherited affine scale/reflection into resting skinned geometry and rebuilds orthonormal joint frames. Rest vertex positions, normal response, weights, UVs, inactive morph targets and rigid attachments are retained; front-face winding is corrected after a mirrored bake. Rotating a joint therefore cannot stretch its segments through an ancestor's unequal scale. The input template is read-only. Existing animation clips must be retargeted to the normalized frames, and active source morphs are rejected rather than silently baked twice. The hand uses this utility before posing.
+
+`node scripts/acryllex/verify-pixel-activity.mjs` checks four static subjects for non-frozen pixels, small global density variation, deterministic reverse seeking, beat independence, and exact static behavior when activity is disabled. Set `ACRYLLEX_ACTIVITY_VIDEO=1` to render the 60 fps motion comparison. Shape-study reference provenance and qualitative findings are in `artifacts/acryllex-realism/references/hand-shape-study/`. These are visual references, not bundled reel textures.
+
+Models can supply model-space `Built.framingPoints` for known pose extents. Automatic camera fitting includes these points once; it does not resize the camera as the object moves. The hand supplies open/curled pose extents so a shot starting curled has room for the later open fingers. Explicit cameras still use their authored positions.
+
+`node scripts/acryllex/hand-grab-demo.mjs` exports an eight-second source-hand action and renders it through the normal imported-mesh path with the recording profile. It reaches for a small sphere on a stand, closes a measured thumb/index grip, lifts it and moves/turns the wrist. The compound action keeps the sphere attached throughout the lift. The script checks full skinned-triangle sphere clearance and hand/stand clearance across 33 sampled poses before rendering. Its `.glb`, recipe and `.contacts.json` remain beside the video for review. This is one authored object/pose pairing, not a general grasp solver. `ACRYLLEX_STILLS_ONLY=1` prepares the action and review frames without encoding the video.
+
+`glass-optics` is an opt-in optical study alongside the existing `water-glass`. It traces actual tapered inner/outer walls, base, rounded lip, curved water meniscus and a straight hollow straw. Shared scene light intensities feed finite reflection emitters; the normal shared pixel/ink pass follows. The reflection stage uses explicit light identity, independent of shadow sorting, and bright dielectric reflections do not enable the emissive halo. Explicit `strawTilt`/`strawYaw` controls move the rigid straw and reject poses that cross the vessel walls. Its ray budget is bounded; it does not solve caustics/dispersion or simulate moving liquid. It has not replaced `water-glass` or received visual-style approval. `verify-glass-optics.mjs` compares GPU primary straw masks against double-precision interface paths and independent triangle intersections from three views; numerical agreement does not establish visual realism.
+
+`Built.sceneTransmission` provides an optional shared capture of same-frame scene colour/depth, excluding participating optical surfaces. Capture restores visibility, active target/cube face/mip and clear state on errors and owns its render target. It leaves the renderer's default viewport/scissor state untouched. `glass-optics` exposes this through `sceneTransmission:true` (default false). Its perspective-correct screen-space traversal samples only first-layer, in-view surfaces; hidden/offscreen geometry and other optical volumes are absent. The trace now allows up to 512 samples so steep rays do not skip source spans. `verify-scene-transmission.mjs` passes front/high background-card, submerged marker/sphere and moving-card comparisons against independent triangle intersections on double-precision optical paths. Unsupported source samples are reported separately. Additional recording-profile checks exercise visibility and exact reverse seeking after peer capture disposal and scene recreation. These gates do not prove full scene light transport or perceptual realism.
+
+Optical materials set `material.userData.screenAO=false`: their first-interface depth cannot describe the surface supplying refracted radiance. The shared effect hook marks this case in the floating-point alpha channel, and post AO skips that receiver. Opaque materials retain their existing response. This prevents nearly invisible refracted contents and unstable post shading without changing the common ink, raster, light or density calibration.
+
+`node scripts/acryllex/glass-demo.mjs` renders a ten-second optical review with three deliberate camera cuts and a small authored straw movement. It uses the recording profile and the self-contained glass path, without changing the original reels.
+
+`node scripts/acryllex/scene-transmission-demo.mjs` renders a separate nine-second review showing a properly oriented Poly Haven spoon scan in the vessel, moving background lines through the water/glass and a distinct high view. The scan is rigidly reoriented; its measured bowl bottom clears the floor and sampled vertices clear the inner wall. Original reels and earlier delivered demos are preserved.
+
+
+## Direct Objaverse sources
+
+`mesh.params.objaverse` resolves a verified object UID to its actual source GLB. Preparation retains per-object licence, creator, source metadata, file hashes and actual rig/clip/morph names. Source cutout transparency is preserved without importing photographic RGB into neutral shading. `sourceRotation` corrects source axes before height measurement. See `chatgpt-site/src/acryllex/OBJAVERSE.md` and `scripts/acryllex/objaverse-reviewed.json` for the inspected human, hand and head sources, their limits and reproducible commands. These sources add real geometry and available source motion; they do not turn a static scan into an articulated hand or expressive face.
+
+## Realistic model library and auto-sourcing
+
+- **Library:** realistic scanned / engineering models live in `src/acryllex/assets/catalog.json` (`file: real/...`), at real-world size (`scale`) with orientation fixes (`rot`). Sources: NASA 3D Resources, Smithsonian Open Access 3D (CC0), Khronos samples, three.js examples, Objaverse/Sketchfab (CC-BY 4.0 / CC0 only; author + page kept in `license`/`page` for attribution).
+- **Curated lists:** `scripts/acryllex/realistic-assets.mjs`, `objaverse-picks.json`, `sourced-assets.json`. Rebuild everything with `node scripts/acryllex/ingest-assets.mjs` (or pass ids).
+- **External index:** `node scripts/acryllex/source-search.mjs build` (one-time, ≈600 MB Objaverse metadata into `.acryllex-cache/sources/`); `node scripts/acryllex/source-search.mjs "fire truck"` to search.
+- **Auto-sourcing in `produce.mjs`:** after the script, Sol lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Sol picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
+- **Review sheets:** `node scripts/acryllex/gallery.mjs <out.png> <ids...>`.

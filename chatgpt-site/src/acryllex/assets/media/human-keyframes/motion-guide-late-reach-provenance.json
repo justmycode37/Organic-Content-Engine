@@ -1,0 +1,59 @@
+{
+  "status": "OWN synthetic undithered motion guide for motion-transfer experiment, not an adopted recreation.",
+  "source": "Own neutral guide from141 plus203 smooth late hand reach, fixed-length IK and wrist orientation compensation; no original image/video pixels included",
+  "sourceCommit": "ecd268be53fbf78d0a95b4c8253c1b672c24276e",
+  "frames": 147,
+  "fps": 30,
+  "duration": 4.9,
+  "width": 1164,
+  "height": 670,
+  "bytes": 336638,
+  "sha256": "b572a73eaffb3bb40d8d7b6ebd1da8ec4e79c16cd6538fc61f3edf36d8952344",
+  "preparation": "Furniture hidden only in this guide; body material neutral gray, alpha hash off, normal SRGB raw rendering and video grayscale. Pose203 corrected only late hand targets and forearm-relative wrist orientation. Root motion, other bones and camera follow retained. Hue flash/dissolve removed for continuous full-body conditioning.",
+  "sourceSpecSHA256": "05de1f2f30b344196d75920e4302a8d760eba4ebf288aae202907fad6a58a5de",
+  "errors": [],
+  "file": "motion-guide-late-reach.mp4",
+  "sourceSpec": "motion-guide-late-reach-spec.json",
+  "sourceReferencePixelsIncluded": false,
+  "role": "Optional own synthetic motion driver; bundled photographic outputs still use the prior guide",
+  "validation": {
+    "nativeSamples": 293,
+    "extra240HzSamples": 113,
+    "earlyMaxRigDisplacement": 0,
+    "unchangedTrunkShouldersFeetMaxDisplacement": 0,
+    "segmentLengthMaxDifference": 1.6387877721513178e-09,
+    "wristOrientationMaxDegrees": 0.0851725681799986,
+    "minElbowBendDegrees": 53.5224387209302,
+    "errors": [],
+    "minimumDeskClearanceMetres": 0.002913118071449561,
+    "lateSkinSamples": 57,
+    "deskPenetratingSamples": 0,
+    "referenceWristEstimateUncertaintyPixels": 10,
+    "keyboardKeypressContactVerified": false,
+    "wristPositions": {
+      "270": {
+        "near": [
+          611.9398174248603,
+          338.9294124808303
+        ],
+        "far": [
+          614.0062740018993,
+          335.9503640966612
+        ]
+      },
+      "280": {
+        "near": [
+          616.9692632876598,
+          338.9295041867376
+        ],
+        "far": [
+          619.5355862031528,
+          337.96783005610183
+        ]
+      }
+    }
+  },
+  "candidateSpecSHA256": "1990cc39d39ed32b60ce3ce75b5b0b91cc8662cdcf622544c7dcd4c3280aef4f",
+  "exporter": "scripts/acryllex/render-human-guide.mjs",
+  "exporterSHA256": "41da0cab14941b25a990b9be2b644afca143102602a8c644dcec83979bab2f23"
+}

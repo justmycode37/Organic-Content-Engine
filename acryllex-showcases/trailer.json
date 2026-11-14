@@ -1,0 +1,773 @@
+{
+ "version": 1,
+ "series": "ACRYLLEX",
+ "title": "ACRYLLEX trailer",
+ "captions": false,
+ "scenes": [
+  {
+   "say": ".",
+   "hue": "blue",
+   "duration": 4,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "push",
+    "screenY": 0.56,
+    "amount": 1.2
+   },
+   "objects": [
+    {
+     "id": "e",
+     "model": "earth",
+     "enter": "from-black",
+     "idle": "turn",
+     "enterAt": 0.2,
+     "enterDur": 2.5
+    }
+   ],
+   "events": [],
+   "text": [
+    {
+     "text": "FROM A FIELD OF DOTS",
+     "style": "mono",
+     "pos": [
+      0.5,
+      0.82
+     ],
+     "at": 1.5,
+     "erase": false,
+     "align": "center"
+    }
+   ]
+  },
+  {
+   "say": ".",
+   "hue": "white",
+   "duration": 4,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "orbit",
+    "screenY": 0.56,
+    "amount": 0.8
+   },
+   "objects": [
+    {
+     "id": "hb",
+     "model": "hubble",
+     "enter": "light-up",
+     "idle": "spin-slow",
+     "enterAt": 0.1
+    }
+   ],
+   "events": [
+    {
+     "at": 3,
+     "target": "hb",
+     "fx": "glint"
+    }
+   ],
+   "text": [
+    {
+     "text": "COMES THE REAL WORLD",
+     "style": "mono",
+     "pos": [
+      0.5,
+      0.82
+     ],
+     "at": 1,
+     "erase": false,
+     "align": "center"
+    }
+   ],
+   "transition": "black"
+  },
+  {
+   "say": ".",
+   "hue": "cyan",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "push",
+    "screenY": 0.56,
+    "amount": 1.6
+   },
+   "objects": [
+    {
+     "id": "a",
+     "model": "atom",
+     "enter": "none",
+     "idle": "spin"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.05,
+     "target": "a",
+     "fx": "charge",
+     "dur": 1.9
+    }
+   ],
+   "text": [],
+   "transition": "blink"
+  },
+  {
+   "say": ".",
+   "hue": "azure",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.58,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "sh",
+     "model": "great-white-shark",
+     "enter": "none",
+     "idle": "float"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.02,
+     "target": "sh",
+     "fx": "shockwave"
+    }
+   ],
+   "text": [
+    {
+     "text": "ACRYLLEX",
+     "style": "headline",
+     "pos": "top",
+     "at": 0.02,
+     "erase": false,
+     "glitch": [
+      0.02,
+      1.5
+     ],
+     "size": 190,
+     "font": "oswald"
+    }
+   ],
+   "transition": "flash"
+  },
+  {
+   "say": ".",
+   "hue": "amber",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.85,
+    "move": "crane",
+    "screenY": 0.56,
+    "amount": 1
+   },
+   "objects": [
+    {
+     "id": "r",
+     "model": "saturn-v",
+     "enter": "rise",
+     "idle": "none",
+     "enterAt": 0
+    }
+   ],
+   "events": [],
+   "text": [
+    {
+     "text": "ANY OBJECT",
+     "style": "tag",
+     "pos": "top",
+     "at": 0.05,
+     "erase": false
+    }
+   ],
+   "transition": "push-right"
+  },
+  {
+   "say": ".",
+   "hue": "orange",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.8,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "gi",
+     "model": "masai-giraffe",
+     "enter": "none",
+     "idle": "turn"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.5,
+     "target": "gi",
+     "fx": "scan"
+    }
+   ],
+   "text": [],
+   "transition": "glitch"
+  },
+  {
+   "say": ".",
+   "hue": "amber",
+   "duration": 2,
+   "camera": {
+    "angle": "side",
+    "fill": 0.7,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "t",
+     "model": "bengal-tiger",
+     "enter": "materialize",
+     "idle": "turn",
+     "enterAt": 0
+    }
+   ],
+   "events": [
+    {
+     "at": 1.25,
+     "target": "t",
+     "fx": "recoil",
+     "fxFrom": "right"
+    }
+   ],
+   "text": [],
+   "transition": "wipe"
+  },
+  {
+   "say": ".",
+   "hue": "green",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "tr",
+     "model": "mammoth-skeleton",
+     "enter": "assemble",
+     "idle": "turn",
+     "enterAt": 0
+    }
+   ],
+   "events": [
+    {
+     "at": 1.25,
+     "target": "tr",
+     "fx": "shockwave"
+    }
+   ],
+   "text": [
+    {
+     "text": "ANY ERA",
+     "style": "tag",
+     "pos": "top",
+     "at": 0.1,
+     "erase": false
+    }
+   ]
+  },
+  {
+   "say": ".",
+   "hue": "white",
+   "duration": 2,
+   "camera": {
+    "angle": "high",
+    "fill": 0.75,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "wf",
+     "model": "wright-flyer",
+     "enter": "none",
+     "idle": "float"
+    },
+    {
+     "id": "jet",
+     "model": "passenger-airliner",
+     "enter": "none",
+     "idle": "none"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.5,
+     "target": "wf",
+     "morph": "jet",
+     "morphStyle": "particles",
+     "dur": 1.3
+    }
+   ],
+   "text": [],
+   "transition": "push-right"
+  },
+  {
+   "say": ".",
+   "hue": "cyan",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "orbit",
+    "screenY": 0.56,
+    "amount": 1
+   },
+   "objects": [
+    {
+     "id": "dn",
+     "model": "dna",
+     "enter": "assemble",
+     "idle": "spin",
+     "enterAt": 0
+    }
+   ],
+   "events": [
+    {
+     "at": 1.25,
+     "target": "dn",
+     "fx": "ripple"
+    }
+   ],
+   "text": [],
+   "transition": "glitch"
+  },
+  {
+   "say": ".",
+   "hue": "red",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.7,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "c",
+     "model": "sports-car",
+     "enter": "slide-right",
+     "idle": "none",
+     "enterAt": 0
+    }
+   ],
+   "events": [
+    {
+     "at": 1,
+     "target": "c",
+     "fx": "recoil",
+     "fxFrom": "left"
+    },
+    {
+     "at": 1.5,
+     "target": "c",
+     "fx": "shake"
+    }
+   ],
+   "text": [],
+   "transition": "cut"
+  },
+  {
+   "say": ".",
+   "hue": "violet",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "ap",
+     "model": "apollo-11-capsule",
+     "enter": "none",
+     "idle": "turn"
+    },
+    {
+     "id": "lm",
+     "model": "apollo-lunar-module",
+     "enter": "none",
+     "idle": "none"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.5,
+     "target": "ap",
+     "morph": "lm",
+     "morphStyle": "flip",
+     "dur": 1
+    }
+   ],
+   "text": [
+    {
+     "text": "ANY CHANGE",
+     "style": "tag",
+     "pos": "top",
+     "at": 0.1,
+     "erase": false
+    }
+   ],
+   "transition": "flash"
+  },
+  {
+   "say": ".",
+   "hue": "amber",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "pull",
+    "screenY": 0.56,
+    "amount": 1
+   },
+   "objects": [
+    {
+     "id": "ch",
+     "model": "chimpanzee",
+     "enter": "materialize",
+     "idle": "none",
+     "enterAt": 0
+    },
+    {
+     "id": "go",
+     "model": "silverback-gorilla",
+     "enter": "materialize",
+     "idle": "none",
+     "near": "ch",
+     "side": "right",
+     "gap": 0.3,
+     "enterAt": 0.5
+    }
+   ],
+   "events": [
+    {
+     "at": 1.5,
+     "target": "go",
+     "hue": "red"
+    }
+   ],
+   "text": [],
+   "transition": "wipe"
+  },
+  {
+   "say": ".",
+   "hue": "red",
+   "duration": 4,
+   "camera": {
+    "angle": "front",
+    "fill": 0.62,
+    "move": "push",
+    "screenY": 0.56,
+    "amount": 0.6
+   },
+   "objects": [
+    {
+     "id": "h",
+     "model": "human-heart-model",
+     "enter": "from-black",
+     "idle": "none",
+     "enterAt": 0.1
+    }
+   ],
+   "events": [
+    {
+     "at": 0.5,
+     "target": "h",
+     "fx": "heartbeat",
+     "fxCount": 3,
+     "dur": 1
+    }
+   ],
+   "text": [
+    {
+     "text": "IN EVERY DOT",
+     "style": "mono",
+     "pos": [
+      0.5,
+      0.82
+     ],
+     "at": 2,
+     "erase": false,
+     "align": "center"
+    }
+   ],
+   "transition": "black"
+  },
+  {
+   "say": ".",
+   "hue": "white",
+   "duration": 1,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "mt",
+     "model": "megalodon-tooth",
+     "enter": "none",
+     "idle": "turn"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.1,
+     "target": "mt",
+     "fx": "glitch"
+    }
+   ],
+   "text": [],
+   "transition": "glitch"
+  },
+  {
+   "say": ".",
+   "hue": "orange",
+   "duration": 1,
+   "camera": {
+    "angle": "high",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "pr",
+     "model": "perseverance-rover",
+     "enter": "none",
+     "idle": "none"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.1,
+     "target": "pr",
+     "fx": "shake",
+     "fxAmount": 1.4
+    }
+   ],
+   "text": []
+  },
+  {
+   "say": ".",
+   "hue": "amber",
+   "duration": 1,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "jw",
+     "model": "james-webb",
+     "enter": "none",
+     "idle": "spin-slow"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.2,
+     "target": "jw",
+     "fx": "glint"
+    }
+   ],
+   "text": []
+  },
+  {
+   "say": ".",
+   "hue": "white",
+   "duration": 1,
+   "camera": {
+    "angle": "front",
+    "fill": 0.62,
+    "move": "static",
+    "screenY": 0.56
+   },
+   "objects": [
+    {
+     "id": "vm",
+     "model": "venus-de-milo",
+     "enter": "none",
+     "idle": "turn"
+    }
+   ],
+   "events": [],
+   "text": []
+  },
+  {
+   "say": ".",
+   "hue": "blue",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "orbit-left",
+    "screenY": 0.56,
+    "amount": 1
+   },
+   "objects": [
+    {
+     "id": "bf",
+     "model": "monarch-butterfly",
+     "enter": "slide-left",
+     "idle": "float",
+     "enterAt": 0
+    },
+    {
+     "id": "eg",
+     "model": "flying-eagle",
+     "enter": "none",
+     "idle": "none"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.75,
+     "target": "bf",
+     "morph": "eg",
+     "morphStyle": "particles",
+     "dur": 1.3
+    }
+   ],
+   "text": [],
+   "transition": "push-right"
+  },
+  {
+   "say": ".",
+   "hue": "white",
+   "duration": 2,
+   "camera": {
+    "angle": "three-quarter",
+    "fill": 0.62,
+    "move": "push",
+    "screenY": 0.56,
+    "amount": 1
+   },
+   "objects": [
+    {
+     "id": "pn",
+     "model": "concert-grand-piano",
+     "enter": "none",
+     "idle": "turn"
+    },
+    {
+     "id": "gt",
+     "model": "electric-guitar",
+     "enter": "none",
+     "idle": "none"
+    }
+   ],
+   "events": [
+    {
+     "at": 0.02,
+     "target": "pn",
+     "fx": "shockwave",
+     "fxAmount": 1.5
+    },
+    {
+     "at": 1,
+     "target": "pn",
+     "morph": "gt",
+     "morphStyle": "fade",
+     "dur": 0.8
+    },
+    {
+     "at": 1.5,
+     "target": "gt",
+     "fx": "glint"
+    }
+   ],
+   "text": [],
+   "transition": "flash"
+  },
+  {
+   "say": ".",
+   "hue": "blue",
+   "duration": 6,
+   "camera": {
+    "angle": "high",
+    "fill": 0.62,
+    "move": "orbit",
+    "screenY": 0.56,
+    "amount": 0.6
+   },
+   "objects": [
+    {
+     "id": "sa",
+     "model": "saturn",
+     "enter": "materialize",
+     "idle": "turn",
+     "enterAt": 0,
+     "exit": "to-black",
+     "exitAt": 5.25,
+     "exitDur": 0.75
+    }
+   ],
+   "events": [
+    {
+     "at": 0.05,
+     "target": "sa",
+     "fx": "shockwave",
+     "fxAmount": 2
+    }
+   ],
+   "text": [
+    {
+     "text": "ACRYLLEX",
+     "style": "headline",
+     "pos": "top",
+     "at": 0.5,
+     "erase": false,
+     "glitch": [
+      0.5,
+      3
+     ],
+     "size": 200,
+     "font": "oswald"
+    },
+    {
+     "text": "ANIMATION LIBRARY",
+     "style": "mono",
+     "pos": [
+      0.5,
+      0.2
+     ],
+     "at": 1.25,
+     "erase": false,
+     "align": "center"
+    },
+    {
+     "text": "REAL OBJECTS · REAL SCANS",
+     "style": "mono",
+     "pos": [
+      0.5,
+      0.84
+     ],
+     "at": 2.25,
+     "erase": false,
+     "align": "center"
+    }
+   ],
+   "transition": "glitch"
+  }
+ ]
+}

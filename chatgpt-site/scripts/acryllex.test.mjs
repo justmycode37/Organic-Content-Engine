@@ -8,7 +8,93 @@ function modelContext(params,seed=37){
  return {params,seed,mat,mesh:(g,o)=>new THREE.Mesh(g,mat(o)),color:()=>new THREE.Color(1,1,1),num:(key,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number.isFinite(Number(params[key]))?Number(params[key]):f)),bool:(key,f)=>typeof params[key]==='boolean'?params[key]:f,str:(key,f,allowed)=>typeof params[key]==='string'&&(!allowed||allowed.includes(params[key]))?params[key]:f};
 }
 const spec={version:1,series:'ACRYLLEX',title:'t',scenes:Array.from({length:8},(_,i)=>({say:'One two three four five six seven eight nine ten eleven twelve thirteen.',hue:'blue',objects:[{id:'a',model:i%2?'led':'human',enter:'assemble'}],events:[{at:'seven',target:'a',set:{glow:1}}],text:[{text:'1993',style:'number',at:'ten'}]}))};
-test('catalogue has people, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
+test('flat source coverage retains alpha and cached texture ownership with independent materials',async()=>{
+ const {plainMaterial,realMaterial}=await import('../src/acryllex/assets.ts');
+ const base=modelContext({}),ctx={...base,mat:o=>{const m=base.mat(o);m.alphaHash=true;return m;}};
+ const texture=new THREE.DataTexture(new Uint8Array([255,0,0,0,0,0,0,255]),2,1,THREE.RGBAFormat);
+ texture.offset.set(.1,.2);texture.repeat.set(.5,.75);texture.flipY=false;texture.colorSpace=THREE.SRGBColorSpace;
+ const source=new THREE.MeshStandardMaterial({map:texture,transparent:true,opacity:.8,depthWrite:false,side:THREE.DoubleSide});
+ const sourceState=()=>({opacity:source.opacity,transparent:source.transparent,side:source.side,map:source.map,offset:texture.offset.toArray(),repeat:texture.repeat.toArray(),flipY:texture.flipY,colorSpace:texture.colorSpace});
+ const before=sourceState(),legacy=plainMaterial(source,ctx,.7),a=plainMaterial(source,ctx,.7,true),b=plainMaterial(source,ctx,.7,true);
+ assert.equal(legacy.map,null);assert.equal(legacy.transparent,false);assert.equal(legacy.alphaHash,true);
+ assert.equal(a.map,texture);assert.equal(a.alphaMap,null);assert.equal(a.transparent,true);assert.equal(a.alphaHash,false,'BLEND must not apply a second stochastic coverage pass');
+ assert.equal(a.depthWrite,false);assert.equal(a.opacity,.8);assert.equal(a.side,legacy.side,'Coverage must not change source sidedness policy');
+ assert.deepEqual(a.color,legacy.color,'Source RGB must not replace the scene-hue albedo');
+ assert.notEqual(a.customProgramCacheKey(),legacy.customProgramCacheKey());
+ a.opacity=.2;a.color.setScalar(.1);assert.equal(b.opacity,.8);assert.deepEqual(b.color,legacy.color);
+ let disposed=0;texture.addEventListener('dispose',()=>disposed++);a.dispose();b.dispose();legacy.dispose();assert.equal(disposed,0,'Instance materials do not own the cached source texture');
+ assert.deepEqual(sourceState(),before);
+ const opaque=source.clone();opaque.transparent=false;opaque.alphaTest=0;const untouched=plainMaterial(opaque,ctx,.7,true);assert.equal(untouched.map,null,'Opaque source images must not acquire alpha coverage');
+ const mask=source.clone();mask.transparent=false;mask.alphaTest=.5;mask.opacity=1;mask.depthWrite=true;
+ const cutout=plainMaterial(mask,ctx,.7,true);assert.equal(cutout.alphaTest,.5);assert.equal(cutout.alphaHash,true,'Opaque masks keep the entrance dissolve');
+ const textured=realMaterial(source,ctx,.7,.4,true),oldTextured=realMaterial(source,ctx,.7,.4);
+ assert.equal(textured.map,texture);assert.equal(textured.transparent,true);assert.equal(textured.alphaHash,false);assert.notEqual(textured.customProgramCacheKey(),oldTextured.customProgramCacheKey());
+ for(const m of [source,opaque,mask,untouched,cutout,textured,oldTextured])m.dispose();texture.dispose();assert.equal(disposed,1);
+});
+test('catalogue has people, media subjects, fluids, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','human-male','human-female','footage','wave-footage','ocean-wave-media','fluid-sheet','fluid-jet','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
+test('gear-machine wheels remain coaxial with the Z shafts and advance equal tooth counts',async()=>{
+ const {gearMachine}=await import('../src/acryllex/models/industry.ts');
+ const built=gearMachine.build(modelContext({})),wheels=built.root.children.filter(o=>o.children.some(child=>child.geometry?.type==='LatheGeometry'));
+ assert.equal(wheels.length,3);
+ const teeth=[12,10,8],directions=[1,-1,1];
+ for(const time of[0,.125,.7,1.4,.125]){
+  built.update({drive:.6},time);built.root.updateMatrixWorld(true);
+  for(const [i,wheel]of wheels.entries()){
+   const axis=new THREE.Vector3(0,1,0).applyQuaternion(wheel.getWorldQuaternion(new THREE.Quaternion()));
+   assert.ok(Math.abs(axis.z)>1-1e-12,'Wheel must spin around its bearing shaft, without tumbling');
+   assert.ok(Math.abs(wheel.rotation.y*teeth[i]*directions[i]-time*.6*4*12)<1e-10,'Meshing tooth advance must agree');
+  }
+ }
+ const snapshot=wheels.map(w=>w.quaternion.clone());built.update({drive:0},9);built.root.updateMatrixWorld(true);
+ for(const wheel of wheels)assert.ok(Math.abs(wheel.rotation.y)<1e-12);
+ built.update({drive:.6},.125);for(const [i,wheel]of wheels.entries())assert.ok(wheel.quaternion.angleTo(snapshot[i])<1e-7);
+});
+test('anatomical bodies contain separate skinned meshes with valid normalized weights',async()=>{
+ const bodies=[];
+ for(const id of ['human-male','human-female']){
+  const data=await readFile(new URL(`../src/acryllex/assets/humans/${id}.glb`,import.meta.url));
+  assert.equal(data.readUInt32LE(0),0x46546c67);assert.equal(data.readUInt32LE(4),2);assert.equal(data.readUInt32LE(8),data.length);
+  const length=data.readUInt32LE(12),gltf=JSON.parse(data.subarray(20,20+length).toString());
+  assert.equal(gltf.asset.extras.id,id);assert.equal(gltf.asset.extras.commit,'a8bc2d54ff0ac92e78ff71431b1023eda42bf482');
+  assert.equal(gltf.asset.extras.license,'CC0-1.0');
+  const bin=data.subarray(28+length),skin=gltf.skins[0],body=gltf.meshes.find(m=>m.name==='Body').primitives[0];
+  assert.ok(skin.joints.length>=60);assert.ok(gltf.accessors[body.attributes.POSITION].count>10000);
+  const indices=gltf.accessors[body.attributes.JOINTS_0],weights=gltf.accessors[body.attributes.WEIGHTS_0];assert.equal(indices.count,weights.count);
+  const offset=a=>(gltf.bufferViews[a.bufferView].byteOffset??0)+(a.byteOffset??0);
+  for(let i=0;i<weights.count;i++){
+   let sum=0;for(let k=0;k<4;k++){const w=bin.readFloatLE(offset(weights)+(i*4+k)*4);assert.ok(Number.isFinite(w)&&w>=0&&w<=1);sum+=w;assert.ok(bin[offset(indices)+i*4+k]<skin.joints.length);}
+   assert.ok(Math.abs(sum-1)<1e-5,'Every skin vertex must have normalized bone weights');
+  }
+  bodies.push(data);
+ }
+ assert.notDeepEqual(bodies[0],bodies[1],'Female anatomy must use its own mesh');
+});
+test('authored human correctives reproduce shipped assets from unchanged pinned base data',async()=>{
+ const {gunzipSync,gzipSync}=await import('node:zlib');
+ const {parseGLB,encodeGLB,applyHumanCorrectives,sha256}=await import('./acryllex/repack-human-correctives.mjs');
+ for(const sex of ['male','female']){
+  const shipped=await readFile(new URL(`../src/acryllex/assets/humans/human-${sex}.glb`,import.meta.url));
+  const payloadBytes=await readFile(new URL(`../src/acryllex/assets/humans/human-${sex}-fields.json.gz`,import.meta.url));
+  const payload=JSON.parse(gunzipSync(payloadBytes)),output=parseGLB(shipped);
+  const base=encodeGLB(Buffer.from(payload.baseJsonChunk,'base64'),output.bin.subarray(0,payload.baseBinaryBytes)),original=parseGLB(base);
+  assert.equal(sha256(base),payload.baseSHA256);assert.deepEqual(applyHumanCorrectives(base,payloadBytes),shipped);
+  const body=output.doc.meshes.find(m=>m.name==='Body'),baseBody=original.doc.meshes.find(m=>m.name==='Body');
+  assert.deepEqual(body.primitives[0].attributes,baseBody.primitives[0].attributes);
+  assert.deepEqual(output.doc.skins,original.doc.skins);assert.deepEqual(output.doc.nodes,original.doc.nodes);
+  assert.deepEqual(output.doc.asset.extras.recipe,original.doc.asset.extras.recipe);
+  const config=body.extras.humanPoseCorrectives;
+  assert.equal(config.version,1);assert.equal(config.driver,'anatomical-contact-v1');
+  assert.equal(config.targets.length,50);assert.equal(body.primitives[0].targets.length,config.targets.length);
+  for(const target of body.primitives[0].targets)for(const name of ['POSITION','NORMAL']){
+   const accessor=output.doc.accessors[target[name]];
+   assert.equal(accessor.componentType,5126);assert.equal(accessor.type,'VEC3');
+   assert.equal(accessor.count,output.doc.accessors[body.primitives[0].attributes.POSITION].count);
+  }
+  const wrong=Buffer.from(base);wrong[wrong.length-1]^=1;
+  assert.throws(()=>applyHumanCorrectives(wrong,payloadBytes),/pinned base/);
+  assert.throws(()=>applyHumanCorrectives(base,gzipSync(JSON.stringify({...payload,outputSHA256:'wrong'}))),/authored output/);
+ }
+});
 test('spec schema and content checks',async()=>{const {specSchema,specProblems}=await import('../src/acryllex/schema.ts');const c=await loadCatalog();assert.ok(specSchema.safeParse(spec).success);assert.deepEqual(specProblems(spec,c.has),[]);
  assert.ok(specSchema.safeParse({...spec,look:{palette:{blue:'#1234c8'}}}).success);
  assert.ok(specSchema.safeParse({...spec,look:{textColor:'#c5c5c5'}}).success);
@@ -19,13 +105,78 @@ test('spec schema and content checks',async()=>{const {specSchema,specProblems}=
  assert.ok(!specSchema.safeParse({...spec,look:{noiseReference:.02}}).success);
  const grain=structuredClone(spec);grain.scenes[0].light={noise:.06,noiseReference:.015};assert.ok(specSchema.safeParse(grain).success);
  grain.scenes[0].light.noiseReference=.02;assert.ok(!specSchema.safeParse(grain).success);
+ const clocked=structuredClone(spec);clocked.scenes[0].motionFPS=25;clocked.scenes[0].motionPhase=1/60;
+ assert.ok(specSchema.safeParse(clocked).success);
+ for(const fps of [0,-1,Infinity,121]){clocked.scenes[0].motionFPS=fps;assert.ok(!specSchema.safeParse(clocked).success);}
+ clocked.scenes[0].motionFPS=25;clocked.scenes[0].motionPhase=Infinity;assert.ok(!specSchema.safeParse(clocked).success);
  const bad=structuredClone(spec);bad.scenes[0].objects[0].model='nope';bad.scenes[1].events[0].at='zebra';const p=specProblems(bad,c.has);assert.ok(p.some(x=>x.includes('unknown model')));assert.ok(p.some(x=>x.includes('zebra')));});
 test('automatic sound cues follow the picture',async()=>{const {autoCues}=await import('../src/acryllex/cues.ts');const cues=autoCues(spec);assert.ok(cues.some(c=>c.kind==='assemble'));assert.ok(cues.some(c=>c.kind==='power-on'));assert.ok(cues.every((c,i)=>i===0||c.at>=cues[i-1].at));});
-test('acryllex is a separate seeded account on Sol medium',async()=>{const {ACRYLLEX_POLICY}=await import('../worker/acryllex-policy.ts');assert.equal(ACRYLLEX_POLICY.models.all,'gpt-6.1-sol');assert.equal(ACRYLLEX_POLICY.models.effort,'medium');});
+test('acryllex is a separate seeded account on Sol xhigh',async()=>{const {ACRYLLEX_POLICY}=await import('../worker/acryllex-policy.ts');assert.equal(ACRYLLEX_POLICY.models.all,'gpt-6.1-sol');assert.equal(ACRYLLEX_POLICY.models.effort,'xhigh');});
 test('fractional dots preserve video dimensions and aspect ratio',async()=>{
  const f=await import('../src/acryllex/format.ts');f.setFormat({width:1164,height:670,cell:3.72});
  assert.equal(f.W,1164);assert.equal(f.H,670);assert.equal(f.CELL,3.72);
  assert.ok(f.COLS*f.CELL>=f.W);assert.ok(f.ROWS*f.CELL>=f.H);f.setFormat();
+});
+test('fluid sheets preserve an authored control grid and reuse their geometry buffers',async()=>{
+ const {fluidSheet}=await import('../src/acryllex/models/fluids.ts');
+ const grid=[[[0,0,0],[1,.3,0],[2,.2,0]],[[0,.6,1],[1,1.2,1],[2,.8,1]],[[0,1.4,2],[1,1.1,2],[2,.4,2]]];
+ const water=fluidSheet.build(modelContext({controlGrid:grid,amplitude:0,thickness:.02,uSegments:12,vSegments:10,foamCount:8}));
+ const mesh=water.root.getObjectByName('fluid-sheet-surface'),position=mesh.geometry.getAttribute('position'),normal=mesh.geometry.getAttribute('normal');
+ const point=i=>[position.getX(i),position.getY(i),position.getZ(i)];
+ for(const [index,expected] of [[0,grid[0][0]],[12,grid[0][2]],[130,grid[2][0]],[142,grid[2][2]]])point(index).forEach((v,k)=>assert.ok(Math.abs(v-expected[k])<1e-6));
+ const original=position.array.slice();
+ for(const t of [.4,2,.4]){
+  water.update({flow:2,amplitude:1,foam:1},t);
+  assert.equal(mesh.geometry.getAttribute('position'),position);assert.equal(mesh.geometry.getAttribute('normal'),normal);
+  assert.deepEqual(position.array,original,'Flow changes an undeformed authored sheet');
+ }
+ assert.equal(water.root.userData.fluidCore,'parametric-fluid-surface');
+ assert.equal(water.root.userData.fluidMode,'control-grid');
+});
+test('closed liquid jets keep both seams and normals continuous on reverse seeking',async()=>{
+ const {fluidJet}=await import('../src/acryllex/models/fluids.ts');
+ const water=fluidJet.build(modelContext({path:[[1,0,0],[0,.4,1],[-1,.8,0],[0,-.2,-1]],closedPath:true,radius:.08,amplitude:.004,uSegments:24,vSegments:12,foamCount:12}));
+ const mesh=water.root.getObjectByName('fluid-jet-surface'),position=mesh.geometry.getAttribute('position'),normal=mesh.geometry.getAttribute('normal');
+ const state={flow:-.7,radius:1.2,spread:.9,foam:1};water.update(state,.37);
+ const expected=position.array.slice(),expectedNormals=normal.array.slice(),foam=water.root.getObjectByName('fluid-jet-foam'),foamExpected=foam.instanceMatrix.array.slice();
+ water.update(state,1.29);water.update(state,.37);assert.deepEqual(position.array,expected);assert.deepEqual(normal.array,expectedNormals);assert.deepEqual(foam.instanceMatrix.array,foamExpected);
+ const match=(a,b)=>{for(let k=0;k<3;k++){assert.ok(Math.abs(position.getComponent(a,k)-position.getComponent(b,k))<1e-6);assert.ok(Math.abs(normal.getComponent(a,k)-normal.getComponent(b,k))<1e-6);}};
+ for(let v=0;v<=12;v++)match(v*25,v*25+24);
+ for(let u=0;u<=24;u++)match(u,12*25+u);
+ for(let i=0;i<normal.count;i++){const n=Math.hypot(normal.getX(i),normal.getY(i),normal.getZ(i));assert.ok(Number.isFinite(n)&&Math.abs(n-1)<2e-5);}
+ for(const v of [0,3,6,9]){
+  const i=v*25,radial=new THREE.Vector3(position.getX(i)-1,position.getY(i),position.getZ(i));
+  assert.ok(radial.dot(new THREE.Vector3(normal.getX(i),normal.getY(i),normal.getZ(i)))>0,'Liquid tube normals face inside the jet');
+ }
+});
+test('foam advection uses physical elapsed time at stopped and accelerated lifecycle rates',async()=>{
+ const {createFluidSurface,createFluidFoam}=await import('../src/acryllex/models/fluid-surface.ts');
+ const surface=createFluidSurface({uSegments:8,vSegments:8,flipNormals:true,sample:(u,v,t,out)=>out.set(u,0,v)}),material=new THREE.MeshStandardMaterial();
+ for(const speed of [0,.5,4]){
+  const clocks=[],foam=createFluidFoam({surface,count:1,seed:32,material,speed,lifetime:2,normalOffset:0,size:.03,seedUV:(_seed,out)=>out.set(.2,.3),flow:(_u,_v,t,out)=>{clocks.push(t);out.set(.1,-.05);}});
+  foam.update(.7);const matrix=new THREE.Matrix4();foam.mesh.getMatrixAt(0,matrix);const p=new THREE.Vector3(),q=new THREE.Quaternion(),scale=new THREE.Vector3();matrix.decompose(p,q,scale);assert.ok(scale.length()>0,'A stopped lifecycle should retain visible seeded foam');
+  const elapsed=clocks.length ? .7-Math.min(...clocks) : 0;
+  assert.ok(Math.abs(p.x-(.2+.1*elapsed))<1e-6);assert.ok(Math.abs(p.z-(.3-.05*elapsed))<1e-6);
+  assert.ok(clocks.every(t=>t<=.7));if(speed===0)assert.ok(clocks.every(t=>t===.7));
+  foam.dispose();
+ }
+ surface.dispose();material.dispose();
+});
+test('water optics preserves authored fluid geometry and releases owned environment textures',async()=>{
+ const {fluidSheet,fluidJet}=await import('../src/acryllex/models/fluids.ts');
+ for(const model of [fluidSheet,fluidJet]){
+  const params={uSegments:16,vSegments:8,foamCount:0,amplitude:.04},opaque=model.build(modelContext(params)),water=model.build(modelContext({...params,material:'water',opticalThickness:1.2,rippleAmplitude:.006}));
+  opaque.update({flow:1},.7);water.update({flow:1},.7);
+  const name=model===fluidSheet?'fluid-sheet-surface':'fluid-jet-surface',a=opaque.root.getObjectByName(name),b=water.root.getObjectByName(name);
+  assert.deepEqual(b.geometry.attributes.position.array,a.geometry.attributes.position.array);
+  assert.deepEqual(b.geometry.attributes.normal.array,a.geometry.attributes.normal.array);
+  assert.ok(b.material.isMeshPhysicalMaterial);assert.equal(b.material.metalness,0);assert.equal(b.material.ior,1.333);assert.equal(b.material.thickness,1.2);
+  assert.equal(b.castShadow,false);assert.equal(b.receiveShadow,true);
+  const shader={uniforms:{},vertexShader:'#include <worldpos_vertex>',fragmentShader:'#include <normal_fragment_maps>'};b.material.onBeforeCompile(shader,null);
+  assert.equal(shader.uniforms.waterOpticsTime.value,.7);water.update({flow:1},1.3);water.update({flow:1},.7);assert.equal(shader.uniforms.waterOpticsTime.value,.7);
+  let released=0;b.material.envMap.addEventListener('dispose',()=>released++);b.material.dispose();b.material.dispose();assert.equal(released,1);
+  for(const instance of [opaque,water])instance.root.traverse(o=>{if(o.isInstancedMesh)o.dispose();o.geometry?.dispose();if(o.material)for(const material of Array.isArray(o.material)?o.material:[o.material])material.dispose();});
+ }
 });
 test('rounded geometry keeps the specified bounds even for thin lids',async()=>{
  const {G}=await import('../src/acryllex/kit.ts');const g=G.rbox(.32,.21,.006,.004);g.computeBoundingBox();
@@ -161,19 +312,68 @@ test('object effects validate, play and add sound cues',async()=>{
 });
 test('darkness entrances, exits and scene transitions validate and cue sound',async()=>{
  const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {fxReveal,fxUniforms,REVEAL_KINDS}=await import('../src/acryllex/effects.ts');
- const s=structuredClone(spec);s.scenes[0].objects[0].enter='from-black';s.scenes[0].objects[0].exit='scan-out';s.scenes[1].transition='black';s.scenes[1].transitionDur=1;s.scenes[2].transition='push-left';s.scenes[3].transition='glitch';
+ const s=structuredClone(spec);s.scenes[0].objects[0].enter='from-black';s.scenes[0].objects[0].exit='to-black';s.scenes[1].transition='black';s.scenes[1].transitionDur=1;s.scenes[2].transition='push-right';s.scenes[3].transition='glitch';
  assert.ok(specSchema.safeParse(s).success);
  const bad=structuredClone(s);bad.scenes[1].transition='fade-to-pink';assert.ok(!specSchema.safeParse(bad).success);
- const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='glitch'&&c.why.includes('transition')));assert.ok(cues.some(c=>c.kind==='scan'));
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='glitch'&&c.why.includes('transition')));assert.ok(cues.some(c=>c.kind==='dissolve'));
  const box=new THREE.Box3(new THREE.Vector3(-1,0,-1),new THREE.Vector3(1,2,1));
  for(const kind of REVEAL_KINDS){const u=fxUniforms();assert.ok(fxReveal(kind,.5,u,box),kind);}
  const u=fxUniforms();fxReveal('from-black',0,u,box);assert.equal(u.uFxDim.value,0);fxReveal('to-black',0,fxUniforms(),box);
 });
 test('morph styles validate, hand over cleanly and cue sound',async()=>{
  const {specSchema}=await import('../src/acryllex/schema.ts');const {autoCues}=await import('../src/acryllex/cues.ts');const {morphPose,MORPH_STYLES,densify}=await import('../src/acryllex/effects.ts');
- const s=structuredClone(spec);s.scenes[0].objects.push({id:'b',model:'led',enter:'none'});s.scenes[0].events=[{at:'seven',target:'a',morph:'b',morphStyle:'implode'}];
+ const s=structuredClone(spec);s.scenes[0].objects.push({id:'b',model:'led',enter:'none'});s.scenes[0].events=[{at:'seven',target:'a',morph:'b',morphStyle:'blob'}];
  assert.ok(specSchema.safeParse(s).success);const bad=structuredClone(s);bad.scenes[0].events[0].morphStyle='melt';assert.ok(!specSchema.safeParse(bad).success);
- const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='charge'));assert.ok(cues.some(c=>c.why==='implode burst'));
- for(const style of MORPH_STYLES.filter(x=>x!=='particles')){assert.ok(morphPose(style,0.02,false).visible,style);assert.ok(morphPose(style,0.98,true).visible,style);assert.ok(!(morphPose(style,0.5,false).visible&&morphPose(style,0.5,true).visible)||style==='scan'||style==='fade',style);}
+ const cues=autoCues(s);assert.ok(cues.some(c=>c.kind==='ripple'&&c.why.includes('blob')));
+ for(const style of MORPH_STYLES.filter(x=>x!=='particles')){assert.ok(morphPose(style,0.02,false).visible,style);assert.ok(morphPose(style,0.98,true).visible,style);assert.ok(!(morphPose(style,0.5,false).visible&&morphPose(style,0.5,true).visible)||style==='fade',style);}
  const m=new THREE.Mesh(new THREE.BoxGeometry(1,1,1));densify([m]);assert.ok(m.geometry.attributes.position.count>200);
+});
+test('removed effects, entrances, transitions and morph styles are rejected',async()=>{
+ const {specSchema}=await import('../src/acryllex/schema.ts');
+ const tryScene=f=>{const s=structuredClone(spec);f(s.scenes[1]);return specSchema.safeParse(s).success;};
+ for(const fx of ['squash','hop','flicker'])assert.ok(!tryScene(sc=>{sc.events=[{at:'seven',target:'a',fx}];}),fx);
+ for(const enter of ['scan-in','ping'])assert.ok(!tryScene(sc=>{sc.objects[0].enter=enter;}),enter);
+ for(const exit of ['scan-out','ping-out'])assert.ok(!tryScene(sc=>{sc.objects[0].exit=exit;}),exit);
+ for(const tr of ['iris','blinds','push-left','push-up','dissolve'])assert.ok(!tryScene(sc=>{sc.transition=tr;}),tr);
+ for(const morphStyle of ['implode','scan'])assert.ok(!tryScene(sc=>{sc.objects.push({id:'b',model:'led',enter:'none'});sc.events=[{at:'seven',target:'a',morph:'b',morphStyle}];}),morphStyle);
+});
+
+test('male and female rigs preserve proportions, posed skin and independent material controls',async()=>{const {verifyHumanRigs}=await import('./acryllex/verify-human-rig.mjs');const result=await verifyHumanRigs();assert.equal(result.passed,30);});
+test('human correction adapter leaves assets without corrective metadata untouched',async()=>{
+ const {createPoseCorrectives}=await import('../src/acryllex/models/human-correctives.ts');
+ const rig=new Proxy({},{get(){throw new Error('No-metadata actor read the rig');}});
+ const adapter=createPoseCorrectives(rig,new THREE.Group());
+ assert.equal(adapter.available,false);assert.equal(adapter.update(),undefined);assert.equal(adapter.update(false),undefined);
+});
+
+test('authored limb velocity preserves an earlier reach when later keys are refined',async()=>{
+ const {sampleChannel,parseTrack,TrackPlayer}=await import('../src/acryllex/models/human-motion.ts');
+ const original=[{t:0,v:[0,0,0]},{t:1,v:[1,2,0]},{t:2,v:[3,1,0]},{t:3,v:[4,3,0]}];
+ const refined=structuredClone(original);refined[2].velocity=[1.5,.5,0];refined.splice(3,0,{t:2.05,v:[3.15,.8,0]});
+ for(let frame=0;frame<=120;frame++)assert.deepEqual(sampleChannel(refined,frame/60),sampleChannel(original,frame/60),'A later detail changed the preceding reach');
+ const track=parseTrack({units:'stature',keys:refined.map(k=>({t:k.t,weight:0,handR:{pos:k.v,softness:.012,...(k.velocity?{velocity:k.velocity}:{})}}))});
+ assert.ok(track);const player=new TrackPlayer(track,1.8);let actual;
+ const rig={solve(){},need:n=>n,ik(side,limb,target,options){assert.equal(side,'Right');assert.equal(limb,'arm');assert.equal(options.softness,.012*1.8);actual=target.toArray();}};
+ for(const t of [1.8,2.025,1.8]){player.apply(rig,t);assert.deepEqual(actual,sampleChannel(refined,t).map(v=>v*1.8),'Parsed position velocities did not reach the compiled IK track in stature units');}
+});
+
+test('zero additive human offsets leave the underlying pose untouched',async()=>{
+ const {parseTrack,TrackPlayer}=await import('../src/acryllex/models/human-motion.ts');
+ const player=new TrackPlayer(parseTrack({keys:[{t:0,offset:{spine:[0,0,0],y:0}},{t:1,offset:{spine:[12,0,0],y:.02}},{t:2,offset:{spine:[0,0,0],y:0}}]}));
+ for(const t of [-1,0,2,2.01,10])assert.equal(player.offsets(t),null,'An inactive offset would reapply the rig');
+ assert.deepEqual(player.offsets(1),{spine:[12,0,0],y:.02});
+ const tiny=new TrackPlayer(parseTrack({keys:[{t:0,offset:{head:[-1e-15,0,0],y:0}}]}));
+ assert.deepEqual(tiny.offsets(0),{head:[-1e-15,0,0],y:0},'A genuine small offset must not be thresholded away');
+ const vertical=new TrackPlayer(parseTrack({keys:[{t:0,offset:{spine:[0,0,0],y:-.01}}]}));
+ assert.deepEqual(vertical.offsets(0),{spine:[0,0,0],y:-.01});
+});
+
+test('soft reach retains its safety limit and bounded C2 transition',async()=>{
+ const {softenReach}=await import('../src/acryllex/models/human-motion.ts');
+ const limit=.5,width=.012,step=1e-6;
+ for(let i=0;i<=1000;i++){const d=.45+i*.0001,hard=Math.min(d,limit),soft=softenReach(d,limit,width);assert.ok(soft<=hard+1e-12);assert.ok(hard-soft<=3*width/16+1e-12);assert.equal(softenReach(d,limit),hard);}
+ for(const [d,slope]of [[limit-width,1],[limit+width,0]]){
+  const a=softenReach(d-step,limit,width),b=softenReach(d,limit,width),c=softenReach(d+step,limit,width);
+  assert.ok(Math.abs((c-a)/(2*step)-slope)<1e-7);assert.ok(Math.abs((c-2*b+a)/step**2)<.01);
+ }
 });

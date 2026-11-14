@@ -1,0 +1,16 @@
+{
+  "purpose": "Reproducible appearance and driving-motion inputs for the bundled fixed-view human media",
+  "generated": true,
+  "originalReferencePixelsIncluded": false,
+  "files": {
+    "start.png": "9633b5ffa486f96b4d0c095a529fcdb453b20b37277c6b46efea12784284ab70",
+    "female-start.png": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
+    "motion-guide-corrected.mp4": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c"
+  },
+  "appearanceGenerator": "image_gen",
+  "motionGenerator": "own fitted rig render; neutral grayscale; furniture hidden; flash/dissolve removed",
+  "videoGenerator": "Kling AI2.6 Motion Control",
+  "preparation": "Whole-image uniform scale/translation and alpha-over-black for appearance inputs; no body-part warp. Movie preparation and hashes are in ../human-motion-provenance.json.",
+  "limitations": "Appearance source poses are approximate. The driving rig supplies the animation; generated output still has documented tracking and material-density errors.",
+  "default3DModelChanges": false
+}

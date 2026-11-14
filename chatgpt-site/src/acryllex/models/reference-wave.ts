@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import {lerp,clamp,rng} from '../kit.ts';
 import {defineModel} from './types.ts';
+import {createFluidSurface,createFluidFoam,controlGridFluidSampler} from './fluid-surface.ts';
 
 // ================================================================= ocean wave (barrel)
 const volumetricCurlWave=defineModel({
@@ -193,12 +194,136 @@ const layeredCurlWave=defineModel({
 
 
 
+// A source wave is one editable preset of the reusable surface/foam system.
+// All dimensions, section curves, timing and materials stay here or in params;
+// fluid-surface.ts contains no reference-camera, palette, shot or wave assumptions.
+const sculptedCurlWave=defineModel({
+ id:'curl-wave',describe:'Editable continuous curling water sheet with a real sheared opening, rolled crest, swept relief and surface-bound foam.',
+ controls:{size:'overall growth',flow:'procedural water flow rate',break:'0..1 manual breaking phase; omit for timed break'},defaults:{size:1,flow:1},
+ params:{outerProfile:'2D front-section crest control points, metres',crestDelta:'per-point crest displacement as it breaks, metres',foldProfile:'fold ridge spline control points, metres',openingX:'opening centre across the front section',openingY:'opening centre height in the front section',openingWidth:'opening horizontal radius',openingHeight:'opening vertical radius',openingShear:'upper/lower opening shear',closingTravel:'opening travel as it closes',closingAmount:'closure strength',breakStart:'break start seconds',breakEnd:'break end seconds',breakPower:'break acceleration',barrelDepth:'continuous sheet recession',crestWidth:'rolled lip width',crestDepth:'rolled lip depth',surfaceRipple:'fine moving swept relief depth',foldHeight:'integrated fold ridge depth',waterTone:'neutral sparse-water albedo',innerTone:'neutral inner-wall albedo',crestTone:'neutral crest foam albedo',foldTone:'neutral thin-fold foam albedo',foamSpread:'landing field spread',foamCount:'surface-bound foam population',sprayCount:'curvature-bound spray population',foamAdvance:'landing foam travel toward the barrel',foamTone:'neutral foam albedo'},
+ build(ctx){
+  const root=new THREE.Group();if(ctx.bool('mirror',false))root.scale.x=-1;
+  const profile=(key:string,fallback:number[][])=>{const p=ctx.params[key];return Array.isArray(p)&&p.length>2&&p.every(v=>Array.isArray(v)&&v.length>=2&&Number.isFinite(v[0])&&Number.isFinite(v[1]))?p.map(v=>[Number(v[0]),Number(v[1])]):fallback;};
+  const crestBase=profile('outerProfile',[[-6,1.05],[-3.45,1.58],[-1.65,2.15],[.15,2.13],[1.75,1.57],[2.6,.58],[3.15,-.8],[4.25,-1.16],[5.65,-1.30]]);
+  const crestDelta=profile('crestDelta',[[0,0],[0,0],[0,0],[0,0],[-.24,-.45],[-.77,-.73],[-1.45,.12],[0,0],[0,0]]);
+  const foldBase=profile('foldProfile',[[.15,1],[-.38,.99],[-1.15,.68],[-1.51,.23],[-1.28,-.32],[-.65,-.95],[.16,-1.4]]);
+  const center=new THREE.Vector3(-.05,3.27,0),R=new THREE.Vector3(.99715,0,.07545),U=new THREE.Vector3(-.00175,.99973,.0231),N=new THREE.Vector3(-.07543,.02317,.99688),D=9.93;
+  const project=(u:number,v:number,z:number,out:THREE.Vector3)=>out.copy(center).addScaledVector(R,u*(D-z)/D).addScaledVector(U,v*(D-z)/D).addScaledVector(N,z);
+  const eyeX=ctx.num('openingX',1.15,-1,3),eyeY=ctx.num('openingY',-.76,-2,1),rx0=ctx.num('openingWidth',.8,.3,1.5),ry0=ctx.num('openingHeight',.69,.2,1.3),shear=ctx.num('openingShear',.46,-1,1),travel=ctx.num('closingTravel',.68,0,1.5),closing=ctx.num('closingAmount',1,0,1.5);
+  const begin=ctx.num('breakStart',.55,0,5),end=Math.max(begin+.1,ctx.num('breakEnd',2.53,.1,10)),power=ctx.num('breakPower',2.25,.5,5),depth=ctx.num('barrelDepth',3.2,.5,6),width=ctx.num('crestWidth',.46,.12,1.2),crestDepth=ctx.num('crestDepth',.72,.05,1.8),ripple=ctx.num('surfaceRipple',.025,0,.12),foldHeight=ctx.num('foldHeight',.28,0,.7);
+  const waterTone=ctx.num('waterTone',.14,.02,1),innerTone=ctx.num('innerTone',.46,.05,1),crestTone=ctx.num('crestTone',1.2,.2,2),foldTone=ctx.num('foldTone',.85,.1,2),foamSpread=ctx.num('foamSpread',1,.4,1.8),foamAdvance=ctx.num('foamAdvance',1.4,0,2.2);
+  let manual=-1,size=1;type State={p:number;q:number;cx:number;cy:number;rx:number;ry:number;polygon:number[][];fold:number[][];outer:Map<number,{x:number;y:number;crest:boolean}>};const states=new Map<number,State>();
+  const state=(t:number)=>{let s=states.get(t);if(s)return s;const p=clamp((t-begin)/(end-begin)),q=(manual>=0?clamp(manual):Math.pow(p,power))*closing,crest=crestBase.map(([x,y],i)=>[x!+(crestDelta[i]?.[0]??0)*q,y!+(crestDelta[i]?.[1]??0)*q]);const curve=new THREE.CatmullRomCurve3(crest.map(([x,y])=>new THREE.Vector3(x,y,0))),polygon=Array.from({length:65},(_,i)=>{const p=curve.getPointAt(i/64);return[p.x,p.y];});polygon.push([6,-3.4],[-6,-3.4]);s={p,q,cx:eyeX-travel*q,cy:eyeY-.025*p,rx:rx0*(1-.35*q),ry:ry0*(1-.58*q),polygon,fold:foldBase.map(([x,y],i)=>[x!-(i>3?(i-3)/3*.3*q:0),y!]),outer:new Map()};states.set(t,s);return s;};
+  const boundary=(u:number,s:State)=>{u=((u%1)+1)%1;let p=s.outer.get(u);if(p)return p;const a=u*Math.PI*2,dx=s.rx*Math.cos(a)-shear*s.ry*Math.sin(a),dy=s.ry*Math.sin(a);let reach=100,edge=0;for(let k=0;k<s.polygon.length;k++){const A=s.polygon[k]!,B=s.polygon[(k+1)%s.polygon.length]!,ex=B[0]!-A[0]!,ey=B[1]!-A[1]!,cross=dx*ey-dy*ex;if(Math.abs(cross)<1e-8)continue;const ax=A[0]!-s.cx,ay=A[1]!-s.cy,tt=(ax*ey-ay*ex)/cross,ss=(ax*dy-ay*dx)/cross;if(tt>0&&ss>=0&&ss<=1&&tt<reach){reach=tt;edge=k;}}p={x:s.cx+dx*reach,y:s.cy+dy*reach,crest:edge<64};s.outer.set(u,p);return p;};
+  const segmentDistance=(x:number,y:number,a:number[],b:number[])=>{const dx=b[0]!-a[0]!,dy=b[1]!-a[1]!,k=clamp(((x-a[0]!)*dx+(y-a[1]!)*dy)/(dx*dx+dy*dy));return Math.hypot(x-a[0]!-k*dx,y-a[1]!-k*dy);};
+  let last={u:NaN,v:NaN,t:NaN,x:0,y:0,z:0,tone:0};
+  const field=(u:number,v:number,t:number)=>{if(last.u===u&&last.v===v&&last.t===t)return last;const s=state(t),a=u*Math.PI*2,sa=Math.sin(a),ca=Math.cos(a),lower=(1-sa)*.5,neck=1-.65*s.q*lower*lower,ix=s.cx+s.rx*neck*ca-shear*s.ry*sa-.30*s.q*lower*lower,iy=s.cy+s.ry*sa,outer=boundary(u,s),x=lerp(ix,outer.x,v),y=lerp(iy,outer.y,v),edgeDistance=Math.hypot(outer.x-x,outer.y-y),lipWidth=width*(1+.8*s.q)*(outer.x>1?1.7:1),roll=outer.crest?Math.exp(-Math.pow((edgeDistance-lipWidth*.45)/(lipWidth*.35),2)):0;
+   let fd=100;for(let k=0;k<s.fold.length-1;k++)fd=Math.min(fd,segmentDistance(x,y,s.fold[k]!,s.fold[k+1]!));const ridge=Math.exp(-Math.pow(fd/.14,2)),distanceFromEye=Math.hypot(x-ix,y-iy),wave=ripple*(.65*Math.sin(distanceFromEye*24-a*4-t*6.5)+.3*Math.sin(distanceFromEye*43+a*7.3-t*9.7)+.25*Math.sin(x*11+y*4+t*3));
+   const z=-depth*Math.exp(-v*4.7)+crestDepth*roll+foldHeight*ridge+wave*Math.sin(Math.PI*v),inner=Math.exp(-Math.pow(distanceFromEye/1.6,2)),base=lerp(waterTone,innerTone,inner),tone=lerp(lerp(base,crestTone,roll),foldTone,ridge*.9);last={u,v,t,x,y,z,tone};return last;};
+  const water=createFluidSurface({uSegments:256,vSegments:112,periodicU:true,flipNormals:true,thickness:ctx.num('sheetThickness',.035,0,.2),sample(u,v,t,out){const f=field(u,v,t);project(f.x*size,f.y*size,f.z,out);},color(u,v,t,_p,out){out.setScalar(field(u,v,t).tone);}});
+  const material=ctx.mat({tone:1,rough:.62,side:THREE.DoubleSide});material.vertexColors=true;const mesh=new THREE.Mesh(water.geometry,material);mesh.frustumCulled=false;root.add(mesh);
+  // A second parametric sheet is an emitter guide for the landing fan. Its
+  // attached droplets move with sampled surface flow; no screen-space sprites.
+  const apron=createFluidSurface({uSegments:48,vSegments:20,flipNormals:true,sample(u,v,t,out){const s=state(t),start=2.85-foamAdvance*s.q-1.05*s.q*v*v,x=lerp(start,6.1,u),top=lerp(-1.04+.35*s.q,-1.38,u),spread=(.55+.7*Math.sqrt(u))*foamSpread,y=top-v*spread*1.65+.035*Math.sin(u*36+v*12-t*5),z=.45+.12*Math.sin(u*12+v*8-t*3);project(x*size,y*size,z,out);}});
+  const foamMaterial=ctx.mat({tone:ctx.num('foamTone',1,.2,1),rough:.82});foamMaterial.onBeforeCompile=sh=>{sh.fragmentShader=sh.fragmentShader.replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n totalEmissiveRadiance+=diffuseColor.rgb*0.22;');};
+  const foam=createFluidFoam({surface:apron,count:ctx.num('foamCount',5200,500,15000),seed:ctx.seed+261,material:foamMaterial,seedUV:(s,out)=>out.set(s.random[2]!,Math.pow(s.random[3]!,1.5)),flow:(_u,_v,_t,out)=>out.set(.16,0),size:[.024,.055],lifetime:[.8,1.7],normalOffset:.05,spread:.07});root.add(foam.mesh);
+  const spray=createFluidFoam({surface:water,count:ctx.num('sprayCount',650,0,4000),seed:ctx.seed+431,material:foamMaterial,seedUV:(s,out)=>out.set(.025+s.random[2]!*.42,.98),flow:(_u,_v,_t,out)=>out.set(-.035,.02),size:[.012,.028],lifetime:[.2,.48],spray:.75,gravity:4.5,normalOffset:.035,bendThreshold:ctx.num('sprayBend',.4,0,4)});root.add(spray.mesh);
+  return{root,grounded:false,update(c,t){manual=c.break??-1;size=lerp(.4,1,clamp(c.size??1));const time=t*(c.flow??1);states.clear();last.t=NaN;water.update(time);apron.update(time);foam.update(time);spray.update(time);}};
+ },
+});
+
+// Rolled open water sheet swept through depth. The visible tube is created by
+// folding/overhang and foreground water, rather than a hole cut in a front sheet.
+const rolledCurlWave=defineModel({
+ id:'curl-wave',describe:'An editable C-section breaker swept through depth, with a real overhanging lip, sea swell and surface-emitted landing foam.',
+ controls:{size:'growth',flow:'water flow',break:'optional0..1 manual break phase'},defaults:{size:1,flow:1},
+ params:{sections:'optional authored grid points[v*uCount+u], xyz metres',uCount:'authored grid width',vCount:'authored grid depth',frontProfile:'editable front C-section xy control points',barrelLength:'sheet depth length',backCenterX:'deep barrel axis x',backCenterY:'deep barrel axis y',backWidth:'deep C-section radius x',backHeight:'deep C-section radius y',backShear:'deep C-section shear',closingTravel:'late deep-axis travel',closingAmount:'breaker closure amount',breakStart:'break start',breakEnd:'break end',surfaceRipple:'swept normal relief depth',waterTone:'neutral water albedo',crestTone:'neutral foamy lip albedo',innerTone:'neutral inner-water albedo',foamCount:'surface-bound foam population',sprayCount:'lip-emitted spray population'},
+ build(ctx){
+  const root=new THREE.Group();if(ctx.bool('mirror',false))root.scale.x=-1;
+  const pairs=(key:string,fallback:number[][])=>{const a=ctx.params[key];return Array.isArray(a)&&a.length>3&&a.every(p=>Array.isArray(p)&&p.length>=2&&Number.isFinite(p[0])&&Number.isFinite(p[1]))?a.map(p=>[Number(p[0]),Number(p[1])]):fallback;};
+  const front=pairs('frontProfile',[[-8,.05],[-4.5,.15],[-3,.3],[-3,1.1],[-2.6,2.5],[-2,3.7],[-1.7,4.7],[-1.3,5.2],[-.6,5.3],[.3,5.2],[1.2,4.9],[2,4.4],[2.7,3.6],[3.1,2.6],[3.3,1.6],[3.4,.4]]);
+  const length=ctx.num('barrelLength',6,2,12),frontZ=ctx.num('frontDepth',1,-2,3),backX=ctx.num('backCenterX',1.9,-1,4),backY=ctx.num('backCenterY',1.9,.5,4),rx=ctx.num('backWidth',1.15,.4,2),ry=ctx.num('backHeight',.9,.2,2),shear=ctx.num('backShear',.5,-1,1),travel=ctx.num('closingTravel',1.05,0,2),strength=ctx.num('closingAmount',1,0,1.4),begin=ctx.num('breakStart',.55,0,4),end=Math.max(begin+.1,ctx.num('breakEnd',2.53,.2,8));
+  const ripple=ctx.num('surfaceRipple',.018,0,.1),waterTone=ctx.num('waterTone',.19,.02,1),innerTone=ctx.num('innerTone',.42,.05,1),crestTone=ctx.num('crestTone',1,.1,2),nu=40,nv=7;let manual=-1,size=1;type State={q:number;points:THREE.Vector3[];sample:ReturnType<typeof controlGridFluidSampler>};const cache=new Map<number,State>();
+  const authored=ctx.params.sections;const authoredU=Math.round(ctx.num('uCount',nu,2,80)),authoredV=Math.round(ctx.num('vCount',nv,2,30));
+  const state=(t:number)=>{let s=cache.get(t);if(s)return s;const p=clamp((t-begin)/(end-begin)),q=(manual>=0?clamp(manual):Math.pow(p,2.25))*strength,points:THREE.Vector3[]=[];
+   if(Array.isArray(authored)&&authored.length===authoredU*authoredV&&authored.every(p=>Array.isArray(p)&&p.length===3&&p.every(Number.isFinite))){for(const p of authored)points.push(new THREE.Vector3(Number(p[0]),Number(p[1]),Number(p[2])));s={q,points,sample:controlGridFluidSampler({points,uCount:authoredU,vCount:authoredV})};cache.set(t,s);return s;}
+   for(let j=0;j<nv;j++){
+    const d=j/(nv-1),f=Math.pow(d,.78),z=frontZ-length*d,cx=backX-travel*q,cy=backY-.08*q,rrx=rx*(1-.3*q),rry=ry*(1-.58*q),sh=shear-.6*q,tailY=lerp(.05,4.8,d),section:THREE.Vector3[]=[];
+    for(let k=0;k<front.length;k++){
+     let bx:number,by:number;if(k===0){bx=-8;by=tailY;}else if(k===1){bx=-3.5;by=lerp(.15,2.5,d);}else{const theta=(225-(k-2)/(front.length-3)*(270+65*q))*Math.PI/180;bx=cx+rrx*Math.cos(theta)-sh*rry*Math.sin(theta);by=cy+rry*Math.sin(theta);}
+     const edge=clamp((k-9)/(front.length-10)),fx=front[k]![0]!-1.9*q*edge*edge,fy=front[k]![1]!+1.85*q*Math.pow(edge,3)-.75*q*Math.sin(Math.PI*edge);
+     section.push(new THREE.Vector3(lerp(fx,bx,f),lerp(fy,by,f),z));
+    }
+    const curve=new THREE.CatmullRomCurve3(section);for(let i=0;i<nu;i++)points.push(curve.getPointAt(i/(nu-1)));
+   }
+   s={q,points,sample:controlGridFluidSampler({points,uCount:nu,vCount:nv})};cache.set(t,s);return s;
+  };
+  const radius=new THREE.Vector3();
+  const shape=(u:number,v:number,t:number,out:THREE.Vector3)=>{state(t).sample(u,v,t,out);radius.set(out.x-lerp(.3,backX,v),out.y-lerp(2.6,backY,v),0);if(u<.2)radius.set(-.15,.8,.6);radius.normalize();
+   const phase=u*140+v*18+.5*Math.sin(v*8)-t*4.2,relief=ripple*(Math.sin(phase)+.28*Math.sin(u*337-v*35+t*7.1));
+   const foldU=ctx.num('foldU',.49,.2,.8)+ctx.num('foldSweep',.2,-.3,.4)*v+.018*Math.sin(v*5+t*.4),fold=ctx.num('foldDepth',.18,0,.5)*Math.exp(-Math.pow((u-foldU)/.012,2))*Math.sin(Math.PI*clamp((v+.12)/1.2));
+   out.addScaledVector(radius,relief+fold).multiplyScalar(size);
+  };
+  const surface=createFluidSurface({uSegments:320,vSegments:96,thickness:ctx.num('sheetThickness',.06,0,.2),sample:shape,color(u,v,t,_p,out){const frontLip=Math.exp(-Math.pow((v-.08)/.28,2))*Math.exp(-Math.pow((u-.65)/.22,4)),inside=Math.pow(v,1.5),tone=lerp(lerp(waterTone,innerTone,inside),crestTone,frontLip);out.setScalar(tone);}});
+  const mat=ctx.mat({tone:1,rough:.58,side:THREE.DoubleSide});mat.vertexColors=true;const mesh=new THREE.Mesh(surface.geometry,mat);mesh.name='rolled-water-sheet';mesh.frustumCulled=false;root.add(mesh);
+  const sea=createFluidSurface({uSegments:72,vSegments:36,flipNormals:true,sample(u,v,t,out){const x=lerp(-8,7,u),z=lerp(frontZ-length,3,v),swell=1.15*Math.exp(-Math.pow((x-1.2)/3,2))*clamp((-z+1)/6),y=.06+swell+.028*Math.sin(x*13+z*9-t*4);out.set(x*size,y*size,z*size);}});const seaMesh=ctx.mesh(sea.geometry,{tone:waterTone,rough:.7,side:THREE.DoubleSide});seaMesh.name='breaker-ground-swell';seaMesh.frustumCulled=false;root.add(seaMesh);
+  const sourcePoint=new THREE.Vector3();const apron=createFluidSurface({uSegments:40,vSegments:24,flipNormals:true,sample(u,v,t,out){const q=state(t).q;shape(ctx.num('foamSourceU',.86,.65,1),0,t,sourcePoint);const x=lerp(sourcePoint.x-.35,6.3,u)-1.2*q*v*v*(1-u),y=sourcePoint.y-.45-v*(1.3+.45*u)+.03*Math.sin(u*25+v*9-t*4),z=lerp(sourcePoint.z+.25,1.6,u)+.08*Math.sin(u*13+v*11-t*3);out.set(x,y,z);}});
+  const foamMat=ctx.mat({tone:ctx.num('foamTone',1,.2,2),rough:.8});const foamEmission=ctx.num('foamEmission',.55,0,1);foamMat.onBeforeCompile=s=>{s.fragmentShader=s.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>\n totalEmissiveRadiance+=diffuseColor.rgb*${foamEmission};`);};
+  const foam=createFluidFoam({surface:apron,count:ctx.num('foamCount',6000,500,15000),seed:ctx.seed+725,material:foamMat,seedUV:(s,out)=>out.set(s.random[2]!,Math.pow(s.random[3]!,1.4)),flow:(_u,_v,_t,out)=>out.set(.16,0),size:[.025,.055],lifetime:[.8,1.7],spread:.065,normalOffset:.06});root.add(foam.mesh);
+  const crestFoam=createFluidFoam({surface,count:ctx.num('crestFoamCount',6500,0,18000),seed:ctx.seed+817,material:foamMat,seedUV:(s,out)=>out.set(.56+s.random[2]!*.39,Math.pow(s.random[3]!,1.6)*ctx.num('crestFoamWidth',.22,.03,.5)),flow:(_u,_v,_t,out)=>out.set(.025,.015),size:[.045*ctx.num('crestFoamSize',1,.3,2),.085*ctx.num('crestFoamSize',1,.3,2)],lifetime:[.65,1.4],spread:.035,normalOffset:ctx.num('crestFoamOffset',-.11,-.3,.3)});root.add(crestFoam.mesh);
+  const spray=createFluidFoam({surface,count:ctx.num('sprayCount',650,0,3000),seed:ctx.seed+919,material:foamMat,seedUV:(s,out)=>out.set(.45+s.random[2]!*.42,s.random[3]!*.12),flow:(_u,_v,_t,out)=>out.set(.055,.025),size:[.012,.028],lifetime:[.2,.5],spray:.8,gravity:5,normalOffset:.02,bendThreshold:.3});root.add(spray.mesh);
+  return{root,grounded:false,update(c,t){manual=c.break??-1;size=lerp(.4,1,clamp(c.size??1));const time=t*(c.flow??1);cache.clear();surface.update(time);sea.update(time);apron.update(time);foam.update(time);crestFoam.update(time);spray.update(time);}};
+ },
+});
+
+// Closed breaker mass: independently authored cavity and exterior sections,
+// joined across the lip and both ends. The lower cavity interface is the floor.
+const breakerVolumeWave=defineModel({
+ id:'curl-wave',describe:'A closed breaker water volume with independently editable cavity/exterior cross-sections and geometry-bound lip, floor and landing foam.',
+ controls:{size:'growth',flow:'flow speed',break:'optional manual break phase0..1'},defaults:{size:1,flow:1},
+ params:{innerFront:'closed cavity section xy points',outerFront:'closed exterior section xy points',outerBack:'deep exterior section xy points',barrelLength:'barrel depth',frontDepth:'front section z',backCenterX:'deep cavity x',backCenterY:'deep cavity y',backWidth:'deep cavity radius x',backHeight:'deep cavity radius y',backShear:'cavity shear',closingTravel:'cavity closing travel',surfaceRipple:'water surface relief',floorRipple:'floor fold relief',crestFoamCount:'lip-bound foam population',foamCount:'landing foam population',floorFoamCount:'floor-curvature foam population',sprayCount:'lip spray population'},
+ build(ctx){
+  const root=new THREE.Group();if(ctx.bool('mirror',false))root.scale.x=-1;
+  const profile=(key:string,fallback:number[][])=>{const a=ctx.params[key];return Array.isArray(a)&&a.length>=6&&a.every(p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite))?a.map(p=>[Number(p[0]),Number(p[1])]):fallback;};
+  const innerFront=profile('innerFront',[[-8,.8],[-4,.8],[-2.4,1.2],[-2.2,2.2],[-1.9,3.5],[-1.5,4.4],[-.8,4.55],[.1,4.45],[.9,4.15],[1.6,3.65],[2.2,2.9],[2.6,2],[2.75,1.1],[2.4,.85],[1.5,.9],[.5,.95],[-.7,.9],[-2,.85],[-4,.8]]);
+  const outerFront=profile('outerFront',[[-10,-3],[-5,-3],[-4.5,.3],[-3.3,2.4],[-2.6,4.2],[-1.9,5.15],[-1.2,5.25],[-.3,5.1],[.6,4.8],[1.4,4.3],[2.1,3.5],[2.6,2.6],[2.9,1.6],[4,.8],[5,-2],[3,-3],[0,-3],[-3,-3],[-7,-3]]);
+  const outerBack=profile('outerBack',[[-10,-3],[-8,1],[-6,4.7],[-3.5,5],[-2,5.3],[-1,5.5],[0,5.5],[1,5.4],[2.2,5],[3.5,4.5],[4.5,3.7],[5.5,2.7],[6,1.5],[7,.6],[7,-2],[3,-3],[0,-3],[-3,-3],[-7,-3]]);
+  const angles=[225,210,195,165,135,105,90,75,50,25,5,-15,-45,-60,-80,-95,-110,-125,-132],frontZ=ctx.num('frontDepth',1,-2,3),length=ctx.num('barrelLength',6,2,12),backX=ctx.num('backCenterX',1.9,-1,4),backY=ctx.num('backCenterY',1.9,.5,4),rx=ctx.num('backWidth',1.3,.4,2),ry=ctx.num('backHeight',.85,.2,2),shear=ctx.num('backShear',.65,-1,1),travel=ctx.num('closingTravel',1.05,0,2),strength=ctx.num('closingAmount',1,0,1.4),begin=ctx.num('breakStart',.55,0,4),end=Math.max(begin+.1,ctx.num('breakEnd',2.53,.2,8)),nu=96,nv=7;
+  let manual=-1,size=1;type State={q:number;inner:ReturnType<typeof controlGridFluidSampler>;outer:ReturnType<typeof controlGridFluidSampler>};const cache=new Map<number,State>();
+  const state=(t:number)=>{let s=cache.get(t);if(s)return s;const p=clamp((t-begin)/(end-begin)),q=(manual>=0?clamp(manual):Math.pow(p,2.25))*strength,inside:THREE.Vector3[]=[],outside:THREE.Vector3[]=[];
+   for(let j=0;j<nv;j++){const d=j/(nv-1),f=Math.pow(d,.72),z=frontZ-length*d,cx=backX-travel*q,cy=backY+ctx.num('axisEntryLift',.45,0,1)*Math.exp(-p/.18)+ctx.num('axisClosingLift',.2,-.3,.6)*q-.04*q,rrx=rx*(1-.3*q),rry=ry*(1-.58*q),sh=shear-.6*q;
+    const section=(inner:boolean)=>{const front=inner?innerFront:outerFront,back=outerBack,points:THREE.Vector3[]=[];for(let k=0;k<front.length;k++){const a=k/front.length,edge=clamp((a-.4)/.3),crease=Math.sin(Math.PI*edge),floor=a>.67?Math.sin(Math.PI*clamp((a-.67)/.33)):0;let fx=front[k]![0]!,fy=front[k]![1]!;
+      if(inner){fx-=1.6*q*edge*edge*(1-floor);fy-=1.05*q*crease;fy+=.65*q*floor;}else{fx-=.8*q*edge*edge*(1-floor);fy-=.35*q*crease;}
+      let bx:number,by:number;if(inner){const angle=(angles[k%angles.length]!-25*q*crease)*Math.PI/180;bx=cx+rrx*Math.cos(angle)-sh*rry*Math.sin(angle);by=cy+rry*Math.sin(angle);}else{const b=back[Math.min(k,back.length-1)]!;bx=b[0]!;by=b[1]!;}
+      points.push(new THREE.Vector3(lerp(fx,bx,f),lerp(fy,by,f),z));}
+     return new THREE.CatmullRomCurve3(points,true,'catmullrom',.45);};
+    const ic=section(true),oc=section(false);for(let i=0;i<nu;i++){inside.push(ic.getPoint(i/nu));outside.push(oc.getPoint(i/nu));}
+   }
+   s={q,inner:controlGridFluidSampler({points:inside,uCount:nu,vCount:nv,periodicU:true}),outer:controlGridFluidSampler({points:outside,uCount:nu,vCount:nv,periodicU:true})};cache.set(t,s);return s;
+  };
+  const radial=new THREE.Vector3(),ripple=ctx.num('surfaceRipple',.035,0,.15),floorRipple=ctx.num('floorRipple',.09,0,.3);
+  const sampleBoundary=(outer:boolean,u:number,v:number,t:number,out:THREE.Vector3)=>{const s=state(t);(outer?s.outer:s.inner)(u,v,t,out);radial.set(out.x-lerp(.7,backX,v),out.y-lerp(2.1,backY,v),0).normalize();const floor=clamp((u-.67)/.08)*clamp((1.04-u)/.08),h=ripple*(Math.sin(u*177+v*14-t*4.5)+.3*Math.sin(u*389-v*25+t*7.3));const foldU=ctx.num('foldU',.21,.1,.4)+ctx.num('foldSweep',.08,-.2,.3)*v,fold=outer?0:ctx.num('foldDepth',.28,0,.6)*Math.exp(-Math.pow((u-foldU)/.009,2));out.addScaledVector(radial,h*(1-floor)+fold);if(!outer)out.y+=floor*floorRipple*(Math.sin(out.x*8+out.z*9-t*4)+.35*Math.sin(out.x*17+out.z*14-t*7));out.multiplyScalar(size);};
+  const waterTone=ctx.num('waterTone',.12,.02,1),floorTone=ctx.num('floorTone',.3,.02,1),crestTone=ctx.num('crestTone',.8,.1,2);
+  const body=createFluidSurface({uSegments:320,vSegments:80,periodicU:true,flipNormals:true,sample:(u,v,t,p)=>sampleBoundary(false,u,v,t,p),backSample:(u,v,t,p)=>sampleBoundary(true,u,v,t,p),color(u,v,_t,_p,out){const top=Math.exp(-Math.pow((u-.43)/.16,4)),floor=clamp((u-.67)/.07);out.setScalar(lerp(lerp(waterTone,crestTone,top),floorTone,floor)*lerp(1,ctx.num('deepTone',1.8,1,3),Math.pow(v,4)));}});
+  const waterMat=ctx.mat({tone:1,rough:.55,side:THREE.DoubleSide});waterMat.vertexColors=true;const mesh=new THREE.Mesh(body.geometry,waterMat);mesh.name='closed-breaker-water-volume';mesh.frustumCulled=false;root.add(mesh);
+  const a=new THREE.Vector3(),b=new THREE.Vector3(),lip=createFluidSurface({uSegments:100,vSegments:12,sample(u,v,t,p){const q=ctx.num('crestStartU',.27,.15,.4)+u*ctx.num('crestSpanU',.39,.2,.6);sampleBoundary(false,q,0,t,a);sampleBoundary(true,q,0,t,b);p.copy(a).lerp(b,v);}});
+  const foamMat=ctx.mat({tone:ctx.num('foamTone',1,.2,2),rough:.8});const emission=ctx.num('foamEmission',.55,0,1);foamMat.onBeforeCompile=s=>{s.fragmentShader=s.fragmentShader.replace('#include <emissivemap_fragment>',`#include <emissivemap_fragment>\n totalEmissiveRadiance+=diffuseColor.rgb*${emission};`);};
+  const crestFoam=createFluidFoam({surface:lip,count:ctx.num('crestFoamCount',14000,0,24000),seed:ctx.seed+817,material:foamMat,seedUV:(s,p)=>p.set(s.random[2]!,s.random[3]!),flow:(_u,_v,_t,p)=>p.set(.025,.015),size:[.03,.065],lifetime:[.65,1.4],spread:.025,normalOffset:.04,emission:(_f,_s,t)=>.7+.3*clamp(state(t).q)});root.add(crestFoam.mesh);
+  const apron=createFluidSurface({uSegments:60,vSegments:30,flipNormals:true,sample(u,v,t,p){sampleBoundary(true,ctx.num('foamSourceU',.58,.45,.7),0,t,a);const x=lerp(a.x-.1,6.5,u),y=a.y-.4+ctx.num('landingRise',.6,0,1)*state(t).q-v*(1.2+.25*u)+.12*Math.sin(u*13+v*5-t*3)*Math.sin(Math.PI*v),z=lerp(frontZ+.1,2,u)+v*.3;p.set(x,y,z);}});
+  const foam=createFluidFoam({surface:apron,count:ctx.num('foamCount',8500,0,18000),seed:ctx.seed+725,material:foamMat,seedUV:(s,p)=>p.set(s.random[2]!,Math.pow(s.random[3]!,1.3)),flow:(_u,_v,_t,p)=>p.set(.12,0),size:[.025,.055],lifetime:[.8,1.7],spread:.08,normalOffset:.06});root.add(foam.mesh);
+  const faceFoam=createFluidFoam({surface:body,count:ctx.num('faceFoamCount',2400,0,8000),seed:ctx.seed+443,material:foamMat,seedUV:(s,p)=>{const v=s.random[3]!*.85;p.set(ctx.num('foldU',.21,.1,.4)+ctx.num('foldSweep',.08,-.2,.3)*v+(s.random[2]!-.5)*.014,v);},flow:(_u,_v,_t,p)=>p.set(ctx.num('foldSweep',.08,-.2,.3)*-.015,-.015),size:[.024,.044],lifetime:[.7,1.4],normalOffset:.03});root.add(faceFoam.mesh);
+  const floorFoam=createFluidFoam({surface:body,count:ctx.num('floorFoamCount',4000,0,12000),seed:ctx.seed+371,material:foamMat,seedUV:(s,p)=>p.set(.69+s.random[2]!*.3,.05+s.random[3]!*.9),flow:(_u,_v,_t,p)=>p.set(-.02,-.02),size:[.015,.035],lifetime:[.6,1.3],normalOffset:.025,bendThreshold:ctx.num('floorFoamBend',2,0,8)});root.add(floorFoam.mesh);
+  const spray=createFluidFoam({surface:lip,count:ctx.num('sprayCount',1000,0,3000),seed:ctx.seed+919,material:foamMat,flow:(_u,_v,_t,p)=>p.set(.08,.03),size:[.012,.03],lifetime:[.2,.55],spray:1,gravity:5,normalOffset:.02});root.add(spray.mesh);
+  return{root,grounded:false,update(c,t){manual=c.break??-1;size=lerp(.4,1,clamp(c.size??1));const time=t*(c.flow??1);cache.clear();body.update(time);lip.update(time);apron.update(time);crestFoam.update(time);foam.update(time);faceFoam.update(time);floorFoam.update(time);spray.update(time);}};
+ },
+});
+
 /** Preserve the original layered silhouette by default. The deeper barrel form is opt-in. */
 export const curlWave=defineModel({
  ...layeredCurlWave,
- describe:layeredCurlWave.describe+' Use form=barrel for an asymmetric continuous barrel wall, independent front fold and falling foam.',
- params:{...volumetricCurlWave.params,
-  form:'layered (default): original layout; hybrid: shaded crest on original layout; barrel: continuous wall and fold',
+ describe:'Legacy editable procedural wave; use wave-footage for recognizable natural water in a fixed view. Geometry forms preserve existing recipes and support custom 3D editing; their availability does not establish realistic fluid motion or a reference match.',
+ params:{...volumetricCurlWave.params,...sculptedCurlWave.params,...rolledCurlWave.params,...breakerVolumeWave.params,
+  form:'layered (default), hybrid, barrel, sculpted, rolled, or breaker closed water volume',
   eye:'eye radius m (layered default0.62, barrel default0.95)',
   eyeX:'tube centre x m (layered default0.95, barrel default1.55)',
   eyeY:'tube centre y m (layered default2.57, barrel default1.9)',
@@ -213,5 +338,5 @@ export const curlWave=defineModel({
   foamGain:'layered foam luminance multiplier (default1)',
   foamEmission:'layered foam self-light strength (default0.55)',
  },
- build(ctx){const fallback=ctx.params.volume!==undefined||ctx.params.overhang!==undefined?'barrel':'layered';return ctx.str('form',fallback,['layered','hybrid','barrel'])==='barrel'?volumetricCurlWave.build(ctx):layeredCurlWave.build(ctx);},
+ build(ctx){const fallback=ctx.params.volume!==undefined||ctx.params.overhang!==undefined?'barrel':'layered';const form=ctx.str('form',fallback,['layered','hybrid','barrel','sculpted','rolled','breaker']);return form==='breaker'?breakerVolumeWave.build(ctx):form==='rolled'?rolledCurlWave.build(ctx):form==='sculpted'?sculptedCurlWave.build(ctx):form==='barrel'?volumetricCurlWave.build(ctx):layeredCurlWave.build(ctx);},
 });

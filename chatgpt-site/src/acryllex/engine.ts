@@ -6,9 +6,13 @@ import type {Built,ModelCtx,PoseState,ModelDef} from './models/types.ts';
 import {clamp,lerp,ease,deg,rng,seedOf,smooth,type MatOpts} from './kit.ts';
 import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
-import {ditherThresholdGLSL} from './dither.ts';
+import {ditherThresholdGLSL,ditherActivityGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
-import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,type FxTrack,type FxUniforms} from './effects.ts';
+import {SceneTransmissionCapture} from './scene-transmission.ts';
+import {sampleMotionTime} from './motion-clock.ts';
+import {referenceProblems,referenceKind} from './reference-media.ts';
+import {applyStyleProfile} from './style-profile.ts';
+import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,DENSE_FX,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
 
@@ -27,12 +31,13 @@ const hueColor=(h?:string,palette:Partial<Record<Hue,string>>={})=>{if(!h)return
 const POST_VERT=`varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}`;
 const POST_FRAG=(aoMethod:'plane'|'legacy')=>`
 precision highp float;
-uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
+uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float haloTime;uniform float glowActive;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
 varying vec2 vUv;
-uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;
+uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;uniform float activityPhase;
 float bayer8(vec2 p){ivec2 i=ivec2(mod(p,8.));int x=i.x,y=i.y,xy=x^y;int v=((xy&1)<<5)|((x&1)<<4)|((xy&2)<<2)|((x&2)<<1)|((xy&4)>>1)|((x&4)>>2);return (float(v)+0.5)/64.;}
 float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 ${ditherThresholdGLSL}
+${ditherActivityGLSL}
 float mx(vec3 c){return max(c.r,max(c.g,c.b));}
 float linZ(vec2 uv){float z=texture2D(tDepth,uv).x*2.-1.;return 2.*cNear*cFar/(cFar+cNear-z*(cFar-cNear));}
 ${ambientOcclusionGLSL(aoMethod)}
@@ -40,14 +45,17 @@ vec4 dotColor(sampler2D t,vec2 c,vec2 cuv,vec2 local,bool useAO){
  vec2 tx=1./(res/cell*3.);vec4 s=vec4(0.);for(int i=-1;i<=1;i++)for(int j=-1;j<=1;j++)s+=textureLod(t,cuv+vec2(float(i),float(j))*tx,0.);s/=9.;
  float b=mx(s.rgb);
  vec3 hue=fixedInk>0?inkColor:s.rgb/max(b,1e-4);
- if(useAO&&b>0.012&&b<1.25)b*=ambientOcclusion(cuv);
+ // Alpha above one marks an optical surface whose colour comes from another
+ // path. Its first-interface depth cannot describe an opaque AO receiver.
+ if(useAO&&s.a<=1.001&&b>0.012&&b<1.25)b*=ambientOcclusion(cuv);
  // Map lit intensity to black/white before deriving dot coverage and ink brightness.
  b=max(0.,(b-blackPoint)/max(.0001,whitePoint-blackPoint));
  // 1-bit ordered dither on full cells: bright areas merge into solid colour, shadows become sparse Bayer grids
  float dens=pow(clamp(b*boost*expo,0.,1.),gam);
  // tone contrast around mid grey: lit faces fill in, shadow faces thin out (reference look)
  dens=clamp((dens-0.5)*contrast+0.5,0.,1.)*step(0.012,b);
- float thr=mix(bayer8(c),hash(c*0.37+11.),noiseAmt);
+ vec2 thresholdCell=activeThresholdCell(c,activity,activityEpoch,activityPhase);
+ float thr=mix(bayer8(thresholdCell),hash(thresholdCell*0.37+11.),noiseAmt);
  if(noiseReference>=0.)thr=referenceThreshold(thr,noiseAmt,noiseReference);
  vec2 dc=abs(local-cell*0.5);
  // Sparse ink has soft dot edges; dense highlights join into a continuous surface.
@@ -67,17 +75,15 @@ vec4 dotColor(sampler2D t,vec2 c,vec2 cuv,vec2 local,bool useAO){
  // halo around self-lit things
  vec4 g1=textureLod(t,cuv,4.),g2=textureLod(t,cuv,5.8);
  float glow=max(clamp((mx(g1.rgb)-0.9)/2.,0.,1.),clamp((mx(g2.rgb)-0.35)/1.4,0.,1.)*0.75);
- if(glow>0.){float h=hash(c+floor(time*9.)*0.37);if(h<glow*0.8){vec4 g=mx(g1.rgb)>mx(g2.rgb)?g1:g2;return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink,1.);}}
+ if(glowActive>.5&&glow>0.){float h=hash(c+floor(haloTime*9.)*0.37);if(h<glow*0.8){vec4 g=mx(g1.rgb)>mx(g2.rgb)?g1:g2;return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink,1.);}}
  // sparse point-cloud fuzz around silhouettes
  float a=textureLod(t,cuv,2.8).a;
- if(s.a<0.5&&a>0.03){float h=hash(c*1.31+floor(time*7.)*0.71);if(h<a*fuzz){vec4 g=textureLod(t,cuv,2.8);return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink*(fixedInk>0?1.:0.8),1.);}}
+ if(s.a<0.5&&a>0.03){float h=hash(c*1.31+floor(haloTime*7.)*0.71);if(h<a*fuzz){vec4 g=textureLod(t,cuv,2.8);return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink*(fixedInk>0?1.:0.8),1.);}}
  return vec4(0.);
 }
-/** Through-black masks (1 fade, 2 iris, 3 blinds, 4 blink): maskK is the visible share. */
+/** Through-black masks (1 fade, 4 blink): maskK is the visible share. */
 bool masked(vec2 c,vec2 cuv){
  if(maskMode==0||maskK>=1.)return false;
- if(maskMode==2){vec2 d=(cuv-.5)*vec2(res.x/res.y,1.);return length(d)>maskK*.62;}
- if(maskMode==3){float bars=10.;return fract(cuv.y*bars)>maskK;}
  if(maskMode==4)return abs(cuv.y-.5)*2.>maskK*1.01;
  return false;
 }
@@ -88,9 +94,7 @@ void main(){
  if(mode>0){float n=hash(c*0.731+3.1);float p=1.-mixP;
   if(mode==1)useB=n<mixP;
   else if(mode==2)useB=(1.-cuv.y)*0.75+n*0.25<mixP*1.0;
-  else if(mode==3){useB=cuv.x<1.-p;sa=cuv-vec2(1.-p,0.);sb=cuv+vec2(p,0.);}
   else if(mode==4){useB=cuv.x>p;sa=cuv+vec2(1.-p,0.);sb=cuv-vec2(p,0.);}
-  else if(mode==5){useB=cuv.y>=p;sa=cuv+vec2(0.,1.-p);sb=cuv-vec2(0.,p);}
   else if(mode==6){float band=floor(c.y/7.),fr=floor(time*24.);float h=hash(vec2(band,3.7));float j=hash(vec2(band,fr));
    useB=h*.8+j*.2<mixP;float near=1.-smoothstep(0.,.22,abs(h-mixP));float off=(hash(vec2(band+9.,fr))-.5)*.16*near;sa.x+=off;sb.x+=off;}
  }
@@ -148,9 +152,10 @@ class SceneRuntime {
  objs:Obj[]=[];byId=new Map<string,Obj>();dur:number;hue:THREE.Color;
  cam:{dir:THREE.Vector3;target:THREE.Vector3;dist:number;screenY:number;move:string;amount:number;fov?:number;follow?:string};
  camEvents:(Track&{target:THREE.Vector3;dist:number;dir:THREE.Vector3;screenY:number;fov?:number})[]=[];
- frameWidth=4;pulse=0;
+ frameWidth=4;
  key!:THREE.DirectionalLight;kdir=new THREE.Vector3(1,1,1);center=new THREE.Vector3();radius=2;
  pointLights:{light:THREE.PointLight;intensity:number;active?:[number,number];fade:number}[]=[];
+ private transmission:SceneTransmissionCapture|null=null;
  constructor(public spec:Scene,public index:number,private fixedInk=false,private palette:Partial<Record<Hue,string>>={}){
   this.dur=sceneDuration(spec);this.hue=hueColor(spec.hue??'blue',this.palette);
   this.scene.background=null;
@@ -162,12 +167,12 @@ class SceneRuntime {
   this.scene.add(key);this.scene.add(key.target);this.key=key;
   key.castShadow=LOOK.shadows>0;key.shadow.mapSize.set(2048,2048);key.shadow.bias=-0.0015;
   const camTarget=new THREE.Object3D();camTarget.position.set(0,0,-10);this.camera.add(camTarget);
-  const fill=new THREE.DirectionalLight(0xffffff,(L.fill??LOOK.fill)*PI_L);fill.position.set(-(kd[0]??1.2),0.2,0.8);fill.target=camTarget;this.camera.add(fill);
-  const rim=new THREE.DirectionalLight(0xffffff,(L.rim??LOOK.rim)*PI_L);rim.position.set(0.6,0.9,-1.6);rim.target=camTarget;this.camera.add(rim);
+  const fill=new THREE.DirectionalLight(0xffffff,(L.fill??LOOK.fill)*PI_L);fill.position.set(-(kd[0]??1.2),0.2,0.8);fill.target=camTarget;fill.userData.acryllexReflectionRole='fill';this.camera.add(fill);
+  const rim=new THREE.DirectionalLight(0xffffff,(L.rim??LOOK.rim)*PI_L);rim.position.set(0.6,0.9,-1.6);rim.target=camTarget;rim.userData.acryllexReflectionRole='rear';this.camera.add(rim);
   this.scene.add(new THREE.AmbientLight(0xffffff,(L.ambient??LOOK.ambient)*PI_L));
   for(const p of L.points??[]){const light=new THREE.PointLight(0xffffff,p.intensity*PI_L,p.distance??0,p.decay??2);light.position.fromArray(p.pos);this.scene.add(light);this.pointLights.push({light,intensity:light.intensity,active:p.active,fade:p.fade??.1});}
   this.build();
-  this.cam={dir:new THREE.Vector3(0,0,1),target:new THREE.Vector3(),dist:5,screenY:0.5,move:'drift',amount:1};
+  this.cam={dir:new THREE.Vector3(0,0,1),target:new THREE.Vector3(),dist:5,screenY:0.5,move:'static',amount:1};
   this.frameCamera();
   this.compileEvents();
   // scene bounds for the shadow camera; every mesh casts and receives shadows
@@ -182,15 +187,16 @@ class SceneRuntime {
   const list=(this.spec.objects??[]).slice(0,12);
   for(const o of list){
    if(!o||typeof o.id!=='string')continue;
-   const def=findModel(String(o.model))??findModel('compose')!;
+   const def=findModel(String(o.model));
+   if(!def)throw new Error(`Unknown model ${o.model}; provide a verified mesh or reference source`);
    const hue=hueColor(o.hue??this.spec.hue??'blue',this.palette);
-   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
+   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){throw new Error(`model ${o.model} (${o.id}) failed: ${err instanceof Error?err.message:String(err)}; supply a valid source instead of a placeholder`,{cause:err});}
    const inner=new THREE.Group(),outer=new THREE.Group(),shape=new THREE.Group();shape.add(built.root);inner.add(shape);outer.add(inner);this.scene.add(outer);
    const ctrl0:Record<string,number>={...(def.defaults??{}),...(o.controls??{})};
    if(o.stretch)shape.scale.fromArray(o.stretch);
    const posable=!!def.poses?.length;
    const pose:PoseState={from:o.pose??'stand',to:o.pose??'stand',k:1,time:0,travel:0,speed:0};
-   built.root.traverse(c=>{const m=(c as THREE.Mesh).material as THREE.Material|undefined;if(m&&!Array.isArray(m))m.userData.baseOpacity=m.opacity;});
+   built.root.traverse(c=>{const material=(c as THREE.Mesh).material;if(material)for(const m of Array.isArray(material)?material:[material])m.userData.baseOpacity=m.opacity;});
    built.update?.(ctrl0,0,pose);
    outer.updateMatrixWorld(true);
    const box=new THREE.Box3().setFromObject(built.root,true);if(box.isEmpty())box.set(new THREE.Vector3(-0.5,0,-0.5),new THREE.Vector3(0.5,1,0.5));
@@ -199,9 +205,11 @@ class SceneRuntime {
    // origin:'model' keeps the model's own coordinates (explicit cameras, environments); default recentres on its bounds
    if(o.origin==='model')inner.position.set(0,0,0);else inner.position.set(-center.x,grounded?-box.min.y:-center.y,-center.z);
    const meshes:THREE.Mesh[]=[];built.root.traverse(c=>{if((c as THREE.Mesh).isMesh)meshes.push(c as THREE.Mesh);});
-   const fxU=fxUniforms(),owner={};
-   for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(x=>patchMaterial(x,fxU,owner));else m.material=patchMaterial(m.material,fxU,owner);}
-   const mats=[...new Set(meshes.map(m=>m.material as THREE.MeshStandardMaterial))];
+   const fxU=fxUniforms(),owner={},patched=new Map<THREE.Material,THREE.Material>();
+   // Foam layers and other model parts may share a material. Install each object's shader hooks once.
+   const patch=(material:THREE.Material)=>{let result=patched.get(material);if(!result){result=patchMaterial(material,fxU,owner);patched.set(material,result);}return result;};
+   for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(patch);else m.material=patch(m.material);}
+   const mats=[...new Set(meshes.flatMap(m=>Array.isArray(m.material)?m.material:[m.material]))] as THREE.MeshStandardMaterial[];
    const obj:Obj={spec:o,def,built,outer,inner,meshes,mats,baseColors:mats.map(m=>m.color.clone()),size,center,grounded,base:new THREE.Vector3(),baseRot:new THREE.Euler(...((o.rot??[0,0,0]).map(v=>deg(Number(v)||0)) as [number,number,number])),baseScale:clamp(Number(o.scale)||1,0.01,500),moves:[],turns:[],scales:[],controls:new Map(),ctrl0,hues:[],fx:[],poses:[],yaw:[],posable,clip:new THREE.Plane(new THREE.Vector3(0,-1,0),0),effects:[],fxU};
    this.objs.push(obj);this.byId.set(o.id,obj);
   }
@@ -266,7 +274,8 @@ class SceneRuntime {
   for(const o of ids){this.scene.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(o.outer,true);if(!b.isEmpty())box.union(b);}
   if(box.isEmpty())box.set(new THREE.Vector3(-1,0,-1),new THREE.Vector3(1,2,1));
   const yawPitch:Record<string,[number,number]>={front:[0,6],'three-quarter':[34,14],'three-quarter-left':[-34,14],side:[90,4],'side-left':[-90,4],top:[0,72],high:[22,34],low:[18,-6],back:[180,8]};
-  const [yaw,pitch]=yawPitch[angle??'three-quarter']??yawPitch['three-quarter']!;
+  const flatView=ids.length>0&&ids.every(o=>!!referenceKind(o.def.id));
+  const [yaw,pitch]=flatView?[0,0]:yawPitch[angle??'three-quarter']??yawPitch['three-quarter']!;
   const dir=new THREE.Vector3(Math.sin(deg(yaw))*Math.cos(deg(pitch)),Math.sin(deg(pitch)),Math.cos(deg(yaw))*Math.cos(deg(pitch))).normalize();
   const target=box.getCenter(new THREE.Vector3());
   const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),dir).normalize();if(right.lengthSq()<1e-6)right.set(1,0,0);
@@ -274,7 +283,9 @@ class SceneRuntime {
   const tanV=Math.tan(deg(VFOV/2)),tanH=tanV*W/H;
   // Fit on real surface points (bounding-box corners leave empty space and frame too wide).
   const pts:THREE.Vector3[]=[];
-  for(const o of ids){o.outer.updateMatrixWorld(true);for(const m of o.meshes){const pa=m.geometry.attributes.position;if(!pa)continue;const step=Math.max(1,Math.floor(pa.count/400));for(let i=0;i<pa.count;i+=step){const v=new THREE.Vector3();if((m as THREE.SkinnedMesh).isSkinnedMesh)(m as THREE.SkinnedMesh).getVertexPosition(i,v);else v.set(pa.getX(i),pa.getY(i),pa.getZ(i));pts.push(v.applyMatrix4(m.matrixWorld));}}}
+  for(const o of ids){o.outer.updateMatrixWorld(true);for(const m of o.meshes){const pa=m.geometry.attributes.position;if(!pa)continue;const step=Math.max(1,Math.floor(pa.count/400));for(let i=0;i<pa.count;i+=step){const v=new THREE.Vector3();if((m as THREE.SkinnedMesh).isSkinnedMesh)(m as THREE.SkinnedMesh).getVertexPosition(i,v);else v.set(pa.getX(i),pa.getY(i),pa.getZ(i));pts.push(v.applyMatrix4(m.matrixWorld));}}
+   for(const point of o.built.framingPoints??[])pts.push(point.clone().applyMatrix4(o.inner.matrixWorld));
+  }
   if(pts.length){const pb=new THREE.Box3().setFromPoints(pts);pb.getCenter(target);}
   if(!pts.length)for(let i=0;i<8;i++)pts.push(new THREE.Vector3(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z));
   // centre the projected extents, then size them
@@ -296,7 +307,7 @@ class SceneRuntime {
   const c=this.spec.camera??{};const framed=this.objs.filter(o=>o.spec.frame!==false);
   const focus=this.focusObjs(c.focus)??framed;
   const sy=clamp(Number(c.screenY)||this.defaultScreenY(),0.25,0.75);const f=this.explicit(c,sy)??this.fit(focus.length?focus:this.objs,c.angle,clamp(Number(c.fill)||0.86,0.2,1.1),sy);
-  this.cam={...f,move:c.move??'drift',amount:clamp(Number(c.amount)||1,0,3),fov:clamp(Number(c.fov)||VFOV,8,120),follow:c.follow};
+  this.cam={...f,move:c.move??'static',amount:clamp(Number(c.amount??1),0,3),fov:clamp(Number(c.fov)||VFOV,8,120),follow:c.follow};
   const tanH=Math.tan(deg(VFOV/2))*W/H;this.frameWidth=2*tanH*f.dist;
  }
  /** Leave room for a top headline: subject sits lower when the scene has top text. */
@@ -342,7 +353,7 @@ class SceneRuntime {
     const style=e.morphStyle??'particles';
     if(style==='particles'){o.fx.push({kind:'morph',out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:'morph-in',out:false,t0:t,t1:t+len});}
     else{if(style==='blob'){densify(o.meshes);densify(b.meshes);}o.fx.push({kind:`morph:${style}`,out:true,t0:t,t1:t+len,partner:b});b.fx.push({kind:`morph:${style}:in`,out:false,t0:t,t1:t+len,partner:o});}}
-   if(e.fx){const runs=clamp(Math.round(Number(e.fxCount)||1),1,8),one=Number(e.dur)>0?clamp(Number(e.dur),0.1,6):FX_DUR[e.fx]??0.8;if(e.fx==='shockwave'||e.fx==='ripple')densify(o.meshes);o.effects.push({kind:e.fx,t0:t,t1:t+one*runs,from:e.fxFrom??'front',amount:clamp(Number(e.fxAmount)||1,0.1,3),count:runs});}
+   if(e.fx){const runs=clamp(Math.round(Number(e.fxCount)||1),1,8),one=Number(e.dur)>0?clamp(Number(e.dur),0.1,6):FX_DUR[e.fx]??0.8;if(DENSE_FX.has(e.fx))densify(o.meshes);o.effects.push({kind:e.fx,t0:t,t1:t+one*runs,from:e.fxFrom??'front',amount:clamp(Number(e.fxAmount)||1,0.1,3),count:runs});}
    if(e.show)o.fx.push({kind:e.show,out:false,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.show))});
    if(e.hide)o.fx.push({kind:e.hide,out:true,easing:e.easing,t0:t,t1:t+(e.dur??fxLen(e.hide))});
   }
@@ -403,8 +414,8 @@ class SceneRuntime {
     rot.y=yaw;}
    for(const tr of o.turns){if(t<tr.t0)break;const kk=interpolate((t-tr.t0)/(tr.t1-tr.t0),tr.easing);rot.x+=tr.by.x*kk;rot.y+=tr.by.y*kk;rot.z+=tr.by.z*kk;}
    let scale=o.baseScale*evalNum(o.scales,t,1);
-   // like the reference, a lone object is never frozen: it turns slowly unless told otherwise
-   const idle=o.spec.idle??(o.posable||o.spec.near||this.objs.length>2?'none':'turn');const id=o.spec.id.length;
+   // Physical subjects hold their shape and pose unless the author requests motion.
+   const idle=o.spec.idle??'none';const id=o.spec.id.length;
    if(idle==='turn')rot.y+=Math.sin(t*0.5+id)*0.26+t*0.07;
    if(idle==='spin')rot.y+=t*0.9;
    if(idle==='spin-slow')rot.y+=t*0.35;
@@ -475,7 +486,9 @@ class SceneRuntime {
    o.inner.visible=vis&&reveal>0.002;
    const fxOn=o.effects.some(f=>t>=f.t0&&t<f.t1);
    if(fxOn||rv||mo){o.outer.updateMatrixWorld(true);const box=new THREE.Box3().setFromObject(o.inner);fxSurface(fxOn?o.effects:[],t,o.fxU,box);resetReveal(o.fxU);if(rv)fxReveal(rv.kind,rv.k,o.fxU,box);
-    if(mo){mo.partner.outer.updateMatrixWorld(true);const pb=new THREE.Box3().setFromObject(mo.partner.inner);morphSurface(mo.style,mo.k,mo.inbound,o.fxU,mo.inbound?pb:box,box.clone().union(pb));}
+    if(mo){mo.partner.outer.updateMatrixWorld(true);
+     // exact vertex bounds: a turning object's loose box swells and would make the blob ball pulse in size
+     const own=new THREE.Box3().setFromObject(o.inner,true),pb=new THREE.Box3().setFromObject(mo.partner.inner,true);morphSurface(mo.style,mo.k,mo.inbound,o.fxU,mo.inbound?pb:own);}
     o.fxDirty=true;}
    else if(o.fxDirty){fxSurface([],t,o.fxU,new THREE.Box3());resetReveal(o.fxU);o.fxDirty=false;}
    if(parts===2&&morphTo){this.ensureParticles(o);this.ensureParticles(morphTo);this.drawMorph(o,morphTo,partsK);}
@@ -568,7 +581,6 @@ class SceneRuntime {
    case 'static':break;
    default:yaw=lerp(-4,4,e)*a;dist*=lerp(1.02,0.97,e);
   }
-  dist*=1-0.022*this.pulse; // the picture breathes on the beat
   const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),deg(yaw));dir.applyQuaternion(q);
   if(pitch){const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),dir).normalize();dir.applyAxisAngle(right,-deg(pitch)).normalize();}
   this.camera.position.copy(target).addScaledVector(dir,dist);
@@ -582,47 +594,90 @@ class SceneRuntime {
   this.key.target.position.copy(this.center);this.key.position.copy(this.center).addScaledVector(wd,this.radius*3);this.key.target.updateMatrixWorld();
  }
 
+ /** Only actual emitters/effects animate halo grain; bright skin and metal do not flicker by default. */
+ emissionActive(t:number){return this.objs.some(o=>o.outer.visible&&(o.mats.some(m=>m.emissive&&m.emissiveIntensity>0&&Math.max(m.emissive.r,m.emissive.g,m.emissive.b)>0)||o.effects.some(f=>t>=f.t0&&t<f.t1)||o.fx.some(f=>t>=f.t0&&t<f.t1&&['from-black','light-up'].includes(f.kind))));}
+
  /** Screen position (px) of an object's top centre, for labels. */
  project(id:string){const o=this.byId.get(id);if(!o||!o.outer.visible)return null;const b=new THREE.Box3().setFromObject(o.inner,true);if(b.isEmpty())return null;const c=b.getCenter(new THREE.Vector3());c.y=b.max.y;const v=c.project(this.camera);return {x:(v.x*0.5+0.5)*W,y:(-v.y*0.5+0.5)*H};}
+ prepareTransmission(renderer:THREE.WebGLRenderer,width:number,height:number){
+  const receivers=this.objs.flatMap(o=>o.built.sceneTransmission?[o.built.sceneTransmission]:[]);
+  if(receivers.length)(this.transmission??=new SceneTransmissionCapture()).capture(renderer,this.scene,this.camera,width,height,receivers);
+ }
+ private disposed=false;
+ dispose(){
+  if(this.disposed)return;this.disposed=true;const errors:unknown[]=[];
+  for(const o of this.objs)try{o.built.dispose?.();}catch(error){errors.push(error);}
+  try{this.transmission?.dispose();}catch(error){errors.push(error);}
+  try{disposeScene(this.scene);}catch(error){errors.push(error);}
+  if(errors.length)throw new AggregateError(errors,'Scene cleanup failed');
+ }
+
 }
 
-const DIRECT:Record<string,number>={dissolve:1,wipe:2,'push-left':3,'push-right':4,'push-up':5,glitch:6};
-const THROUGH:Record<string,number>={black:1,iris:2,blinds:3,blink:4};
-function transitionLen(s:Scene){const tr=s.transition??'cut';return s.transitionDur??(tr in THROUGH?0.8:tr==='glitch'?0.35:tr.startsWith('push')?0.55:TRANSITION);}
+const DIRECT:Record<string,number>={wipe:2,'push-right':4,glitch:6};
+const THROUGH:Record<string,number>={black:1,blink:4};
+function transitionLen(s:Scene){const tr=s.transition??'cut';return s.transitionDur??(tr in THROUGH?0.8:tr==='glitch'?0.35:tr==='push-right'?0.55:TRANSITION);}
 function fxLen(kind:string){return REVEAL_DUR[kind]??({cut:0.02,'wipe-up':0.9,materialize:0.75,assemble:1.15,pop:0.45,grow:0.8,drop:0.7,'slide-left':0.6,'slide-right':0.6,rise:0.8,dissolve:0.6,shatter:1.1,shrink:0.45,fall:0.8,'walk-in-left':0.01,'walk-in-right':0.01,'walk-out-left':0.01,'walk-out-right':0.01} as Record<string,number>)[kind]??0.6;}
 function bounce(k:number){const n1=7.5625,d1=2.75;if(k<1/d1)return n1*k*k;if(k<2/d1)return n1*(k-=1.5/d1)*k+0.75;if(k<2.5/d1)return n1*(k-=2.25/d1)*k+0.9375;return n1*(k-=2.625/d1)*k+0.984375;}
 function walkEase(k:number){k=clamp(k);const a=0.12;if(k<a)return k*k/(2*a)/(1-a);if(k>1-a)return 1-(1-k)*(1-k)/(2*a)/(1-a);return (k-a/2)/(1-a);}
 function lerpAngle(a:number,b:number,k:number){let d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return a+d*k;}
 
+// Validate even when callers construct Engine directly without the JSON schema.
+function validateSceneRaster(value:unknown,index:number){
+ if(value===undefined)return;
+ const label=`scene ${index+1} raster`;
+ if(!value||typeof value!=='object'||Array.isArray(value)||(Object.getPrototypeOf(value)!==Object.prototype&&Object.getPrototypeOf(value)!==null))throw new Error(`${label}: expected an object`);
+ const result:NonNullable<Scene['raster']>={};
+ for(const key of Reflect.ownKeys(value)){
+  if(typeof key!=='string')throw new Error(`${label}: unknown symbol field`);
+  const v=Reflect.get(value,key);
+  const bounds=key==='cell'?[1,24]:key==='dotRoundness'?[0,1]:key==='dotSoftness'?[0,2]:key==='activity'?[0,1]:key==='activityRate'?[1,60]:null;
+  if(!bounds)throw new Error(`${label}.${key}: unknown field`);
+  if(v!==undefined&&(typeof v!=='number'||!Number.isFinite(v)||v<bounds[0]!||v>bounds[1]!))throw new Error(`${label}.${key}: expected a finite number in [${bounds[0]}, ${bounds[1]}]`);
+  result[key as keyof NonNullable<Scene['raster']>]=v as number|undefined;
+ }
+ return result;
+}
+
 // ---------------------------------------------------------------- engine
 export class Engine {
+ private disposed=false;
  private aoMethod:'plane'|'legacy'='plane';
+ private rasterDefaults:Required<NonNullable<Scene['raster']>>;
  renderer:THREE.WebGLRenderer;gl:HTMLCanvasElement;out:HTMLCanvasElement;ctx2d:CanvasRenderingContext2D;
  rtA:THREE.WebGLRenderTarget;rtB:THREE.WebGLRenderTarget;post:THREE.ShaderMaterial;postScene=new THREE.Scene();postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
  scenes:(SceneRuntime|null)[]=[];starts:number[]=[];total=0;
  constructor(public spec:AcryllexSpec){
+  spec=applyStyleProfile(spec);this.spec=spec;
+  spec.scenes.forEach((scene,index)=>validateSceneRaster(scene.raster,index));
+  for(const [index,scene] of spec.scenes.entries()){
+   const problems=referenceProblems(scene);if(problems.length)throw new Error(`scene ${index+1}: ${problems.join('; ')}`);
+  }
   setFormat(spec.format??{});
   Object.assign(LOOK,{contrast:1.35,blackPoint:0,whitePoint:1,inkLo:0.42,shadows:1,ao:1,gamma:0.85,noise:0.06,gap:0,ink:1,fuzz:0.06,dotRoundness:0,dotSoftness:0,key:1.0,fill:0.1,rim:0.3,ambient:0.07,dir:[1.2,1.0,0.75]},spec.look??{});
+  this.rasterDefaults={cell:CELL,dotRoundness:LOOK.dotRoundness,dotSoftness:LOOK.dotSoftness,activity:0,activityRate:18};
   this.gl=document.createElement('canvas');this.gl.width=W;this.gl.height=H;
   this.renderer=new THREE.WebGLRenderer({canvas:this.gl,antialias:false,preserveDrawingBuffer:true,alpha:false});
   this.renderer.outputColorSpace=THREE.LinearSRGBColorSpace;this.renderer.toneMapping=THREE.NoToneMapping;this.renderer.setPixelRatio(1);this.renderer.localClippingEnabled=true;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFShadowMap;this.renderer.setSize(W,H,false);
   const mk=()=>{const rt=new THREE.WebGLRenderTarget(COLS*SS,ROWS*SS,{type:THREE.HalfFloatType,samples:4,generateMipmaps:true,minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,depthTexture:new THREE.DepthTexture(COLS*SS,ROWS*SS,THREE.FloatType)});return rt;};
   this.rtA=mk();this.rtB=mk();
-  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},time:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
+  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},activityPhase:{value:0},time:{value:0},haloTime:{value:0},glowActive:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),this.post));
   this.out=document.createElement('canvas');this.out.width=W;this.out.height=H;this.ctx2d=this.out.getContext('2d')!;
   let t=0;for(const s of spec.scenes){this.starts.push(t);t+=sceneDuration(s);}this.total=t;
   this.scenes=spec.scenes.map(()=>null);
  }
  dispose(){
-  for(const s of this.scenes)if(s)disposeScene(s.scene);
-  this.rtA.dispose();this.rtB.dispose();disposeScene(this.postScene);
-  this.renderer.dispose();this.renderer.forceContextLoss();this.scenes=[];
+  if(this.disposed)return;this.disposed=true;const errors:unknown[]=[],release=(fn:()=>void)=>{try{fn();}catch(error){errors.push(error);}};
+  for(const s of this.scenes)if(s)release(()=>s.dispose());
+  release(()=>this.rtA.dispose());release(()=>this.rtB.dispose());release(()=>disposeScene(this.postScene));
+  release(()=>this.renderer.dispose());release(()=>this.renderer.forceContextLoss());this.scenes=[];
+  if(errors.length)throw new AggregateError(errors,'Engine cleanup failed');
  }
  runtime(i:number){
   if(!this.scenes[i]){
    // free scenes we are past
-   for(let k=0;k<i-1;k++)if(this.scenes[k]){disposeScene(this.scenes[k]!.scene);this.scenes[k]=null;}
+   for(let k=0;k<i-1;k++)if(this.scenes[k]){this.scenes[k]!.dispose();this.scenes[k]=null;}
  this.scenes[i]=new SceneRuntime(this.spec.scenes[i]!,i,this.spec.look?.inkMode==='fixed',this.spec.look?.palette);
   }
   return this.scenes[i]!;
@@ -631,15 +686,23 @@ export class Engine {
  /** 1 on a beat, decaying to 0 before the next (0 when the reel has no beat grid). */
  beatPulse(t:number){const b=this.spec.beat;if(!b||!(b.period>0.2)||t<(b.from??0))return 0;const x=((t-b.phase)%b.period+b.period)%b.period;return Math.exp(-7*x/b.period);}
  renderInto(rt:THREE.WebGLRenderTarget,i:number,local:number){
-  const s=this.runtime(i);s.pulse=this.beatPulse(this.starts[i]!+local);s.update(local);
+  const s=this.runtime(i),clock=sampleMotionTime(local,this.starts[i]!,this.spec.scenes[i]!.motionFPS,this.spec.scenes[i]!.motionPhase);s.update(clock);
+  s.prepareTransmission(this.renderer,rt.width,rt.height);
   this.renderer.setRenderTarget(rt);this.renderer.setClearColor(0x000000,0);this.renderer.clear();this.renderer.render(s.scene,s.camera);
  }
  frame(t:number,opts:{captions?:boolean}={}){
   const i=this.sceneAt(t),local=t-this.starts[i]!,sc=this.spec.scenes[i]!;
+  const raster=validateSceneRaster(sc.raster,i),u=this.post.uniforms;
+  u.cell!.value=raster?.cell??this.rasterDefaults.cell;u.dotRoundness!.value=raster?.dotRoundness??this.rasterDefaults.dotRoundness;u.dotSoftness!.value=raster?.dotSoftness??this.rasterDefaults.dotSoftness;
+  u.activity!.value=raster?.activity??this.rasterDefaults.activity;
+  // Activity follows global output time, independently of the sampled motion clock.
+  const activityTime=t*(raster?.activityRate??this.rasterDefaults.activityRate)+1e-7;
+  u.activityEpoch!.value=Math.floor(activityTime);if(u.activityPhase)u.activityPhase.value=activityTime-Math.floor(activityTime);
+  const motionLocal=sampleMotionTime(local,this.starts[i]!,sc.motionFPS,sc.motionPhase),motionGlobal=sc.motionFPS?this.starts[i]!+motionLocal:t;
   const aoMethod=sc.aoMethod??this.spec.look?.aoMethod??'plane';
   if(aoMethod!==this.aoMethod){this.aoMethod=aoMethod;this.post.fragmentShader=POST_FRAG(aoMethod);this.post.needsUpdate=true;}
   this.renderInto(this.rtA,i,local);
-  const hc=this.spec.look?.inkMode==='fixed'?this.runtime(i).inkHue(local):hueColor(sc.hue??'blue',this.spec.look?.palette),light=sampleLightTrack(sc.light?.keyframes??[],local,{contrast:sc.light?.contrast??LOOK.contrast,inkLo:sc.light?.inkLo??LOOK.inkLo,gamma:sc.light?.gamma??LOOK.gamma,blackPoint:sc.light?.blackPoint??LOOK.blackPoint,whitePoint:sc.light?.whitePoint??LOOK.whitePoint,exposure:sc.light?.exposure??1,ink:sc.light?.ink??LOOK.ink*Math.max(hc.r,hc.g,hc.b),softness:sc.light?.softness??0});
+  const hc=this.spec.look?.inkMode==='fixed'?this.runtime(i).inkHue(motionLocal):hueColor(sc.hue??'blue',this.spec.look?.palette),light=sampleLightTrack(sc.light?.keyframes??[],motionLocal,{contrast:sc.light?.contrast??LOOK.contrast,inkLo:sc.light?.inkLo??LOOK.inkLo,gamma:sc.light?.gamma??LOOK.gamma,blackPoint:sc.light?.blackPoint??LOOK.blackPoint,whitePoint:sc.light?.whitePoint??LOOK.whitePoint,exposure:sc.light?.exposure??1,ink:sc.light?.ink??LOOK.ink*Math.max(hc.r,hc.g,hc.b),softness:sc.light?.softness??0});
   {const rt=this.runtime(i),cam=rt.camera,u=this.post.uniforms;u.cNear!.value=cam.near;u.cFar!.value=cam.far;u.tanHalf!.value=Math.tan(deg(cam.fov/2));u.aoR!.value=(sc.aoRadius??rt.radius*0.06);u.aoStr!.value=LOOK.ao*(sc.ao??1.4);u.contrast!.value=Number(light.contrast)||LOOK.contrast;u.inkLo!.value=light.inkLo??LOOK.inkLo;u.gam!.value=light.gamma??LOOK.gamma;u.blackPoint!.value=light.blackPoint??LOOK.blackPoint;u.whitePoint!.value=light.whitePoint??LOOK.whitePoint;u.expo!.value=Number(light.exposure)||1;u.noiseAmt!.value=sc.light?.noise??LOOK.noise;u.noiseReference!.value=sc.light?.noiseReference??this.spec.look?.noiseReference??-1;}
   let mode=0,mixP=0,maskMode=0,maskK=1;
   const tr=sc.transition??'cut',D=transitionLen(sc),dur=sceneDuration(sc);
@@ -653,9 +716,13 @@ export class Engine {
   if(i>0&&tr in THROUGH&&local<D/2){maskMode=THROUGH[tr]!;maskK=smooth(local/(D/2));}
   else if(next&&trN in THROUGH&&local>dur-transitionLen(next)/2){maskMode=THROUGH[trN]!;maskK=smooth((dur-local)/(transitionLen(next)/2));}
   this.post.uniforms.maskMode!.value=maskMode;this.post.uniforms.maskK!.value=maskK;
-  const pulse=this.beatPulse(t);this.post.uniforms.boost!.value=1+0.22*pulse;
+  // The beat grid schedules edits/audio; it never changes subject size or dot density.
+  this.post.uniforms.boost!.value=1;
   this.post.uniforms.ink!.value=light.ink;this.post.uniforms.inkColor!.value.set(hc.r,hc.g,hc.b).divideScalar(Math.max(hc.r,hc.g,hc.b,1e-4));
-  this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=t;
+  const hasEmission=this.runtime(i).emissionActive?.(motionLocal)||(mode>0&&i>0&&this.runtime(i-1).emissionActive?.(sampleMotionTime(local+sceneDuration(this.spec.scenes[i-1]!),this.starts[i-1]!,this.spec.scenes[i-1]!.motionFPS,this.spec.scenes[i-1]!.motionPhase)));
+  if(this.post.uniforms.haloTime)this.post.uniforms.haloTime.value=hasEmission?motionGlobal:0;
+  if(this.post.uniforms.glowActive)this.post.uniforms.glowActive.value=hasEmission?1:0;
+  this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=motionGlobal;
   this.renderer.setRenderTarget(null);this.renderer.setClearColor(0x000000,1);this.renderer.clear();this.renderer.render(this.postScene,this.postCam);
   const c=this.ctx2d;c.globalAlpha=1;c.fillStyle='#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';
   const rt=this.runtime(i);
@@ -665,7 +732,7 @@ export class Engine {
    const carried=(prior.text??[]).filter(item=>item.carry&&priorTime<=textEnd(prior,item.until,priorDuration));
    if(!carried.length)continue;
    let priorRuntime:SceneRuntime|undefined;
-   const previousCtx:TextCtx={...tctx,t:priorTime,dur:priorDuration,scene:prior,hue:this.spec.look?.palette?.[prior.hue??'blue']??HUES[prior.hue??'blue'],project:id=>{if(!priorRuntime){priorRuntime=this.runtime(previous);priorRuntime.update(priorTime);}return priorRuntime.project(id);}};
+   const previousCtx:TextCtx={...tctx,t:priorTime,dur:priorDuration,scene:prior,hue:this.spec.look?.palette?.[prior.hue??'blue']??HUES[prior.hue??'blue'],project:id=>{if(!priorRuntime){priorRuntime=this.runtime(previous);priorRuntime.update(sampleMotionTime(priorTime,this.starts[previous]!,prior.motionFPS,prior.motionPhase));}return priorRuntime.project(id);}};
    for(const item of carried)drawText(previousCtx,item);
   }
   for(const item of sc.text??[])drawText(tctx,item);
@@ -675,4 +742,4 @@ export class Engine {
  }
 }
 
-function disposeScene(s:THREE.Scene){s.traverse(o=>{const m=o as THREE.Mesh;if(m.geometry)m.geometry.dispose();const mat=m.material as THREE.Material|THREE.Material[]|undefined;if(Array.isArray(mat))mat.forEach(x=>x.dispose());else mat?.dispose();});}
+function disposeScene(s:THREE.Scene){s.traverse(o=>{if('shadow' in o&&o.shadow instanceof THREE.LightShadow)o.shadow.dispose();const m=o as THREE.Mesh;if((m as THREE.InstancedMesh).isInstancedMesh)(m as THREE.InstancedMesh).dispose();if(m.geometry)m.geometry.dispose();const mat=m.material as THREE.Material|THREE.Material[]|undefined;if(Array.isArray(mat))mat.forEach(x=>x.dispose());else mat?.dispose();});}

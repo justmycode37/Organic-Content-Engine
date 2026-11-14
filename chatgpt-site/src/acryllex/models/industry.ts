@@ -775,6 +775,8 @@ export const gearMachine=defineModel({
   box(ctx,housing,[1.32,0.12,0.88],[0,0.08,0],0.75,0.025);box(ctx,housing,[1.32,0.12,0.88],[0,0.92,0],0.75,0.025);
   const cover=box(ctx,housing,[1.20,0.10,0.055],[0,0.50,0.42],0.44,0.015);void cover;
   const gears=[gear(ctx,root,0.32,12,0.10,[-0.38,0.52,0.18],0.92),gear(ctx,root,0.22,10,0.10,[0.18,0.52,0.18],0.68),gear(ctx,root,0.15,8,0.10,[0.58,0.52,0.18],0.96)];
+  // The helper's axle is local Y; the bearing shafts and crank run along Z.
+  for(const wheel of gears)wheel.rotation.x=Math.PI/2;
   for(const [x,r] of [[-0.38,0.32],[0.18,0.22],[0.58,0.15]] as [number,number][]){
    cylinder(ctx,root,0.055,0.82,[x,0.52,0],0.52,20,[90,0,0]);
    add(ctx,root,G.torus(r*0.3,0.012,8,24),[x,0.52,-0.45],[0,0,0],0.95);
@@ -783,7 +785,7 @@ export const gearMachine=defineModel({
   rodBetween(ctx,crank,[0,0,0],[0,0.22,0],0.025,0.96);rodBetween(ctx,crank,[0,0.22,0],[0.18,0.22,0],0.025,0.96);
   add(ctx,crank,G.capsule(0.025,0.16,5,12),[0.20,0.22,0],[0,0,90],0.6);
   root.scale.setScalar(1.2);root.position.y=-0.024;
-  return {root,grounded:true,update(c,t){const a=t*clamp(c.drive??0.35)*4;gears[0]!.rotation.y=a;gears[1]!.rotation.y=-a*1.2;gears[2]!.rotation.y=a*1.75;crank.rotation.z=a;}};
+  return {root,grounded:true,update(c,t){const a=t*clamp(c.drive??0.35)*4;gears[0]!.rotation.y=a;gears[1]!.rotation.y=-a*12/10;gears[2]!.rotation.y=a*12/8;crank.rotation.z=a;}};
  }
 });
 

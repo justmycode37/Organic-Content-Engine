@@ -24,7 +24,7 @@ const ready=fonts();
 declare global {interface Window {acryllex:{load(spec:AcryllexSpec,assets?:Record<string,string>):Promise<{duration:number;scenes:number[]}>;frame(t:number,type?:string,quality?:number):string;probe(t:number,w:number,h:number,mode?:'brightness'|'neutral'|'ink'):number[];shot(t:number,scale?:number):string;duration():number}}}
 
 window.acryllex={
- async load(spec,assets){await ready;await preloadAssets(assets??{});engine?.dispose();engine=new Engine(spec);return {duration:engine.total,scenes:spec.scenes.map(sceneDuration)};},
+ async load(spec,assets){await ready;engine?.dispose();engine=null;const next=new Engine(spec);try{await preloadAssets(assets??{},next.renderer);engine=next;}catch(error){next.dispose();throw error;}return {duration:engine.total,scenes:spec.scenes.map(sceneDuration)};},
  frame(t,type='image/jpeg',quality=0.97){const c=engine!.frame(t);return c.toDataURL(type,quality).split(',')[1]!;},
  shot(t,scale=1){const c=engine!.frame(t);if(scale===1)return c.toDataURL('image/png').split(',')[1]!;const s=document.createElement('canvas');s.width=Math.round(W*scale);s.height=Math.round(H*scale);s.getContext('2d')!.drawImage(c,0,0,s.width,s.height);return s.toDataURL('image/png').split(',')[1]!;},
  duration(){return engine?.total??0;},

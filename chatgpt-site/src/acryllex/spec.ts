@@ -8,10 +8,10 @@ export type Hue='blue'|'azure'|'red'|'white'|'amber'|'green'|'cyan'|'violet'|'or
 export type At=string|number;
 export type Vec3=[number,number,number];
 
-export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'from-black'|'light-up'|'ping'|'scan-in'|'none';
-export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'to-black'|'scan-out'|'ping-out'|'none';
+export type Enter='cut'|'materialize'|'wipe-up'|'wipe-left'|'wipe-right'|'assemble'|'pop'|'drop'|'slide-left'|'slide-right'|'rise'|'grow'|'walk-in-left'|'walk-in-right'|'from-black'|'light-up'|'none';
+export type Exit='dissolve'|'shatter'|'shrink'|'slide-left'|'slide-right'|'fall'|'walk-out-left'|'walk-out-right'|'to-black'|'none';
 /** One-shot object effects (see effects.ts). */
-export type FxKind='heartbeat'|'shockwave'|'ripple'|'shake'|'squash'|'recoil'|'hop'|'glint'|'scan'|'charge'|'flicker'|'glitch';
+export type FxKind='heartbeat'|'shockwave'|'ripple'|'shake'|'recoil'|'glint'|'scan'|'charge'|'glitch';
 /** Where a shock wave / ripple starts or where a hit comes from: a side of the object, or a direction from its centre (-1..1 per axis). */
 export type FxFrom='top'|'bottom'|'left'|'right'|'front'|'back'|'center'|Vec3;
 export type Idle='none'|'turn'|'spin'|'spin-slow'|'float'|'pulse'|'sway'|'wobble'|'orbit';
@@ -78,7 +78,7 @@ export interface SceneEvent {
  hue?:Hue;
  show?:Enter;
  hide?:Exit;
- /** One-shot effect on the target: heartbeat (pounds like a heart), shockwave (a bright wave runs over the surface as it absorbs a hit), ripple, shake, squash, recoil, hop, glint (light sweep), scan (scan line), charge (powers up and releases), flicker, glitch. `dur` is one run; `fxCount` repeats it. */
+ /** One-shot effect on the target: heartbeat (pounds like a heart), shockwave (a bright wave runs over the surface as it absorbs a hit), ripple, shake, recoil, glint (light sweep), scan (scan line), charge (powers up and releases), glitch. `dur` is one run; `fxCount` repeats it. */
  fx?:FxKind;
  fxFrom?:FxFrom;
  /** Strength multiplier (default 1). */
@@ -86,8 +86,8 @@ export interface SceneEvent {
  fxCount?:number;
  /** Point-cloud morph of the target into another object of the scene (declare that object with enter:"none"). */
  morph?:string;
- /** How the morph looks: particles (swirling point cloud, default), blob (melts into a sphere that reshapes into the result), flip (card flip), implode (collapses to a point, bursts out as the result), scan (a scan line rewrites it), fade (dissolves through darkness). */
- morphStyle?:'particles'|'blob'|'flip'|'implode'|'scan'|'fade';
+ /** How the morph looks: particles (swirling point cloud, default), blob (melts into a sphere that reshapes into the result), flip (card flip), fade (dissolves through darkness). */
+ morphStyle?:'particles'|'blob'|'flip'|'fade';
  camera?:CameraMove;
  sfx?:string;
 }
@@ -188,12 +188,22 @@ export interface Scene {
  say:string;
  hue?:Hue;
  duration?:number;
+ /** Optional global frame clock for geometry, camera and lighting; text keeps its original timing. */
+ motionFPS?:number;
+ /** Global clock phase in seconds (default 0). */
+ motionPhase?:number;
  camera?:CameraMove;
+ /** Post ink grid: cell is output px (1..24), roundness 0..1, softness output px (0..2).
+  * Defaults to the engine's original format.cell / look; source render resolution is unchanged.
+  * activity (0..1, default 0) reshuffles threshold cells locally; activityRate (1..60 Hz, default 18)
+  * uses global output time independently of motionFPS. Geometry, ink and uniform-tile density stay fixed.
+  * Direct transitions use the selected incoming scene's grid for both images, as with lighting. */
+ raster?:{cell?:number;dotRoundness?:number;dotSoftness?:number;activity?:number;activityRate?:number};
  objects:SceneObject[];
  events?:SceneEvent[];
  text?:TextItem[];
- /** Into this scene. dissolve, wipe, push-left/right/up and glitch mix the two scenes; black/iris/blinds/blink close the last scene to black and open this one from black. */
- transition?:'cut'|'dissolve'|'wipe'|'flash'|'push-left'|'push-right'|'push-up'|'glitch'|'black'|'iris'|'blinds'|'blink';
+ /** Into this scene. wipe, push-right and glitch mix the two scenes; black/blink close the last scene to black and open this one from black. */
+ transition?:'cut'|'wipe'|'flash'|'push-right'|'glitch'|'black'|'blink';
  /** Transition length in seconds (default 0.4; through-black 0.8, split across the cut). */
  transitionDur?:number;
  /** Light rig for this scene: key direction (camera space, x right y up z toward viewer) and levels. */
@@ -215,10 +225,12 @@ export interface Scene {
 export interface AcryllexSpec {
  version:1;
  series:'ACRYLLEX';
+ /** Shared recording calibration; custom/legacy specs omit it. Geometry and motion remain independent. */
+ style?:'reference-recording';
  title:string;
  musicBrief?:string;
  captions?:boolean;
- /** Filled in by the producer: the music's beat grid (seconds). Picture pulses on it. */
+ /** Music beat grid (seconds), for edit/audio timing only. Never pulses geometry, camera or brightness. */
  beat?:{period:number;phase:number;from?:number};
  scenes:Scene[];
  /** Output size and dot pitch; default 1080x1920 portrait, 4 px dots. */

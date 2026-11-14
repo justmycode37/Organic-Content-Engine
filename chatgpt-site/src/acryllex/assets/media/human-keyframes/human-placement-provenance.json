@@ -1,0 +1,221 @@
+{
+  "protocol": "Five calibration frames0,15,60,150,250;15added after full173 revealed a fast opening approach missing from sparse sampling. Camera-vertical translation and camera-depth solve crownY,soleY; horizontal camera-space placement is kept fixed because crownX also measures head-pose/shape differences using known camera projection; depth supplies uniform perspective scale. No body-part warp, no sourceRGBedit. PCHIP trajectory clamped outsidecalibration andsampledintoexisting120Hzpublicposkeyframes. Held30,45,90,210,237,270 notusedforcurve. ReferencefeetROI overlapschair late; uncertainty~3px. Dense localshape mismatch remainsunfitted.",
+  "kind": "Numeric camera/whole-actor registration; no original image/video pixels",
+  "asset": "human-male-motion",
+  "calibration": [
+    {
+      "frame": 0,
+      "split": "calibration",
+      "reference": {
+        "headX": 574.8583535108959,
+        "crownY": 131,
+        "soleY": 506
+      },
+      "source": {
+        "headX": 557.627990430622,
+        "crownY": 117,
+        "soleY": 512
+      },
+      "targetScale": 0.9493670886075949,
+      "deltaWorld": [
+        -0.03218592062365636,
+        -0.024816123841762697,
+        -0.30576624592473556
+      ],
+      "camera": {
+        "frame": 0,
+        "pos": [
+          -2.3897201842310327,
+          0.8787582236663914,
+          -0.03573185217290398
+        ],
+        "depth": 5.777218978338895,
+        "quaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051275
+        ],
+        "actorQuaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051276
+        ],
+        "focal": 1250.237020535574
+      }
+    },
+    {
+      "frame": 15,
+      "split": "calibration",
+      "reference": {
+        "headX": 572.6383763837638,
+        "crownY": 112,
+        "soleY": 507
+      },
+      "source": {
+        "headX": 561.2491145218418,
+        "crownY": 115,
+        "soleY": 512
+      },
+      "targetScale": 0.9949622166246851,
+      "deltaWorld": [
+        -0.0031279303923953546,
+        0.018081311287051385,
+        -0.029715338727755884
+      ],
+      "camera": {
+        "frame": 15,
+        "pos": [
+          -2.284064131552819,
+          0.8787582236663914,
+          -0.03573185217290398
+        ],
+        "depth": 5.777218978338895,
+        "quaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051275
+        ],
+        "actorQuaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051276
+        ],
+        "focal": 1250.237020535574
+      }
+    },
+    {
+      "frame": 60,
+      "split": "calibration",
+      "reference": {
+        "headX": 570.3108935128519,
+        "crownY": 95,
+        "soleY": 508
+      },
+      "source": {
+        "headX": 563.3693251533742,
+        "crownY": 114,
+        "soleY": 515
+      },
+      "targetScale": 1.0299251870324189,
+      "deltaWorld": [
+        0.017365972217603807,
+        0.061211905140181516,
+        0.16497673606723623
+      ],
+      "camera": {
+        "frame": 60,
+        "pos": [
+          -1.4311476164479389,
+          0.8787582236663914,
+          -0.03573185217290398
+        ],
+        "depth": 5.777218978338895,
+        "quaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051275
+        ],
+        "actorQuaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051276
+        ],
+        "focal": 1250.237020535574
+      }
+    },
+    {
+      "frame": 150,
+      "split": "calibration",
+      "reference": {
+        "headX": 584.0188916876574,
+        "crownY": 128,
+        "soleY": 517
+      },
+      "source": {
+        "headX": 583.3472222222222,
+        "crownY": 129,
+        "soleY": 517
+      },
+      "targetScale": 1.0025773195876289,
+      "deltaWorld": [
+        0.0015461906210279394,
+        0.002662359185843655,
+        0.014688810899765429
+      ],
+      "camera": {
+        "frame": 150,
+        "pos": [
+          0.3033021443176114,
+          0.8787582236663914,
+          -0.03573185217290398
+        ],
+        "depth": 5.777218978338895,
+        "quaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051275
+        ],
+        "actorQuaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051276
+        ],
+        "focal": 1250.237020535574
+      }
+    },
+    {
+      "frame": 250,
+      "split": "calibration",
+      "reference": {
+        "headX": 576.7992424242424,
+        "crownY": 215,
+        "soleY": 527
+      },
+      "source": {
+        "headX": 577.5689865689866,
+        "crownY": 217,
+        "soleY": 523
+      },
+      "targetScale": 1.0196078431372548,
+      "deltaWorld": [
+        0.011628908910405357,
+        0.0023315726218001574,
+        0.11047463464885093
+      ],
+      "camera": {
+        "frame": 250,
+        "pos": [
+          0.6402798157689668,
+          0.8787582236663914,
+          -0.03573185217290398
+        ],
+        "depth": 5.777218978338895,
+        "quaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051275
+        ],
+        "actorQuaternion": [
+          -0.016867419269709725,
+          0.05240696289334718,
+          0.000885313273542915,
+          0.9984829576051276
+        ],
+        "focal": 1250.237020535574
+      }
+    }
+  ],
+  "keyframeRate": 120,
+  "interpolation": "Componentwise PCHIP of camera-vertical/depth world translation deltas, clamped outside0..250/60, sampled into existing position keys. Camera-space X, actor scale/rotation and body parts are not fitted.",
+  "constructorBounds": "Original base pos retained for scene shadow bounds; only absolute position keyframes change.",
+  "limitation": "Reference foot support includes blurred edges and late chair overlap. Root registration cannot fix head/torso pose or fine contacts; no99%claim."
+}

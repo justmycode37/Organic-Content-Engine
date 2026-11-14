@@ -1,25 +1,32 @@
-// One labelled reel showing every object effect, darkness entrance/exit, scene transition and morph style.
-//   node scripts/acryllex/fx-showcase.mjs <out.mp4|out.json>
+// Labelled showcase reels of the ACRYLLEX effect library.
+//   node scripts/acryllex/fx-showcase.mjs effects     <out.mp4|out.json>   every one-shot object effect
+//   node scripts/acryllex/fx-showcase.mjs transitions <out.mp4|out.json>   scene transitions, darkness entrances/exits and morphs, all on the earth globe
+//   node scripts/acryllex/fx-showcase.mjs all         <out.mp4|out.json>
 import {writeFile} from 'node:fs/promises';
 import {renderVideo} from './render.mjs';
-const out=process.argv[2];if(!out)throw new Error('Usage: fx-showcase.mjs <out.mp4|out.json>');
+const [mode,out]=process.argv.slice(2);
+if(!['effects','transitions','all'].includes(mode)||!out)throw new Error('Usage: fx-showcase.mjs effects|transitions|all <out.mp4|out.json>');
 const S=[];
-const scene=(label,sub,hue,objects,events=[],extra={})=>S.push({say:label,hue,duration:extra.duration??2.6,camera:{angle:'three-quarter',fill:0.6,move:'static',screenY:0.56},objects,events,text:[{text:label,style:'headline',pos:'top',at:0.05,erase:false},{text:sub,style:'mono',pos:[0.5,0.19],align:'center',at:0.1,erase:false}],...extra});
+const scene=(label,sub,hue,objects,events=[],extra={})=>S.push({say:label,hue,duration:extra.duration??2.6,camera:{angle:extra.angle??'three-quarter',fill:0.6,move:'static',screenY:0.56},objects,events,text:[{text:label,style:'headline',pos:'top',at:0.05,erase:false},{text:sub,style:'mono',pos:[0.5,0.19],align:'center',at:0.1,erase:false}],...extra.scene});
 const obj=(model,more={})=>({id:'m',model,enter:'none',idle:'none',...more});
-// object effects
-for(const [fx,model,hue,more] of [['heartbeat','heart','red',{fxCount:2}],['shockwave','cube','blue',{}],['ripple','raindrop','cyan',{}],['shake','alarm_clock_01','amber',{}],['squash','cube','green',{}],['recoil','cube','violet',{fxFrom:'left'}],['hop','cube','orange',{}],['glint','smartphone','white',{}],['scan','brain','cyan',{}],['charge','led','amber',{}],['flicker','light_bulb','amber',{}],['glitch','laptop','green',{}]])
- scene(fx.toUpperCase(),'object effect',hue,[obj(model)],[{at:0.6,target:'m',fx,...more}]);
-// darkness entrances / exits
-for(const [kind,model,hue] of [['from-black','heart','red'],['light-up','brain','cyan'],['ping','cube','blue'],['scan-in','smartphone','white']])
- scene(kind.toUpperCase(),'entrance',hue,[obj(model,{enter:kind,enterAt:0.4})]);
-for(const [kind,model,hue] of [['to-black','alarm_clock_01','amber'],['scan-out','laptop','green'],['ping-out','egg','violet']])
- scene(kind.toUpperCase(),'exit',hue,[obj(model,{exit:kind,exitAt:0.9})]);
-// scene transitions (each scene is entered with its transition)
-for(const [tr,model,hue] of [['black','earth','blue'],['iris','heart','red'],['blinds','brain','cyan'],['blink','light_bulb','amber'],['push-left','smartphone','white'],['push-up','cube','green'],['glitch','laptop','green'],['dissolve','egg','violet']])
- scene(tr.toUpperCase(),'scene transition',hue,[obj(model,{idle:'turn'})],[],{transition:tr});
-// morphs
-for(const [style,a,b,hue] of [['particles','abacus','calculator','cyan'],['blob','cube','earth','blue'],['blob','heart','brain','red'],['flip','smartphone','calculator','white'],['implode','egg','heart','red'],['scan','laptop','smartphone','green'],['fade','alarm_clock_01','light_bulb','amber']])
- scene(`${style.toUpperCase()} MORPH`,`${a.replace(/_01$/,'').replace('_',' ')} → ${b.replace('_',' ')}`,hue,[obj(a),{id:'b',model:b,enter:'none',idle:'none'}],[{at:0.6,target:'m',morph:'b',morphStyle:style,dur:1.3}],{duration:2.8});
-const spec={version:1,series:'ACRYLLEX',title:'ACRYLLEX effects showcase',captions:false,scenes:S};
+
+if(mode!=='transitions')
+ for(const [fx,hue,more] of [['heartbeat','red',{fxCount:2}],['shockwave','blue',{}],['ripple','cyan',{}],['shake','amber',{}],['recoil','violet',{fxFrom:'left'}],['glint','white',{}],['scan','cyan',{}],['charge','amber',{}],['glitch','green',{}]])
+  scene(fx.toUpperCase(),'object effect',hue,[obj('earth')],[{at:0.6,target:'m',fx,...more}]);
+
+if(mode!=='effects'){
+ const globe=(more={})=>obj('earth',{idle:'turn',...more});
+ // scene transitions: every scene is the globe; hue and angle change so the cut itself is visible
+ const looks=[['blue','three-quarter'],['cyan','three-quarter-left'],['green','front'],['violet','three-quarter'],['amber','three-quarter-left'],['red','front'],['white','three-quarter']];
+ ['cut','black','blink','push-right','glitch','wipe','flash'].forEach((tr,i)=>{const [hue,angle]=looks[i%looks.length];
+  scene(tr.toUpperCase(),i===0?'scene transition (hard cut)':'scene transition',hue,[globe()],[],{angle,scene:{transition:tr}});});
+ scene('FROM-BLACK','entrance','blue',[globe({enter:'from-black',enterAt:0.4})]);
+ scene('LIGHT-UP','entrance','cyan',[globe({enter:'light-up',enterAt:0.4})]);
+ scene('TO-BLACK','exit','green',[globe({exit:'to-black',exitAt:0.9})]);
+ for(const [style,hue] of [['particles','blue'],['blob','cyan'],['flip','violet'],['fade','amber']])
+  scene(`${style.toUpperCase()} MORPH`,'earth → desk globe',hue,[globe({idle:'none'}),{id:'b',model:'desk-globe',enter:'none',idle:'none'}],[{at:0.6,target:'m',morph:'b',morphStyle:style,dur:1.3}],{duration:2.8});
+}
+
+const spec={version:1,series:'ACRYLLEX',title:`ACRYLLEX ${mode} showcase`,captions:false,scenes:S};
 if(out.endsWith('.json'))await writeFile(out,JSON.stringify(spec,null,1));
 else{const info=await renderVideo(spec,out);console.log(`Wrote ${out} (${S.length} scenes, ${info.duration.toFixed(1)} s)`);}
