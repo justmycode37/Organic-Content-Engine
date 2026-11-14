@@ -20400,7 +20400,8 @@
               "innerAngleDeg": 12,
               "outerAngleDeg": 20,
               "distance": 3
-            }
+            },
+            "sourceHairSide": true
           },
           "pos": [
             -2.4499999999999997,

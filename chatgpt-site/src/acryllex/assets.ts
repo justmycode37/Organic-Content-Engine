@@ -134,11 +134,15 @@ export function realMaterial(src:THREE.Material|undefined,ctx:ModelCtx,tone=0.95
  return m;
 }
 
-/** Clone a loaded asset with ACRYLLEX materials. Source alpha is opt-in for general assets. */
-export function instance(id:string,ctx:ModelCtx,tone=0.95,plain=false,detail=0.7,options:{sourceAlpha?:boolean}={}){
+/** Match explicit hair surface tags, without interpreting eyelashes or arbitrary substrings as hair. */
+const hairTag=(name:string)=>/^hair(?:mat(?:erial)?)?$/i.test(name)||/(?:^|[\s_:.-])hair(?:$|[\s_:.-])/i.test(name);
+const isSourceHair=(meshName:string,materialName:string)=>!/eyelash/i.test(meshName+' '+materialName)&&(hairTag(meshName)||hairTag(materialName));
+
+/** Clone a loaded asset with ACRYLLEX materials. Source alpha and named hair sidedness are independent opt-ins. */
+export function instance(id:string,ctx:ModelCtx,tone=0.95,plain=false,detail=0.7,options:{sourceAlpha?:boolean;sourceHairSide?:boolean}={}){
  const g=GLTFS.get(id);if(!g)return null;
  const root=SkeletonUtils.clone(g.scene) as THREE.Object3D;
- root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;m.frustumCulled=false;const mats=Array.isArray(m.material)?m.material:[m.material];const conv=mats.map(x=>plain?plainMaterial(x,ctx,tone,!!options.sourceAlpha):realMaterial(x,ctx,tone,detail,!!options.sourceAlpha));m.material=Array.isArray(m.material)?conv:conv[0]!;});
+ root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh)return;m.frustumCulled=false;const mats=Array.isArray(m.material)?m.material:[m.material];const conv=mats.map(x=>{const material=plain?plainMaterial(x,ctx,tone,!!options.sourceAlpha):realMaterial(x,ctx,tone,detail,!!options.sourceAlpha);if(options.sourceHairSide&&isSourceHair(m.name,x.name))material.side=x.side;return material;});m.material=Array.isArray(m.material)?conv:conv[0]!;});
  return {root,animations:g.animations};
 }
 

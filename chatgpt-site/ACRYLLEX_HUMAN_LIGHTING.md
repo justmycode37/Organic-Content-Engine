@@ -18,3 +18,9 @@ Positions and distance are world-space metres. The spotlight stays fixed as the 
 Omit the parameter or set it to `null`, `false`, `0` or `{intensity: 0}` to disable it. Enabled configurations require finite three-component `position` and `target`, distinct positions, nonnegative intensity, `0 <= innerAngleDeg < outerAngleDeg < 90`, and positive distance. Malformed enabled settings throw instead of substituting a placeholder object. The angle and distance defaults are the values shown above.
 
 The light works with static poses, authored tracks, pose correctives and [recorded motion](ACRYLLEX_RECORDED_MOTION.md). Instances own their added receiver attributes; cached source meshes are unchanged. Select intensity and placement against multiple poses: a more readable head can still reduce local light/dark contrast if the accent is too strong.
+
+## Authored hair sidedness
+
+Set `params.sourceHairSide: true` on a human to preserve the source asset's material side on explicitly named or tagged Hair surfaces. This can restore back-facing hair cards without changing the skull or hair mesh. The default is `false`, which retains existing rendering. Eyelashes, clothing, skin and other surfaces keep their existing side policy.
+
+This setting copies the source side exactly, including FrontSide or BackSide when authored. It is independent of `sourceAlpha`; transparency, colour, texture coverage and the existing single/double-pass policy remain unchanged. It does not add a new hairstyle or make a narrow head wider. Review both moving and seated views because the restored cards can change local dot density.
