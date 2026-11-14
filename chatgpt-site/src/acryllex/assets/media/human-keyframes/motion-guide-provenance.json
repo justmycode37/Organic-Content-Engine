@@ -1,0 +1,18 @@
+{
+  "status": "OWN synthetic undithered motion guide for motion-transfer experiment, not an adopted recreation.",
+  "source": "actual public library human95 pose tracks/camera using Remy body; no reference RGB/video frames included",
+  "sourceCommit": "b118b17ad0be27ea2534165bd78e6960e2c13761",
+  "frames": 147,
+  "fps": 30,
+  "duration": 4.9,
+  "width": 1164,
+  "height": 670,
+  "bytes": 337005,
+  "sha256": "db504009e0147fbad8251b145bbd9ada0d28f3802a2942c91e695446284e5b5d",
+  "preparation": "Furniture hidden only in this guide; body material neutral gray, alpha hash off, normal SRGB raw rendering and video grayscale. Pose, root motion, bone proportions and camera follow retained. Hue flash/dissolve removed for continuous full-body conditioning.",
+  "sourceSpecSHA256": "4aad178afe814cd337f888e2b2776c3ea938ca3700704ef5e68c13c79da74f6d",
+  "errors": [],
+  "file": "motion-guide.mp4",
+  "sourceReferencePixelsIncluded": false,
+  "use": "experimental driving video for pose-conditioned human appearance transfer; not a recreation preset"
+}

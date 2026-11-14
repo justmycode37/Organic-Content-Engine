@@ -52,7 +52,14 @@
     "source-guided calibration, not held validation",
     "seated body remains wider and wrist/hip/knee positions differ from the reference",
     "seated density MAE .1962 vs .1868 for the current recreation",
-    "First/end-only motion preserved identity but crouched too early and omitted backward chair reach; full trial was rejected. Explicit middle frame is an unverified follow-up."
+    "First/end-only motion preserved identity but crouched too early and omitted backward chair reach; full trial was rejected. Explicit middle frame is an unverified follow-up.",
+    "Four-pose video restored chair reach but still exaggerated arm swing, altered gait and slid feet. Motion transfer from an own rendered rig guide is the next unverified experiment."
   ],
-  "defaultChanges": false
+  "defaultChanges": false,
+  "motionGuide": {
+    "file": "motion-guide.mp4",
+    "provenance": "motion-guide-provenance.json",
+    "sha256": "db504009e0147fbad8251b145bbd9ada0d28f3802a2942c91e695446284e5b5d",
+    "generatedBy": "own library rig render, not image/video generation or original reference capture"
+  }
 }
