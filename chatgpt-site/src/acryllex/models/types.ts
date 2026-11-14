@@ -19,6 +19,8 @@ export interface PoseState {from:string;to:string;k:number;time:number;/** metre
 
 export interface Built {
  root:THREE.Object3D;
+ /** Release instance-only animation/resource state; never cached asset templates. */
+ dispose?():void;
  /** Per-frame update: control values (already eased) and scene-local time. */
  update?(controls:Record<string,number>,t:number,pose:PoseState):void;
  /** Model rests on the ground (y=0 is its bottom). Default true. Floating models are centred. */

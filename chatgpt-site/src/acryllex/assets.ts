@@ -11,6 +11,7 @@ export interface AssetEntry {id:string;src:'polyhaven'|'three'|'url';url?:string
 export const ASSETS=(catalogJson as {assets:AssetEntry[]}).assets;
 export const ASSET_BASE='http://acx.local/a/';
 const GLTFS=new Map<string,GLTF>();
+const RECORDED_PATHS=new Map<string,string>();
 interface FootageManifest {w:number;h:number;cols:number;rows:number;fps:number;frames:number;atlases:string[];[key:string]:unknown}
 interface Footage extends FootageManifest {tex:THREE.Texture[]}
 const FOOTAGE=new Map<string,Footage>();
@@ -81,7 +82,7 @@ export async function preloadAssets(paths:Record<string,string>){
   if(footagePaths.some(([key])=>key.startsWith(id+':[')))FOOTAGE_LEGACY_MAPS.delete(id);else FOOTAGE_LEGACY_MAPS.add(id);
   FOOTAGE.set(id,clip);
  }
- await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')&&!id.startsWith('fluid-cache:')).map(async([id,path])=>{if(GLTFS.has(id))return;try{GLTFS.set(id,await loader.loadAsync(ASSET_BASE+path));}catch(err){console.warn(`asset ${id} failed`,err);}}));
+ await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')&&!id.startsWith('fluid-cache:')).map(async([id,path])=>{if(GLTFS.has(id)&&(!id.startsWith('recorded-motion:')||RECORDED_PATHS.get(id)===path))return;try{const loaded=await loader.loadAsync(ASSET_BASE+path);GLTFS.set(id,loaded);if(id.startsWith('recorded-motion:'))RECORDED_PATHS.set(id,path);}catch(err){if(id.startsWith('recorded-motion:'))throw new Error(`recorded motion ${id} failed to load: ${String(err)}`);console.warn(`asset ${id} failed`,err);}}));
 }
 export function gltf(id:string){return GLTFS.get(id);}
 

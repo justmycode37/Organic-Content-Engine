@@ -182,7 +182,8 @@ class SceneRuntime {
    if(!o||typeof o.id!=='string')continue;
    const def=findModel(String(o.model))??findModel('compose')!;
    const hue=hueColor(o.hue??this.spec.hue??'blue',this.palette);
-   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache')throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
+   const recorded=o.params?.recordedMotion,recordedRequired=Object.hasOwn(def.params??{},'recordedMotion')&&recorded!==undefined&&recorded!==null&&recorded!==false;
+   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache'||recordedRequired)throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
    const inner=new THREE.Group(),outer=new THREE.Group(),shape=new THREE.Group();shape.add(built.root);inner.add(shape);outer.add(inner);this.scene.add(outer);
    const ctrl0:Record<string,number>={...(def.defaults??{}),...(o.controls??{})};
    if(o.stretch)shape.scale.fromArray(o.stretch);
@@ -586,6 +587,14 @@ class SceneRuntime {
 
  /** Screen position (px) of an object's top centre, for labels. */
  project(id:string){const o=this.byId.get(id);if(!o||!o.outer.visible)return null;const b=new THREE.Box3().setFromObject(o.inner,true);if(b.isEmpty())return null;const c=b.getCenter(new THREE.Vector3());c.y=b.max.y;const v=c.project(this.camera);return {x:(v.x*0.5+0.5)*W,y:(-v.y*0.5+0.5)*H};}
+ private disposed=false;
+ dispose(){
+  if(this.disposed)return;this.disposed=true;const errors:unknown[]=[];
+  for(const o of this.objs)try{o.built.dispose?.();}catch(error){errors.push(error);}
+  try{disposeScene(this.scene);}catch(error){errors.push(error);}
+  if(errors.length)throw new AggregateError(errors,'Scene cleanup failed');
+ }
+
 }
 
 const DIRECT:Record<string,number>={wipe:2,'push-right':4,glitch:6};
@@ -598,6 +607,7 @@ function lerpAngle(a:number,b:number,k:number){let d=((b-a+Math.PI)%(Math.PI*2)+
 
 // ---------------------------------------------------------------- engine
 export class Engine {
+ private disposed=false;
  private aoMethod:'plane'|'legacy'='plane';
  renderer:THREE.WebGLRenderer;gl:HTMLCanvasElement;out:HTMLCanvasElement;ctx2d:CanvasRenderingContext2D;
  rtA:THREE.WebGLRenderTarget;rtB:THREE.WebGLRenderTarget;post:THREE.ShaderMaterial;postScene=new THREE.Scene();postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
@@ -617,14 +627,16 @@ export class Engine {
   this.scenes=spec.scenes.map(()=>null);
  }
  dispose(){
-  for(const s of this.scenes)if(s)disposeScene(s.scene);
-  this.rtA.dispose();this.rtB.dispose();disposeScene(this.postScene);
-  this.renderer.dispose();this.renderer.forceContextLoss();this.scenes=[];
+  if(this.disposed)return;this.disposed=true;const errors:unknown[]=[],release=(fn:()=>void)=>{try{fn();}catch(error){errors.push(error);}};
+  for(const s of this.scenes)if(s)release(()=>s.dispose());
+  release(()=>this.rtA.dispose());release(()=>this.rtB.dispose());release(()=>disposeScene(this.postScene));
+  release(()=>this.renderer.dispose());release(()=>this.renderer.forceContextLoss());this.scenes=[];
+  if(errors.length)throw new AggregateError(errors,'Engine cleanup failed');
  }
  runtime(i:number){
   if(!this.scenes[i]){
    // free scenes we are past
-   for(let k=0;k<i-1;k++)if(this.scenes[k]){disposeScene(this.scenes[k]!.scene);this.scenes[k]=null;}
+   for(let k=0;k<i-1;k++)if(this.scenes[k]){this.scenes[k]!.dispose();this.scenes[k]=null;}
  this.scenes[i]=new SceneRuntime(this.spec.scenes[i]!,i,this.spec.look?.inkMode==='fixed',this.spec.look?.palette);
   }
   return this.scenes[i]!;
