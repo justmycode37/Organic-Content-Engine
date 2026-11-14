@@ -61,5 +61,11 @@
     "provenance": "motion-guide-provenance.json",
     "sha256": "db504009e0147fbad8251b145bbd9ada0d28f3802a2942c91e695446284e5b5d",
     "generatedBy": "own library rig render, not image/video generation or original reference capture"
+  },
+  "femaleSource": {
+    "file": "female-start.png",
+    "provenance": "female-start-provenance.json",
+    "sha256": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
+    "status": "source only; motion validation pending"
   }
 }

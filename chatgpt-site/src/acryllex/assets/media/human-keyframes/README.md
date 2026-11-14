@@ -9,3 +9,5 @@ The first/end-only generation preserved identity and natural proportions but cro
 No model preset or renderer default is changed by these files. Original reference images and video are not included.
 
 `motion-guide.mp4` is a continuous 4.9-second, furniture-free grayscale render of the existing fitted human rig and camera, for a pose-conditioned appearance-transfer test. It contains no original reference-video pixels. Its provenance is recorded separately. Four-pose generation restored the reach but still altered gait, arm swing and foot contacts, so it remains unadopted. The motion guide tests whether explicit video motion conditioning can preserve those constraints.
+
+`female-start.png` supplies a distinct, fully clothed adult female appearance on the same canvas. It is an experimental generated source, with pose deviations recorded in `female-start-provenance.json`; it is not yet an animated model or adopted preset.

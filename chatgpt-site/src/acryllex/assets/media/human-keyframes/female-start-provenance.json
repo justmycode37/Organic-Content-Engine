@@ -1,0 +1,22 @@
+{
+  "status": "experimental generated female appearance source; not an animated or adopted model",
+  "file": "female-start.png",
+  "subject": "synthetic fully clothed adult woman",
+  "generator": "built-in image_gen",
+  "sha256": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
+  "size": [
+    1164,
+    670
+  ],
+  "mode": "RGB",
+  "preparation": "one uniform whole-image scale and translation; ordinary alpha composite over black; no body-part warp, pose retouching or tone correction",
+  "guidance": "generated male composition/clothes/light and user-provided initial human pose; no original reference pixels composited",
+  "remainingPoseErrorsPixels": {
+    "rearToeY": 26,
+    "frontHeelX": -30,
+    "frontKneeY": -22,
+    "forwardHandX": 21
+  },
+  "animated": false,
+  "defaultChanges": false
+}
