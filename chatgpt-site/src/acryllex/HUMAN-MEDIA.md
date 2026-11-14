@@ -35,6 +35,18 @@ For this fixed-view human sequence, the example uses `scene.raster.cell: 3.2` an
 The optional `asset: "human-male-clay-motion"` on `human-male-footage` supplies the same action in a neutral off-white material with a brighter crown and a shadowed cheek. The photographic male/female defaults stay available. The reference fixture retains the photographic male and uses a camera-vertical/depth root position track, with the original constructor bounds kept for furniture lighting. It never stretches individual body parts. Its five framing calibration samples are documented in `assets/media/human-keyframes/human-placement-provenance.json`; clip preparation is in `assets/media/human-motion-provenance.json`. Exact finger contact and a99%reference match remain unverified.
 
 
-For subtle pixel activity, add `scene.raster: {"activity":0.3,"activityRate":18}` while retaining the chosen `cell` size, contrast and fixed ink. `activity` accepts 0..1 and defaults to 0; `activityRate` accepts 1..60 Hz and defaults to 18. The deterministic clock uses global output time, independently of `motionFPS`, so reverse seeks reproduce the same pattern. Omitted fields reset every frame to their engine defaults.
+For pixel activity, add `scene.raster: {"activity":0.08,"activityRate":12}` while retaining the chosen `cell` size, contrast and fixed ink. `activity` accepts 0..1 and defaults to 0; `activityRate` accepts 1..60 Hz and defaults to 18. The deterministic clock uses global output time, independently of `motionFPS`, so reverse seeks reproduce the same pattern. Omitted fields reset every frame to their engine defaults.
 
 Activity swaps complete Bayer/noise threshold addresses within each 2×2 cell tile. Pair members share one decision, preserving the exact threshold multiset and therefore the lit-cell count on a uniform, complete tile, including with `noiseReference` tone mapping. Source sampling, cell geometry and ink coordinates stay fixed. Density can vary locally where lighting or silhouettes differ between neighboring cells; activity does not introduce a color source. At activity 0 the original threshold path is retained.
+
+Tune amount and rate together, per scene. A small amount updated quickly and a larger amount updated slowly can have similar long-term turnover but different short-term motion. For water, try a faster rate such as 30 Hz; for quiet rigid objects, start around 8–12 Hz. These are starting points, not a shared reference preset. More activity cannot supply missing water motion or correct an inaccurate human pose.
+
+`scripts/acryllex/compare-activity.py` measures colored-dot turnover at 1, 2, 4 and 8 output-frame gaps in selected native-resolution windows. For example:
+
+```sh
+python3 scripts/acryllex/compare-activity.py original.mov recreation.mp4 activity.json \
+  --crop 1164:670:42:684 --window human:150 --window calculator:430 --window red-cube:1560
+python3 scripts/acryllex/compare-activity.test.py
+```
+
+It uses max-minus-min chroma to include both red and blue and exclude white captions, then limits measurements to locally stable, partially filled areas. For white or gray ink, run those windows separately with `--signal intensity`; that mode also includes white captions, so inspect whether text affects the result. It reports both full-pixel and cell-center turnover, coarse density drift, valid pair counts and missing frames. An empty mask produces `null`, not a misleading zero. Interpret the measures alongside the videos: geometry, compression and grid alignment still affect them, and cell-center sampling can alias. They do not establish a percentage reference match. Dependencies are the same NumPy/SciPy/FFmpeg tools used by `compare.py`, plus FFprobe.
