@@ -6,7 +6,8 @@ import type {AcryllexSpec} from '../src/acryllex/spec.ts';
 /** Every ACRYLLEX step runs on gpt-6.1-sol at medium reasoning effort (owner rule). */
 const MODEL='gpt-6.1-sol',EFFORT='medium';
 
-export interface AcryllexHistoryEntry {title?:string;topic?:string;summary?:string}
+import {type AcryllexHistoryEntry,findRepeat,freshSeeds,historyLines,topicKey} from './acryllex-history.ts';
+export type {AcryllexHistoryEntry};
 type Usage=(entry:unknown)=>void;
 type Img={mime:string;base64:string};
 
@@ -35,8 +36,9 @@ export const ACRYLLEX_TOPIC_SEEDS=[
  'How noise-cancelling headphones work','Why leaves change colour','Why we have fingerprints','How vaccines teach your body','Why glass is transparent','How birds navigate','Why a spinning top stays up','Why we hiccup',
 ];
 
-const ideaSchema=z.object({topic:z.string(),question:z.string(),hook:z.string(),angle:z.string(),facts:z.array(z.string()).min(4).max(12),heroObjects:z.array(z.string()).max(8),twist:z.string(),answer:z.string()}).strict();
+const ideaSchema=z.object({topic:z.string(),topicKey:z.string().min(3).max(60),question:z.string(),hook:z.string(),angle:z.string(),facts:z.array(z.string()).min(4).max(12),heroObjects:z.array(z.string()).max(8),twist:z.string(),answer:z.string()}).strict();
 const scriptSchema=z.object({title:z.string().max(90),lines:z.array(z.string().min(3).max(220)).min(8).max(16),musicBrief:z.string().max(400),factNotes:z.array(z.string()).max(12)}).strict();
+const noveltySchema=z.object({repeat:z.boolean(),of:z.string().max(200)}).strict();
 const reviewSchema=z.object({ok:z.boolean(),problems:z.array(z.string()).max(20)}).strict();
 
 const STORY_RULES=`NARRATION: 100-140 spoken words total, split into 12-16 short lines; each line is ONE scene (5-12 words) so the picture cuts fast. Storytelling like a great documentary narrator talking to a friend: open with a hook question or striking everyday image the viewer has wondered about (no greeting), build a concrete journey with stakes and a twist (who tried, what failed, what changed), then a satisfying, clear answer and a short memorable last line. Simple words, short sentences, concrete numbers only when correct. No CTA, no "did you know", no "let's dive in".\nTALK ABOUT THE REAL THINGS: name and describe the actual subject (DNA, genes, cells, the banana, the person) in most lines; use at most one short analogy in the whole script, never an extended metaphor that replaces the subject. Lead with the surprising fact, then explain what it truly means.\nPLAIN LANGUAGE IS MANDATORY: a curious 12-year-old must understand every sentence on first listen. No jargon (never words like p-type, band gap, energy gap, charge carriers, substrate, doping, photons, wavelength-nm); replace mechanisms with everyday analogies and concrete images ("the crystal kept cracking like thin ice"). Prefer people doing things and physical objects over abstract physics: every line must be something a camera could film (a person, a machine, a crystal, a lamp, a phone). At most one technical name in the whole script. It is better to explain ONE idea beautifully than five precisely.`;
@@ -63,13 +65,22 @@ const catalogText=(c:Catalog)=>`${c.text}\nREAL SCANNED OBJECTS (photoscans; use
 export async function generateAcryllexReel(env:{OPENAI_API_KEY?:string},topicHint:string,cat:Catalog,onUsage?:Usage,history:AcryllexHistoryEntry[]=[]){
  const key=env.OPENAI_API_KEY?.trim();if(!key)throw new Error('Configure OPENAI_API_KEY');
  const ask=solClient(key,onUsage);const log:Record<string,unknown>={};
- const past=history.slice(0,20).map(h=>`- ${h.title??h.topic}`).join('\n')||'- none yet';
- // 1. Ideation
- let idea:z.infer<typeof ideaSchema>|undefined;
- for(let i=0;i<2&&!idea;i++){
-  const raw=await ask('ideation',`${JSON.stringify(ACRYLLEX_POLICY)}\nYou are the editor of ACRYLLEX, a reel channel of curious explainers: things people are curious about but never thought about before.${topicHint?` Requested topic: ${topicHint}.`:` Choose a topic that is NOT one of the earlier reels below. Seed ideas: ${ACRYLLEX_TOPIC_SEEDS.join('; ')}.`}\nEarlier reels (avoid):\n${past}\nReturn the idea: topic, the viewer's question, a hook line, the story angle (a concrete narrative with people/objects, not a lecture), 5-10 verified key facts (with years/names where relevant; only facts you are certain of), the 3-6 hero objects the story needs (as recognisable real subjects suited to licensed footage/photos, scans or editable 3D), the twist, and the clear answer.`,4000,{name:'acryllex_idea',schema:ideaSchema});
-  const p=ideaSchema.safeParse(json(raw));if(p.success)idea=p.data;
+ const past=historyLines(history),seeds=freshSeeds(ACRYLLEX_TOPIC_SEEDS,history);
+ // 1. Ideation — never a subject an earlier reel covered (local check + Sol check against the full ledger)
+ let idea:z.infer<typeof ideaSchema>|undefined;const rejected:string[]=[];
+ for(let i=0;i<4&&!idea;i++){
+  const raw=await ask('ideation',`${JSON.stringify(ACRYLLEX_POLICY)}\nYou are the editor of ACRYLLEX, a reel channel of curious explainers: things people are curious about but never thought about before.${topicHint?` Requested topic: ${topicHint}.`:` Choose a topic that is NOT one of the earlier reels below — not the same subject under a new title or angle either. Unused seed ideas: ${seeds.join('; ')||'none left; invent a fresh one'}.`}\nEVERY earlier ACRYLLEX reel (never repeat any of these subjects):\n${past}${rejected.length?`\nAlready rejected as repeats this run (pick something else): ${rejected.join('; ')}`:''}\nReturn the idea: topic, topicKey (2-5 word lowercase kebab slug of the core subject, e.g. blue-led-invention, why-we-yawn), the viewer's question, a hook line, the story angle (a concrete narrative with people/objects, not a lecture), 5-10 verified key facts (with years/names where relevant; only facts you are certain of), the 3-6 hero objects the story needs (as recognisable real subjects suited to licensed footage/photos, scans or editable 3D), the twist, and the clear answer.`,4000,{name:'acryllex_idea',schema:ideaSchema});
+  const p=ideaSchema.safeParse(json(raw));if(!p.success)continue;
+  const cand={...p.data,topicKey:topicKey(p.data.topicKey)||topicKey(p.data.topic)};
+  const hit=findRepeat(cand,history);let dup=hit?(hit.topic??hit.title??'an earlier reel'):null;
+  if(!dup&&history.length){
+   const n=noveltySchema.safeParse(json(await ask('novelty',`Is this new reel idea the same subject as any earlier reel (same question answered, even if the title, angle or wording differs)? A different subject that merely shares a field is NOT a repeat.\nNew idea: ${JSON.stringify({topic:cand.topic,question:cand.question,answer:cand.answer})}\nEarlier reels:\n${past}\nReturn repeat true/false and of = the earlier reel it repeats (empty if none).`,1500,{name:'acryllex_novelty',schema:noveltySchema})));
+   if(n.success&&n.data.repeat)dup=n.data.of||'an earlier reel';
+  }
+  if(dup){rejected.push(`${cand.topic} (repeats ${dup})`);if(topicHint)throw new Error(`Requested topic repeats an earlier ACRYLLEX reel: ${dup}`);continue;}
+  idea=cand;
  }
+ if(!idea&&rejected.length)throw new Error(`Ideation kept repeating earlier reels: ${rejected.join('; ')}`);
  if(!idea)throw new Error('Ideation failed');log.idea=idea;
  // 2. Script
  let script:z.infer<typeof scriptSchema>|undefined;let feedback='';
