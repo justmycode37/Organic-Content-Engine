@@ -67,5 +67,11 @@
     "provenance": "female-start-provenance.json",
     "sha256": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
     "status": "source only; motion validation pending"
+  },
+  "correctedMotionGuide": {
+    "file": "motion-guide-corrected.mp4",
+    "provenance": "motion-guide-corrected-provenance.json",
+    "sha256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
+    "status": "validated own driving render; final transferred appearance pending"
   }
 }
