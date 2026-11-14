@@ -5,8 +5,23 @@
   "subject": "synthetic fully clothed adult male",
   "frames": [
     {
+      "file": "start.png",
+      "role": "first: actual initial full-stride walking pose",
+      "sha256": "9633b5ffa486f96b4d0c095a529fcdb453b20b37277c6b46efea12784284ab70",
+      "width": 1164,
+      "height": 670,
+      "mode": "RGB",
+      "preparation": "one uniform scale and translation; ordinary alpha composite onto black; source RGB channel variation retained",
+      "limitations": [
+        "rear toe26px low",
+        "front heel32px left",
+        "front knee27px high",
+        "guided source0 calibration, not held proof"
+      ]
+    },
+    {
       "file": "walk.png",
-      "role": "first",
+      "role": "middle: walking pose near1s",
       "sha256": "a8c90e9adbd87fd367b81743fadd03eceff08a856e032c30f49e91893d6f9d49",
       "width": 1164,
       "height": 670,
