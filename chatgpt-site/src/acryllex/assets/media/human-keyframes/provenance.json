@@ -1,0 +1,33 @@
+{
+  "status": "experimental source plates for a controlled continuous-motion test; not an adopted recreation or animated preset",
+  "generated": true,
+  "generator": "built-in image_gen tool",
+  "subject": "synthetic fully clothed adult male",
+  "frames": [
+    {
+      "file": "walk.png",
+      "role": "first",
+      "sha256": "a8c90e9adbd87fd367b81743fadd03eceff08a856e032c30f49e91893d6f9d49",
+      "width": 1164,
+      "height": 670,
+      "mode": "RGB"
+    },
+    {
+      "file": "type.png",
+      "role": "last",
+      "sha256": "ad6e6350bddd82d69b87d3e6f39594d73e29a80bf0286395cf66d6b9575971c0",
+      "width": 1164,
+      "height": 670,
+      "mode": "RGB"
+    }
+  ],
+  "guidance": "user-provided human poses and generated actor identity; original guide pixels were not composited into these images",
+  "preparation": "global uniform scale and translation only, no body-part warp; actual footage-plane RGB capture with original linear output and alpha blending; no pixel post effect",
+  "limitations": [
+    "source-guided calibration, not held validation",
+    "seated body remains wider and wrist/hip/knee positions differ from the reference",
+    "seated density MAE .1962 vs .1868 for the current recreation",
+    "continuous motion and input-frame preservation unverified"
+  ],
+  "defaultChanges": false
+}
