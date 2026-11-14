@@ -19,3 +19,21 @@ float referenceThreshold(float t,float w,float reference){
  return (1.-reference)*(rank+.5)/64.+reference*u;
 }
 `;
+
+/** Permute complete threshold addresses; both ranks and static noise move together.
+ * The selected reflection pairs cells in a 2x2 tile. A shared pair decision
+ * either swaps both members or neither, preserving the tile's threshold multiset.
+ * Geometry, source sampling and ink always keep their original coordinates.
+ */
+export const ditherActivityGLSL=`
+vec2 activeThresholdCell(vec2 c,float amount,float epoch){
+ if(amount<=0.)return c;
+ vec2 tile=floor(c*.5),local=c-tile*2.;
+ vec2 seed=tile+vec2(epoch*.731,epoch*.193);
+ float direction=floor(hash(seed+vec2(17.31,43.71))*3.);
+ vec2 partner=direction<1.?vec2(1.-local.x,local.y):direction<2.?vec2(local.x,1.-local.y):1.-local;
+ float pairID=min(local.x+2.*local.y,partner.x+2.*partner.y);
+ if(hash(seed+vec2(71.13+pairID*13.7,29.17+pairID*7.1))<amount)return tile*2.+partner;
+ return c;
+}
+`;
