@@ -10,6 +10,8 @@ For a different subject use `footage` with `file` or an HTTPS `url`, plus a matc
 
 Use existing scanned, rigged human assets and motion capture when editable poses or new camera views are required. Geometry remains useful for mechanical objects and subjects that need true 3D editing.
 
+For a human footage layer whose grayscale source is too flat or dark, optional `params.sourceLevels:{blackPoint:0,whitePoint:.75}` grades that instance before the common dot renderer. Maximum RGB intensity is mapped from the selected black/white range to 0–1; source hue and alpha are retained. Both points must be finite numbers in 0–1, separated by at least 0.000001. Omission or the identity range `{blackPoint:0,whitePoint:1}` leaves the original material program untouched. This changes coverage through source shading while keeping the output dot size, ink, camera and scene lighting unchanged. It does not alter prepared atlas pixels or other instances of the same clip. Compare local density and contrast at intermediate frames before selecting a range; these controls do not repair a wrong pose or missing motion.
+
 
 To regenerate the inside matte, install the optional build tools (`numpy`, `scipy`, `Pillow`, `opencv-python-headless`) into a Python environment and run from `chatgpt-site`:
 
