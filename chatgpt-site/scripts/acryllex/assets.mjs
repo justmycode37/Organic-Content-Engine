@@ -7,6 +7,8 @@ import {fileURLToPath} from 'node:url';
 import {prepareFluidCaches} from './cache-assets.mjs';
 import {prepareFootage} from './media-assets.mjs';
 import {prepareRecordedMotions} from './recorded-motion-assets.mjs';
+import {prepareHumanBodies} from './human-body-assets.mjs';
+import {parseBodySource} from '../../src/acryllex/human-body-source.ts';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 export const ASSET_DIR=join(ROOT,'.acryllex-assets');
@@ -44,7 +46,7 @@ export async function ensureAsset(entry,res='1k'){
 
 /** All assets a spec needs (plus the human rigs + clip sources when people appear). */
 export async function assetsForSpec(spec){
- const ids=new Set();
+ const ids=new Set(),profileAssets=new Set();
  const bodies=new Set(['human-xbot']);const PROFILES=new Map([
   ...['human-male','anatomical-man','male-body','male-figure','man-anatomical'].map(id=>[id,'human-male']),
   ...['human-female','anatomical-woman','female-body','female-figure','woman-anatomical'].map(id=>[id,'human-female']),
@@ -52,13 +54,14 @@ export async function assetsForSpec(spec){
  const isHuman=id=>HUMAN.test(id)||PROFILES.has(id);
  for(const s of spec.scenes??[])for(const o of s.objects??[]){
   const model=norm(o.model);ids.add(model);if(!isHuman(model))continue;
-  const profile=PROFILES.get(model),body=String(o.params?.body??'').toLowerCase();
+  const custom=parseBodySource(o.params?.bodySource,o.params?.body);if(custom)continue;
+  const profile=PROFILES.get(model),body=String(o.params?.body??'').toLowerCase();if(profile)profileAssets.add(profile);
   if(profile&&!body&&String(o.params?.mesh??'anatomical')==='anatomical')continue;
   const figure=String(o.params?.figure??(profile==='human-female'||/woman/i.test(model)?'woman':'man')).toLowerCase();
   if(figure!=='mannequin')bodies.add(body?`human-${body}`:figure==='woman'?'human-megan':'human-brian');
  }
- const out={};
- for(const id of new Set([...ids].map(id=>PROFILES.get(id)).filter(Boolean))){
+ const out=await prepareHumanBodies(spec,ASSET_DIR);
+ for(const id of profileAssets){
   const rel=`humans/${id}.glb`;await mkdir(join(ASSET_DIR,'humans'),{recursive:true});
   await copyFile(join(ROOT,'src/acryllex/assets',rel),join(ASSET_DIR,rel));out[id]=rel;
  }
