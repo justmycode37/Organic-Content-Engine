@@ -36,7 +36,7 @@
   },
   "file": "clay-start.png",
   "sha256": "ce68742b4623244c0384210d6271d7c4558b6b5e17a3eeaee5f3f01930467105",
-  "status": "Experimental source frame. Static cap and leg support improve, torso match is mixed; no motion or99%fidelity claim. Not a default asset.",
+  "status": "Appearance input for optionalhuman-male-clay-motion, generated motion and corrected placement evaluated separately; no99%claim.",
   "creators": "Source appearance generated with built-in image_gen from prior generated117 and own141rig render. No reference video pixels copied into asset.",
   "rights": "Generated asset; no CC0/MIT license claim for provider-generated content."
 }

@@ -193,6 +193,10 @@ export interface Scene {
  /** Global clock phase in seconds (default 0). */
  motionPhase?:number;
  camera?:CameraMove;
+ /** Post ink grid: cell is output px (1..24), roundness 0..1, softness output px (0..2).
+  * Defaults to the engine's original format.cell / look; source render resolution is unchanged.
+  * Direct transitions use the selected incoming scene's grid for both images, as with lighting. */
+ raster?:{cell?:number;dotRoundness?:number;dotSoftness?:number};
  objects:SceneObject[];
  events?:SceneEvent[];
  text?:TextItem[];

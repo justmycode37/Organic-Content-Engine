@@ -104,3 +104,12 @@ test('real footage builds select the preparation key and own alpha/material/UV s
   for(const t of shared)t.dispose();
  }
 });
+
+test('neutral clay footage selects its own pinned source for all male aliases',()=>{
+ for(const model of ['human-male-footage','human-footage','man-footage']){
+  const p=resolveFootageParams(model,{asset:'human-male-clay-motion'});
+  assert.equal(p.file,'library:human-male-clay-motion.mkv');assert.equal(p.alphaFile,'library:human-male-clay-motion-alpha.mkv');
+  assert.equal(p.crop,'243:417:452:112');assert.equal(p.expectedSHA256,'6aa6f3bf758597e6e52dc74601bc76ef7cc9a6c8410c78c857f89a0d54cba217');
+  assert.equal(p.cols,243);assert.equal(p.rows,417);assert.equal(p.sourceLevels.whitePoint,.75);
+ }
+});

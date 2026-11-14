@@ -7,3 +7,5 @@ The guide keeps one arm reaching for a chair while the other stays down/front, s
 No original reference-video pixels or raw body-model files are included. Source hashes and preparation are recorded in `provenance.json`, `female-start-provenance.json` and `motion-guide-corrected-provenance.json`. The generated output and alpha-mask hashes are recorded in `../human-motion-provenance.json`.
 
 The images retain small pose deviations; the guide supplies the actual animation. These inputs and generated clips do not establish a 99% reference match.
+
+`clay-start.png` and its provenance supply the optional neutral clay appearance. `human-placement-provenance.json` records the five numeric framing samples used by the reference fixture; it contains no source video frames. Placement changes only camera-vertical/depth root position keys, while the original constructor position preserves shadow framing.

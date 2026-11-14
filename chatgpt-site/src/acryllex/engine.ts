@@ -607,16 +607,36 @@ function bounce(k:number){const n1=7.5625,d1=2.75;if(k<1/d1)return n1*k*k;if(k<2
 function walkEase(k:number){k=clamp(k);const a=0.12;if(k<a)return k*k/(2*a)/(1-a);if(k>1-a)return 1-(1-k)*(1-k)/(2*a)/(1-a);return (k-a/2)/(1-a);}
 function lerpAngle(a:number,b:number,k:number){let d=((b-a+Math.PI)%(Math.PI*2)+Math.PI*2)%(Math.PI*2)-Math.PI;return a+d*k;}
 
+// Validate even when callers construct Engine directly without the JSON schema.
+function validateSceneRaster(value:unknown,index:number){
+ if(value===undefined)return;
+ const label=`scene ${index+1} raster`;
+ if(!value||typeof value!=='object'||Array.isArray(value)||(Object.getPrototypeOf(value)!==Object.prototype&&Object.getPrototypeOf(value)!==null))throw new Error(`${label}: expected an object`);
+ const result:NonNullable<Scene['raster']>={};
+ for(const key of Reflect.ownKeys(value)){
+  if(typeof key!=='string')throw new Error(`${label}: unknown symbol field`);
+  const v=Reflect.get(value,key);
+  const bounds=key==='cell'?[1,24]:key==='dotRoundness'?[0,1]:key==='dotSoftness'?[0,2]:null;
+  if(!bounds)throw new Error(`${label}.${key}: unknown field`);
+  if(v!==undefined&&(typeof v!=='number'||!Number.isFinite(v)||v<bounds[0]!||v>bounds[1]!))throw new Error(`${label}.${key}: expected a finite number in [${bounds[0]}, ${bounds[1]}]`);
+  result[key as keyof NonNullable<Scene['raster']>]=v as number|undefined;
+ }
+ return result;
+}
+
 // ---------------------------------------------------------------- engine
 export class Engine {
  private disposed=false;
  private aoMethod:'plane'|'legacy'='plane';
+ private rasterDefaults:Required<NonNullable<Scene['raster']>>;
  renderer:THREE.WebGLRenderer;gl:HTMLCanvasElement;out:HTMLCanvasElement;ctx2d:CanvasRenderingContext2D;
  rtA:THREE.WebGLRenderTarget;rtB:THREE.WebGLRenderTarget;post:THREE.ShaderMaterial;postScene=new THREE.Scene();postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
  scenes:(SceneRuntime|null)[]=[];starts:number[]=[];total=0;
  constructor(public spec:AcryllexSpec){
+  spec.scenes.forEach((scene,index)=>validateSceneRaster(scene.raster,index));
   setFormat(spec.format??{});
   Object.assign(LOOK,{contrast:1.35,blackPoint:0,whitePoint:1,inkLo:0.42,shadows:1,ao:1,gamma:0.85,noise:0.06,gap:0,ink:1,fuzz:0.06,dotRoundness:0,dotSoftness:0,key:1.0,fill:0.1,rim:0.3,ambient:0.07,dir:[1.2,1.0,0.75]},spec.look??{});
+  this.rasterDefaults={cell:CELL,dotRoundness:LOOK.dotRoundness,dotSoftness:LOOK.dotSoftness};
   this.gl=document.createElement('canvas');this.gl.width=W;this.gl.height=H;
   this.renderer=new THREE.WebGLRenderer({canvas:this.gl,antialias:false,preserveDrawingBuffer:true,alpha:false});
   this.renderer.outputColorSpace=THREE.LinearSRGBColorSpace;this.renderer.toneMapping=THREE.NoToneMapping;this.renderer.setPixelRatio(1);this.renderer.localClippingEnabled=true;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFShadowMap;this.renderer.setSize(W,H,false);
@@ -652,6 +672,8 @@ export class Engine {
  }
  frame(t:number,opts:{captions?:boolean}={}){
   const i=this.sceneAt(t),local=t-this.starts[i]!,sc=this.spec.scenes[i]!;
+  const raster=validateSceneRaster(sc.raster,i),u=this.post.uniforms;
+  u.cell!.value=raster?.cell??this.rasterDefaults.cell;u.dotRoundness!.value=raster?.dotRoundness??this.rasterDefaults.dotRoundness;u.dotSoftness!.value=raster?.dotSoftness??this.rasterDefaults.dotSoftness;
   const motionLocal=sampleMotionTime(local,this.starts[i]!,sc.motionFPS,sc.motionPhase),motionGlobal=sc.motionFPS?this.starts[i]!+motionLocal:t;
   const aoMethod=sc.aoMethod??this.spec.look?.aoMethod??'plane';
   if(aoMethod!==this.aoMethod){this.aoMethod=aoMethod;this.post.fragmentShader=POST_FRAG(aoMethod);this.post.needsUpdate=true;}

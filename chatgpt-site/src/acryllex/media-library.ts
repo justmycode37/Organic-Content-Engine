@@ -1,5 +1,42 @@
 /** Fixed-view subjects. Stock originals use the private download cache; generated human sources include bundled provenance. */
 export const MEDIA_LIBRARY={
+"human-male-clay-motion": {
+  "name": "Adult male in neutral clay material, walking, sitting and typing",
+  "creator": "Organic Content Engine; image_gen and Kling AI",
+  "acquired": "2026-11-14",
+  "page": "https://kling.ai/feature/ai-motion-control",
+  "license": "https://kling.ai/docs/user-policy",
+  "terms": "https://kling.ai/docs/payment-policy",
+  "capture": "Synthetic character generated with Kling AI. Neutral clay image_gen appearance and own fitted-rig motion guide; no filmed person or copied reference pixels.",
+  "limitations": "Fixed profile and baked action. Natural proportions and crown/cheek lighting reviewed; fine hands, lean pose and contacts remain approximate. Not a99%reference match.",
+  "recommendedLight": {
+    "contrast": 0.8,
+    "gamma": 0.8,
+    "blackPoint": 0.025,
+    "whitePoint": 0.9,
+    "exposure": 0.68,
+    "softness": 0.6
+  },
+  "defaults": {
+    "file": "library:human-male-clay-motion.mkv",
+    "expectedSHA256": "6aa6f3bf758597e6e52dc74601bc76ef7cc9a6c8410c78c857f89a0d54cba217",
+    "alphaFile": "library:human-male-clay-motion-alpha.mkv",
+    "sourceStart": 0,
+    "sourceDuration": 4.9,
+    "fps": 30,
+    "crop": "243:417:452:112",
+    "cols": 243,
+    "rows": 417,
+    "monochrome": false,
+    "preserveAspect": true,
+    "blur": 0,
+    "loop": false,
+    "sourceLevels": {
+      "blackPoint": 0,
+      "whitePoint": 0.75
+    }
+  }
+},
 "human-male-motion": {
   "name": "Adult male walking, sitting and typing",
   "creator": "Organic Content Engine; image_gen and Kling AI",
