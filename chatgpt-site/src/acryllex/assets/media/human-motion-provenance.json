@@ -12,6 +12,10 @@
     "sourceLevels": {
       "blackPoint": 0,
       "whitePoint": 0.75
+    },
+    "sceneRasterExample": {
+      "cell": 3.2,
+      "softness": 0.6
     }
   },
   "subjects": {
@@ -37,7 +41,8 @@
       ],
       "crop": "235:422:446:108",
       "preparation": "Uniform whole-canvas resize with integer raster rounding, source RGB otherwise unchanged; lossless FFV1. Matte from generated maxRGB>5 largest connected component, enclosed holes filled, boundary Gaussian sigma0.5. No original reference pixels used, no body-part deformation or local tone edit.",
-      "validation": "Native identity/anatomy and guide motion reviewed; remaining source tracking/finger/material-density limitations are documented in the catalogue. Named model rendering compared with direct source preparation."
+      "validation": "Native identity/anatomy and guide motion reviewed; remaining source tracking/finger/material-density limitations are documented in the catalogue. Named model rendering compared with direct source preparation.",
+      "referenceRecipePlacement": "human-keyframes/human-placement-provenance.json"
     },
     "female": {
       "asset": "human-female-motion",
@@ -62,6 +67,30 @@
       "crop": "238:422:448:109",
       "preparation": "Uniform whole-canvas resize with integer raster rounding, source RGB otherwise unchanged; lossless FFV1. Matte from generated maxRGB>5 largest connected component, enclosed holes filled, boundary Gaussian sigma0.5. No original reference pixels used, no body-part deformation or local tone edit.",
       "validation": "Native identity/anatomy and guide motion reviewed; remaining source tracking/finger/material-density limitations are documented in the catalogue. Named model rendering compared with direct source preparation."
+    },
+    "maleClay": {
+      "asset": "human-male-clay-motion",
+      "sourceFile": "human-male-clay-motion.mkv",
+      "alphaFile": "human-male-clay-motion-alpha.mkv",
+      "sourceSHA256": "6aa6f3bf758597e6e52dc74601bc76ef7cc9a6c8410c78c857f89a0d54cba217",
+      "alphaSHA256": "01635251a91772ca89e072cb13292932f3bc095429d0cabac7e0e3916c5c57d5",
+      "nativeGeneratedSHA256": "d4ac424ec770612d9745ad1d82f06d3003416ca174a28bb2f64949403e1e9a73",
+      "nativeGenerationResolution": "720p",
+      "runId": "01M7CCB9C16FCE3G65AWVH52FZ",
+      "inputCommit": "5c61dd5aaa0cd3aced9263119aa34ebc473efb0c",
+      "appearanceInput": "human-keyframes/clay-start.png",
+      "motionGuide": "human-keyframes/motion-guide-corrected.mp4",
+      "motionGuideSHA256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
+      "frames": 147,
+      "fps": 30.0,
+      "duration": 4.9,
+      "size": [
+        1164,
+        670
+      ],
+      "crop": "243:417:452:112",
+      "preparation": "Uniform whole-canvas resize with integer raster rounding, source RGB otherwise unchanged; lossless FFV1. Matte from generated maxRGB>5 largest connected component, enclosed holes filled, boundary Gaussian sigma0.5. No original reference pixels used, no body-part deformation or local tone edit.",
+      "validation": "Native guide transfer, stable material lighting and anatomy reviewed at six times. Crown/cheek ordering improves; fine hands and pose details remain approximate. Optional material variant; photographic male remains the reference recipe/default. Rigid source0framing delta\u221212px may be needed when substituting for photographic footage. No99%reference match."
     }
   }
 }

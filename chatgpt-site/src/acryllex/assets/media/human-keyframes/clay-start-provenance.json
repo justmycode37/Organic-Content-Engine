@@ -1,0 +1,42 @@
+{
+  "purpose": "Neutral albedo and physically coherent high rear key source experiment; unadopted",
+  "tool": "built-in image_gen",
+  "prompt": "Use case: identity-preserve / lighting-weather. Create one production source frame for a realistic human motion-transfer animation. Image 1 is the edit target: preserve this adult male's natural anatomical proportions, side profile, exact walking stride, arm swing, hand positions, head location and overall framing. Image 2 is supporting pose/material guidance only, showing our own rig; do not copy its joint seams or simplify anatomy. Primary change: render the whole figure as a high-quality photorealistic 3D scan made entirely of a single neutral matte off-white/light-gray clay material. All hair, skin, shirt, shorts and shoes share that same albedo. Keep detailed realistic human anatomy, face planes, hands and cloth folds. Use a short-sleeve shirt and knee-length shorts with low-profile shoes, following image 2 wardrobe geometry. Sculpted short hair should be the same off-white material as the skin; preserve a smooth compact crown with a subtle short forward hair projection, no dark photographic hair, no added baseball cap. Lighting is crucial: a large high key light above and behind the figure on the LEFT of the image, illuminating the upper skull, shoulder and back. His right-facing cheek and front of neck must be distinctly in shadow, with only weak frontal fill. Strong natural separation between lit and shadow surfaces, no uniform white fill, no hard black painted facial patch. This should be physically coherent clay shading, no dither or pixelart. Keep the exact right-facing side view and full body on pure solid BLACK background, no floor plane, floor reflection, furniture, text, props, logos or cropping. Wide landscape canvas matching the references, 1164 by 670 framing. The entire figure remains roughly centered near x550 y320 with crown near y118 and feet near y508. Do not stretch or squash any body part, do not change the camera, do not add another person. Output only this single full-body frame.",
+  "editTarget": "agent-human117-registered-start.png",
+  "poseMaterialGuidance": "root-human141-guide-frame-000.png",
+  "rawOutput": "root-human163-clay-source-raw.png",
+  "referencePixelsInOutput": false,
+  "registration": {
+    "operation": "One uniform whole-image affine registration to same source0calibration anchors as117; no part warp, no local tone edits. Black matte largest connected maxRGB>10 component,holesfilled,boundarysigma.5.",
+    "rawSize": [
+      1653,
+      951
+    ],
+    "rawAnchors": {
+      "crown": 166,
+      "sole": 714,
+      "crownX": 796.4344703770197
+    },
+    "targetAnchors": {
+      "crown": 135,
+      "sole": 506,
+      "crownX": 575
+    },
+    "scale": 0.677007299270073,
+    "translation": [
+      35.808050164463,
+      22.61678832116789
+    ],
+    "sha256": {
+      "root-human163-clay-source-raw.png": "ef63ed4348f28a8e9f4e5db583da655dcaa52c5f569674c20d4052ecee4a6238",
+      "agent-human163-registered-start.png": "ce68742b4623244c0384210d6271d7c4558b6b5e17a3eeaee5f3f01930467105",
+      "agent-human163-registered-start-rgba.png": "4e140a30ea6674dcf7e72af3285c66f8eae384da3d8afb1e4713510d13767351"
+    },
+    "adopted": false
+  },
+  "file": "clay-start.png",
+  "sha256": "ce68742b4623244c0384210d6271d7c4558b6b5e17a3eeaee5f3f01930467105",
+  "status": "Appearance input for optionalhuman-male-clay-motion, generated motion and corrected placement evaluated separately; no99%claim.",
+  "creators": "Source appearance generated with built-in image_gen from prior generated117 and own141rig render. No reference video pixels copied into asset.",
+  "rights": "Generated asset; no CC0/MIT license claim for provider-generated content."
+}

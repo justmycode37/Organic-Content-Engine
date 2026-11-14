@@ -1,7 +1,7 @@
 {
   "version": 1,
   "series": "ACRYLLEX",
-  "title": "Human media models · Kling AI",
+  "title": "Human media models \u00b7 Kling AI",
   "captions": false,
   "format": {
     "width": 1164,
@@ -25,7 +25,7 @@
   },
   "scenes": [
     {
-      "say": "male human motion — generated with Kling AI",
+      "say": "male human motion \u2014 generated with Kling AI",
       "hue": "blue",
       "duration": 4.9,
       "camera": {
@@ -48,7 +48,7 @@
         "blackPoint": 0.025,
         "whitePoint": 0.9,
         "exposure": 0.68,
-        "softness": 0.25
+        "softness": 0.6
       },
       "objects": [
         {
@@ -68,10 +68,13 @@
           "enter": "none",
           "exit": "none"
         }
-      ]
+      ],
+      "raster": {
+        "cell": 3.2
+      }
     },
     {
-      "say": "female human motion — generated with Kling AI",
+      "say": "female human motion \u2014 generated with Kling AI",
       "hue": "blue",
       "duration": 4.9,
       "camera": {
@@ -94,7 +97,7 @@
         "blackPoint": 0.025,
         "whitePoint": 0.9,
         "exposure": 0.68,
-        "softness": 0.25
+        "softness": 0.6
       },
       "objects": [
         {
@@ -114,7 +117,10 @@
           "enter": "none",
           "exit": "none"
         }
-      ]
+      ],
+      "raster": {
+        "cell": 3.2
+      }
     }
   ]
 }

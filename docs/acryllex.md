@@ -286,3 +286,5 @@ read-only, with no derived textures. Face-culling policy is unchanged. `sourceAl
 the previous material conversion; general asset `instance()` calls opt in through its final options
 argument. Transparent meshes follow the existing engine shadow policy. This corrects lost coverage;
 hairstyle, likeness and local density still require reference review.
+
+A scene can override the final dot grid with `raster: {cell: 3.2, dotRoundness: 1, dotSoftness: 0.5}`. Cell pitch is 1–24 output pixels, roundness 0–1 and edge softness 0–2; all fields are optional and finite. Omitted fields restore the format cell and global look values on every frame. This changes only the post-render ink grid: source render targets, lighting, models and the global format resolution stay the same. During a direct scene transition, the incoming scene controls the raster for both sampled images, as it does the shared post-light settings.
