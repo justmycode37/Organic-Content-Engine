@@ -5,7 +5,7 @@
 //         → SOUND DESIGN (Sol cue sheet, ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats) → final mix → video.
 // Every step is cached in <workdir>, so a rerun resumes instead of paying twice.
 import {createHash} from 'node:crypto';
-import {access,mkdir,readFile,writeFile,rm,appendFile} from 'node:fs/promises';
+import {access,mkdir,readFile,writeFile,rm,appendFile,rename} from 'node:fs/promises';
 import {spawn,execFileSync,spawnSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -15,6 +15,13 @@ import {loadCatalog} from './catalog.mjs';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 const CACHE=join(ROOT,'.acryllex-cache');
+/** Local ledger of every finished ACRYLLEX reel (manual runs and worker jobs), so no topic repeats. */
+export const HISTORY_FILE=process.env.ACRYLLEX_HISTORY_FILE?.trim()||join(ROOT,'.acryllex-history.json');
+export async function readLedger(file=HISTORY_FILE){try{const v=JSON.parse(await readFile(file,'utf8'));return Array.isArray(v)?v:[];}catch(e){if(e.code==='ENOENT')return [];throw new Error(`ACRYLLEX history ledger unreadable (${file}): ${e.message}`);}}
+export async function recordReel(entry,file=HISTORY_FILE){
+ const list=await readLedger(file);if(entry.workdir&&list.some(h=>h.workdir===entry.workdir))return list;
+ const next=[entry,...list];const tmp=`${file}.${process.pid}.tmp`;await writeFile(tmp,JSON.stringify(next,null,1));await rename(tmp,file);return next;
+}
 const VOICE_ID=process.env.ACRYLLEX_VOICE_ID?.trim()||'s3TPKV1kjDlVtZbl4Ksh'; // Adam, same narrator as Hedgy
 const hash=v=>createHash('sha256').update(JSON.stringify(v)).digest('hex').slice(0,20);
 const exists=p=>access(p).then(()=>true,()=>false);
@@ -157,7 +164,9 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
  if(!await exists(draft)){
   if(!ask)throw new Error('Set OPENAI_API_KEY');
   log('Sol: ideation → script → fact check → storyboard → storyboard review');
-  const r=await gen.generateAcryllexReel({OPENAI_API_KEY:openai},topic,cat,usage,history);
+  const {mergeHistory}=await import('../../worker/acryllex-history.ts');
+  const all=mergeHistory(history,await readLedger());log(`history: ${all.length} earlier reels checked for repeats`);
+  const r=await gen.generateAcryllexReel({OPENAI_API_KEY:openai},topic,cat,usage,all);
   Object.assign(provenance,r.provenance);await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
@@ -218,6 +227,8 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
  const finished=join(workdir,'finished.mp4');
  await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',audio,'-map','0:v','-map','1:a','-c:v','copy','-c:a','copy','-t',total.toFixed(3),'-movflags','+faststart',finished]);
  for(const i of [0,1,2])await rm(`${audio}.stem${i}.wav`,{force:true});
+ {const {topicKey}=await import('../../worker/acryllex-history.ts');const idea=provenance.idea??{};
+  await recordReel({at:new Date().toISOString(),title:spec.title,topic:idea.topic??spec.title,topicKey:idea.topicKey||topicKey(idea.topic??spec.title??''),summary:spec.scenes.map(s=>s.say).join(' ').slice(0,200),workdir});}
  log(`done: ${finished} (${total.toFixed(1)} s)`);
  return {finished,spec,provenance};
 }

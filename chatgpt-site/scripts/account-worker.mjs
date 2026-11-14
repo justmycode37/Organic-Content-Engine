@@ -13,7 +13,7 @@ async function makeAcryllex(job){
  const cache=join(CACHE,`${safe(job.id)}`);await mkdir(cache,{recursive:true});
  const done=join(cache,'finished.mp4');
  const {produce}=await import('./acryllex/produce.mjs');
- const history=(Array.isArray(job.history)?job.history:[]).map(h=>({title:h.title,summary:h.summary}));
+ const history=(Array.isArray(job.history)?job.history:[]).map(h=>({title:h.title,topic:h.topic,topicKey:h.topicKey,summary:h.summary}));
  const r=await produce(cache,{history});
  return {done:r.finished??done,spec:r.spec,provenance:r.provenance};
 }

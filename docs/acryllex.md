@@ -288,3 +288,17 @@ argument. Transparent meshes follow the existing engine shadow policy. This corr
 hairstyle, likeness and local density still require reference review.
 
 A scene can override the final dot grid with `raster: {cell: 3.2, dotRoundness: 1, dotSoftness: 0.5}`. Cell pitch is 1–24 output pixels, roundness 0–1 and edge softness 0–2; all fields are optional and finite. Omitted fields restore the format cell and global look values on every frame. This changes only the post-render ink grid: source render targets, lighting, models and the global format resolution stay the same. During a direct scene transition, the incoming scene controls the raster for both sampled images, as it does the shared post-light settings.
+
+## No repeated topics
+
+Every finished reel is remembered, and a new reel never covers a subject an earlier one did
+(`chatgpt-site/worker/acryllex-history.ts`):
+
+- The scheduled worker receives every completed ACRYLLEX job of the account (not a recent window), with title,
+  topic and `topicKey`. `scripts/acryllex/produce.mjs` merges that with the local ledger
+  `chatgpt-site/.acryllex-history.json` (override with `ACRYLLEX_HISTORY_FILE`), which records every finished
+  reel, including manual runs.
+- Ideation sees the full list and only the seed ideas not used yet, and returns a `topicKey` slug.
+- Each idea is checked before any paid step: same key or mostly the same subject words → rejected; otherwise a
+  short Sol `novelty` call compares the question against every earlier reel. A rejected idea is retried (up to
+  4 ideas); a requested `--topic` that repeats fails immediately.
