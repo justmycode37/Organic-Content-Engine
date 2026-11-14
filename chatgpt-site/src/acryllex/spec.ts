@@ -225,10 +225,12 @@ export interface Scene {
 export interface AcryllexSpec {
  version:1;
  series:'ACRYLLEX';
+ /** Shared recording calibration; custom/legacy specs omit it. Geometry and motion remain independent. */
+ style?:'reference-recording';
  title:string;
  musicBrief?:string;
  captions?:boolean;
- /** Filled in by the producer: the music's beat grid (seconds). Picture pulses on it. */
+ /** Music beat grid (seconds), for edit/audio timing only. Never pulses geometry, camera or brightness. */
  beat?:{period:number;phase:number;from?:number};
  scenes:Scene[];
  /** Output size and dot pitch; default 1080x1920 portrait, 4 px dots. */

@@ -56,16 +56,18 @@ test('local ledger records each finished reel once',async()=>{
 function fakeSol(answers){
  const steps=[];const real=globalThis.fetch;
  globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);const text=body.input[0].content[0].text;const step=body.text?.format?.name;steps.push({step,text});
-  const out=answers(step,steps);return new Response(JSON.stringify({status:'completed',usage:{},output:[{content:[{type:'output_text',text:JSON.stringify(out)}]}]}),{status:200});};
+  const out=answers(step,steps);const response={status:'completed',usage:{},output:[{content:[{type:'output_text',text:JSON.stringify(out)}]}]};
+  return new Response(`data: ${JSON.stringify({type:'response.completed',response})}\n\n`,{status:200,headers:{'content-type':'text/event-stream'}});};
  return {steps,restore:()=>{globalThis.fetch=real;}};
 }
-const idea=(topic,topicKey)=>({topic,topicKey,question:'q',hook:'h',angle:'a',facts:['1','2','3','4'],heroObjects:['x'],twist:'t',answer:'a'});
+// explainer plans (the ideation step is the plan step); topicKey is derived from the topic
+const idea=(topic)=>({topic,question:'q',answer:'a',goldenThread:'g',anchor:{thing:'x',why:'w'},analogy:'none',steps:[{idea:'1',because:'b',show:'s'},{idea:'2',because:'b',show:'s'},{idea:'3',because:'b',show:'s'}],hook:'h',payoff:'p',facts:['1','2','3'],heroObjects:['x'],leftOut:[]});
 const cat={text:'',assets:'',has:()=>true};
 
-test('ideation rejects a repeated subject and retries before any paid step',async()=>{
+test('planning rejects a repeated subject and retries before any paid step',async()=>{
  let ideations=0;
  const sol=fakeSol(step=>{
-  if(step==='acryllex_idea')return ++ideations===1?idea('How blue LEDs were finally invented','blue-led-story'):idea('Why cats purr','cat-purr');
+  if(step==='acryllex_plan')return ++ideations===1?idea('Why blue LEDs were so hard to invent'):idea('Why cats purr','cat-purr');
   if(step==='acryllex_novelty')return {repeat:false,of:''};
   return {bad:true};// script stage: stop the test here
  });
@@ -73,17 +75,17 @@ test('ideation rejects a repeated subject and retries before any paid step',asyn
   await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'',cat,undefined,[blue]),/Script failed/);
   const names=sol.steps.map(s=>s.step);
   assert.equal(ideations,2);
-  assert.match(sol.steps[1].text,/Already rejected as repeats this run \(pick something else\): How blue LEDs/);
-  assert.match(sol.steps[0].text,/\[blue-led-invention\]/);
+  assert.match(sol.steps[1].text,/Already rejected as repeats this run \(pick something else\): Why blue LEDs/);
+  assert.match(sol.steps[0].text,/\[blue-led-invention\]/);// full ledger with keys
   assert.ok(!/Unused seed ideas:[^\n]*blue LED/.test(sol.steps[0].text));
-  assert.deepEqual(names.slice(0,3),['acryllex_idea','acryllex_idea','acryllex_novelty']);
+  assert.deepEqual(names.slice(0,3),['acryllex_plan','acryllex_plan','acryllex_novelty']);
  }finally{sol.restore();}
 });
 
 test('Sol novelty check can veto an idea that the word check misses',async()=>{
  let ideations=0;
  const sol=fakeSol(step=>{
-  if(step==='acryllex_idea')return ++ideations===1?idea('The crystal that made white lightbulbs possible','gallium-nitride-crystal'):idea('Why cats purr','cat-purr');
+  if(step==='acryllex_plan')return ++ideations===1?idea('The crystal that made white lightbulbs possible','gallium-nitride-crystal'):idea('Why cats purr','cat-purr');
   if(step==='acryllex_novelty')return ideations===1?{repeat:true,of:blue.topic}:{repeat:false,of:''};
   return {bad:true};
  });
@@ -92,7 +94,7 @@ test('Sol novelty check can veto an idea that the word check misses',async()=>{
 });
 
 test('a requested topic that repeats an earlier reel stops immediately',async()=>{
- const sol=fakeSol(step=>step==='acryllex_idea'?idea('Why the blue LED was so hard to invent','blue-led-invention'):{bad:true});
+ const sol=fakeSol(step=>step==='acryllex_plan'?idea('Why the blue LED was so hard to invent','blue-led-invention'):{bad:true});
  try{
   await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'blue LED',cat,undefined,[blue]),/repeats an earlier ACRYLLEX reel/);
   assert.equal(sol.steps.length,1);

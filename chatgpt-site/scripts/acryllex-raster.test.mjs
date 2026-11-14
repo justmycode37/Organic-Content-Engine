@@ -26,7 +26,7 @@ test('direct Engine callers reject malformed raster before requiring DOM or WebG
 });
 
 function harness(scenes,defaults={cell:7.44,dotRoundness:.35,dotSoftness:.2}){
- const uniforms=Object.fromEntries(['cell','dotRoundness','dotSoftness','activity','activityEpoch','cNear','cFar','tanHalf','aoR','aoStr','contrast','inkLo','gam','blackPoint','whitePoint','expo','noiseAmt','noiseReference','maskMode','maskK','boost','ink','mode','mixP','time'].map(k=>[k,{value:NaN}]));
+ const uniforms=Object.fromEntries(['cell','dotRoundness','dotSoftness','activity','activityEpoch','activityPhase','cNear','cFar','tanHalf','aoR','aoStr','contrast','inkLo','gam','blackPoint','whitePoint','expo','noiseAmt','noiseReference','maskMode','maskK','boost','ink','mode','mixP','time'].map(k=>[k,{value:NaN}]));
  uniforms.inkColor={value:{set(){return this;},divideScalar(){return this;}}};
  const draws=[],runtime={camera:{near:.1,far:100,fov:36},radius:1,dur:2,project(){return null;}};
  const engine=Object.assign(Object.create(Engine.prototype),{spec:{version:1,series:'ACRYLLEX',title:'Raster',captions:false,scenes},starts:scenes.map((_,i)=>i*2),rasterDefaults:{activity:0,activityRate:18,...defaults},aoMethod:'plane',post:{uniforms},rtA:{},rtB:{},postScene:{},postCam:{},out:{},gl:{},ctx2d:{fillRect(){},drawImage(){}},renderer:{setRenderTarget(){},setClearColor(){},clear(){},render(){}},runtime(){return runtime;},renderInto(rt,i,local){draws.push({rt,i,local});}});
@@ -94,4 +94,12 @@ test('hidden activity fields and changing getters use the validated snapshot bef
  h.engine.frame(.5);assert.equal(reads,1);assert.equal(h.uniforms.activityEpoch.value,15);
  const before=[h.uniforms.activity.value,h.uniforms.activityEpoch.value],count=h.draws.length;
  assert.throws(()=>h.engine.frame(.5),/scene 1 raster.activityRate/);assert.deepEqual([h.uniforms.activity.value,h.uniforms.activityEpoch.value],before);assert.equal(h.draws.length,count);
+});
+
+
+test('pixel activity retains fractional global time for asynchronous tile changes and exact reverse seeking',()=>{
+ const h=harness([{...scene({activity:.06,activityRate:12}),motionFPS:1}]);
+ for(const t of [1.01,1.06,1.12,1.01]){
+  h.engine.frame(t);const time=t*12+1e-7;assert.equal(h.uniforms.activityEpoch.value,Math.floor(time));assert.ok(Math.abs(h.uniforms.activityPhase.value-(time-Math.floor(time)))<1e-10);assert.equal(h.uniforms.time.value,1);
+ }
 });

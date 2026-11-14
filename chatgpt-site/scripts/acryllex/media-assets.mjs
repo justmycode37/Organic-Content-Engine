@@ -6,7 +6,8 @@ import {once} from 'node:events';
 import {extname,join,resolve} from 'node:path';
 import {spawnSync} from 'node:child_process';
 import {fileURLToPath} from 'node:url';
-import {footageVariantKey} from '../../src/acryllex/media-key.ts';
+import {footageVariantKey,backgroundKey} from '../../src/acryllex/media-key.ts';
+import {referenceKind,referenceProblems} from '../../src/acryllex/reference-media.ts';
 import {MEDIA_LIBRARY,isFootageModel,resolveFootageParams} from '../../src/acryllex/media-library.ts';
 
 const MAX_INPUT=512*1024*1024,MAX_ATLASES=256*1024*1024,MAX_FRAMES=2400;
@@ -17,7 +18,7 @@ function run(program,args){const result=spawnSync(program,args,{encoding:'utf8',
 function number(params,key,fallback,min,max){const value=params[key]===undefined?fallback:Number(params[key]);if(!Number.isFinite(value)||value<min||value>max)throw new Error(`footage ${key} must be ${min}..${max}`);return value;}
 
 /** Public HTTPS inputs are cached locally; references and licenses belong with the asset catalogue. */
-async function sourceFile(source,assetDir){
+export async function sourceFile(source,assetDir){
  if(source.startsWith('library:')){
   const name=source.slice(8);if(!/^[a-z0-9][a-z0-9.-]*$/i.test(name))throw new Error('footage: invalid library media path');
   source=fileURLToPath(new URL('../../src/acryllex/assets/media/'+name,import.meta.url));
@@ -47,6 +48,9 @@ function probe(file){
 
 async function prepareOne(source,params,format,assetDir){
  const file=await sourceFile(source,assetDir),input=probe(file),sourceSHA256=await fileHash(file);
+ if(params.mediaKind==='image'&&!input.still)throw new Error('reference-image requires a still photograph; use reference-video for moving action');
+ if(params.mediaKind==='video'&&input.still)throw new Error('reference-video requires moving source frames; a photograph cannot supply articulation');
+ const keyBackground=params.backgroundKey===undefined?null:backgroundKey(params.backgroundKey);
  if(params.expectedSHA256!==undefined&&params.expectedSHA256!==sourceSHA256)throw new Error('footage: source hash differs from the pinned library asset');
  const fps=number(params,'fps',30,.1,120),blur=number(params,'blur',1.2,0,10),start=number(params,'sourceStart',0,0,1e7);
  const duration=params.sourceDuration===undefined?(input.still?1/fps:null):number(params,'sourceDuration',null,1/fps,MAX_FRAMES/fps);
@@ -64,16 +68,16 @@ async function prepareOne(source,params,format,assetDir){
  // Matroska duration metadata rounds to milliseconds even for exact 30fps masks.
  if(alphaInfo?.duration!==null&&alphaInfo?.duration!==undefined&&effectiveDuration!==null&&start+effectiveDuration>alphaInfo.duration+.001)throw new Error('footage: alpha video does not cover the requested source interval');
  const alphaSHA256=alphaFile?await fileHash(alphaFile):null;
- const identity={version:2,asset:params.asset??null,sourceSHA256,alphaSHA256,w,h,fps,start,duration,crop,blur,monochrome:params.monochrome===true,invertAlpha:params.invertAlpha===true,mirrorX:params.mirrorX===true,mirrorY:params.mirrorY===true};
+ const identity={version:3,asset:params.asset??null,sourceSHA256,alphaSHA256,w,h,fps,start,duration,crop,blur,monochrome:params.monochrome===true,invertAlpha:params.invertAlpha===true,mirrorX:params.mirrorX===true,mirrorY:params.mirrorY===true,backgroundKey:keyBackground};
  const key=hash(JSON.stringify(identity)).slice(0,24),relative=`import/media-${key}`,dir=join(assetDir,relative),manifest=join(dir,'manifest.json');
  if(await exists(manifest))return relative+'/manifest.json';
  const pending=dir+'.'+randomUUID()+'.tmp';await mkdir(pending,{recursive:true});
  try{
-  const cols=Math.max(1,Math.min(8,Math.floor(4096/w))),rows=Math.max(1,Math.min(8,Math.floor(4096/h))),args=['-v','error','-y','-threads','2'];
+  const cols=input.still?1:Math.max(1,Math.min(8,Math.floor(4096/w))),rows=input.still?1:Math.max(1,Math.min(8,Math.floor(4096/h))),args=['-v','error','-y','-threads','2'];
   if(input.still)args.push('-loop','1');args.push('-i',file);
   if(alphaFile){if(alphaInfo.still)args.push('-loop','1');args.push('-i',alphaFile);}
   const trim=`trim=start=${start}${effectiveDuration===null?'':`:duration=${effectiveDuration}`},setpts=PTS-STARTPTS,fps=${fps}`;
-  let filters=`[0:v:0]${trim}${crop?`,crop=${crop}`:''}${blur>0?`,gblur=sigma=${blur}`:''},scale=${w}:${h}:flags=area,setsar=1,format=rgba`;
+  let filters=`[0:v:0]${trim}${crop?`,crop=${crop}`:''},format=rgba${keyBackground?`,colorkey=0x${keyBackground.color.slice(1)}:${keyBackground.similarity}:${keyBackground.blend}`:''}${blur>0?`,gblur=sigma=${blur}`:''},scale=${w}:${h}:flags=area,setsar=1,format=rgba`;
   if(params.monochrome===true)filters+=',colorchannelmixer=rr=.2126:rg=.7152:rb=.0722:gr=.2126:gg=.7152:gb=.0722:br=.2126:bg=.7152:bb=.0722';
   filters+='[image];';let final='image';
   if(alphaFile){filters+=`[1:v:0]${trim}${crop?`,crop=${crop}`:''},scale=${w}:${h}:flags=area,format=gray${params.invertAlpha===true?',negate':''}[mask];[image][mask]alphamerge=shortest=1[rgba];`;final='rgba';}
@@ -86,7 +90,7 @@ async function prepareOne(source,params,format,assetDir){
   if(atlases.length!==Math.ceil(frames/(cols*rows)))throw new Error('footage atlas count does not match decoded frame count');
   let bytes=0;for(const file of atlases)bytes+=(await stat(join(pending,file))).size;if(bytes>MAX_ATLASES)throw new Error('footage atlases exceed256MiB; reduce sourceDuration or resolution');
   const entry=MEDIA_LIBRARY[params.asset];
-  await writeFile(join(pending,'manifest.json'),JSON.stringify({w,h,cols,rows,fps,frames,atlases:atlases.map(f=>relative+'/'+f),sourceWidth:width,sourceHeight:height,sourceStart:start,sourceDuration:effectiveDuration,monochrome:params.monochrome===true,sourceSHA256,alphaSHA256,preparedVersion:2,...(entry?{provenance:{asset:params.asset,creator:entry.creator,acquired:entry.acquired,page:entry.page,license:entry.license,terms:entry.terms,capture:entry.capture}}:{})})+'\n');
+  await writeFile(join(pending,'manifest.json'),JSON.stringify({w,h,cols,rows,fps,frames,atlases:atlases.map(f=>relative+'/'+f),sourceWidth:width,sourceHeight:height,sourceStart:start,sourceDuration:effectiveDuration,sourceKind:input.still?'photograph':'video',monochrome:params.monochrome===true,sourceSHA256,alphaSHA256,backgroundKey:keyBackground,preparedVersion:3,...(entry?{provenance:{asset:params.asset,creator:entry.creator,acquired:entry.acquired,page:entry.page,license:entry.license,terms:entry.terms,capture:entry.capture}}:{})})+'\n');
   try{await rename(pending,dir);}catch(e){if(!await exists(manifest))throw e;await rm(pending,{recursive:true,force:true});}
   return relative+'/manifest.json';
  }catch(e){await rm(pending,{recursive:true,force:true});throw e;}
@@ -97,6 +101,8 @@ export async function prepareFootage(spec,assetDir){
  for(const scene of spec.scenes??[])for(const object of scene.objects??[]){
   if(!isFootageModel(String(object.model)))continue;
   const params=resolveFootageParams(object.model,object.params),source=String(params.file??params.url??'');if(!source)throw new Error('footage requires params.asset, params.file or params.url');
+  const problems=referenceProblems(scene);if(problems.length)throw new Error(problems.join('; '));
+  const kind=referenceKind(object.model);if(kind)params.mediaKind=kind;
   const key=footageVariantKey(source,params);if(!out[key])out[key]=await prepareOne(source,params,spec.format,assetDir);
   const alias='footage:'+source;if(!aliases.has(alias))aliases.set(alias,out[key]);else if(aliases.get(alias)!==out[key])aliases.set(alias,null);
  }

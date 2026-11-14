@@ -1,5 +1,8 @@
+import {referenceKind,referenceDefaults} from './reference-media.ts';
+import {REFERENCE_CATALOG} from './reference-catalog.ts';
 /** Fixed-view subjects. Stock originals use the private download cache; generated human sources include bundled provenance. */
 export const MEDIA_LIBRARY={
+ ...REFERENCE_CATALOG,
 "human-male-clay-motion": {
   "name": "Adult male in neutral clay material, walking, sitting and typing",
   "creator": "Organic Content Engine; image_gen and Kling AI",
@@ -148,14 +151,15 @@ const FOOTAGE_PRESETS:Record<string,keyof typeof MEDIA_LIBRARY>={
  'human-male-footage':'human-male-motion','human-footage':'human-male-motion','man-footage':'human-male-motion',
  'human-female-footage':'human-female-motion','woman-footage':'human-female-motion',
 };
-export function isFootageModel(id:string){const key=normalized(id);return ['footage','video','clip'].includes(key)||Object.hasOwn(FOOTAGE_PRESETS,key);}
+export function isFootageModel(id:string){const key=normalized(id);return !!referenceKind(key)||['footage','video','clip'].includes(key)||Object.hasOwn(FOOTAGE_PRESETS,key);}
 
 /** Shared by preparation and playback so named subjects use exactly the same variant. */
-export function resolveFootageParams(model:string,params:Record<string,unknown>={}){
+export function resolveFootageParams(model:string,params:Record<string,unknown>={}):Record<string,unknown>{
  const key=normalized(model),asset=params.asset??(Object.hasOwn(FOOTAGE_PRESETS,key)?FOOTAGE_PRESETS[key]:undefined);
- if(asset===undefined)return params;
+ if(asset===undefined)return referenceKind(key)?referenceDefaults(params):params;
  if(typeof asset!=='string'||!Object.hasOwn(MEDIA_LIBRARY,asset))throw new Error(`footage: unknown library asset ${String(asset)}`);
  if(params.file!==undefined||params.url!==undefined)throw new Error('footage: choose a library asset or a custom file/URL');
  const entry=MEDIA_LIBRARY[asset as keyof typeof MEDIA_LIBRARY];
- return {...entry.defaults,...params,asset,expectedSHA256:entry.defaults.expectedSHA256};
+ const resolved={...entry.defaults,...params,asset,expectedSHA256:entry.defaults.expectedSHA256};
+ return referenceKind(key)?referenceDefaults(resolved):resolved;
 }

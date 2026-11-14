@@ -1,7 +1,7 @@
 import type {ModelDef} from './types.ts';
 import {person} from './person.ts';
 import {humanMale,humanFemale} from './realistic-humans.ts';
-import {ASSETS,findAsset,assetModel,importedMesh,footage,waveFootage,humanMaleFootage,humanFemaleFootage} from '../assets.ts';
+import {ASSETS,findAsset,assetModel,importedMesh,footage,referenceImage,referenceVideo,waveFootage,humanMaleFootage,humanFemaleFootage} from '../assets.ts';
 import * as tech from './tech.ts';
 import * as basic from './basic.ts';
 import * as biology from './biology.ts';
@@ -19,11 +19,16 @@ import * as computing from './computing.ts';
 import * as reference from './reference.ts';
 import * as shapes from './shapes.ts';
 import * as fluids from './fluids.ts';
+import {waterGlass,opticalRay} from './optics.ts';
+import {glassOptics} from './glass-optics.ts';
 import {fluidCache} from './fluid-cache.ts';
+import {MEDIA_LIBRARY} from '../media-library.ts';
+import {portrait} from './portrait.ts';
+import {riggedHand} from './rigged-hand.ts';
 
 /** Every model module exports ModelDefs; add new modules here. */
 // reference/shapes first so their ids win over older packs
-const MODULES:Record<string,unknown>[]=[{person,humanMale,humanFemale,importedMesh,footage,waveFootage,humanMaleFootage,humanFemaleFootage,fluidCache},reference,fluids,shapes,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
+const MODULES:Record<string,unknown>[]=[{person,humanMale,humanFemale,portrait,riggedHand,importedMesh,footage,referenceImage,referenceVideo,waveFootage,humanMaleFootage,humanFemaleFootage,fluidCache,waterGlass,opticalRay,glassOptics},reference,fluids,shapes,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
 
 export const MODELS:ModelDef[]=MODULES.flatMap(m=>Object.values(m).filter((v):v is ModelDef=>!!v&&typeof v==='object'&&'id' in v&&'build' in v&&typeof (v as ModelDef).build==='function'));
 
@@ -47,7 +52,7 @@ export function describeModels(){
   if(m.controls&&Object.keys(m.controls).length)bits.push(`  controls: ${Object.entries(m.controls).map(([k,v])=>`${k} (${v})`).join('; ')}`);
   if(m.poses?.length)bits.push(`  poses: ${m.poses.join(', ')}`);
   return bits.join('\n');
- }).join('\n');
+ }).join('\n')+'\nREFERENCE SUBJECTS (use reference-image or reference-video with params.asset; retain the captured viewpoint and stated limitations):\n'+Object.entries(MEDIA_LIBRARY).map(([id,entry])=>`- ${id}: ${entry.name}. ${entry.capture} Limits: ${entry.limitations}`).join('\n');
 }
 
 /** Compact list of the real photoscanned / animated assets (ids usable as model ids). */

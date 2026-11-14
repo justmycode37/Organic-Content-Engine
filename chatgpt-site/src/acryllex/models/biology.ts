@@ -36,7 +36,7 @@ function span(m:THREE.Object3D,a:THREE.Vector3,b:THREE.Vector3,tmp=new THREE.Vec
 // ---------------------------------------------------------------- eye
 export const eye=defineModel({
  id:'eye',aliases:['eyeball','human-eye','eyes','vision','sight','retina','pupil','iris'],
- describe:'A big human eyeball: bright sclera with faint veins, textured iris ring, dark round pupil, cornea rim and catch-light, optic nerve trailing behind. `dilate` widens the pupil, `look` turns the eye sideways.',
+ describe:'Isolated anatomy DIAGRAM, not a realistic person or face. For a viewer looking at something show a whole face with reference-image/reference-video, not this detached eyeball. A big human eyeball: bright sclera with faint veins, textured iris ring, dark round pupil, cornea rim and catch-light, optic nerve trailing behind. `dilate` widens the pupil, `look` turns the eye sideways.',
  params:{nerve:'true (default) | false: optic nerve at the back'},
  controls:{dilate:'0 pinpoint pupil .. 1 wide open (default 0.35)',look:'-1 look left .. 0 straight .. 1 look right',lookUp:'-1 down .. 1 up'},
  defaults:{dilate:0.35,look:0,lookUp:0},size:'1 m display (real 2.4 cm)',
@@ -216,11 +216,11 @@ function buildHand(ctx:ModelCtx){
 }
 export const hand=defineModel({
  id:'hand',aliases:['human-hand','palm','fist','fingers','hand-open','high-five','pointing-hand'],
- describe:'A human right hand, palm facing the viewer, five jointed fingers with knuckles and nails, thumb out, wrist. `fist` curls it into a fist, `point` curls all but the index finger (pointing up), `spread` fans the fingers.',
+ describe:'Simplified articulated anatomy DIAGRAM; not suitable for realistic closeups or hero hand contact. Use reference-image asset reference-hand-palm for exact static anatomy, or reference-video for filmed gripping. A human right hand, palm facing the viewer, five jointed fingers with knuckles and nails, thumb out, wrist. `fist` curls it into a fist, `point` curls all but the index finger (pointing up), `spread` fans the fingers.',
  controls:{fist:'0 open .. 1 closed fist',point:'0..1 index finger pointing',spread:'0 together .. 1 fingers spread'},defaults:{fist:0,point:0,spread:0.4},size:'0.2 m',
  build(ctx){
   const h=buildHand(ctx);
-  return {root:h.root,grounded:false,update(c,t){h.update(clamp(c.fist??0),clamp(c.point??0),clamp(c.spread??0.4)+0.04*Math.sin(t*1.3));}};
+  return {root:h.root,grounded:false,update(c,t){h.update(clamp(c.fist??0),clamp(c.point??0),clamp(c.spread??0.4));}};
  },
 });
 

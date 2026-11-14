@@ -1,0 +1,29 @@
+{
+  "right": {
+    "source": "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/right.glb",
+    "page": "https://github.com/immersive-web/webxr-input-profiles/tree/main/packages/assets",
+    "creator": "Immersive Web Input Profiles contributors",
+    "license": "MIT (LICENSE.md alongside files)",
+    "capture": "Authored rigged 3D model; not a claimed photographic scan",
+    "acquired": "2026-11-14",
+    "sha256": "291790c14f7f88a7f9bd35330c47392ed8e8d395ae6728f4bb7089f1bc1f2b96"
+  },
+  "left": {
+    "source": "https://cdn.jsdelivr.net/npm/@webxr-input-profiles/assets@1.0/dist/profiles/generic-hand/left.glb",
+    "page": "https://github.com/immersive-web/webxr-input-profiles/tree/main/packages/assets",
+    "creator": "Immersive Web Input Profiles contributors",
+    "license": "MIT (LICENSE.md alongside files)",
+    "capture": "Authored rigged 3D model; not a claimed photographic scan",
+    "acquired": "2026-11-14",
+    "sha256": "bc67783144944ea1cda54d9247885825ea5fb9d4651469fe7d00be517a5c2b87"
+  },
+  "anatomical-right": {
+    "source": "https://files.innerscene.com/library/posable-anatomical-right-hand-f6098b4f/c28ad5ff8fafd424275f/hand-posable.glb",
+    "page": "https://www.innerscene.com/tools/library/3d-parts/posable-anatomical-right-hand-f6098b4f",
+    "creator": "Innerscene, based on MakeHuman/MPFB CC0 body, rig and skin assets",
+    "license": "CC0 1.0; https://creativecommons.org/publicdomain/zero/1.0/",
+    "capture": "Source-authored anatomical hand, not a photographic scan. 8120 vertices, preserved 16-bone skin. Source bind pose is gently curved. Left hand is its mirrored instance.",
+    "acquired": "2026-11-14",
+    "sha256": "4e9a6219f4147f80fbd29cd4c349e1ae1d59d436d81822a0da8247984cb2d4e9"
+  }
+}

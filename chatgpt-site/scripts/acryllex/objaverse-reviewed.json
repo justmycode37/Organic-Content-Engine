@@ -1,0 +1,139 @@
+{
+  "sources": [
+    {
+      "uid": "c5322a46a62644cebd41527859260b65",
+      "name": "Free 018 Kana Music",
+      "author": "ddd",
+      "page": "https://sketchfab.com/3d-models/c5322a46a62644cebd41527859260b65",
+      "sourceURL": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-124/c5322a46a62644cebd41527859260b65.glb",
+      "license": "CC-BY-4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+      "sha256": "b08e766cf8f1d20a7db0267908643f597a83aebe340d4c69b96675d63ff79fcd",
+      "acquiredAt": "2026-11-14T18:30:37.380Z",
+      "captureOrigin": "unverified",
+      "inspection": {
+        "meshes": 1,
+        "vertices": 10753,
+        "triangles": 19422,
+        "skins": [
+          {
+            "name": "",
+            "joints": 66
+          }
+        ],
+        "animations": [
+          {
+            "name": "mixamo.com",
+            "channels": 70,
+            "paths": [
+              "translation",
+              "rotation"
+            ]
+          }
+        ],
+        "morphTargets": [],
+        "materials": [
+          "018-01"
+        ],
+        "extensions": []
+      },
+      "kind": "human",
+      "params": {
+        "objaverse": "c5322a46a62644cebd41527859260b65",
+        "expectedSHA256": "b08e766cf8f1d20a7db0267908643f597a83aebe340d4c69b96675d63ff79fcd",
+        "height": 1.65,
+        "clips": "all"
+      },
+      "review": {
+        "status": "evaluation; no user approval inferred",
+        "scope": "Supplied body animation only; no facial targets.",
+        "comparison": "Source geometry checked against the creator thumbnail; rendered through the shared reference-recording profile."
+      }
+    },
+    {
+      "uid": "97208693ce4b43729cdcc35621c51bc0",
+      "name": "Realistic Left Hand",
+      "author": "Ian Christopher",
+      "page": "https://sketchfab.com/3d-models/97208693ce4b43729cdcc35621c51bc0",
+      "sourceURL": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-152/97208693ce4b43729cdcc35621c51bc0.glb",
+      "license": "CC-BY-4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+      "sha256": "d15ce92b0f0d47fafbe1942ccada8e7eb844354f3df5dc447661930dff9053ba",
+      "acquiredAt": "2026-11-14T18:26:02.205Z",
+      "captureOrigin": "unverified",
+      "inspection": {
+        "meshes": 3,
+        "vertices": 147331,
+        "triangles": 237222,
+        "skins": [],
+        "animations": [],
+        "morphTargets": [],
+        "materials": [
+          "Material.001"
+        ],
+        "extensions": []
+      },
+      "kind": "hand",
+      "params": {
+        "objaverse": "97208693ce4b43729cdcc35621c51bc0",
+        "expectedSHA256": "d15ce92b0f0d47fafbe1942ccada8e7eb844354f3df5dc447661930dff9053ba",
+        "height": 0.21,
+        "clips": [],
+        "sourceRotation": [
+          90,
+          0,
+          0
+        ]
+      },
+      "review": {
+        "status": "evaluation; no user approval inferred",
+        "scope": "Static source sculpt; no finger rig or grasp animation. Accepted hand-mesh is unchanged.",
+        "comparison": "Source geometry checked against the creator thumbnail; rendered through the shared reference-recording profile."
+      }
+    },
+    {
+      "uid": "27f75fa94c384000bb6a79a3000f8e80",
+      "name": "Angelica",
+      "author": "NikZava284 \u2713",
+      "page": "https://sketchfab.com/3d-models/27f75fa94c384000bb6a79a3000f8e80",
+      "sourceURL": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-064/27f75fa94c384000bb6a79a3000f8e80.glb",
+      "license": "CC-BY-4.0",
+      "licenseURL": "https://creativecommons.org/licenses/by/4.0/",
+      "sha256": "16c8103c509469606fcc1529f417cd1318bfb6644a9c2e8f915feca4f1aa1190",
+      "acquiredAt": "2026-11-14T18:24:35.942Z",
+      "captureOrigin": "unverified",
+      "inspection": {
+        "meshes": 7,
+        "vertices": 93770,
+        "triangles": 143680,
+        "skins": [],
+        "animations": [],
+        "morphTargets": [],
+        "materials": [
+          "Mouth",
+          "Hair",
+          "Head",
+          "material",
+          "EyeScleraReflect",
+          "Eyelashes",
+          "MeniscusEye"
+        ],
+        "extensions": [
+          "KHR_materials_pbrSpecularGlossiness"
+        ]
+      },
+      "kind": "head",
+      "params": {
+        "objaverse": "27f75fa94c384000bb6a79a3000f8e80",
+        "expectedSHA256": "16c8103c509469606fcc1529f417cd1318bfb6644a9c2e8f915feca4f1aa1190",
+        "height": 0.42,
+        "clips": []
+      },
+      "review": {
+        "status": "evaluation; no user approval inferred",
+        "scope": "Static source head; no blink, smile or speech rig. Appearance remains under review.",
+        "comparison": "Source geometry checked against the creator thumbnail; rendered through the shared reference-recording profile."
+      }
+    }
+  ]
+}

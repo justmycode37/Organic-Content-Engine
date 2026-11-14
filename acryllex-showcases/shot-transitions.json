@@ -1,0 +1,269 @@
+{
+ "authoredProblems": [
+  "scene 2: opens only 23° and 1.1x away from the previous shot of the same subject (a jump cut); change the angle by at least 30° or the shot size by at least 1.3x.",
+  "scene 2: flash transition on a camera change of the same subject is gratuitous; use a clean cut (or wipe/black for a real time jump).",
+  "scene 2 camera event at \"1.4\": swings 70° over 2s like a camera morph; make a new angle a hard cut (easing \"hold\", dur 0.04).",
+  "scene 3 camera event at \"1.5\": 0° / 1.05x is a hesitant nudge; either cut to a clearly different shot (>= 30° or >= 1.3x) or hold the shot."
+ ],
+ "plan": [
+  "scene 2: jump cut (high 0.68) → three-quarter-left fill 1.05 focus mug+bottle (66°, 1.69x)",
+  "scene 2: flash → cut on a same-subject viewpoint change",
+  "scene 2 camera event at \"1.4\": 122° swing over 2s → hard cut",
+  "scene 3 camera event at \"1.5\": dropped hesitant nudge (0°, 1.05x)"
+ ],
+ "remaining": [],
+ "cuts": "2:cut new-angle 66° 1.69x, 2@1.4s cut new-angle; 3:cut new-angle 86° 1x; 4:cut new-angle 79° 1.45x",
+ "spec": {
+  "version": 1,
+  "series": "ACRYLLEX",
+  "title": "Shot transitions",
+  "style": "reference-recording",
+  "captions": false,
+  "scenes": [
+   {
+    "say": "A glass bottle stands on the table.",
+    "duration": 2.6,
+    "camera": {
+     "angle": "three-quarter",
+     "fill": 0.62
+    },
+    "objects": [
+     {
+      "id": "bottle",
+      "model": "bottle",
+      "enter": "none",
+      "idle": "none"
+     }
+    ],
+    "raster": {
+     "activity": 0.06,
+     "activityRate": 12,
+     "cell": 3.4515463917525775,
+     "dotRoundness": 1,
+     "dotSoftness": 0.4639175257731959
+    },
+    "light": {
+     "dir": [
+      1.5,
+      1.1,
+      1.2
+     ],
+     "key": 0.65,
+     "fill": 0.08,
+     "ambient": 0.065,
+     "rim": 0.35,
+     "contrast": 0.8,
+     "exposure": 0.68,
+     "blackPoint": 0.025,
+     "whitePoint": 0.9,
+     "inkLo": 0.16,
+     "gamma": 0.8,
+     "softness": 0.8814432989690721
+    }
+   },
+   {
+    "say": "Seen from a little higher.",
+    "duration": 3.2,
+    "transition": "cut",
+    "camera": {
+     "angle": "three-quarter-left",
+     "fill": 1.05,
+     "move": "push",
+     "amount": 0.5,
+     "focus": [
+      "mug",
+      "bottle"
+     ]
+    },
+    "objects": [
+     {
+      "id": "bottle",
+      "model": "bottle",
+      "enter": "none",
+      "idle": "none"
+     },
+     {
+      "id": "mug",
+      "model": "mug",
+      "enter": "none",
+      "idle": "none",
+      "near": "bottle",
+      "side": "right"
+     }
+    ],
+    "events": [
+     {
+      "at": 1.4,
+      "dur": 0.04,
+      "camera": {
+       "angle": "side",
+       "fill": 0.62
+      },
+      "easing": "hold"
+     }
+    ],
+    "raster": {
+     "activity": 0.06,
+     "activityRate": 12,
+     "cell": 3.4515463917525775,
+     "dotRoundness": 1,
+     "dotSoftness": 0.4639175257731959
+    },
+    "light": {
+     "dir": [
+      1.5,
+      1.1,
+      1.2
+     ],
+     "key": 0.65,
+     "fill": 0.08,
+     "ambient": 0.065,
+     "rim": 0.35,
+     "contrast": 0.8,
+     "exposure": 0.68,
+     "blackPoint": 0.025,
+     "whitePoint": 0.9,
+     "inkLo": 0.16,
+     "gamma": 0.8,
+     "softness": 0.8814432989690721
+    }
+   },
+   {
+    "say": "From above it is a circle.",
+    "duration": 3,
+    "camera": {
+     "angle": "top",
+     "fill": 0.62
+    },
+    "objects": [
+     {
+      "id": "bottle",
+      "model": "bottle",
+      "enter": "none",
+      "idle": "none"
+     },
+     {
+      "id": "mug",
+      "model": "mug",
+      "enter": "none",
+      "idle": "none",
+      "near": "bottle",
+      "side": "right"
+     }
+    ],
+    "raster": {
+     "activity": 0.06,
+     "activityRate": 12,
+     "cell": 3.4515463917525775,
+     "dotRoundness": 1,
+     "dotSoftness": 0.4639175257731959
+    },
+    "light": {
+     "dir": [
+      1.5,
+      1.1,
+      1.2
+     ],
+     "key": 0.65,
+     "fill": 0.08,
+     "ambient": 0.065,
+     "rim": 0.35,
+     "contrast": 0.8,
+     "exposure": 0.68,
+     "blackPoint": 0.025,
+     "whitePoint": 0.9,
+     "inkLo": 0.16,
+     "gamma": 0.8,
+     "softness": 0.8814432989690721
+    }
+   },
+   {
+    "say": "Down low it towers like a monument.",
+    "duration": 2.8,
+    "camera": {
+     "angle": "low",
+     "fill": 0.9,
+     "focus": "bottle"
+    },
+    "objects": [
+     {
+      "id": "bottle",
+      "model": "bottle",
+      "enter": "none",
+      "idle": "none"
+     },
+     {
+      "id": "mug",
+      "model": "mug",
+      "enter": "none",
+      "idle": "none",
+      "near": "bottle",
+      "side": "right"
+     }
+    ],
+    "raster": {
+     "activity": 0.06,
+     "activityRate": 12,
+     "cell": 3.4515463917525775,
+     "dotRoundness": 1,
+     "dotSoftness": 0.4639175257731959
+    },
+    "light": {
+     "dir": [
+      1.5,
+      1.1,
+      1.2
+     ],
+     "key": 0.65,
+     "fill": 0.08,
+     "ambient": 0.065,
+     "rim": 0.35,
+     "contrast": 0.8,
+     "exposure": 0.68,
+     "blackPoint": 0.025,
+     "whitePoint": 0.9,
+     "inkLo": 0.16,
+     "gamma": 0.8,
+     "softness": 0.8814432989690721
+    }
+   }
+  ],
+  "format": {
+   "width": 1080,
+   "cell": 3.4515463917525775
+  },
+  "look": {
+   "inkMode": "fixed",
+   "palette": {
+    "blue": "#382ef5",
+    "red": "#d00a3e",
+    "azure": "#1e56c9",
+    "white": "#c5c5c5"
+   },
+   "textColor": "#c5c5c5",
+   "dotRoundness": 1,
+   "dotSoftness": 0.4639175257731959,
+   "noise": 0.015,
+   "fuzz": 0,
+   "blackPoint": 0.025,
+   "whitePoint": 0.9,
+   "inkLo": 0.16,
+   "gamma": 1,
+   "aoMethod": "legacy",
+   "contrast": 0.8,
+   "shadows": 1,
+   "ao": 1,
+   "gap": 0,
+   "ink": 1,
+   "key": 0.65,
+   "fill": 0.08,
+   "ambient": 0.065,
+   "rim": 0.35,
+   "dir": [
+    1.5,
+    1.1,
+    1.2
+   ]
+  }
+ }
+}

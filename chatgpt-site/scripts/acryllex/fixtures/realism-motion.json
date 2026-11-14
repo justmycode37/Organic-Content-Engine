@@ -1,0 +1,215 @@
+{
+  "version": 1,
+  "series": "ACRYLLEX",
+  "title": "Library realism and camera trials",
+  "captions": false,
+  "format": {
+    "width": 1080,
+    "height": 1920,
+    "cell": 3.4515463917525775
+  },
+  "look": {},
+  "scenes": [
+    {
+      "say": "Both spoons rest on the table.",
+      "duration": 2,
+      "objects": [
+        {
+          "id": "wood",
+          "model": "wooden_spoon",
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue",
+      "camera": {
+        "angle": "three-quarter",
+        "fill": 0.86,
+        "move": "static"
+      }
+    },
+    {
+      "say": "Look closely at the wood grain.",
+      "duration": 2,
+      "objects": [
+        {
+          "id": "wood",
+          "model": "wooden_spoon",
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue",
+      "camera": {
+        "angle": "three-quarter-left",
+        "fill": 1.05,
+        "move": "push",
+        "amount": 0.5,
+        "focus": "wood"
+      }
+    },
+    {
+      "say": "The round bowl curves inwards at the top.",
+      "duration": 2,
+      "objects": [
+        {
+          "id": "wood",
+          "model": "wooden_spoon",
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue",
+      "camera": {
+        "angle": "three-quarter",
+        "fill": 0.86,
+        "move": "static"
+      }
+    },
+    {
+      "say": "Water reaches the surface inside this glass.",
+      "duration": 3,
+      "objects": [
+        {
+          "id": "glass",
+          "model": "water-glass",
+          "enter": "cut",
+          "idle": "none",
+          "controls": {
+            "fill": 0.2
+          }
+        }
+      ],
+      "events": [
+        {
+          "at": 0.4,
+          "dur": 2,
+          "target": "glass",
+          "set": {
+            "fill": 0.75
+          }
+        }
+      ],
+      "hue": "blue",
+      "camera": {
+        "angle": "side",
+        "fill": 1,
+        "focus": "glass"
+      }
+    },
+    {
+      "say": "Look down at the straw through the water.",
+      "duration": 2.5,
+      "camera": {
+        "pos": [
+          0,
+          0.6,
+          0.2
+        ],
+        "look": [
+          0,
+          0.1,
+          0
+        ],
+        "move": "static"
+      },
+      "objects": [
+        {
+          "id": "glass",
+          "model": "water-glass",
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue"
+    },
+    {
+      "say": "A real hand keeps contact while stirring.",
+      "duration": 2.5,
+      "camera": {
+        "angle": "front",
+        "move": "static",
+        "fill": 0.94
+      },
+      "objects": [
+        {
+          "id": "hand",
+          "model": "reference-video",
+          "params": {
+            "asset": "reference-hand-contact",
+            "height": 2
+          },
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue"
+    },
+    {
+      "say": "A whole face blinks and smiles naturally.",
+      "duration": 3,
+      "camera": {
+        "angle": "front",
+        "move": "static",
+        "fill": 0.94
+      },
+      "objects": [
+        {
+          "id": "face",
+          "model": "reference-video",
+          "params": {
+            "asset": "reference-face-motion",
+            "height": 2
+          },
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue"
+    },
+    {
+      "say": "Light changes direction at a water surface.",
+      "duration": 2,
+      "objects": [
+        {
+          "id": "ray",
+          "model": "optical-ray",
+          "params": {
+            "from": [
+              -0.15,
+              0.2,
+              0
+            ],
+            "direction": [
+              0.5,
+              -0.8,
+              0
+            ],
+            "planePoint": [
+              0,
+              0,
+              0
+            ],
+            "normal": [
+              0,
+              1,
+              0
+            ],
+            "n1": 1.0003,
+            "n2": 1.333,
+            "width": 0.0015,
+            "showNormal": true
+          },
+          "enter": "cut",
+          "idle": "none"
+        }
+      ],
+      "hue": "blue",
+      "camera": {
+        "angle": "high",
+        "fill": 0.7
+      }
+    }
+  ],
+  "style": "reference-recording"
+}

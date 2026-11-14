@@ -37,7 +37,7 @@ export function autoCues(spec:AcryllexSpec):AutoCue[]{
    if(e.hide&&EXIT_SFX[e.hide]){const [kind,gain]=EXIT_SFX[e.hide]!;out.push({at:t,kind,gain,why:`hide ${e.target}`});}
    if(e.fx&&FX_SFX[e.fx]){const [kind,gain]=FX_SFX[e.fx]!;const n=e.fx==='heartbeat'?Math.max(1,Math.round(Number(e.fxCount)||1)):1,len=Number(e.dur)>0?Number(e.dur):0.9;for(let r=0;r<n;r++)out.push({at:t+r*len,kind,gain,why:`${e.target} ${e.fx}`});}
    if(e.morph){const style=e.morphStyle??'particles',len=Number(e.dur)||1;const kind=({blob:'ripple',flip:'swish',fade:'dissolve'} as Record<string,string>)[style]??'assemble';out.push({at:t,kind,gain:0.8,why:`${e.target} morphs into ${e.morph} (${style})`});}
-   if(e.camera)out.push({at:t,kind:'whoosh',gain:0.3,why:'camera move'});
+   if(e.camera)out.push(e.easing==='hold'&&(Number(e.dur)||0.9)<=0.1?{at:t+(Number(e.dur)||0),kind:'cut',gain:0.6,why:'in-scene camera cut'}:{at:t,kind:'whoosh',gain:0.3,why:'camera move'});
   }
   for(const tx of s.text??[]){
    const t=at(tx.at,0.1);const chars=tx.text.length;

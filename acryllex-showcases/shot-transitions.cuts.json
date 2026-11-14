@@ -1,0 +1,46 @@
+{
+ "frames": 349,
+ "expected": [
+  {
+   "t": 2.6,
+   "why": "scene 2 cut",
+   "frame": 78,
+   "measured": {
+    "frame": 78,
+    "t": 2.6,
+    "lumaDiff": 8.4
+   }
+  },
+  {
+   "t": 4.04,
+   "why": "scene 2 in-scene cut to side",
+   "frame": 122,
+   "measured": {
+    "frame": 122,
+    "t": 4.067,
+    "lumaDiff": 9.4
+   }
+  },
+  {
+   "t": 5.800000000000001,
+   "why": "scene 3 cut",
+   "frame": 175,
+   "measured": {
+    "frame": 175,
+    "t": 5.833,
+    "lumaDiff": 4.2
+   }
+  },
+  {
+   "t": 8.8,
+   "why": "scene 4 cut",
+   "frame": 264,
+   "measured": {
+    "frame": 264,
+    "t": 8.8,
+    "lumaDiff": 6.3
+   }
+  }
+ ],
+ "unexpected": []
+}

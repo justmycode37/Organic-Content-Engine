@@ -7,7 +7,7 @@ import {listAccounts} from './accounts.ts';
 const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
 /** What a published or finished reel covered, so the next one can avoid its concept, item and music. */
-export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),idea=parse(row.provenance).idea??{};
+export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});
  return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
 export const runtime=(env:Env)=>Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
 export async function tickAccounts(c:Container,env:Env){

@@ -31,7 +31,7 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
  if(!key)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
  async function ask(model:string,input:string,max:number,format?:{name:string;schema:z.ZodType}){
- const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,reasoning:{effort:model==='gpt-6-luna'?'low':'medium'},input,max_output_tokens:max,store:false,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})}),signal:AbortSignal.timeout(120000)});
+ const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},body:JSON.stringify({model,reasoning:{effort:'xhigh'},input,max_output_tokens:max,store:false,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})}),signal:AbortSignal.timeout(120000)});
  if(!response.ok)throw new AppError(502,'model_failed',`${model} request failed (${response.status}); check model access and API billing`);
  const r=await response.json() as {usage?:unknown;status?:string;output?:{content?:{type:string;text?:string}[]}[]};
  onUsage?.({model,usage:r.usage,status:r.status,output:r.output});
@@ -58,7 +58,7 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  // 2. Plan and specialists.
  const plan=await ask('gpt-6.1-sol',`${brand} Plan this reel. Give a concrete scene and narration brief for twelve specialists.`,5000);
  const contributions:string[]=new Array(ROLES.length);let next=0;
- const settled=await Promise.allSettled(Array.from({length:4},async()=>{while(next<ROLES.length){const i=next++;contributions[i]=`${ROLES[i]}: ${await ask('gpt-6-luna',`${brand}\nProducer brief: ${plan}\nYour task: ${ROLES[i]}. Return at most 180 words of precise production instructions, no preamble.`,8000)}`;}}));
+ const settled=await Promise.allSettled(Array.from({length:4},async()=>{while(next<ROLES.length){const i=next++;contributions[i]=`${ROLES[i]}: ${await ask('gpt-6.1-sol',`${brand}\nProducer brief: ${plan}\nYour task: ${ROLES[i]}. Return at most 180 words of precise production instructions, no preamble.`,8000)}`;}}));
  const failure=settled.find(x=>x.status==='rejected');if(failure?.status==='rejected')throw failure.reason;
  // 3. Assembly, with one repair for schema or story problems.
  const schema=JSON.stringify(z.toJSONSchema(reelSpecSchema));
@@ -68,5 +68,5 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  let result=check(output);
  for(let repair=0;repair<2&&!result.spec;repair++){output=await ask('gpt-6.1-sol',`Repair this reel JSON. Keep its story, hero item (${idea.heroItem}) and numerically correct hypothetical intact. Problems: ${JSON.stringify(result.issues)}\nJSON: ${output}\nSchema: ${schema}`,10000,{name:'hedgy_reel',schema:reelSpecSchema});result=check(output);}
  if(!result.spec)throw new AppError(502,'invalid_reel',`Producer returned an invalid reel specification: ${result.issues?.slice(0,3).join('; ')}`);
- return {spec:result.spec,provenance:{orchestrator:'gpt-6.1-sol',effort:'medium',specialist:'gpt-6-luna',specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:result.spec.title},plan,contributions}};
+ return {spec:result.spec,provenance:{orchestrator:'gpt-6.1-sol',effort:'xhigh',specialist:'gpt-6.1-sol',specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:result.spec.title},plan,contributions}};
 }

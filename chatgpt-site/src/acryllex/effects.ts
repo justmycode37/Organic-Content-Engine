@@ -140,10 +140,10 @@ export function patchMaterial(mat:THREE.Material,u:FxUniforms,owner:object):THRE
    .replace('#include <clipping_planes_fragment>','#include <clipping_planes_fragment>\n'+FRAG_REVEAL)
    .replace('#include <normal_fragment_maps>','#include <normal_fragment_maps>\n'+FRAG_NORMAL)
    .replace('#include <emissivemap_fragment>','#include <emissivemap_fragment>\n'+FRAG_GLOW)
-   .replace('#include <opaque_fragment>','outgoingLight*=uFxDim*(1.-fxWaveDim)*(1.-fxDark);\n#include <opaque_fragment>');
+   .replace('#include <opaque_fragment>','outgoingLight*=uFxDim*(1.-fxWaveDim)*(1.-fxDark);\n#include <opaque_fragment>'+(m.userData.screenAO===false?'\n gl_FragColor.a=2.;':''));
  };
  const key=m.customProgramCacheKey.bind(m);
- m.customProgramCacheKey=()=>key()+'|acx-fx7';
+ m.customProgramCacheKey=()=>key()+'|acx-fx8'+(m.userData.screenAO===false?'-no-screen-ao':'');
  m.needsUpdate=true;
  return m;
 }

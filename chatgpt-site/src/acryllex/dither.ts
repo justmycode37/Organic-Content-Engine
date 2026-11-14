@@ -26,9 +26,12 @@ float referenceThreshold(float t,float w,float reference){
  * Geometry, source sampling and ink always keep their original coordinates.
  */
 export const ditherActivityGLSL=`
-vec2 activeThresholdCell(vec2 c,float amount,float epoch){
+vec2 activeThresholdCell(vec2 c,float amount,float epoch,float phase){
  if(amount<=0.)return c;
  vec2 tile=floor(c*.5),local=c-tile*2.;
+ // Each tile changes at its own phase. This avoids a whole-image tick/flicker,
+ // while a pair still shares one epoch and exactly preserves its threshold ranks.
+ epoch+=floor(phase+hash(tile+vec2(19.43,53.17)));
  vec2 seed=tile+vec2(epoch*.731,epoch*.193);
  float direction=floor(hash(seed+vec2(17.31,43.71))*3.);
  vec2 partner=direction<1.?vec2(1.-local.x,local.y):direction<2.?vec2(local.x,1.-local.y):1.-local;

@@ -8,8 +8,10 @@ import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
 import {ditherThresholdGLSL,ditherActivityGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
+import {SceneTransmissionCapture} from './scene-transmission.ts';
 import {sampleMotionTime} from './motion-clock.ts';
-import {isFootageModel} from './media-library.ts';
+import {referenceProblems,referenceKind} from './reference-media.ts';
+import {applyStyleProfile} from './style-profile.ts';
 import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,DENSE_FX,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
@@ -29,9 +31,9 @@ const hueColor=(h?:string,palette:Partial<Record<Hue,string>>={})=>{if(!h)return
 const POST_VERT=`varying vec2 vUv;void main(){vUv=uv;gl_Position=vec4(position.xy,0.,1.);}`;
 const POST_FRAG=(aoMethod:'plane'|'legacy')=>`
 precision highp float;
-uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
+uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float haloTime;uniform float glowActive;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
 varying vec2 vUv;
-uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;
+uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;uniform float activityPhase;
 float bayer8(vec2 p){ivec2 i=ivec2(mod(p,8.));int x=i.x,y=i.y,xy=x^y;int v=((xy&1)<<5)|((x&1)<<4)|((xy&2)<<2)|((x&2)<<1)|((xy&4)>>1)|((x&4)>>2);return (float(v)+0.5)/64.;}
 float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 ${ditherThresholdGLSL}
@@ -43,14 +45,16 @@ vec4 dotColor(sampler2D t,vec2 c,vec2 cuv,vec2 local,bool useAO){
  vec2 tx=1./(res/cell*3.);vec4 s=vec4(0.);for(int i=-1;i<=1;i++)for(int j=-1;j<=1;j++)s+=textureLod(t,cuv+vec2(float(i),float(j))*tx,0.);s/=9.;
  float b=mx(s.rgb);
  vec3 hue=fixedInk>0?inkColor:s.rgb/max(b,1e-4);
- if(useAO&&b>0.012&&b<1.25)b*=ambientOcclusion(cuv);
+ // Alpha above one marks an optical surface whose colour comes from another
+ // path. Its first-interface depth cannot describe an opaque AO receiver.
+ if(useAO&&s.a<=1.001&&b>0.012&&b<1.25)b*=ambientOcclusion(cuv);
  // Map lit intensity to black/white before deriving dot coverage and ink brightness.
  b=max(0.,(b-blackPoint)/max(.0001,whitePoint-blackPoint));
  // 1-bit ordered dither on full cells: bright areas merge into solid colour, shadows become sparse Bayer grids
  float dens=pow(clamp(b*boost*expo,0.,1.),gam);
  // tone contrast around mid grey: lit faces fill in, shadow faces thin out (reference look)
  dens=clamp((dens-0.5)*contrast+0.5,0.,1.)*step(0.012,b);
- vec2 thresholdCell=activeThresholdCell(c,activity,activityEpoch);
+ vec2 thresholdCell=activeThresholdCell(c,activity,activityEpoch,activityPhase);
  float thr=mix(bayer8(thresholdCell),hash(thresholdCell*0.37+11.),noiseAmt);
  if(noiseReference>=0.)thr=referenceThreshold(thr,noiseAmt,noiseReference);
  vec2 dc=abs(local-cell*0.5);
@@ -71,10 +75,10 @@ vec4 dotColor(sampler2D t,vec2 c,vec2 cuv,vec2 local,bool useAO){
  // halo around self-lit things
  vec4 g1=textureLod(t,cuv,4.),g2=textureLod(t,cuv,5.8);
  float glow=max(clamp((mx(g1.rgb)-0.9)/2.,0.,1.),clamp((mx(g2.rgb)-0.35)/1.4,0.,1.)*0.75);
- if(glow>0.){float h=hash(c+floor(time*9.)*0.37);if(h<glow*0.8){vec4 g=mx(g1.rgb)>mx(g2.rgb)?g1:g2;return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink,1.);}}
+ if(glowActive>.5&&glow>0.){float h=hash(c+floor(haloTime*9.)*0.37);if(h<glow*0.8){vec4 g=mx(g1.rgb)>mx(g2.rgb)?g1:g2;return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink,1.);}}
  // sparse point-cloud fuzz around silhouettes
  float a=textureLod(t,cuv,2.8).a;
- if(s.a<0.5&&a>0.03){float h=hash(c*1.31+floor(time*7.)*0.71);if(h<a*fuzz){vec4 g=textureLod(t,cuv,2.8);return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink*(fixedInk>0?1.:0.8),1.);}}
+ if(s.a<0.5&&a>0.03){float h=hash(c*1.31+floor(haloTime*7.)*0.71);if(h<a*fuzz){vec4 g=textureLod(t,cuv,2.8);return vec4((fixedInk>0?inkColor:g.rgb/max(mx(g.rgb),1e-4))*ink*(fixedInk>0?1.:0.8),1.);}}
  return vec4(0.);
 }
 /** Through-black masks (1 fade, 4 blink): maskK is the visible share. */
@@ -148,9 +152,10 @@ class SceneRuntime {
  objs:Obj[]=[];byId=new Map<string,Obj>();dur:number;hue:THREE.Color;
  cam:{dir:THREE.Vector3;target:THREE.Vector3;dist:number;screenY:number;move:string;amount:number;fov?:number;follow?:string};
  camEvents:(Track&{target:THREE.Vector3;dist:number;dir:THREE.Vector3;screenY:number;fov?:number})[]=[];
- frameWidth=4;pulse=0;
+ frameWidth=4;
  key!:THREE.DirectionalLight;kdir=new THREE.Vector3(1,1,1);center=new THREE.Vector3();radius=2;
  pointLights:{light:THREE.PointLight;intensity:number;active?:[number,number];fade:number}[]=[];
+ private transmission:SceneTransmissionCapture|null=null;
  constructor(public spec:Scene,public index:number,private fixedInk=false,private palette:Partial<Record<Hue,string>>={}){
   this.dur=sceneDuration(spec);this.hue=hueColor(spec.hue??'blue',this.palette);
   this.scene.background=null;
@@ -162,12 +167,12 @@ class SceneRuntime {
   this.scene.add(key);this.scene.add(key.target);this.key=key;
   key.castShadow=LOOK.shadows>0;key.shadow.mapSize.set(2048,2048);key.shadow.bias=-0.0015;
   const camTarget=new THREE.Object3D();camTarget.position.set(0,0,-10);this.camera.add(camTarget);
-  const fill=new THREE.DirectionalLight(0xffffff,(L.fill??LOOK.fill)*PI_L);fill.position.set(-(kd[0]??1.2),0.2,0.8);fill.target=camTarget;this.camera.add(fill);
-  const rim=new THREE.DirectionalLight(0xffffff,(L.rim??LOOK.rim)*PI_L);rim.position.set(0.6,0.9,-1.6);rim.target=camTarget;this.camera.add(rim);
+  const fill=new THREE.DirectionalLight(0xffffff,(L.fill??LOOK.fill)*PI_L);fill.position.set(-(kd[0]??1.2),0.2,0.8);fill.target=camTarget;fill.userData.acryllexReflectionRole='fill';this.camera.add(fill);
+  const rim=new THREE.DirectionalLight(0xffffff,(L.rim??LOOK.rim)*PI_L);rim.position.set(0.6,0.9,-1.6);rim.target=camTarget;rim.userData.acryllexReflectionRole='rear';this.camera.add(rim);
   this.scene.add(new THREE.AmbientLight(0xffffff,(L.ambient??LOOK.ambient)*PI_L));
   for(const p of L.points??[]){const light=new THREE.PointLight(0xffffff,p.intensity*PI_L,p.distance??0,p.decay??2);light.position.fromArray(p.pos);this.scene.add(light);this.pointLights.push({light,intensity:light.intensity,active:p.active,fade:p.fade??.1});}
   this.build();
-  this.cam={dir:new THREE.Vector3(0,0,1),target:new THREE.Vector3(),dist:5,screenY:0.5,move:'drift',amount:1};
+  this.cam={dir:new THREE.Vector3(0,0,1),target:new THREE.Vector3(),dist:5,screenY:0.5,move:'static',amount:1};
   this.frameCamera();
   this.compileEvents();
   // scene bounds for the shadow camera; every mesh casts and receives shadows
@@ -182,18 +187,16 @@ class SceneRuntime {
   const list=(this.spec.objects??[]).slice(0,12);
   for(const o of list){
    if(!o||typeof o.id!=='string')continue;
-   const def=findModel(String(o.model))??findModel('compose')!;
+   const def=findModel(String(o.model));
+   if(!def)throw new Error(`Unknown model ${o.model}; provide a verified mesh or reference source`);
    const hue=hueColor(o.hue??this.spec.hue??'blue',this.palette);
-   const recorded=o.params?.recordedMotion,recordedRequired=Object.hasOwn(def.params??{},'recordedMotion')&&recorded!==undefined&&recorded!==null&&recorded!==false;
-   const accent=o.params?.headAccentLight,accentOff=accent==null||accent===false||accent===0||(typeof accent==='object'&&!Array.isArray(accent)&&(accent as {intensity?:unknown}).intensity===0),accentRequired=Object.hasOwn(def.params??{},'headAccentLight')&&!accentOff;
-   const bodySourceRequired=Object.hasOwn(def.params??{},'bodySource')&&o.params?.bodySource!==undefined;
-   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache'||recordedRequired||accentRequired||bodySourceRequired)throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
+   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){throw new Error(`model ${o.model} (${o.id}) failed: ${err instanceof Error?err.message:String(err)}; supply a valid source instead of a placeholder`,{cause:err});}
    const inner=new THREE.Group(),outer=new THREE.Group(),shape=new THREE.Group();shape.add(built.root);inner.add(shape);outer.add(inner);this.scene.add(outer);
    const ctrl0:Record<string,number>={...(def.defaults??{}),...(o.controls??{})};
    if(o.stretch)shape.scale.fromArray(o.stretch);
    const posable=!!def.poses?.length;
    const pose:PoseState={from:o.pose??'stand',to:o.pose??'stand',k:1,time:0,travel:0,speed:0};
-   built.root.traverse(c=>{const m=(c as THREE.Mesh).material as THREE.Material|undefined;if(m&&!Array.isArray(m))m.userData.baseOpacity=m.opacity;});
+   built.root.traverse(c=>{const material=(c as THREE.Mesh).material;if(material)for(const m of Array.isArray(material)?material:[material])m.userData.baseOpacity=m.opacity;});
    built.update?.(ctrl0,0,pose);
    outer.updateMatrixWorld(true);
    const box=new THREE.Box3().setFromObject(built.root,true);if(box.isEmpty())box.set(new THREE.Vector3(-0.5,0,-0.5),new THREE.Vector3(0.5,1,0.5));
@@ -206,7 +209,7 @@ class SceneRuntime {
    // Foam layers and other model parts may share a material. Install each object's shader hooks once.
    const patch=(material:THREE.Material)=>{let result=patched.get(material);if(!result){result=patchMaterial(material,fxU,owner);patched.set(material,result);}return result;};
    for(const m of meshes){if(Array.isArray(m.material))m.material=m.material.map(patch);else m.material=patch(m.material);}
-   const mats=[...new Set(meshes.map(m=>m.material as THREE.MeshStandardMaterial))];
+   const mats=[...new Set(meshes.flatMap(m=>Array.isArray(m.material)?m.material:[m.material]))] as THREE.MeshStandardMaterial[];
    const obj:Obj={spec:o,def,built,outer,inner,meshes,mats,baseColors:mats.map(m=>m.color.clone()),size,center,grounded,base:new THREE.Vector3(),baseRot:new THREE.Euler(...((o.rot??[0,0,0]).map(v=>deg(Number(v)||0)) as [number,number,number])),baseScale:clamp(Number(o.scale)||1,0.01,500),moves:[],turns:[],scales:[],controls:new Map(),ctrl0,hues:[],fx:[],poses:[],yaw:[],posable,clip:new THREE.Plane(new THREE.Vector3(0,-1,0),0),effects:[],fxU};
    this.objs.push(obj);this.byId.set(o.id,obj);
   }
@@ -271,7 +274,8 @@ class SceneRuntime {
   for(const o of ids){this.scene.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(o.outer,true);if(!b.isEmpty())box.union(b);}
   if(box.isEmpty())box.set(new THREE.Vector3(-1,0,-1),new THREE.Vector3(1,2,1));
   const yawPitch:Record<string,[number,number]>={front:[0,6],'three-quarter':[34,14],'three-quarter-left':[-34,14],side:[90,4],'side-left':[-90,4],top:[0,72],high:[22,34],low:[18,-6],back:[180,8]};
-  const [yaw,pitch]=yawPitch[angle??'three-quarter']??yawPitch['three-quarter']!;
+  const flatView=ids.length>0&&ids.every(o=>!!referenceKind(o.def.id));
+  const [yaw,pitch]=flatView?[0,0]:yawPitch[angle??'three-quarter']??yawPitch['three-quarter']!;
   const dir=new THREE.Vector3(Math.sin(deg(yaw))*Math.cos(deg(pitch)),Math.sin(deg(pitch)),Math.cos(deg(yaw))*Math.cos(deg(pitch))).normalize();
   const target=box.getCenter(new THREE.Vector3());
   const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),dir).normalize();if(right.lengthSq()<1e-6)right.set(1,0,0);
@@ -279,7 +283,9 @@ class SceneRuntime {
   const tanV=Math.tan(deg(VFOV/2)),tanH=tanV*W/H;
   // Fit on real surface points (bounding-box corners leave empty space and frame too wide).
   const pts:THREE.Vector3[]=[];
-  for(const o of ids){o.outer.updateMatrixWorld(true);for(const m of o.meshes){const pa=m.geometry.attributes.position;if(!pa)continue;const step=Math.max(1,Math.floor(pa.count/400));for(let i=0;i<pa.count;i+=step){const v=new THREE.Vector3();if((m as THREE.SkinnedMesh).isSkinnedMesh)(m as THREE.SkinnedMesh).getVertexPosition(i,v);else v.set(pa.getX(i),pa.getY(i),pa.getZ(i));pts.push(v.applyMatrix4(m.matrixWorld));}}}
+  for(const o of ids){o.outer.updateMatrixWorld(true);for(const m of o.meshes){const pa=m.geometry.attributes.position;if(!pa)continue;const step=Math.max(1,Math.floor(pa.count/400));for(let i=0;i<pa.count;i+=step){const v=new THREE.Vector3();if((m as THREE.SkinnedMesh).isSkinnedMesh)(m as THREE.SkinnedMesh).getVertexPosition(i,v);else v.set(pa.getX(i),pa.getY(i),pa.getZ(i));pts.push(v.applyMatrix4(m.matrixWorld));}}
+   for(const point of o.built.framingPoints??[])pts.push(point.clone().applyMatrix4(o.inner.matrixWorld));
+  }
   if(pts.length){const pb=new THREE.Box3().setFromPoints(pts);pb.getCenter(target);}
   if(!pts.length)for(let i=0;i<8;i++)pts.push(new THREE.Vector3(i&1?box.max.x:box.min.x,i&2?box.max.y:box.min.y,i&4?box.max.z:box.min.z));
   // centre the projected extents, then size them
@@ -301,7 +307,7 @@ class SceneRuntime {
   const c=this.spec.camera??{};const framed=this.objs.filter(o=>o.spec.frame!==false);
   const focus=this.focusObjs(c.focus)??framed;
   const sy=clamp(Number(c.screenY)||this.defaultScreenY(),0.25,0.75);const f=this.explicit(c,sy)??this.fit(focus.length?focus:this.objs,c.angle,clamp(Number(c.fill)||0.86,0.2,1.1),sy);
-  this.cam={...f,move:c.move??'drift',amount:clamp(Number(c.amount)||1,0,3),fov:clamp(Number(c.fov)||VFOV,8,120),follow:c.follow};
+  this.cam={...f,move:c.move??'static',amount:clamp(Number(c.amount??1),0,3),fov:clamp(Number(c.fov)||VFOV,8,120),follow:c.follow};
   const tanH=Math.tan(deg(VFOV/2))*W/H;this.frameWidth=2*tanH*f.dist;
  }
  /** Leave room for a top headline: subject sits lower when the scene has top text. */
@@ -408,8 +414,8 @@ class SceneRuntime {
     rot.y=yaw;}
    for(const tr of o.turns){if(t<tr.t0)break;const kk=interpolate((t-tr.t0)/(tr.t1-tr.t0),tr.easing);rot.x+=tr.by.x*kk;rot.y+=tr.by.y*kk;rot.z+=tr.by.z*kk;}
    let scale=o.baseScale*evalNum(o.scales,t,1);
-   // like the reference, a lone object is never frozen: it turns slowly unless told otherwise
-   const idle=o.spec.idle??(o.posable||o.spec.near||this.objs.length>2?'none':'turn');const id=o.spec.id.length;
+   // Physical subjects hold their shape and pose unless the author requests motion.
+   const idle=o.spec.idle??'none';const id=o.spec.id.length;
    if(idle==='turn')rot.y+=Math.sin(t*0.5+id)*0.26+t*0.07;
    if(idle==='spin')rot.y+=t*0.9;
    if(idle==='spin-slow')rot.y+=t*0.35;
@@ -575,7 +581,6 @@ class SceneRuntime {
    case 'static':break;
    default:yaw=lerp(-4,4,e)*a;dist*=lerp(1.02,0.97,e);
   }
-  dist*=1-0.022*this.pulse; // the picture breathes on the beat
   const q=new THREE.Quaternion().setFromAxisAngle(new THREE.Vector3(0,1,0),deg(yaw));dir.applyQuaternion(q);
   if(pitch){const right=new THREE.Vector3().crossVectors(new THREE.Vector3(0,1,0),dir).normalize();dir.applyAxisAngle(right,-deg(pitch)).normalize();}
   this.camera.position.copy(target).addScaledVector(dir,dist);
@@ -589,12 +594,20 @@ class SceneRuntime {
   this.key.target.position.copy(this.center);this.key.position.copy(this.center).addScaledVector(wd,this.radius*3);this.key.target.updateMatrixWorld();
  }
 
+ /** Only actual emitters/effects animate halo grain; bright skin and metal do not flicker by default. */
+ emissionActive(t:number){return this.objs.some(o=>o.outer.visible&&(o.mats.some(m=>m.emissive&&m.emissiveIntensity>0&&Math.max(m.emissive.r,m.emissive.g,m.emissive.b)>0)||o.effects.some(f=>t>=f.t0&&t<f.t1)||o.fx.some(f=>t>=f.t0&&t<f.t1&&['from-black','light-up'].includes(f.kind))));}
+
  /** Screen position (px) of an object's top centre, for labels. */
  project(id:string){const o=this.byId.get(id);if(!o||!o.outer.visible)return null;const b=new THREE.Box3().setFromObject(o.inner,true);if(b.isEmpty())return null;const c=b.getCenter(new THREE.Vector3());c.y=b.max.y;const v=c.project(this.camera);return {x:(v.x*0.5+0.5)*W,y:(-v.y*0.5+0.5)*H};}
+ prepareTransmission(renderer:THREE.WebGLRenderer,width:number,height:number){
+  const receivers=this.objs.flatMap(o=>o.built.sceneTransmission?[o.built.sceneTransmission]:[]);
+  if(receivers.length)(this.transmission??=new SceneTransmissionCapture()).capture(renderer,this.scene,this.camera,width,height,receivers);
+ }
  private disposed=false;
  dispose(){
   if(this.disposed)return;this.disposed=true;const errors:unknown[]=[];
   for(const o of this.objs)try{o.built.dispose?.();}catch(error){errors.push(error);}
+  try{this.transmission?.dispose();}catch(error){errors.push(error);}
   try{disposeScene(this.scene);}catch(error){errors.push(error);}
   if(errors.length)throw new AggregateError(errors,'Scene cleanup failed');
  }
@@ -635,7 +648,11 @@ export class Engine {
  rtA:THREE.WebGLRenderTarget;rtB:THREE.WebGLRenderTarget;post:THREE.ShaderMaterial;postScene=new THREE.Scene();postCam=new THREE.OrthographicCamera(-1,1,1,-1,0,1);
  scenes:(SceneRuntime|null)[]=[];starts:number[]=[];total=0;
  constructor(public spec:AcryllexSpec){
+  spec=applyStyleProfile(spec);this.spec=spec;
   spec.scenes.forEach((scene,index)=>validateSceneRaster(scene.raster,index));
+  for(const [index,scene] of spec.scenes.entries()){
+   const problems=referenceProblems(scene);if(problems.length)throw new Error(`scene ${index+1}: ${problems.join('; ')}`);
+  }
   setFormat(spec.format??{});
   Object.assign(LOOK,{contrast:1.35,blackPoint:0,whitePoint:1,inkLo:0.42,shadows:1,ao:1,gamma:0.85,noise:0.06,gap:0,ink:1,fuzz:0.06,dotRoundness:0,dotSoftness:0,key:1.0,fill:0.1,rim:0.3,ambient:0.07,dir:[1.2,1.0,0.75]},spec.look??{});
   this.rasterDefaults={cell:CELL,dotRoundness:LOOK.dotRoundness,dotSoftness:LOOK.dotSoftness,activity:0,activityRate:18};
@@ -644,7 +661,7 @@ export class Engine {
   this.renderer.outputColorSpace=THREE.LinearSRGBColorSpace;this.renderer.toneMapping=THREE.NoToneMapping;this.renderer.setPixelRatio(1);this.renderer.localClippingEnabled=true;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFShadowMap;this.renderer.setSize(W,H,false);
   const mk=()=>{const rt=new THREE.WebGLRenderTarget(COLS*SS,ROWS*SS,{type:THREE.HalfFloatType,samples:4,generateMipmaps:true,minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,depthTexture:new THREE.DepthTexture(COLS*SS,ROWS*SS,THREE.FloatType)});return rt;};
   this.rtA=mk();this.rtB=mk();
-  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},time:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
+  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},activityPhase:{value:0},time:{value:0},haloTime:{value:0},glowActive:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),this.post));
   this.out=document.createElement('canvas');this.out.width=W;this.out.height=H;this.ctx2d=this.out.getContext('2d')!;
   let t=0;for(const s of spec.scenes){this.starts.push(t);t+=sceneDuration(s);}this.total=t;
@@ -669,7 +686,8 @@ export class Engine {
  /** 1 on a beat, decaying to 0 before the next (0 when the reel has no beat grid). */
  beatPulse(t:number){const b=this.spec.beat;if(!b||!(b.period>0.2)||t<(b.from??0))return 0;const x=((t-b.phase)%b.period+b.period)%b.period;return Math.exp(-7*x/b.period);}
  renderInto(rt:THREE.WebGLRenderTarget,i:number,local:number){
-  const s=this.runtime(i),clock=sampleMotionTime(local,this.starts[i]!,this.spec.scenes[i]!.motionFPS,this.spec.scenes[i]!.motionPhase);s.pulse=this.beatPulse(this.starts[i]!+clock);s.update(clock);
+  const s=this.runtime(i),clock=sampleMotionTime(local,this.starts[i]!,this.spec.scenes[i]!.motionFPS,this.spec.scenes[i]!.motionPhase);s.update(clock);
+  s.prepareTransmission(this.renderer,rt.width,rt.height);
   this.renderer.setRenderTarget(rt);this.renderer.setClearColor(0x000000,0);this.renderer.clear();this.renderer.render(s.scene,s.camera);
  }
  frame(t:number,opts:{captions?:boolean}={}){
@@ -678,7 +696,8 @@ export class Engine {
   u.cell!.value=raster?.cell??this.rasterDefaults.cell;u.dotRoundness!.value=raster?.dotRoundness??this.rasterDefaults.dotRoundness;u.dotSoftness!.value=raster?.dotSoftness??this.rasterDefaults.dotSoftness;
   u.activity!.value=raster?.activity??this.rasterDefaults.activity;
   // Activity follows global output time, independently of the sampled motion clock.
-  u.activityEpoch!.value=Math.floor(t*(raster?.activityRate??this.rasterDefaults.activityRate)+1e-7);
+  const activityTime=t*(raster?.activityRate??this.rasterDefaults.activityRate)+1e-7;
+  u.activityEpoch!.value=Math.floor(activityTime);if(u.activityPhase)u.activityPhase.value=activityTime-Math.floor(activityTime);
   const motionLocal=sampleMotionTime(local,this.starts[i]!,sc.motionFPS,sc.motionPhase),motionGlobal=sc.motionFPS?this.starts[i]!+motionLocal:t;
   const aoMethod=sc.aoMethod??this.spec.look?.aoMethod??'plane';
   if(aoMethod!==this.aoMethod){this.aoMethod=aoMethod;this.post.fragmentShader=POST_FRAG(aoMethod);this.post.needsUpdate=true;}
@@ -697,8 +716,12 @@ export class Engine {
   if(i>0&&tr in THROUGH&&local<D/2){maskMode=THROUGH[tr]!;maskK=smooth(local/(D/2));}
   else if(next&&trN in THROUGH&&local>dur-transitionLen(next)/2){maskMode=THROUGH[trN]!;maskK=smooth((dur-local)/(transitionLen(next)/2));}
   this.post.uniforms.maskMode!.value=maskMode;this.post.uniforms.maskK!.value=maskK;
-  const pulse=this.beatPulse(motionGlobal);this.post.uniforms.boost!.value=1+0.22*pulse;
+  // The beat grid schedules edits/audio; it never changes subject size or dot density.
+  this.post.uniforms.boost!.value=1;
   this.post.uniforms.ink!.value=light.ink;this.post.uniforms.inkColor!.value.set(hc.r,hc.g,hc.b).divideScalar(Math.max(hc.r,hc.g,hc.b,1e-4));
+  const hasEmission=this.runtime(i).emissionActive?.(motionLocal)||(mode>0&&i>0&&this.runtime(i-1).emissionActive?.(sampleMotionTime(local+sceneDuration(this.spec.scenes[i-1]!),this.starts[i-1]!,this.spec.scenes[i-1]!.motionFPS,this.spec.scenes[i-1]!.motionPhase)));
+  if(this.post.uniforms.haloTime)this.post.uniforms.haloTime.value=hasEmission?motionGlobal:0;
+  if(this.post.uniforms.glowActive)this.post.uniforms.glowActive.value=hasEmission?1:0;
   this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=motionGlobal;
   this.renderer.setRenderTarget(null);this.renderer.setClearColor(0x000000,1);this.renderer.clear();this.renderer.render(this.postScene,this.postCam);
   const c=this.ctx2d;c.globalAlpha=1;c.fillStyle='#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';

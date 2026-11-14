@@ -14,14 +14,14 @@ const CHROME=process.env.CHROME_PATH?.trim()||(process.platform==='darwin'?'/App
 export const FPS=30;
 
 export async function openAcryllex(spec){
- const bundle=(await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
+ const bundle=(await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',define:{'import.meta.url':JSON.stringify('http://acx.local/modules/render.js')},loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
  const assets=await assetsForSpec(spec);
  const browser=await chromium.launch({headless:true,executablePath:CHROME,args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
  const page=await browser.newPage();
  const errors=[];
  page.on('pageerror',e=>{errors.push(e.message);console.error(`Page error: ${e.message}`);});
  page.on('console',m=>{if(m.type()==='error'||m.type()==='warning'&&/^(asset|model)\b.*failed/.test(m.text()))errors.push(m.text());if(m.type()==='error'||m.type()==='warning')console.error(`[page] ${m.text()}`);});
- const TYPES={gltf:'model/gltf+json',glb:'model/gltf-binary',bin:'application/octet-stream',jpg:'image/jpeg',png:'image/png',html:'text/html',json:'application/json'};
+ const TYPES={gltf:'model/gltf+json',glb:'model/gltf-binary',bin:'application/octet-stream',jpg:'image/jpeg',png:'image/png',html:'text/html',json:'application/json',wasm:'application/wasm',js:'text/javascript'};
  await page.route('http://acx.local/**',async route=>{
   const url=new URL(route.request().url());
   if(url.pathname==='/'||url.pathname==='/index.html')return route.fulfill({status:200,contentType:'text/html',body:'<!doctype html><title>Acryllex</title>'});

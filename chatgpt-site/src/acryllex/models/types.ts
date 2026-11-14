@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import type {MatOpts} from '../kit.ts';
+import type {SceneTransmissionReceiver} from '../scene-transmission.ts';
 
 export interface ModelCtx {
  /** New material in the scene hue (or opts.color). Every call returns its own material. */
@@ -25,6 +26,11 @@ export interface Built {
  update?(controls:Record<string,number>,t:number,pose:PoseState):void;
  /** Model rests on the ground (y=0 is its bottom). Default true. Floating models are centred. */
  grounded?:boolean;
+ /** Optional model-space points covering known pose extents for a steady automatic
+  * camera fit. These do not alter the visible mesh or resize the camera per frame. */
+ framingPoints?:readonly THREE.Vector3[];
+ /** Optional same-frame surrounding scene colour/depth for optical materials. */
+ sceneTransmission?:SceneTransmissionReceiver;
  /** Meshes whose material glow is driven by the `glow` control (default: all meshes with glow>0). */
  glowMeshes?:THREE.Mesh[];
  /** Named points in model space: `seat` (where a sitting person goes), `top` (surface to put things on), `screen`, `hand`. */

@@ -1,0 +1,70 @@
+[
+ {
+  "id": "honey-bee",
+  "name": "Honey bee",
+  "metres": 0.02,
+  "tags": [
+   "honey bee",
+   "Apis mellifera",
+   "insect",
+   "pollinator",
+   "wings"
+  ],
+  "url": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-148/7225eb1c47fa4affbc04a0372c9edf3b.glb",
+  "source": "Objaverse / Sketchfab",
+  "license": "CC-BY 4.0, by Brama_Grodzka",
+  "page": "https://sketchfab.com/3d-models/7225eb1c47fa4affbc04a0372c9edf3b",
+  "cat": "Realistic",
+  "thing": "honey bee",
+  "sourcedAt": "2026-11-14T18:34:19.956Z",
+  "preview": "/private/tmp/claude-501/-Users-benajaheger-Documents-museum-of-failures-Organic-Content-Engine/c328d37c-7f1d-4346-9a2b-69eb0ed38a4d/scratchpad/sourcing/preview-honey-bee.png"
+ },
+ {
+  "id": "stethoscope",
+  "name": "Stethoscope",
+  "metres": 0.7,
+  "tags": [
+   "medical",
+   "stethoscope",
+   "auscultation",
+   "diagnostic",
+   "doctor",
+   "acoustic"
+  ],
+  "url": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-069/ce1ba77195dd4746841e58346864c059.glb",
+  "source": "Objaverse / Sketchfab",
+  "license": "CC-BY 4.0, by pstephen",
+  "page": "https://sketchfab.com/3d-models/ce1ba77195dd4746841e58346864c059",
+  "cat": "Realistic",
+  "rot": [
+   -90,
+   0,
+   0
+  ],
+  "thing": "stethoscope",
+  "sourcedAt": "2026-11-14T18:39:28.193Z",
+  "preview": "/private/tmp/claude-501/-Users-benajaheger-Documents-museum-of-failures-Organic-Content-Engine/c328d37c-7f1d-4346-9a2b-69eb0ed38a4d/scratchpad/sourcing/preview-stethoscope.png"
+ },
+ {
+  "id": "wind-turbine-tower",
+  "name": "Wind turbine",
+  "metres": 198,
+  "tags": [
+   "wind",
+   "turbine",
+   "rotor",
+   "generator",
+   "renewable",
+   "energy",
+   "electricity"
+  ],
+  "url": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-006/90ad27be20c541d1a0e4818d4e501679.glb",
+  "source": "Objaverse / Sketchfab",
+  "license": "CC-BY 4.0, by cesarkero",
+  "page": "https://sketchfab.com/3d-models/90ad27be20c541d1a0e4818d4e501679",
+  "cat": "Realistic",
+  "thing": "wind turbine",
+  "sourcedAt": "2026-11-14T18:40:08.994Z",
+  "preview": "/private/tmp/claude-501/-Users-benajaheger-Documents-museum-of-failures-Organic-Content-Engine/c328d37c-7f1d-4346-9a2b-69eb0ed38a4d/scratchpad/sourcing/preview-wind-turbine.png"
+ }
+]
