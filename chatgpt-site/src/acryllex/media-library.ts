@@ -1,5 +1,79 @@
-/** Licensed fixed-view subjects. Originals download into the private render cache, never the source tree. */
+/** Fixed-view subjects. Stock originals use the private download cache; generated human sources include bundled provenance. */
 export const MEDIA_LIBRARY={
+"human-male-motion": {
+  "name": "Adult male walking, sitting and typing",
+  "creator": "Organic Content Engine; image_gen and Kling AI",
+  "acquired": "2026-11-14",
+  "page": "https://kling.ai/feature/ai-motion-control",
+  "license": "https://kling.ai/docs/user-policy",
+  "terms": "https://kling.ai/docs/payment-policy",
+  "capture": "Synthetic character generated with Kling AI, not filmed footage. Appearance from image_gen; motion from an own fitted rig render.",
+  "limitations": "Fixed profile and baked action sequence; cannot rotate or accept new poses. Head-cap density, floor offset and some finger/swing-foot detail remain approximate; not a99%reference match.",
+  "recommendedLight": {
+   "contrast": 0.8,
+   "gamma": 0.8,
+   "blackPoint": 0.025,
+   "whitePoint": 0.9,
+   "exposure": 0.68,
+   "softness": 0.25
+  },
+  "defaults": {
+   "file": "library:human-male-motion.mkv",
+   "expectedSHA256": "2f4c9c3d2472c50b0e4f88952d1584b55edb944687fd7dec46410188ce7e3421",
+   "alphaFile": "library:human-male-motion-alpha.mkv",
+   "sourceStart": 0,
+   "sourceDuration": 4.9,
+   "fps": 30.0,
+   "crop": "235:422:446:108",
+   "cols": 235,
+   "rows": 422,
+   "monochrome": false,
+   "preserveAspect": true,
+   "blur": 0,
+   "loop": false,
+   "sourceLevels": {
+    "blackPoint": 0,
+    "whitePoint": 0.75
+   }
+  }
+ },
+ "human-female-motion": {
+  "name": "Adult female walking, sitting and typing",
+  "creator": "Organic Content Engine; image_gen and Kling AI",
+  "acquired": "2026-11-14",
+  "page": "https://kling.ai/feature/ai-motion-control",
+  "license": "https://kling.ai/docs/user-policy",
+  "terms": "https://kling.ai/docs/payment-policy",
+  "capture": "Synthetic character generated with Kling AI, not filmed footage. Appearance from image_gen; motion from an own fitted rig render.",
+  "limitations": "Fixed profile and baked action sequence; cannot rotate or accept new poses. Head-cap density, floor offset and some finger/swing-foot detail remain approximate; not a99%reference match.",
+  "recommendedLight": {
+   "contrast": 0.8,
+   "gamma": 0.8,
+   "blackPoint": 0.025,
+   "whitePoint": 0.9,
+   "exposure": 0.68,
+   "softness": 0.25
+  },
+  "defaults": {
+   "file": "library:human-female-motion.mkv",
+   "expectedSHA256": "1583e8e694e03aae61a349efb3d96cab6d139fcaa824001a7774625baa6ece8c",
+   "alphaFile": "library:human-female-motion-alpha.mkv",
+   "sourceStart": 0,
+   "sourceDuration": 4.9,
+   "fps": 30.0,
+   "crop": "238:422:448:109",
+   "cols": 238,
+   "rows": 422,
+   "monochrome": false,
+   "preserveAspect": true,
+   "blur": 0,
+   "loop": false,
+   "sourceLevels": {
+    "blackPoint": 0,
+    "whitePoint": 0.75
+   }
+  }
+ },
  'ocean-breaker':{
   name:'Breaking ocean wave',creator:'doktorkleinmusic',acquired:'2026-11-13',
   page:'https://pixabay.com/videos/wave-barrel-night-moonlight-268746/',
@@ -32,11 +106,16 @@ export const MEDIA_LIBRARY={
 } as const;
 
 const normalized=(id:string)=>id.toLowerCase().trim().replace(/[\s_]+/g,'-');
-export function isFootageModel(id:string){return ['footage','video','clip','wave-footage','ocean-wave-media'].includes(normalized(id));}
+const FOOTAGE_PRESETS:Record<string,keyof typeof MEDIA_LIBRARY>={
+ 'wave-footage':'ocean-breaker','ocean-wave-media':'ocean-breaker',
+ 'human-male-footage':'human-male-motion','human-footage':'human-male-motion','man-footage':'human-male-motion',
+ 'human-female-footage':'human-female-motion','woman-footage':'human-female-motion',
+};
+export function isFootageModel(id:string){const key=normalized(id);return ['footage','video','clip'].includes(key)||Object.hasOwn(FOOTAGE_PRESETS,key);}
 
 /** Shared by preparation and playback so named subjects use exactly the same variant. */
 export function resolveFootageParams(model:string,params:Record<string,unknown>={}){
- const asset=params.asset??(['wave-footage','ocean-wave-media'].includes(normalized(model))?'ocean-breaker':undefined);
+ const key=normalized(model),asset=params.asset??(Object.hasOwn(FOOTAGE_PRESETS,key)?FOOTAGE_PRESETS[key]:undefined);
  if(asset===undefined)return params;
  if(typeof asset!=='string'||!Object.hasOwn(MEDIA_LIBRARY,asset))throw new Error(`footage: unknown library asset ${String(asset)}`);
  if(params.file!==undefined||params.url!==undefined)throw new Error('footage: choose a library asset or a custom file/URL');

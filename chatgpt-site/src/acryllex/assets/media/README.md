@@ -31,3 +31,6 @@ Use the generated `agent-wave31-outside-approved4-alpha-full-clock.mkv` for the 
 
 
 Media presets prepare three source samples across each output dot (`sampleScale:3`). This preserves fine luminance variation before the common dot renderer; output dot size, threshold pattern and ink stay shared with the rest of the reel. For the approved outside source use scene light `contrast:1.5`, `gamma:1.05`, `blackPoint:.02`, `whitePoint:.95`, `exposure:1.05`, `softness:0`. A final blur thickens the dots and changes apparent local coverage; it is not a substitute for grading.
+
+
+Generated human subjects are available as `human-male-footage` and `human-female-footage`. Their source videos and matching alpha masks are bundled with SHA256 pins and [provenance](human-motion-provenance.json). See [fixed-view human media](../../HUMAN-MEDIA.md) for the shared ink/grid example, playback controls and current limitations.

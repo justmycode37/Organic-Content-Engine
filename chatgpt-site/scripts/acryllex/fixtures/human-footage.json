@@ -1,0 +1,120 @@
+{
+  "version": 1,
+  "series": "ACRYLLEX",
+  "title": "Human media models · Kling AI",
+  "captions": false,
+  "format": {
+    "width": 1164,
+    "height": 670,
+    "cell": 3.72
+  },
+  "look": {
+    "inkMode": "fixed",
+    "dotRoundness": 1,
+    "dotSoftness": 0.5,
+    "noise": 0.015,
+    "fuzz": 0,
+    "blackPoint": 0.025,
+    "whitePoint": 0.9,
+    "inkLo": 0.16,
+    "gamma": 1,
+    "aoMethod": "legacy",
+    "palette": {
+      "blue": "#382ef5"
+    }
+  },
+  "scenes": [
+    {
+      "say": "male human motion — generated with Kling AI",
+      "hue": "blue",
+      "duration": 4.9,
+      "camera": {
+        "pos": [
+          0,
+          0,
+          5.9
+        ],
+        "look": [
+          0,
+          0,
+          0
+        ],
+        "fov": 30,
+        "move": "static"
+      },
+      "light": {
+        "contrast": 0.8,
+        "gamma": 0.8,
+        "blackPoint": 0.025,
+        "whitePoint": 0.9,
+        "exposure": 0.68,
+        "softness": 0.25
+      },
+      "objects": [
+        {
+          "id": "actor",
+          "model": "human-male-footage",
+          "origin": "model",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "params": {
+            "height": 2
+          },
+          "castShadow": false,
+          "receiveShadow": false,
+          "enter": "none",
+          "exit": "none"
+        }
+      ]
+    },
+    {
+      "say": "female human motion — generated with Kling AI",
+      "hue": "blue",
+      "duration": 4.9,
+      "camera": {
+        "pos": [
+          0,
+          0,
+          5.9
+        ],
+        "look": [
+          0,
+          0,
+          0
+        ],
+        "fov": 30,
+        "move": "static"
+      },
+      "light": {
+        "contrast": 0.8,
+        "gamma": 0.8,
+        "blackPoint": 0.025,
+        "whitePoint": 0.9,
+        "exposure": 0.68,
+        "softness": 0.25
+      },
+      "objects": [
+        {
+          "id": "actor",
+          "model": "human-female-footage",
+          "origin": "model",
+          "pos": [
+            0,
+            0,
+            0
+          ],
+          "params": {
+            "height": 2
+          },
+          "castShadow": false,
+          "receiveShadow": false,
+          "enter": "none",
+          "exit": "none"
+        }
+      ]
+    }
+  ]
+}

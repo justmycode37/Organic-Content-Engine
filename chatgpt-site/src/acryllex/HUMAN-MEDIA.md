@@ -1,0 +1,31 @@
+# Fixed-view human media
+
+`human-male-footage` (aliases `human-footage`, `man-footage`) and `human-female-footage` (alias `woman-footage`) provide separate generated adult subjects walking, reaching for a chair, sitting and making typing-like hand movements. Each clip has 147 frames at 30 fps and lasts 4.9 seconds. Both use the existing footage renderer, explicit alpha, instance-owned texture transforms and shared dot shader.
+
+These are fixed-profile video subjects with a baked action sequence. Use `human`, `human-male`, `human-female`, or a compatible `bodySource` for editable poses and new 3D viewpoints. The media subjects accept the existing footage playback, crop and grading parameters.
+
+The named assets are `human-male-motion` and `human-female-motion`. Sources and alpha masks are bundled, and source SHA256 pins are enforced during preparation. Both default to `sourceLevels:{blackPoint:0,whitePoint:.75}`; an identity range disables that grading. The source pixels and cached atlases remain unchanged by runtime grading.
+
+For a one-ink result, use `look.inkMode:"fixed"` with the normal shared cell size. The example at `scripts/acryllex/fixtures/human-footage.json` renders both subjects with the same grid, ink and post-lighting settings. Source lighting is baked into the video. Scene post-lighting and `sourceLevels` control the resulting density; they do not supply a new physical viewpoint or missing hand detail.
+
+```json
+{
+  "id": "actor",
+  "model": "human-female-footage",
+  "origin": "model",
+  "pos": [0, 0, 0],
+  "params": {"height": 2},
+  "castShadow": false,
+  "receiveShadow": false,
+  "enter": "none",
+  "exit": "none"
+}
+```
+
+The example uses a static camera at `[0,0,5.9]`, looking at `[0,0,0]`, with a 30-degree field of view. `height` is the cropped video plane height in metres, including its padding. Place the plane explicitly when mixing it with 3D furniture; the original object camera and root-follow relationship can be retained with public transform keyframes.
+
+Both appearances were generated with image_gen and animated with **Kling AI 2.6 Motion Control**, using an own rendered rig-driving video. Original reference-video pixels are not included. [Source provenance](assets/media/human-motion-provenance.json) records hashes, inputs and preparation; [Kling terms](https://kling.ai/docs/user-policy) and [paid-service terms](https://kling.ai/docs/payment-policy) accompany the generating service.
+
+Current limits include an underfilled hair cap, a slightly low floor, some swing-foot/crown tracking errors and simplified finger articulation. The female clip has softer hand detail. These are usable optional media subjects, not a verified 99% recreation of the reference.
+
+Captured object root paths support up to 600 transform keys per object. The portable reference recipe uses bounded sampled tracks to preserve the original camera follow while using the fixed-view human source.

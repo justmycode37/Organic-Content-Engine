@@ -1,0 +1,30 @@
+{
+  "status": "OWN synthetic undithered motion guide for motion-transfer experiment, not an adopted recreation.",
+  "source": "actual public library combined95/109/139/140 motion tracks and95camera using Remy body; no reference RGB/video frames included",
+  "sourceCommit": "b118b17ad0be27ea2534165bd78e6960e2c13761",
+  "frames": 147,
+  "fps": 30,
+  "duration": 4.9,
+  "width": 1164,
+  "height": 670,
+  "bytes": 332202,
+  "sha256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
+  "preparation": "Furniture hidden only in this guide; body material neutral gray, alpha hash off, normal SRGB raw rendering and video grayscale. Pose, root motion, bone proportions and camera follow retained. Hue flash/dissolve removed for continuous full-body conditioning.",
+  "sourceSpecSHA256": "cc19a267a7f1206989fbf759fa7d46f3bf5aa22d07c3ed06c0688d7e3944d681",
+  "errors": [],
+  "file": "motion-guide-corrected.mp4",
+  "sourceReferencePixelsIncluded": false,
+  "corrections": [
+    "tested head-descent offset with floor support during late walking",
+    "far arm relaxed down/front while near arm alone reaches chair",
+    "far foot stabilizes and near foot retains reduced visible advance"
+  ],
+  "validation": {
+    "sampledTimes": 16,
+    "solvedBoneCount": 67,
+    "isolatedBoneBehaviorPreserved": true,
+    "cameraAndPropsExact": true,
+    "boneLengthsPreserved": true,
+    "role": "experimental motion driver; not adopted recreation"
+  }
+}
