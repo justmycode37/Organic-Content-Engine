@@ -5,6 +5,7 @@ import {defineModel,type ModelCtx,type PoseState} from './types.ts';
 import {gltf,instance} from '../assets.ts';
 import {HUMAN_POSES,humanPoses,humanPoseOffsets} from './human.ts';
 import {HumanRig,MocapSource,TrackPlayer,applyOffsets,bindPose,emptyPose,groundFeet,parseTrack,SIDES,type OffsetPose} from './human-motion.ts';
+import {CapturedFingerSource,fingerFrames,applyCapturedFingers,trackCurlSides} from './human-fingers.ts';
 import {createPoseCorrectives} from './human-correctives.ts';
 import {headAccentLight,parseHeadAccentLight} from './human-head-accent-light.ts';
 import {neutralArms,blendLocalEndpoints} from './human-static.ts';
@@ -82,7 +83,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  const motionTemplate=recordedConfig?gltf(recordedMotionKey(recordedConfig)):undefined;
  if(recordedConfig&&!motionTemplate)throw new Error('recordedMotion: source was not preloaded');
  const recorded=recordedConfig&&motionTemplate?new RecordedMotionSource(motionTemplate,recordedConfig):null;
- const isStatic=(name:string)=>!recorded?.has(name)&&!MOCAP[name]&&!!poses[name];
+ const isStatic=(name:string)=>!recorded?.hasBody(name)&&!MOCAP[name]&&!!poses[name];
 
  const real=id!==CLIP_SOURCE;
  // evenly shaded body (like a body scan in the reference): clothing textures read as holes in the dots, so they are off unless asked for
@@ -111,6 +112,8 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  // bindPose has already run above. Capture the authored uniform head/foot proportions instead of resetting them again.
  const rig=new HumanRig(root,inst.root,{bindPose:false});
  headAccentLight(inst.root,accentConfig);
+ const fingerSource=recorded?.config.fingers?new CapturedFingerSource(recorded):null;
+ const targetFingerFrames=fingerSource?.frames.size?fingerFrames(rig,[...new Set([...fingerSource.frames.values()].map(frame=>frame.side))]):null;
  const correctives=createPoseCorrectives(rig,inst.root),poseCorrectives=ctx.bool('poseCorrectives',false);
  // Converted scans need not put their bind-pose soles at local Y=0. Contacts use the measured skin floor.
  const groundFloor=Math.min(...SIDES.map(S=>rig.point(S+'Sole')?.y??0));
@@ -132,7 +135,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  const sampled=emptyPose(),mix:Record<string,[number,number]>={};
  const update=(_c:Record<string,number>,t:number,pose:PoseState)=>{
   const moving=pose.speed>0.05;
-  const from=pose.from==='stand'&&moving&&!recorded?.has('stand')?'walk':pose.from,to=pose.to==='stand'&&moving&&!recorded?.has('stand')?'walk':pose.to,k=clamp(pose.k);
+  const from=pose.from==='stand'&&moving&&!recorded?.hasBody('stand')?'walk':pose.from,to=pose.to==='stand'&&moving&&!recorded?.hasBody('stand')?'walk':pose.to,k=clamp(pose.k);
   const clipA=MOCAP[from]??'idle',clipB=MOCAP[to]??'idle';
   // natural gait: the mocap walk is blended with idle so stride and arm swing stay realistic (stride param)
   for(const key of Object.keys(mix))delete mix[key];
@@ -141,11 +144,11 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
    const time=n==='walk'?((walkCycle%1+1)%1)*dur:n==='run'?((pose.travel/3.2)*dur)%dur:t%dur;
    mix[n]=[(mix[n]?.[0]??0)+v,time];};
   for(const [clip,v] of [[clipA,1-k],[clipB,k]] as [string,number][]){if(clip==='walk'){add('walk',v*stride);add('idle',v*(1-stride));}else add(clip,v);}
-  const PA=(recorded?.has(from)||MOCAP[from]?offsets[from]:poses[from]) as OffsetPose|undefined,PB=(recorded?.has(to)||MOCAP[to]?offsets[to]:poses[to]) as OffsetPose|undefined;
-  if(recorded&&(recorded.has(from)||recorded.has(to))){
+  const PA=(recorded?.hasBody(from)||MOCAP[from]?offsets[from]:poses[from]) as OffsetPose|undefined,PB=(recorded?.hasBody(to)||MOCAP[to]?offsets[to]:poses[to]) as OffsetPose|undefined;
+  if(recorded&&(recorded.hasBody(from)||recorded.hasBody(to))){
    const endpoint=(name:string,P:OffsetPose|undefined)=>()=>{
     rig.reset();
-    if(recorded.has(name))rig.applyPose(recorded.sample(name,t));
+    if(recorded.hasBody(name))rig.applyPose(recorded.sample(name,t));
     else if(neutralBase&&isStatic(name)){rig.applyPose(emptyPose());neutralArms(rig);}
     else{for(const key of Object.keys(mix))delete mix[key];const clip=MOCAP[name]??'idle';if(clip==='walk'){add('walk',stride);add('idle',1-stride);}else add(clip,1);rig.applyPose(source.sample(mix,sampled));}
     applyOffsets(rig,P,undefined,0);
@@ -193,6 +196,10 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
   track?.apply(rig,t,pose.travel);
   // Keyed tracks retain the final sole guard; unkeyed settled statics keep their knee plane.
   if(ground&&lie<=0&&(!settled||track))groundFeet(rig,groundFloor);
+  if(fingerSource&&targetFingerFrames){
+   const fa=recorded?.has(pose.from)?pose.from:from,fb=recorded?.has(pose.to)?pose.to:to;
+   applyCapturedFingers(rig,targetFingerFrames,fingerSource.sample(fa,t),fingerSource.sample(fb,t),k,{enabled:true,explicitSceneCurl:Object.hasOwn(ctx.params,'fingerCurl'),trackCurlSides:trackCurlSides(track?.track),curlPriority:recordedConfig?.fingerCurlPriority});
+  }
   correctives.update(poseCorrectives);
   rig.write();
   body.rotation.z=deg(90)*lie;body.position.set(0,0.13*lie,0);
@@ -204,7 +211,7 @@ export function buildPerson(ctx:ModelCtx,preset:PersonPreset={}){
  return {root,grounded:true,update,landmarks,rig,setTrack,...(recorded?{dispose:()=>recorded.dispose()}:{} )};
 }
 
-export const PERSON_PARAMS:Record<string,string>={recordedMotion:'optional bone-only GLB {file|url,sha256?,actions:{existingPose:clipName|{clip,start?,end?,timeOrigin?,speed?,loop?}},heading:initial|follow|preserve,baselineY?}. Actual captured action replaces that named pose; clocks are absolute scene seconds. XZ is in-place; object moves supply world path. Units metres/Y-up/+Z bind. No captured fingers or chair contacts inferred.',stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',staticPoseBase:'neutral (anatomical default) | idle (scan default); static neutral poses use arms-down anatomical frames and local endpoint blends',staticFloor:'skin (anatomical default) | none; with ground=true, skin settles upright neutral static feet before authored tracks. Consumes bank y placement; explicit y edits remain relative to bank y',sourceAlpha:'true (default) preserves authored transparency coverage; false retains legacy material conversion. Plain mode keeps scene-hue albedo; textured mode keeps existing luminance detail. Does not change sidedness',sourceHairSide:'false (default); true keeps authored sidedness on named/tagged Hair surfaces during material conversion. Independent of sourceAlpha; preserves alpha and the existing forceSinglePass policy',poseCorrectives:'false (default); true enables authored hip/knee skin corrections for reviewed bends on anatomical assets. Extreme/custom bends require contact review',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',headAccentLight:'optional {position:[x,y,z],target:[x,y,z],intensity,innerAngleDeg:12,outerAngleDeg:20,distance:3}; fixed world-space metres; an art-directed unshadowed Lambertian head/neck accent linked by skin weights. Omitted/false/0 or intensity:0 is off; preserves existing global lighting, shadows and specular',regionTones:'optional {torso,pelvis,legs} material multipliers 0.1 .. 2, default 1; blend continuously through skin weights, compose with headTone and keep the output ink fixed',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, velocity, softness, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true enables floor contact; neutral skin placement preserves explicit y edits, and keyed tracks retain the final sole-plane guard',fingerCurl:'resting finger curl in degrees'};
+export const PERSON_PARAMS:Record<string,string>={recordedMotion:'optional bone-only GLB {file|url,sha256?,actions:{existingPose:clipName|{clip,start?,end?,timeOrigin?,speed?,loop?}},heading:initial|follow|preserve,baselineY?,body:true,fingers:false,fingerCurlPriority:authored|capture}. Recorded body motion replaces the named pose by default; clocks are absolute scene seconds. XZ is in-place; object moves supply world path. Units metres/Y-up/+Z bind. Optional captured fingers compose after hand IK; body:false keeps authored body motion. Authored curl wins unless capture priority is explicit. Missing finger tracks and chair contacts are not inferred.',stride:'walk amplitude 0.3 short .. 1 full mocap (default 0.72)',walkDistance:'metres travelled per complete gait cycle (default 1.5)',walkClock:'distance (default) follows travel; time keeps a fixed cadence through eased moves',walkPeriod:'seconds per complete gait cycle when walkClock=time (default 1.2)',walkPhase:'initial gait phase in cycles (default 0)',height:'standing height in metres; the whole body scales uniformly',staticPoseBase:'neutral (anatomical default) | idle (scan default); static neutral poses use arms-down anatomical frames and local endpoint blends',staticFloor:'skin (anatomical default) | none; with ground=true, skin settles upright neutral static feet before authored tracks. Consumes bank y placement; explicit y edits remain relative to bank y',sourceAlpha:'true (default) preserves authored transparency coverage; false retains legacy material conversion. Plain mode keeps scene-hue albedo; textured mode keeps existing luminance detail. Does not change sidedness',sourceHairSide:'false (default); true keeps authored sidedness on named/tagged Hair surfaces during material conversion. Independent of sourceAlpha; preserves alpha and the existing forceSinglePass policy',poseCorrectives:'false (default); true enables authored hip/knee skin corrections for reviewed bends on anatomical assets. Extreme/custom bends require contact review',headTone:'head/neck albedo multiplier 0.1 .. 2 (default 1); affects dot density with fixed ink, without changing skin positions',tone:'skin albedo multiplier 0.1 .. 2 (default 1)',headAccentLight:'optional {position:[x,y,z],target:[x,y,z],intensity,innerAngleDeg:12,outerAngleDeg:20,distance:3}; fixed world-space metres; an art-directed unshadowed Lambertian head/neck accent linked by skin weights. Omitted/false/0 or intensity:0 is off; preserves existing global lighting, shadows and specular',regionTones:'optional {torso,pelvis,legs} material multipliers 0.1 .. 2, default 1; blend continuously through skin weights, compose with headTone and keep the output ink fixed',poseAdjustments:'object keyed by pose name, containing joint rotations [x,y,z] in degrees and optional y offset in metres; overrides supplied static joints or adds offsets to mocap poses. Spine and neck rotations are spread along the whole chain',track:'keyed pose/IK track {keys:[{t, weight, hips:{pos,rot}, spine, neck, head, handL|handR|footL|footR:{pos, velocity, softness, pole, weight, rot, curl}, floor, floorWeight}], units:"metres"|"stature"} in scene seconds and the figure\'s own space (x left, y up, z forward, origin under the standing pelvis); fixed limb lengths, with optional sole-plane contact independent of trunk blending',ground:'true enables floor contact; neutral skin placement preserves explicit y edits, and keyed tracks retain the final sole-plane guard',fingerCurl:'resting finger curl in degrees'};
 export const PERSON_POSES=[...new Set([...Object.keys(MOCAP),...Object.keys(HUMAN_POSES)])];
 
 export const person=defineModel({
