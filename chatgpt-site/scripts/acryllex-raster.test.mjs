@@ -12,11 +12,11 @@ const engineModule=await import('data:text/javascript;base64,'+Buffer.from(resul
 const {Engine,LOOK}=engineModule;
 const scene=raster=>({say:'A raster fixture.',duration:2,objects:[{id:'a',model:'led'}],...(raster===undefined?{}:{raster})});
 const keys=['cell','dotRoundness','dotSoftness'];
-const invalid=[null,false,0,'6.35',[],{unknown:1},{cell:null},{cell:'6.35'},{cell:NaN},{cell:Infinity},{cell:-Infinity},{cell:0},{cell:.99},{cell:24.01},{dotRoundness:-.01},{dotRoundness:1.01},{dotSoftness:-.01},{dotSoftness:2.01},{dotRoundness:NaN},{dotSoftness:Infinity}];
-const runtimeInvalid=[...invalid,new Date(),Object.create({cell:Infinity}),Object.defineProperty({},'cell',{value:Infinity}),Object.defineProperty({},'unknown',{value:1}),{[Symbol('unknown')]:1}];
+const invalid=[null,false,0,'6.35',[],{unknown:1},{cell:null},{cell:'6.35'},{cell:NaN},{cell:Infinity},{cell:-Infinity},{cell:0},{cell:.99},{cell:24.01},{dotRoundness:-.01},{dotRoundness:1.01},{dotSoftness:-.01},{dotSoftness:2.01},{dotRoundness:NaN},{dotSoftness:Infinity},{activity:null},{activity:'0.3'},{activity:NaN},{activity:Infinity},{activity:-.01},{activity:1.01},{activityRate:null},{activityRate:'18'},{activityRate:NaN},{activityRate:Infinity},{activityRate:0},{activityRate:.99},{activityRate:60.01}];
+const runtimeInvalid=[...invalid,new Date(),Object.create({cell:Infinity}),Object.defineProperty({},'cell',{value:Infinity}),Object.defineProperty({},'unknown',{value:1}),{[Symbol('unknown')]:1},Object.defineProperty({},'activity',{value:Infinity}),Object.defineProperty({},'activityRate',{value:61})];
 
 test('strict scene raster schema accepts omission, partial fields, fractional cells and exact bounds',()=>{
- for(const raster of[undefined,{}, {cell:6.35},{cell:1,dotRoundness:0,dotSoftness:0},{cell:24,dotRoundness:1,dotSoftness:2}])assert.equal(sceneSchema.safeParse(scene(raster)).success,true);
+ for(const raster of[undefined,{}, {cell:6.35},{cell:1,dotRoundness:0,dotSoftness:0},{cell:24,dotRoundness:1,dotSoftness:2},{activity:0,activityRate:1},{activity:1,activityRate:60},{activity:.35,activityRate:17.5}])assert.equal(sceneSchema.safeParse(scene(raster)).success,true);
  for(const raster of invalid)assert.equal(sceneSchema.safeParse(scene(raster)).success,false,`Accepted ${String(raster)}`);
  const rejected=sceneSchema.safeParse(scene({cell:Infinity}));assert.deepEqual(rejected.error.issues[0].path,['raster','cell']);
 });
@@ -26,10 +26,10 @@ test('direct Engine callers reject malformed raster before requiring DOM or WebG
 });
 
 function harness(scenes,defaults={cell:7.44,dotRoundness:.35,dotSoftness:.2}){
- const uniforms=Object.fromEntries(['cell','dotRoundness','dotSoftness','cNear','cFar','tanHalf','aoR','aoStr','contrast','inkLo','gam','blackPoint','whitePoint','expo','noiseAmt','noiseReference','maskMode','maskK','boost','ink','mode','mixP','time'].map(k=>[k,{value:NaN}]));
+ const uniforms=Object.fromEntries(['cell','dotRoundness','dotSoftness','activity','activityEpoch','cNear','cFar','tanHalf','aoR','aoStr','contrast','inkLo','gam','blackPoint','whitePoint','expo','noiseAmt','noiseReference','maskMode','maskK','boost','ink','mode','mixP','time'].map(k=>[k,{value:NaN}]));
  uniforms.inkColor={value:{set(){return this;},divideScalar(){return this;}}};
  const draws=[],runtime={camera:{near:.1,far:100,fov:36},radius:1,dur:2,project(){return null;}};
- const engine=Object.assign(Object.create(Engine.prototype),{spec:{version:1,series:'ACRYLLEX',title:'Raster',captions:false,scenes},starts:scenes.map((_,i)=>i*2),rasterDefaults:{...defaults},aoMethod:'plane',post:{uniforms},rtA:{},rtB:{},postScene:{},postCam:{},out:{},gl:{},ctx2d:{fillRect(){},drawImage(){}},renderer:{setRenderTarget(){},setClearColor(){},clear(){},render(){}},runtime(){return runtime;},renderInto(rt,i,local){draws.push({rt,i,local});}});
+ const engine=Object.assign(Object.create(Engine.prototype),{spec:{version:1,series:'ACRYLLEX',title:'Raster',captions:false,scenes},starts:scenes.map((_,i)=>i*2),rasterDefaults:{activity:0,activityRate:18,...defaults},aoMethod:'plane',post:{uniforms},rtA:{},rtB:{},postScene:{},postCam:{},out:{},gl:{},ctx2d:{fillRect(){},drawImage(){}},renderer:{setRenderTarget(){},setClearColor(){},clear(){},render(){}},runtime(){return runtime;},renderInto(rt,i,local){draws.push({rt,i,local});}});
  return{engine,uniforms,draws,raster:()=>Object.fromEntries(keys.map(k=>[k,uniforms[k].value]))};
 }
 
@@ -61,4 +61,37 @@ test('runtime raster values are read once into a validated snapshot, including h
  const h=harness([scene(Object.defineProperty({},'cell',{value:1}))]);h.engine.frame(.5);assert.equal(h.uniforms.cell.value,1);
  let reads=0;h.engine.spec.scenes[0].raster={get cell(){return ++reads===1?2:Infinity;}};h.engine.frame(.5);assert.equal(reads,1);assert.equal(h.uniforms.cell.value,2);
  assert.throws(()=>h.engine.frame(.5),/scene 1 raster.cell/);assert.equal(h.uniforms.cell.value,2);
+});
+
+
+test('activity resets at cuts and direct transitions, including reverse seeks',()=>{
+ const incoming={...scene({activity:.4,activityRate:30}),transition:'wipe',transitionDur:.4};
+ const h=harness([scene({activity:1,activityRate:60}),scene(),incoming,scene({activityRate:1})]);
+ for(const [t,amount,epoch] of[[.5,1,30],[2.5,0,45],[4.1,.4,123],[6.5,0,6],[.5,1,30],[4.1,.4,123],[2.5,0,45]]){
+  h.engine.frame(t);assert.equal(h.uniforms.activity.value,amount);assert.equal(h.uniforms.activityEpoch.value,epoch);
+ }
+});
+
+test('activity clock advances at its own rate while motion is held and seeks repeat exactly',()=>{
+ const h=harness([{...scene({activity:.5}),motionFPS:1}]);
+ for(const [t,epoch] of[[1.01,18],[1.06,19],[1.12,20],[1.01,18]]){
+  h.engine.frame(t);assert.equal(h.uniforms.activityEpoch.value,epoch);assert.equal(h.uniforms.time.value,1);
+ }
+});
+
+test('activity rate bounds tick on exact global boundaries and omission disables activity',()=>{
+ const h=harness([scene({activity:1,activityRate:1})]);
+ for(const [t,epoch] of[[0,0],[.999,0],[1,1],[1.999,1],[2,2]]){h.engine.frame(t);assert.equal(h.uniforms.activityEpoch.value,epoch);}
+ h.engine.spec.scenes[0].raster={activity:1,activityRate:60};
+ for(const [t,epoch] of[[0,0],[.016,0],[1/60,1],[1/30,2]]){h.engine.frame(t);assert.equal(h.uniforms.activityEpoch.value,epoch);}
+ h.engine.spec.scenes[0].raster={};h.engine.frame(.5);assert.equal(h.uniforms.activity.value,0);assert.equal(h.uniforms.activityEpoch.value,9);
+ h.engine.spec.scenes[0].raster={activity:0,activityRate:60};h.engine.frame(.5);assert.equal(h.uniforms.activity.value,0);assert.equal(h.uniforms.activityEpoch.value,30);
+});
+
+test('hidden activity fields and changing getters use the validated snapshot before assigning uniforms',()=>{
+ const h=harness([scene(Object.defineProperty({},'activity',{value:.75}))]);h.engine.frame(.5);assert.equal(h.uniforms.activity.value,.75);
+ let reads=0;h.engine.spec.scenes[0].raster={activity:.25,get activityRate(){return ++reads===1?30:Infinity;}};
+ h.engine.frame(.5);assert.equal(reads,1);assert.equal(h.uniforms.activityEpoch.value,15);
+ const before=[h.uniforms.activity.value,h.uniforms.activityEpoch.value],count=h.draws.length;
+ assert.throws(()=>h.engine.frame(.5),/scene 1 raster.activityRate/);assert.deepEqual([h.uniforms.activity.value,h.uniforms.activityEpoch.value],before);assert.equal(h.draws.length,count);
 });

@@ -6,7 +6,7 @@ import type {Built,ModelCtx,PoseState,ModelDef} from './models/types.ts';
 import {clamp,lerp,ease,deg,rng,seedOf,smooth,type MatOpts} from './kit.ts';
 import {drawText,drawCaptions,textEnd,type TextCtx} from './text.ts';
 import {ambientOcclusionGLSL} from './ao.ts';
-import {ditherThresholdGLSL} from './dither.ts';
+import {ditherThresholdGLSL,ditherActivityGLSL} from './dither.ts';
 import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
 import {sampleMotionTime} from './motion-clock.ts';
 import {isFootageModel} from './media-library.ts';
@@ -31,10 +31,11 @@ const POST_FRAG=(aoMethod:'plane'|'legacy')=>`
 precision highp float;
 uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
 varying vec2 vUv;
-uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;
+uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;
 float bayer8(vec2 p){ivec2 i=ivec2(mod(p,8.));int x=i.x,y=i.y,xy=x^y;int v=((xy&1)<<5)|((x&1)<<4)|((xy&2)<<2)|((x&2)<<1)|((xy&4)>>1)|((x&4)>>2);return (float(v)+0.5)/64.;}
 float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 ${ditherThresholdGLSL}
+${ditherActivityGLSL}
 float mx(vec3 c){return max(c.r,max(c.g,c.b));}
 float linZ(vec2 uv){float z=texture2D(tDepth,uv).x*2.-1.;return 2.*cNear*cFar/(cFar+cNear-z*(cFar-cNear));}
 ${ambientOcclusionGLSL(aoMethod)}
@@ -49,7 +50,8 @@ vec4 dotColor(sampler2D t,vec2 c,vec2 cuv,vec2 local,bool useAO){
  float dens=pow(clamp(b*boost*expo,0.,1.),gam);
  // tone contrast around mid grey: lit faces fill in, shadow faces thin out (reference look)
  dens=clamp((dens-0.5)*contrast+0.5,0.,1.)*step(0.012,b);
- float thr=mix(bayer8(c),hash(c*0.37+11.),noiseAmt);
+ vec2 thresholdCell=activeThresholdCell(c,activity,activityEpoch);
+ float thr=mix(bayer8(thresholdCell),hash(thresholdCell*0.37+11.),noiseAmt);
  if(noiseReference>=0.)thr=referenceThreshold(thr,noiseAmt,noiseReference);
  vec2 dc=abs(local-cell*0.5);
  // Sparse ink has soft dot edges; dense highlights join into a continuous surface.
@@ -616,7 +618,7 @@ function validateSceneRaster(value:unknown,index:number){
  for(const key of Reflect.ownKeys(value)){
   if(typeof key!=='string')throw new Error(`${label}: unknown symbol field`);
   const v=Reflect.get(value,key);
-  const bounds=key==='cell'?[1,24]:key==='dotRoundness'?[0,1]:key==='dotSoftness'?[0,2]:null;
+  const bounds=key==='cell'?[1,24]:key==='dotRoundness'?[0,1]:key==='dotSoftness'?[0,2]:key==='activity'?[0,1]:key==='activityRate'?[1,60]:null;
   if(!bounds)throw new Error(`${label}.${key}: unknown field`);
   if(v!==undefined&&(typeof v!=='number'||!Number.isFinite(v)||v<bounds[0]!||v>bounds[1]!))throw new Error(`${label}.${key}: expected a finite number in [${bounds[0]}, ${bounds[1]}]`);
   result[key as keyof NonNullable<Scene['raster']>]=v as number|undefined;
@@ -636,13 +638,13 @@ export class Engine {
   spec.scenes.forEach((scene,index)=>validateSceneRaster(scene.raster,index));
   setFormat(spec.format??{});
   Object.assign(LOOK,{contrast:1.35,blackPoint:0,whitePoint:1,inkLo:0.42,shadows:1,ao:1,gamma:0.85,noise:0.06,gap:0,ink:1,fuzz:0.06,dotRoundness:0,dotSoftness:0,key:1.0,fill:0.1,rim:0.3,ambient:0.07,dir:[1.2,1.0,0.75]},spec.look??{});
-  this.rasterDefaults={cell:CELL,dotRoundness:LOOK.dotRoundness,dotSoftness:LOOK.dotSoftness};
+  this.rasterDefaults={cell:CELL,dotRoundness:LOOK.dotRoundness,dotSoftness:LOOK.dotSoftness,activity:0,activityRate:18};
   this.gl=document.createElement('canvas');this.gl.width=W;this.gl.height=H;
   this.renderer=new THREE.WebGLRenderer({canvas:this.gl,antialias:false,preserveDrawingBuffer:true,alpha:false});
   this.renderer.outputColorSpace=THREE.LinearSRGBColorSpace;this.renderer.toneMapping=THREE.NoToneMapping;this.renderer.setPixelRatio(1);this.renderer.localClippingEnabled=true;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFShadowMap;this.renderer.setSize(W,H,false);
   const mk=()=>{const rt=new THREE.WebGLRenderTarget(COLS*SS,ROWS*SS,{type:THREE.HalfFloatType,samples:4,generateMipmaps:true,minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,depthTexture:new THREE.DepthTexture(COLS*SS,ROWS*SS,THREE.FloatType)});return rt;};
   this.rtA=mk();this.rtB=mk();
-  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},time:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
+  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},time:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),this.post));
   this.out=document.createElement('canvas');this.out.width=W;this.out.height=H;this.ctx2d=this.out.getContext('2d')!;
   let t=0;for(const s of spec.scenes){this.starts.push(t);t+=sceneDuration(s);}this.total=t;
@@ -674,6 +676,9 @@ export class Engine {
   const i=this.sceneAt(t),local=t-this.starts[i]!,sc=this.spec.scenes[i]!;
   const raster=validateSceneRaster(sc.raster,i),u=this.post.uniforms;
   u.cell!.value=raster?.cell??this.rasterDefaults.cell;u.dotRoundness!.value=raster?.dotRoundness??this.rasterDefaults.dotRoundness;u.dotSoftness!.value=raster?.dotSoftness??this.rasterDefaults.dotSoftness;
+  u.activity!.value=raster?.activity??this.rasterDefaults.activity;
+  // Activity follows global output time, independently of the sampled motion clock.
+  u.activityEpoch!.value=Math.floor(t*(raster?.activityRate??this.rasterDefaults.activityRate)+1e-7);
   const motionLocal=sampleMotionTime(local,this.starts[i]!,sc.motionFPS,sc.motionPhase),motionGlobal=sc.motionFPS?this.starts[i]!+motionLocal:t;
   const aoMethod=sc.aoMethod??this.spec.look?.aoMethod??'plane';
   if(aoMethod!==this.aoMethod){this.aoMethod=aoMethod;this.post.fragmentShader=POST_FRAG(aoMethod);this.post.needsUpdate=true;}

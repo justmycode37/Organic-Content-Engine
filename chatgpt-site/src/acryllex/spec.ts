@@ -195,8 +195,10 @@ export interface Scene {
  camera?:CameraMove;
  /** Post ink grid: cell is output px (1..24), roundness 0..1, softness output px (0..2).
   * Defaults to the engine's original format.cell / look; source render resolution is unchanged.
+  * activity (0..1, default 0) reshuffles threshold cells locally; activityRate (1..60 Hz, default 18)
+  * uses global output time independently of motionFPS. Geometry, ink and uniform-tile density stay fixed.
   * Direct transitions use the selected incoming scene's grid for both images, as with lighting. */
- raster?:{cell?:number;dotRoundness?:number;dotSoftness?:number};
+ raster?:{cell?:number;dotRoundness?:number;dotSoftness?:number;activity?:number;activityRate?:number};
  objects:SceneObject[];
  events?:SceneEvent[];
  text?:TextItem[];
