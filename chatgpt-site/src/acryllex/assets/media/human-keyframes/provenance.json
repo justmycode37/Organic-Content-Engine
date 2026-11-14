@@ -13,6 +13,16 @@
       "mode": "RGB"
     },
     {
+      "file": "reach.png",
+      "role": "middle: backward chair reach while standing",
+      "sha256": "40f5b4eaa6915c5ab578e0a02b6e7910b9f8cc6e9d92c73318cd45d510d1b802",
+      "width": 1164,
+      "height": 670,
+      "mode": "RGB",
+      "preparation": "one uniform whole-image scale and translation; ordinary alpha composite onto black; no local body deformation or tone adjustment",
+      "limitation": "hand reaches farther left than reference; source-guided calibration only"
+    },
+    {
       "file": "type.png",
       "role": "last",
       "sha256": "ad6e6350bddd82d69b87d3e6f39594d73e29a80bf0286395cf66d6b9575971c0",
@@ -27,7 +37,7 @@
     "source-guided calibration, not held validation",
     "seated body remains wider and wrist/hip/knee positions differ from the reference",
     "seated density MAE .1962 vs .1868 for the current recreation",
-    "continuous motion and input-frame preservation unverified"
+    "First/end-only motion preserved identity but crouched too early and omitted backward chair reach; full trial was rejected. Explicit middle frame is an unverified follow-up."
   ],
   "defaultChanges": false
 }
