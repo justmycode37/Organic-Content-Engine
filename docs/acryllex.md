@@ -365,3 +365,5 @@ Every finished reel is remembered, and a new reel never covers a subject an earl
 - Each idea is checked before any paid step: same key or mostly the same subject words → rejected; otherwise a
   short Sol `novelty` call compares the question against every earlier reel. A rejected idea is retried (up to
   4 ideas); a requested `--topic` that repeats fails immediately.
+
+`mesh.params.sourceAlbedo` optionally maps exact source material names to strengths 0..1. It retains selected source reflectance (for example pupils/irises) under the shared lights without copying photographic skin brightness. Unselected surfaces remain neutral. Source textures with baked lighting still need review; the shader does not infer intrinsic albedo. Defaults are unchanged. Native checks are in `scripts/acryllex/verify-source-albedo.mjs`.

@@ -40,13 +40,14 @@ try{
    const tex=new THREE.DataTexture(new Uint8Array([128,128,128,255]),1,1);tex.colorSpace=THREE.SRGBColorSpace;tex.needsUpdate=true;
    const source=new THREE.MeshStandardMaterial({map:tex}),mesh=new THREE.Mesh(new THREE.PlaneGeometry(2,2),plainMaterial(source,ctx,.72,false,1));scene.add(mesh);
    const sample=()=>{renderer.setRenderTarget(target);renderer.render(scene,camera);const p=new Uint8Array(4);renderer.readRenderTargetPixels(target,32,32,1,1,p);return Array.from(p);};
-   const actual=sample(),linear=new THREE.Color().setRGB(128/255,128/255,128/255,THREE.SRGBColorSpace).r;
+   // Independent IEC sRGB decode: Engine intentionally disables global ColorManagement.
+   const actual=sample(),encoded=128/255,linear=encoded<=.04045?encoded/12.92:Math.pow((encoded+.055)/1.055,2.4);
    mesh.material=ctx.mat({tone:.72*linear,rough:.62});const expected=sample();
    mesh.material=plainMaterial(source,ctx,.72,false,.5);const partial=sample();mesh.material=ctx.mat({tone:.72*(.5+.5*linear),rough:.62});const expectedPartial=sample();
    target.dispose();renderer.dispose();return {actual,expected,partial,expectedPartial,decodedLuma:linear};
   }
  };`},bundle:true,write:false,format:'iife',target:'es2022',define:{'import.meta.url':JSON.stringify('http://acx.local/modules/source-albedo-verification.js')},loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
- await page.addScriptTag({content:bundle});const linear=await page.evaluate(()=>window.sourceAlbedoCheck.linearProbe());assert.deepEqual(linear.actual,linear.expected);assert.deepEqual(linear.partial,linear.expectedPartial);
+ await page.addScriptTag({content:bundle});const linear=await page.evaluate(()=>window.sourceAlbedoCheck.linearProbe());console.log(JSON.stringify({linear}));assert.deepEqual(linear.actual,linear.expected);assert.deepEqual(linear.partial,linear.expectedPartial);
  const results=[];
  for(const source of sourceCases)for(const angle of ['front','three-quarter-left','side']){
   const neutral=make(source,angle,{}),selected=make(source,angle,{[source.eye]:1}),assets=await assetsForSpec(selected);
@@ -54,9 +55,12 @@ try{
   assert.deepEqual(after.profile,before.profile);assert.ok(after.rects.length);assert.equal(after.reverseExact,true);
   let changedInside=0,changedOutside=0,beforeEyeSum=0,afterEyeSum=0,eyePixels=0;
   for(let i=0;i<before.pixels.length;i++){const x=i%1164,y=Math.floor(i/1164),eye=after.rects.some(r=>x>=r.minX&&x<=r.maxX&&y>=r.minY&&y<=r.maxY),changed=before.pixels[i]!==after.pixels[i];if(eye){changedInside+=+changed;beforeEyeSum+=before.pixels[i];afterEyeSum+=after.pixels[i];eyePixels++;}else changedOutside+=+changed;}
-  assert.ok(changedInside>10,source.id+' '+angle+' has no visible eye-texture contribution');assert.equal(changedOutside,0,'Nonselected face shading changed outside the projected eye surfaces');assert.ok(afterEyeSum<beforeEyeSum,'Source pupil/iris reflectance must darken the clay eye');
+  // Front/oblique views expose the iris. A strict profile may hide it or leave no lit eye dots.
+  if(angle!=='side')assert.ok(changedInside>10,source.id+' '+angle+' has no visible eye-texture contribution');
+  assert.equal(changedOutside,0,'Nonselected face shading changed outside the projected eye surfaces');
+  if(changedInside)assert.ok(afterEyeSum<beforeEyeSum,'Source pupil/iris reflectance must darken the clay eye');else assert.equal(afterEyeSum,beforeEyeSum);
   await writeFile(join(out,'source-albedo-'+source.id+'-'+angle+'-neutral.png'),Buffer.from(before.image,'base64'));await writeFile(join(out,'source-albedo-'+source.id+'-'+angle+'.png'),Buffer.from(after.image,'base64'));
-  results.push({source:source.id,uid:source.uid,angle,changedInside,changedOutside,beforeEyeMean:beforeEyeSum/eyePixels,afterEyeMean:afterEyeSum/eyePixels,reverseExact:after.reverseExact,profileUnchanged:true});
+  results.push({source:source.id,uid:source.uid,angle,changedInside,changedOutside,eyeMarkingsVisibleAtRaster:changedInside>0,beforeEyeMean:beforeEyeSum/eyePixels,afterEyeMean:afterEyeSum/eyePixels,reverseExact:after.reverseExact,profileUnchanged:true});
  }
  assert.deepEqual(errors,[]);await writeFile(join(out,'source-albedo-gpu-verification.json'),JSON.stringify({passed:true,linear,results,limits:'Material reflectance/feature visibility and native-frame isolation only. The source geometry, anatomical accuracy, source lighting baked into images, expression quality and perceptual realism still require review. The reference image is not reconstructed by this shader.'},null,2)+'\n');console.log(JSON.stringify({linear,results}));
 }finally{await browser.close();}
