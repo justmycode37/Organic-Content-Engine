@@ -81,3 +81,33 @@ The converter supports explicitly validated CMU inch-based ASF units, degree ang
 Preparation is deterministic: source pins, sampling, names and metadata are stable, with no timestamp or render assets in the GLB. Generic local/remote skeletal GLBs pass through `recorded-motion-assets.mjs`; they are cached by complete-byte SHA256. Source-kind and pin checks occur before loading.
 
 Tests: `node --test scripts/acryllex-recorded-motion.test.mjs` runs synthetic source, validation, sampling, clock, ownership, reproducibility and concurrent-publication checks. No restricted motion samples or network calls are needed by these tests. Actual-data GPU acceptance is a separate private check; successful import alone is not evidence of source likeness or solved chair contacts.
+
+## Captured fingers and independent body motion
+
+Recorded motion accepts three optional controls:
+
+| Control | Default | Behavior |
+| --- | --- | --- |
+| `body` | `true` | Replace the bound action's body motion. `false` keeps the existing body pose, gait and authored tracks. |
+| `fingers` | `false` | Transfer actual animated finger rotations after final hand IK. Missing finger tracks retain the existing hand pose. |
+| `fingerCurlPriority` | `"authored"` | Explicit scene `fingerCurl` or per-hand track curl wins, including zero. `"capture"` explicitly gives available, weighted captured finger actions priority over those curl controls. |
+
+For a typing layer that leaves the body's existing motion intact:
+
+```js
+recordedMotion: {
+  file: "/private/path/typing.glb",
+  actions: { type: "typing", "type-lean": "typing" },
+  body: false,
+  fingers: true,
+  fingerCurlPriority: "capture"
+}
+```
+
+Finger-only bindings use the original semantic action, so a `stand` binding does not disable automatic walking. Each finger's parent-relative rotation transfers through anatomical rest frames, retaining the target's own rest spread and segment lengths. The layer follows the final hand and wrist after IK. Missing endpoints blend with the evaluated existing finger pose; zero-weight captured endpoints are no-ops. This does not infer motion from fingerless captures or solve fingertip/keyboard collisions.
+
+Only animated joints with usable rest-palm and phalanx frames transfer. Missing or degenerate frames retain the existing articulation; unused palm geometry cannot make a fingerless capture fail.
+
+The existing bounds-based origin depends on the initially posed mesh. Starting with captured fingers can shift that initial center by several millimetres. Use `origin: "model"` for an explicit skeletal origin. Alternatively, bindings that activate only later keep the initial bounds unchanged; verify body-world placement across the entire authored motion. No implicit compensation or camera change is applied.
+
+Use your own suitable skeletal source. No captured typing asset is included in the repository. `node --test scripts/acryllex-recorded-fingers.test.mjs` covers synthetic captured rotations, fixed geometry, hand IK, action blends, author/capture priority, no-data behavior and absolute seeking without external assets.

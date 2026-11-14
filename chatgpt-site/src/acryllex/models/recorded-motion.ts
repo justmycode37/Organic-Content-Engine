@@ -4,15 +4,17 @@ import type {GLTF} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import {HumanRig,emptyPose,type HumanPose} from './human-motion.ts';
 
 export interface RecordedAction {clip:string;start:number;end?:number;timeOrigin:number;speed:number;loop:boolean}
-export interface RecordedMotionConfig {src:string;sha256?:string;actions:Record<string,RecordedAction>;heading:'initial'|'follow'|'preserve';baselineY?:number}
+export interface RecordedMotionConfig {src:string;sha256?:string;actions:Record<string,RecordedAction>;heading:'initial'|'follow'|'preserve';baselineY?:number;body?:boolean;fingers?:boolean;fingerCurlPriority?:'authored'|'capture'}
 const fail=(s:string):never=>{throw new Error(`recordedMotion: ${s}`);};
 const finite=(v:unknown,name:string,fallback:number)=>v===undefined?fallback:typeof v==='number'&&Number.isFinite(v)?v:fail(`${name} must be finite`);
 /** Opt-in only. Actions bind existing human pose names; all clocks are absolute scene seconds. */
 export function parseRecordedMotion(value:unknown):RecordedMotionConfig|null{
  if(value===undefined||value===null||value===false)return null;
  if(typeof value!=='object'||Array.isArray(value))return fail('expected an object');
- const v=value as Record<string,unknown>,allowed=['file','url','sha256','actions','heading','baselineY'];
+ const v=value as Record<string,unknown>,allowed=['file','url','sha256','actions','heading','baselineY','body','fingers','fingerCurlPriority'];
  for(const k of Object.keys(v))if(!allowed.includes(k))fail(`unknown option ${k}`);
+ for(const key of ['body','fingers'])if(v[key]!==undefined&&typeof v[key]!=='boolean')fail(`${key} must be boolean`);
+ if(v.fingerCurlPriority!==undefined&&v.fingerCurlPriority!=='authored'&&v.fingerCurlPriority!=='capture')fail('fingerCurlPriority must be authored or capture');
  const hasFile=v.file!==undefined,hasURL=v.url!==undefined;
  if(hasFile&&typeof v.file!=='string'||hasURL&&typeof v.url!=='string')fail('file/url must be strings when present');
  if(hasFile===hasURL)fail('provide exactly one file or url');
@@ -34,7 +36,7 @@ export function parseRecordedMotion(value:unknown):RecordedMotionConfig|null{
   const start=finite(a.start,'start',0),end=a.end===undefined?undefined:finite(a.end,'end',0);if(start<0||end!==undefined&&end<=start)fail('clip range must have0<=start<end');
   actions[name]={clip:String(a.clip),start,...(end===undefined?{}:{end}),timeOrigin:finite(a.timeOrigin,'timeOrigin',0),speed,loop:a.loop===true};
  }
- return{src,sha256:hash,actions,heading:heading as RecordedMotionConfig['heading'],...(v.baselineY===undefined?{}:{baselineY:finite(v.baselineY,'baselineY',0)})};
+ return{src,sha256:hash,actions,heading:heading as RecordedMotionConfig['heading'],...(v.body===undefined?{}:{body:v.body as boolean}),...(v.fingers===undefined?{}:{fingers:v.fingers as boolean}),...(v.fingerCurlPriority===undefined?{}:{fingerCurlPriority:v.fingerCurlPriority as 'authored'|'capture'}),...(v.baselineY===undefined?{}:{baselineY:finite(v.baselineY,'baselineY',0)})};
 }
 /** Must match scripts/acryllex/recorded-motion-assets.mjs. Includes pin to isolate versions of one URL. */
 export const recordedMotionKey=(c:Pick<RecordedMotionConfig,'src'|'sha256'>)=>`recorded-motion:${c.sha256??'local'}:${c.src}`;
@@ -86,6 +88,7 @@ export class RecordedMotionSource {
   for(const a of Object.values(config.actions)){const c=this.clips.get(a.clip);if(!c)fail(`clip ${a.clip} not found`);recordedClipTime(0,c!.duration,a);}
  }
  has(name:string){return Object.hasOwn(this.config.actions,name);}
+ hasBody(name:string){return this.config.body!==false&&this.has(name);}
  private raw(name:string,time:number){
   for(const x of this.rest){x.o.position.copy(x.p);x.o.quaternion.copy(x.q);x.o.scale.copy(x.s);}
   for(const b of this.bindings.get(name)!){const v=b.interpolant.evaluate(time);if(b.property==='position')b.node.position.fromArray(v);else b.node.quaternion.fromArray(v).normalize();}this.space.updateMatrixWorld(true);
