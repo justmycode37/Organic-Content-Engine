@@ -3,6 +3,7 @@ import {GLTFLoader,type GLTF} from 'three/examples/jsm/loaders/GLTFLoader.js';
 import * as SkeletonUtils from 'three/examples/jsm/utils/SkeletonUtils.js';
 import catalogJson from './assets/catalog.json' with {type:'json'};
 import {preloadMeshCaches} from './mesh-cache.ts';
+import {inspectHumanBodyGLB} from './human-body-source.ts';
 import {footageVariantKey} from './media-key.ts';
 import {resolveFootageParams} from './media-library.ts';
 import {defineModel,type ModelDef,type ModelCtx} from './models/types.ts';
@@ -82,7 +83,7 @@ export async function preloadAssets(paths:Record<string,string>){
   if(footagePaths.some(([key])=>key.startsWith(id+':[')))FOOTAGE_LEGACY_MAPS.delete(id);else FOOTAGE_LEGACY_MAPS.add(id);
   FOOTAGE.set(id,clip);
  }
- await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')&&!id.startsWith('fluid-cache:')).map(async([id,path])=>{if(GLTFS.has(id)&&(!id.startsWith('recorded-motion:')||RECORDED_PATHS.get(id)===path))return;try{const loaded=await loader.loadAsync(ASSET_BASE+path);GLTFS.set(id,loaded);if(id.startsWith('recorded-motion:'))RECORDED_PATHS.set(id,path);}catch(err){if(id.startsWith('recorded-motion:'))throw new Error(`recorded motion ${id} failed to load: ${String(err)}`);console.warn(`asset ${id} failed`,err);}}));
+ await Promise.all(Object.entries(paths).filter(([id])=>!id.startsWith('footage:')&&!id.startsWith('fluid-cache:')).map(async([id,path])=>{const custom=id.startsWith('human-body:'),strict=custom||id.startsWith('recorded-motion:');if(GLTFS.has(id)&&(!strict||RECORDED_PATHS.get(id)===path))return;try{let loaded:GLTF;if(custom){const response=await fetch(ASSET_BASE+path);if(!response.ok)throw new Error(`HTTP ${response.status}`);const bytes=await response.arrayBuffer();inspectHumanBodyGLB(new Uint8Array(bytes));loaded=await loader.parseAsync(bytes,ASSET_BASE);}else loaded=await loader.loadAsync(ASSET_BASE+path);GLTFS.set(id,loaded);if(strict)RECORDED_PATHS.set(id,path);}catch(err){if(custom)throw new Error(`bodySource: ${id} failed to load: ${String(err)}`);if(id.startsWith('recorded-motion:'))throw new Error(`recorded motion ${id} failed to load: ${String(err)}`);console.warn(`asset ${id} failed`,err);}}));
 }
 export function gltf(id:string){return GLTFS.get(id);}
 
