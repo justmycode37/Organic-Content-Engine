@@ -196,3 +196,23 @@ test('source orientation precedes physical sizing and preserves authored root tr
  assert.ok(Math.abs(new THREE.Box3().setFromObject(built.root,true).getSize(new THREE.Vector3()).y-.21)<1e-7);assert.deepEqual(positions(scene),before);
  for(const sourceRotation of [null,[1,2],[0,NaN,0],['90',0,0]])assert.throws(()=>importedMesh.build(ctx({file:'source-axis-fixture.glb',sourceRotation})),/three finite degrees/);
 });
+
+test('selected source albedo retains authored eye markings without importing skin colour or changing source data',async()=>{
+ const scene=new THREE.Group(),texture=new THREE.DataTexture(new Uint8Array([128,64,32,96]),1,1);texture.colorSpace=THREE.SRGBColorSpace;texture.offset.set(.2,.3);texture.repeat.set(.5,.75);
+ const skin=new THREE.MeshStandardMaterial({color:new THREE.Color(.3,.4,.5),map:texture}),eye=new THREE.MeshStandardMaterial({color:new THREE.Color(.8,.7,.6),map:texture,transparent:true,opacity:.7,normalMap:new THREE.Texture()});skin.name='Skin';eye.name='Eye';eye.normalScale.set(.4,-.6);
+ const mesh=new THREE.Mesh(new THREE.BoxGeometry(),[skin,eye]);mesh.name='face';scene.add(mesh);const original={color:eye.color.toArray(),offset:texture.offset.toArray(),repeat:texture.repeat.toArray(),points:positions(scene)};
+ await install({'mesh:source-albedo-fixture.glb':{scene,animations:[]}});
+ const selected=importedMesh.build(ctx({file:'source-albedo-fixture.glb',sourceAlbedo:{Eye:1}})).root.getObjectByName('face').material;
+ assert.equal(selected[0].map,null,'Unselected skin must retain neutral shading');assert.equal(selected[1].map,texture);assert.equal(selected[1].normalMap,eye.normalMap);assert.deepEqual(selected[1].normalScale.toArray(),[.4,-.6]);assert.equal(selected[1].opacity,.7);assert.equal(selected[1].roughness,.62);assert.equal(selected[1].userData.acryllexSourceMaterial,'Eye');
+ assert.deepEqual(eye.color.toArray(),original.color);assert.deepEqual(texture.offset.toArray(),original.offset);assert.deepEqual(texture.repeat.toArray(),original.repeat);assert.deepEqual(positions(scene),original.points);assert.equal(texture.colorSpace,THREE.SRGBColorSpace);
+ const partial=plainMaterial(eye,ctx(),.72,true,.5),full=plainMaterial(eye,ctx(),.72,true,1),neutral=plainMaterial(eye,ctx(),.72,true,0);assert.notEqual(partial.customProgramCacheKey(),full.customProgramCacheKey());assert.notEqual(full.customProgramCacheKey(),neutral.customProgramCacheKey());
+ const dark=eye.clone();dark.color.setScalar(.1);assert.notEqual(plainMaterial(dark,ctx(),.72,true,1).customProgramCacheKey(),full.customProgramCacheKey(),'Different source factors need distinct shader programs');
+ const shader={fragmentShader:'#include <map_fragment>'};neutral.onBeforeCompile(shader,{});assert.doesNotMatch(shader.fragmentShader,/diffuseColor.rgb/);
+});
+
+test('source albedo selections reject invalid strengths, unknown material names and incompatible texture modes',()=>{
+ for(const sourceAlbedo of [null,[],true,'Eye',{Eye:NaN},{Eye:Infinity},{Eye:-.1},{Eye:1.1},{Eye:'1'},{'':1}])assert.throws(()=>importedMesh.build(ctx({file:'source-albedo-fixture.glb',sourceAlbedo})),/sourceAlbedo/);
+ assert.throws(()=>importedMesh.build(ctx({file:'source-albedo-fixture.glb',sourceAlbedo:{InventedEye:1}})),/material.*missing/);
+ assert.throws(()=>importedMesh.build(ctx({file:'source-albedo-fixture.glb',plain:false,sourceAlbedo:{Eye:.5}})),/requires the neutral/);
+ for(const strength of [NaN,Infinity,-1,2])assert.throws(()=>plainMaterial(undefined,ctx(),.72,false,strength),/strength/);
+});

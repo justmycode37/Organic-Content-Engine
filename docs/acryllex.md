@@ -351,3 +351,17 @@ Optical materials set `material.userData.screenAO=false`: their first-interface 
 - **External index:** `node scripts/acryllex/source-search.mjs build` (one-time, ≈600 MB Objaverse metadata into `.acryllex-cache/sources/`); `node scripts/acryllex/source-search.mjs "fire truck"` to search.
 - **Auto-sourcing in `produce.mjs`:** after the script, Sol lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Sol picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
 - **Review sheets:** `node scripts/acryllex/gallery.mjs <out.png> <ids...>`.
+
+## No repeated topics
+
+Every finished reel is remembered, and a new reel never covers a subject an earlier one did
+(`chatgpt-site/worker/acryllex-history.ts`):
+
+- The scheduled worker receives every completed ACRYLLEX job of the account (not a recent window), with title,
+  topic and `topicKey`. `scripts/acryllex/produce.mjs` merges that with the local ledger
+  `chatgpt-site/.acryllex-history.json` (override with `ACRYLLEX_HISTORY_FILE`), which records every finished
+  reel, including manual runs.
+- Ideation sees the full list and only the seed ideas not used yet, and returns a `topicKey` slug.
+- Each idea is checked before any paid step: same key or mostly the same subject words → rejected; otherwise a
+  short Sol `novelty` call compares the question against every earlier reel. A rejected idea is retried (up to
+  4 ideas); a requested `--topic` that repeats fails immediately.
