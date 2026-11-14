@@ -1,15 +1,9 @@
-# Experimental human motion keyframes
+# Human motion-transfer inputs
 
-These AI-generated, undithered grayscale plates provide explicit initial full-stride, walking, backward-reaching and seated typing inputs for a continuous human-motion experiment. The synthetic actor is fully clothed; all RGB frames use the same 1164×670 canvas and a black background.
+`start.png` and `female-start.png` are generated, fully clothed adult appearance sources on a shared 1164×670 black canvas. `motion-guide-corrected.mp4` is a 4.9-second, 30 fps furniture-free grayscale render of the fitted human rig. These are the inputs used for the bundled male/female motion clips.
 
-`start.png`, `walk.png`, `reach.png` and `type.png` are source images, not animation frames from an adopted recreation. `provenance.json` records generation, global framing, file hashes and remaining pose/density errors. The seated plate remains wider than the reference, and the reach hand extends too far left.
+The guide keeps one arm reaching for a chair while the other stays down/front, stabilizes the far foot while retaining the near-foot step, and includes a late-walk head descent. Its combined solved-bone behavior, camera and prop transforms were compared at 16 times. Typing wrist checks did not justify an additional correction.
 
-The first/end-only generation preserved identity and natural proportions but crouched too early and omitted the backward chair reach. Its full recreation trial was rejected. The reach frame explicitly supplies that missing action for a new controlled test. The additional start frame corrects the earlier use of the one-second walking pose as the first frame; foot/knee deviations remain and are recorded in provenance. Intermediate poses, local density, contrast and timing still require comparison before adoption.
+No original reference-video pixels or raw body-model files are included. Source hashes and preparation are recorded in `provenance.json`, `female-start-provenance.json` and `motion-guide-corrected-provenance.json`. The generated output and alpha-mask hashes are recorded in `../human-motion-provenance.json`.
 
-No model preset or renderer default is changed by these files. Original reference images and video are not included.
-
-`motion-guide.mp4` is a continuous 4.9-second, furniture-free grayscale render of the existing fitted human rig and camera, for a pose-conditioned appearance-transfer test. It contains no original reference-video pixels. Its provenance is recorded separately. Four-pose generation restored the reach but still altered gait, arm swing and foot contacts, so it remains unadopted. The motion guide tests whether explicit video motion conditioning can preserve those constraints.
-
-`female-start.png` supplies a distinct, fully clothed adult female appearance on the same canvas. It is an experimental generated source, with pose deviations recorded in `female-start-provenance.json`; it is not yet an animated model or adopted preset.
-
-`motion-guide-corrected.mp4` is the next driving-video candidate. It incorporates a tested late-walk head descent, keeps the far arm down/front while the near arm reaches for the chair, and stabilizes the far foot while retaining the reference-like near-foot step. Combined solved-bone behavior, camera and furniture transforms were checked at 16 times. This is still a source-guide experiment; its transferred appearance and final pixel rendering require comparison before adoption.
+The images retain small pose deviations; the guide supplies the actual animation. These inputs and generated clips do not establish a 99% reference match.

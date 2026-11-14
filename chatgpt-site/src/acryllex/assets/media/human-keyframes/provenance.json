@@ -1,77 +1,16 @@
 {
-  "status": "experimental source plates for a controlled continuous-motion test; not an adopted recreation or animated preset",
+  "purpose": "Reproducible appearance and driving-motion inputs for the bundled fixed-view human media",
   "generated": true,
-  "generator": "built-in image_gen tool",
-  "subject": "synthetic fully clothed adult male",
-  "frames": [
-    {
-      "file": "start.png",
-      "role": "first: actual initial full-stride walking pose",
-      "sha256": "9633b5ffa486f96b4d0c095a529fcdb453b20b37277c6b46efea12784284ab70",
-      "width": 1164,
-      "height": 670,
-      "mode": "RGB",
-      "preparation": "one uniform scale and translation; ordinary alpha composite onto black; source RGB channel variation retained",
-      "limitations": [
-        "rear toe26px low",
-        "front heel32px left",
-        "front knee27px high",
-        "guided source0 calibration, not held proof"
-      ]
-    },
-    {
-      "file": "walk.png",
-      "role": "middle: walking pose near1s",
-      "sha256": "a8c90e9adbd87fd367b81743fadd03eceff08a856e032c30f49e91893d6f9d49",
-      "width": 1164,
-      "height": 670,
-      "mode": "RGB"
-    },
-    {
-      "file": "reach.png",
-      "role": "middle: backward chair reach while standing",
-      "sha256": "40f5b4eaa6915c5ab578e0a02b6e7910b9f8cc6e9d92c73318cd45d510d1b802",
-      "width": 1164,
-      "height": 670,
-      "mode": "RGB",
-      "preparation": "one uniform whole-image scale and translation; ordinary alpha composite onto black; no local body deformation or tone adjustment",
-      "limitation": "hand reaches farther left than reference; source-guided calibration only"
-    },
-    {
-      "file": "type.png",
-      "role": "last",
-      "sha256": "ad6e6350bddd82d69b87d3e6f39594d73e29a80bf0286395cf66d6b9575971c0",
-      "width": 1164,
-      "height": 670,
-      "mode": "RGB"
-    }
-  ],
-  "guidance": "user-provided human poses and generated actor identity; original guide pixels were not composited into these images",
-  "preparation": "global uniform scale and translation only, no body-part warp; actual footage-plane RGB capture with original linear output and alpha blending; no pixel post effect",
-  "limitations": [
-    "source-guided calibration, not held validation",
-    "seated body remains wider and wrist/hip/knee positions differ from the reference",
-    "seated density MAE .1962 vs .1868 for the current recreation",
-    "First/end-only motion preserved identity but crouched too early and omitted backward chair reach; full trial was rejected. Explicit middle frame is an unverified follow-up.",
-    "Four-pose video restored chair reach but still exaggerated arm swing, altered gait and slid feet. Motion transfer from an own rendered rig guide is the next unverified experiment."
-  ],
-  "defaultChanges": false,
-  "motionGuide": {
-    "file": "motion-guide.mp4",
-    "provenance": "motion-guide-provenance.json",
-    "sha256": "db504009e0147fbad8251b145bbd9ada0d28f3802a2942c91e695446284e5b5d",
-    "generatedBy": "own library rig render, not image/video generation or original reference capture"
+  "originalReferencePixelsIncluded": false,
+  "files": {
+    "start.png": "9633b5ffa486f96b4d0c095a529fcdb453b20b37277c6b46efea12784284ab70",
+    "female-start.png": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
+    "motion-guide-corrected.mp4": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c"
   },
-  "femaleSource": {
-    "file": "female-start.png",
-    "provenance": "female-start-provenance.json",
-    "sha256": "633940735e5ca910858629e70851bb617b8911ab7b1071377892c8be1931c2f6",
-    "status": "source only; motion validation pending"
-  },
-  "correctedMotionGuide": {
-    "file": "motion-guide-corrected.mp4",
-    "provenance": "motion-guide-corrected-provenance.json",
-    "sha256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
-    "status": "validated own driving render; final transferred appearance pending"
-  }
+  "appearanceGenerator": "image_gen",
+  "motionGenerator": "own fitted rig render; neutral grayscale; furniture hidden; flash/dissolve removed",
+  "videoGenerator": "Kling AI2.6 Motion Control",
+  "preparation": "Whole-image uniform scale/translation and alpha-over-black for appearance inputs; no body-part warp. Movie preparation and hashes are in ../human-motion-provenance.json.",
+  "limitations": "Appearance source poses are approximate. The driving rig supplies the animation; generated output still has documented tracking and material-density errors.",
+  "default3DModelChanges": false
 }

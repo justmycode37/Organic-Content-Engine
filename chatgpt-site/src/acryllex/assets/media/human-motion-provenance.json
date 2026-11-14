@@ -1,0 +1,67 @@
+{
+  "status": "Generated fixed-view human media; not freely rotatable meshes or99%reference matches",
+  "generator": "Kling AI2.6 Motion Control with image_gen appearance inputs and an own rendered rig guide",
+  "providerTerms": [
+    "https://kling.ai/docs/user-policy",
+    "https://kling.ai/docs/payment-policy"
+  ],
+  "originalReferencePixelsIncluded": false,
+  "sharedOutputLook": {
+    "inkMode": "fixed",
+    "cell": 3.72,
+    "sourceLevels": {
+      "blackPoint": 0,
+      "whitePoint": 0.75
+    }
+  },
+  "subjects": {
+    "male": {
+      "asset": "human-male-motion",
+      "sourceFile": "human-male-motion.mkv",
+      "alphaFile": "human-male-motion-alpha.mkv",
+      "sourceSHA256": "2f4c9c3d2472c50b0e4f88952d1584b55edb944687fd7dec46410188ce7e3421",
+      "alphaSHA256": "92a88b821d62ce0fa4ab5074994b4840914034a3320ed7613748037a477868ea",
+      "nativeGeneratedSHA256": "90efe49cda235b2c9581ae9ec82c3419deea6c65d88a162e50ae8d7f837dddec",
+      "nativeGenerationResolution": "1080p",
+      "runId": "01M7C7RTH4GEBJG4XCAPBH7EF2",
+      "inputCommit": "bef8d5a0b8241e42a3329c9789f6bf7c33114050",
+      "appearanceInput": "human-keyframes/start.png",
+      "motionGuide": "human-keyframes/motion-guide-corrected.mp4",
+      "motionGuideSHA256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
+      "frames": 147,
+      "fps": 30.0,
+      "duration": 4.9,
+      "size": [
+        1164,
+        670
+      ],
+      "crop": "235:422:446:108",
+      "preparation": "Uniform whole-canvas resize with integer raster rounding, source RGB otherwise unchanged; lossless FFV1. Matte from generated maxRGB>5 largest connected component, enclosed holes filled, boundary Gaussian sigma0.5. No original reference pixels used, no body-part deformation or local tone edit.",
+      "validation": "Native identity/anatomy and guide motion reviewed; remaining source tracking/finger/material-density limitations are documented in the catalogue. Named model rendering compared with direct source preparation."
+    },
+    "female": {
+      "asset": "human-female-motion",
+      "sourceFile": "human-female-motion.mkv",
+      "alphaFile": "human-female-motion-alpha.mkv",
+      "sourceSHA256": "1583e8e694e03aae61a349efb3d96cab6d139fcaa824001a7774625baa6ece8c",
+      "alphaSHA256": "1c9c104bf0b6182506f64959eae5d28a36c2274f1978f247d0d4ab8bc09b2f08",
+      "nativeGeneratedSHA256": "7092287e6e700093dd4d4f1378681af30e961b678ac69e464b62698a44bfba79",
+      "nativeGenerationResolution": "720p",
+      "runId": "01M7C870YA435V5FJ6XTXC96RP",
+      "inputCommit": "bef8d5a0b8241e42a3329c9789f6bf7c33114050",
+      "appearanceInput": "human-keyframes/female-start.png",
+      "motionGuide": "human-keyframes/motion-guide-corrected.mp4",
+      "motionGuideSHA256": "cc5e50b18298d26d809b8bdb6d11b8fe7e00d503950cb1cfee090f1d9def4c4c",
+      "frames": 147,
+      "fps": 30.0,
+      "duration": 4.9,
+      "size": [
+        1164,
+        670
+      ],
+      "crop": "238:422:448:109",
+      "preparation": "Uniform whole-canvas resize with integer raster rounding, source RGB otherwise unchanged; lossless FFV1. Matte from generated maxRGB>5 largest connected component, enclosed holes filled, boundary Gaussian sigma0.5. No original reference pixels used, no body-part deformation or local tone edit.",
+      "validation": "Native identity/anatomy and guide motion reviewed; remaining source tracking/finger/material-density limitations are documented in the catalogue. Named model rendering compared with direct source preparation."
+    }
+  }
+}
