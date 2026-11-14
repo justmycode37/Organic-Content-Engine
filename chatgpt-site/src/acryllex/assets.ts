@@ -6,6 +6,7 @@ import {preloadMeshCaches} from './mesh-cache.ts';
 import {inspectHumanBodyGLB} from './human-body-source.ts';
 import {footageVariantKey} from './media-key.ts';
 import {resolveFootageParams} from './media-library.ts';
+import {applyFootageLevels} from './footage-levels.ts';
 import {defineModel,type ModelDef,type ModelCtx} from './models/types.ts';
 
 export interface AssetEntry {id:string;src:'polyhaven'|'three'|'url';url?:string;ph?:string;file?:string;name:string;tags:string[];cat?:string;desc?:string;size:number[];anim?:boolean}
@@ -190,7 +191,7 @@ export const importedMesh=defineModel({
 export const footage=defineModel({
  id:'footage',aliases:['video','clip'],
  describe:'A fixed-view video played as dots on a flat screen; it does not reconstruct a new 3D viewpoint. params.file selects prepared footage, start selects seconds into that clip, timeOrigin is its scene-local playback origin, and height is metres (default2; width follows manifest w/h). For an exact camera view use object pos[0,0,0], origin:"model", and camera pos[0,0,height/(2*tan(fov/2))].',
- params:{asset:'licensed subject preset: ocean-breaker or ocean-barrel (instead of file/url)',file:'local video/image path or HTTPS URL',url:'alternative HTTPS video/image URL',crop:'W:H:X:Y',start:'seconds into the prepared clip (default0)',timeOrigin:'scene-local playback origin seconds (default0)',height:'metres (default2)',fps:'prepared frame rate (default30)',loop:'true|false',sampleScale:'source samples per output dot (1..4; library presets3); does not change output dot size',cols:'prepared frame width pixels (optional)',rows:'prepared frame height pixels (optional)',blur:'preparation blur pixels (default1.2)',monochrome:'true prepares BT709 luma for one scene ink',sourceStart:'trim source from this second before preparation',sourceDuration:'optional source trim duration seconds',preserveAspect:'true preserves source/crop aspect during preparation',alphaFile:'optional explicit alpha-mask image/video',invertAlpha:'true inverts the explicit alpha mask',mirrorX:'true mirrors image and alpha together',mirrorY:'true flips image and alpha together'},
+ params:{asset:'licensed subject preset: ocean-breaker or ocean-barrel (instead of file/url)',file:'local video/image path or HTTPS URL',url:'alternative HTTPS video/image URL',crop:'W:H:X:Y',start:'seconds into the prepared clip (default0)',timeOrigin:'scene-local playback origin seconds (default0)',height:'metres (default2)',fps:'prepared frame rate (default30)',loop:'true|false',sampleScale:'source samples per output dot (1..4; library presets3); does not change output dot size',cols:'prepared frame width pixels (optional)',rows:'prepared frame height pixels (optional)',blur:'preparation blur pixels (default1.2)',monochrome:'true prepares BT709 luma for one scene ink',sourceStart:'trim source from this second before preparation',sourceDuration:'optional source trim duration seconds',preserveAspect:'true preserves source/crop aspect during preparation',alphaFile:'optional explicit alpha-mask image/video',invertAlpha:'true inverts the explicit alpha mask',mirrorX:'true mirrors image and alpha together',mirrorY:'true flips image and alpha together',sourceLevels:'optional instance-only {blackPoint:0,whitePoint:1}; 0<=blackPoint<whitePoint<=1. Maps source intensity before shared dot rendering; leaves alpha, prepared atlas, scene lighting and ink unchanged'},
  controls:{speed:'playback speed (default 1)'},defaults:{speed:1},
  build(ctx){
   const params=resolveFootageParams('footage',ctx.params),file=String(params.file??params.url??''),legacy=`footage:${file}`;
@@ -200,6 +201,7 @@ export const footage=defineModel({
   const H2=ctx.num('height',2,0.05,100),root=new THREE.Group();
   const textures=f.tex.map(shared=>{const tex=shared.clone();tex.matrixAutoUpdate=false;return tex;});
   const mat=new THREE.MeshBasicMaterial({map:textures[0]!,alphaHash:true,toneMapped:false});mat.userData.tone=1;mat.userData.explicit=true;
+  applyFootageLevels(mat,params.sourceLevels);
   root.add(new THREE.Mesh(new THREE.PlaneGeometry(H2*f.w/f.h,H2),mat));
   const start=ctx.num('start',0,0,1e6),timeOrigin=ctx.num('timeOrigin',0,-1e6,1e6),loop=ctx.bool('loop',false),per=f.cols*f.rows;
   let last=-1,disposed=false;
