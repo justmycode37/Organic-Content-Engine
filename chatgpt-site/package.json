@@ -7,7 +7,7 @@
     "build": "node scripts/build.mjs",
     "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.worker.json --noEmit && tsc -p tsconfig.render.json --noEmit",
     "validate": "node scripts/validate-artifact.mjs",
-    "test": "node --test scripts/studio.test.mjs scripts/motion.test.mjs scripts/render-worker.test.mjs scripts/smoke.mjs scripts/hedgy.test.mjs scripts/acryllex.test.mjs scripts/acryllex-recorded-motion.test.mjs",
+    "test": "node --test scripts/studio.test.mjs scripts/motion.test.mjs scripts/render-worker.test.mjs scripts/smoke.mjs scripts/hedgy.test.mjs scripts/acryllex.test.mjs scripts/acryllex-recorded-motion.test.mjs scripts/acryllex-head-accent.test.mjs",
     "check": "npm run typecheck && npm run build && npm run validate && npm test",
     "db:generate": "drizzle-kit generate",
     "db:local": "wrangler d1 execute DB --local --config wrangler.local.jsonc --persist-to .wrangler/state --file drizzle/0000_initial.sql",

@@ -183,7 +183,8 @@ class SceneRuntime {
    const def=findModel(String(o.model))??findModel('compose')!;
    const hue=hueColor(o.hue??this.spec.hue??'blue',this.palette);
    const recorded=o.params?.recordedMotion,recordedRequired=Object.hasOwn(def.params??{},'recordedMotion')&&recorded!==undefined&&recorded!==null&&recorded!==false;
-   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache'||recordedRequired)throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
+   const accent=o.params?.headAccentLight,accentOff=accent==null||accent===false||accent===0||(typeof accent==='object'&&!Array.isArray(accent)&&(accent as {intensity?:unknown}).intensity===0),accentRequired=Object.hasOwn(def.params??{},'headAccentLight')&&!accentOff;
+   let built:Built;try{built=def.build(ctxFor(def,o,hue,this.palette));}catch(err){if(isFootageModel(def.id)||def.id==='fluid-cache'||recordedRequired||accentRequired)throw err;console.warn(`model ${o.model} failed`,err);built=findModel('cube')!.build(ctxFor(findModel('cube')!,o,hue,this.palette));}
    const inner=new THREE.Group(),outer=new THREE.Group(),shape=new THREE.Group();shape.add(built.root);inner.add(shape);outer.add(inner);this.scene.add(outer);
    const ctrl0:Record<string,number>={...(def.defaults??{}),...(o.controls??{})};
    if(o.stretch)shape.scale.fromArray(o.stretch);

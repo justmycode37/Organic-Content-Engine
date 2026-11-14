@@ -11,13 +11,15 @@ test('enabled recorded-motion validation errors propagate through actual scene c
  const result=await build({stdin:{contents:source+"\nexport {SceneRuntime};export {GLTFS} from './assets.ts';",resolveDir:dir,sourcefile:'engine.ts',loader:'ts'},plugins:[{name:'test-motion-cache',setup(b){b.onLoad({filter:/[\\/]src[\\/]acryllex[\\/]assets\.ts$/},async a=>({contents:await readFile(a.path,'utf8')+'\nexport {GLTFS};',loader:'ts'}));}}],bundle:true,write:false,format:'esm',platform:'node',logLevel:'silent'});
  const {SceneRuntime,GLTFS}=await import('data:text/javascript;base64,'+Buffer.from(result.outputFiles[0].text).toString('base64'));
  GLTFS.set('recorded-motion:local:private.glb',await parse(fixture()));
- const create=(model,recordedMotion)=>new SceneRuntime({duration:2,objects:[{id:'person',model,pose:'sit',params:{recordedMotion}}]},0);
+ const create=(model,recordedMotion,extra={})=>new SceneRuntime({duration:2,objects:[{id:'person',model,pose:'sit',params:{recordedMotion,...extra}}]},0);
  const warn=console.warn;console.warn=()=>{};
  try{
   for(const model of ['human','human-male','human-female']){
    assert.throws(()=>create(model,{file:'private.glb',actions:{sit:'missing'}}),/recordedMotion: clip missing not found/);
    assert.throws(()=>create(model,{file:'private.glb',actions:{sit:{clip:'take',end:2}}}),/recordedMotion: action range is outside clip/);
    assert.throws(()=>create(model,0),/recordedMotion: expected an object/);
+   assert.throws(()=>create(model,undefined,{headAccentLight:{intensity:1}}),/headAccentLight/);
+   for(const disabled of [false,0,{intensity:0}]){const runtime=create(model,undefined,{headAccentLight:disabled});runtime.dispose();}
    for(const disabled of [undefined,null,false]){const runtime=create(model,disabled);runtime.dispose();}
   }
  }finally{console.warn=warn;}
