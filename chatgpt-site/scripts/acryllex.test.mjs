@@ -32,6 +32,23 @@ test('flat source coverage retains alpha and cached texture ownership with indep
  for(const m of [source,opaque,mask,untouched,cutout,textured,oldTextured])m.dispose();texture.dispose();assert.equal(disposed,1);
 });
 test('catalogue has people, media subjects, fluids, core objects and real scans',async()=>{const c=await loadCatalog();for(const id of ['human','human-male','human-female','footage','wave-footage','ocean-wave-media','fluid-sheet','fluid-jet','led','brain','earth','heart','alarm_clock_01'])assert.ok(c.has(id),id);assert.ok(!c.has('definitely-not-a-model'));assert.ok(c.ids.length>100);});
+test('gear-machine wheels remain coaxial with the Z shafts and advance equal tooth counts',async()=>{
+ const {gearMachine}=await import('../src/acryllex/models/industry.ts');
+ const built=gearMachine.build(modelContext({})),wheels=built.root.children.filter(o=>o.children.some(child=>child.geometry?.type==='LatheGeometry'));
+ assert.equal(wheels.length,3);
+ const teeth=[12,10,8],directions=[1,-1,1];
+ for(const time of[0,.125,.7,1.4,.125]){
+  built.update({drive:.6},time);built.root.updateMatrixWorld(true);
+  for(const [i,wheel]of wheels.entries()){
+   const axis=new THREE.Vector3(0,1,0).applyQuaternion(wheel.getWorldQuaternion(new THREE.Quaternion()));
+   assert.ok(Math.abs(axis.z)>1-1e-12,'Wheel must spin around its bearing shaft, without tumbling');
+   assert.ok(Math.abs(wheel.rotation.y*teeth[i]*directions[i]-time*.6*4*12)<1e-10,'Meshing tooth advance must agree');
+  }
+ }
+ const snapshot=wheels.map(w=>w.quaternion.clone());built.update({drive:0},9);built.root.updateMatrixWorld(true);
+ for(const wheel of wheels)assert.ok(Math.abs(wheel.rotation.y)<1e-12);
+ built.update({drive:.6},.125);for(const [i,wheel]of wheels.entries())assert.ok(wheel.quaternion.angleTo(snapshot[i])<1e-7);
+});
 test('anatomical bodies contain separate skinned meshes with valid normalized weights',async()=>{
  const bodies=[];
  for(const id of ['human-male','human-female']){
