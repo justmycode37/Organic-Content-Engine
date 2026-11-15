@@ -1,0 +1,14 @@
+<!-- studio:meta
+{
+  "description": "One-off scene from raw HTML/CSS/JS. Inserted verbatim into the scene shell, so theme variables (var(--accent) ...), shared classes (.content, .display, .kicker, .hl, .a-rise ...) and the studio runtime API are available. Put <div data-studio-media></div> where the scene media should appear.",
+  "media": "optional",
+  "props": {
+    "html": {"type": "string", "required": true, "description": "markup; wrap it in <div class=\"content\"> to stay inside the safe area"},
+    "css": {"type": "string", "description": "extra CSS (scope selectors with .tpl-custom)"},
+    "js": {"type": "string", "description": "optional script, e.g. studio.onFrame((t, d) => {...}); must be deterministic in t"}
+  }
+}
+-->
+{% if p.css %}<style>{{ p.css | safe }}</style>{% endif %}
+{{ p.html | safe }}
+{% if p.js %}<script>(() => { {{ p.js | safe }} })();</script>{% endif %}

@@ -1,0 +1,44 @@
+<!-- studio:meta
+{
+  "description": "Full-bleed image (slow Ken Burns) or video, with an optional caption bar. Use for screenshots, product shots, demo footage.",
+  "media": "required",
+  "props": {
+    "caption": {"type": "string", "max": 90, "description": "optional text in the caption bar"},
+    "label": {"type": "string", "max": 36, "description": "optional small mono label above the caption, e.g. 'DEMO' or 'SCREENSHOT'"},
+    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "none"], "default": "in", "description": "Ken Burns direction for images"},
+    "frame": {"type": "string", "enum": ["full", "card"], "default": "full", "description": "full-bleed, or an inset rounded card on the dark background (good for screenshots)"}
+  }
+}
+-->
+<style>
+  .tpl-media .full { position: absolute; inset: 0; }
+  .tpl-media .card-slot {
+    position: absolute; left: var(--safe-left); right: var(--safe-right); top: calc(var(--safe-top) + 30px); height: 780px;
+    border-radius: var(--radius); border: 2px solid var(--line); box-shadow: 0 40px 80px rgba(0,0,0,.5);
+  }
+  .tpl-media .shade {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(11,11,12,.65) 0%, rgba(11,11,12,0) 18%, rgba(11,11,12,0) 50%, rgba(11,11,12,.72) 68%, rgba(11,11,12,.88) 100%);
+  }
+  .tpl-media .content { justify-content: flex-end; }
+  .tpl-media .bar {
+    background: rgba(17,17,19,.92); border-left: 10px solid var(--accent); border-radius: 6px 14px 14px 6px;
+    padding: 28px 34px 30px; max-width: 868px; box-shadow: 0 20px 50px rgba(0,0,0,.4);
+  }
+  .tpl-media .bar .label { font-family: var(--font-mono); font-size: 26px; font-weight: 700; letter-spacing: .12em; color: var(--accent); text-transform: uppercase; margin-bottom: 12px; }
+  .tpl-media .bar .text { font-size: 50px; font-weight: 700; line-height: 1.12; letter-spacing: -0.015em; }
+</style>
+{% if p.frame == "card" %}
+<div class="card-slot a-rise kb-{{ p.motion }}" data-studio-media></div>
+{% else %}
+<div class="full kb-{{ p.motion }}" data-studio-media></div>
+<div class="shade"></div>
+{% endif %}
+<div class="content">
+  {% if p.caption or p.label %}
+  <div class="bar a-slide" style="animation-delay:.15s">
+    {% if p.label %}<div class="label">{{ p.label }}</div>{% endif %}
+    {% if p.caption %}<div class="text">{{ p.caption }}</div>{% endif %}
+  </div>
+  {% endif %}
+</div>

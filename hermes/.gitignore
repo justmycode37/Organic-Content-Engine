@@ -1,0 +1,21 @@
+# Hermes home: track only portable, non-secret configuration.
+# Everything else is either machine-specific runtime (rebuilt by
+# scripts/bootstrap.sh) or private runtime state (migrated by copying the folder).
+/*
+!/.gitignore
+!/README.md
+!/HERMES_VERSION
+!/bin/
+!/scripts/
+!/config.yaml
+!/SOUL.md
+!/studio/
+!/newsroom/
+/newsroom/runs/*
+!/newsroom/runs/.gitkeep
+!/newsroom/data/
+/newsroom/data/*.jsonl
+# Bundled skills are synced by the installer; only our own skills are tracked.
+!/skills/
+/skills/*
+!/skills/newsroom/

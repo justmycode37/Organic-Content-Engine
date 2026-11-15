@@ -1,0 +1,33 @@
+<!-- studio:meta
+{
+  "description": "A quote with attribution. Optional media is shown as a round portrait/logo next to the name.",
+  "media": "optional",
+  "props": {
+    "quote": {"type": "string", "required": true, "max": 220, "description": "the quote without quotation marks"},
+    "name": {"type": "string", "required": true, "max": 40, "description": "who said it"},
+    "role": {"type": "string", "max": 60, "description": "title/company, e.g. 'CEO, Anthropic'"},
+    "highlight": {"type": "any", "description": "word or list of words to color in the accent"}
+  }
+}
+-->
+<style>
+  .tpl-quote .content { justify-content: center; }
+  .tpl-quote .qmark {
+    font-family: var(--font-display); font-weight: 900; font-size: 300px; line-height: .7; height: 150px;
+    color: var(--accent); margin-bottom: 26px; transform-origin: left bottom;
+  }
+  .tpl-quote .q { font-size: 84px; font-weight: 700; line-height: 1.08; letter-spacing: -0.025em; width: 100%; }
+  .tpl-quote .who { display: flex; align-items: center; gap: 28px; margin-top: 60px; }
+  .tpl-quote .avatar { width: 132px; height: 132px; border-radius: 50%; flex: none; border: 4px solid var(--accent); }
+  .tpl-quote .dash { width: 60px; height: 8px; background: var(--accent); flex: none; }
+  .tpl-quote .name { font-size: 46px; font-weight: 800; letter-spacing: -0.01em; }
+  .tpl-quote .role { font-size: 34px; font-weight: 500; color: var(--fg-2); margin-top: 6px; }
+</style>
+<div class="content">
+  <div class="qmark a-pop" style="animation-delay:0s">&ldquo;</div>
+  <div class="q display a-rise" style="animation-delay:.06s" data-fit="88,48" data-fit-h="660"><div>{{ p.quote | hl(p.highlight) }}</div></div>
+  <div class="who a-slide" style="animation-delay:.3s">
+    {% if has_media %}<div class="avatar" data-studio-media></div>{% else %}<div class="dash"></div>{% endif %}
+    <div><div class="name">{{ p.name }}</div>{% if p.role %}<div class="role">{{ p.role }}</div>{% endif %}</div>
+  </div>
+</div>

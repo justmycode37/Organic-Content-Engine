@@ -1,0 +1,12 @@
+#!/bin/sh
+# Run Hermes Agent against this folder as HERMES_HOME, wherever the folder lives.
+set -e
+HERE=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+export HERMES_HOME="$HERE"
+LAUNCHER="$HERE/hermes-agent/.hermes/bin/hermes"
+if [ ! -x "$LAUNCHER" ]; then
+    echo "Hermes runtime not installed in $HERE." >&2
+    echo "Run: $HERE/scripts/bootstrap.sh" >&2
+    exit 1
+fi
+exec "$LAUNCHER" "$@"

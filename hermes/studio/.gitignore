@@ -1,0 +1,9 @@
+.venv/
+cache/
+out/
+__pycache__/
+*.pyc
+# Fonts are downloaded by setup.sh (OFL-licensed); see assets/fonts/README.md
+assets/fonts/*.ttf
+assets/fonts/*.txt
+.DS_Store

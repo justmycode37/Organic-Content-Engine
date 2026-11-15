@@ -1,0 +1,170 @@
+/*
+ * Shared layout, chrome (wordmark bug, source label), captions and
+ * animation vocabulary for all templates. Brand tokens live in themes/*.css.
+ *
+ * Coordinate system: fixed 1080x1920 canvas. Template content goes in
+ * `.content` (safe area above the caption band). Animations use the scene
+ * clock: `animation-delay` = seconds into the scene; --scene-dur = length.
+ */
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { width: 1080px; height: 1920px; overflow: hidden; background: var(--bg); }
+body {
+  color: var(--fg);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: geometricPrecision;
+  font-kerning: normal;
+}
+
+#stage { position: absolute; inset: 0; overflow: hidden; background: var(--bg); }
+#scene { position: absolute; inset: 0; }
+
+/* content safe area */
+.content {
+  position: absolute;
+  top: var(--safe-top);
+  left: var(--safe-left);
+  right: var(--safe-right);
+  height: calc(var(--content-bottom) - var(--safe-top));
+  display: flex;
+  flex-direction: column;
+}
+
+/* ------------------------------------------------------------------ chrome */
+#chrome { position: absolute; inset: 0; pointer-events: none; z-index: 50; }
+
+.studio-bug {
+  position: absolute;
+  top: 168px;
+  left: var(--safe-left);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 30px;
+  letter-spacing: 0.16em;
+  color: var(--fg);
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.35);
+}
+.studio-bug .brand-mark { width: 30px; height: 25px; display: block; }
+
+.studio-source {
+  position: absolute;
+  left: var(--safe-left);
+  top: calc(var(--content-bottom) + 22px);
+  max-width: calc(1080px - var(--safe-left) - var(--safe-right));
+  font-family: var(--font-mono);
+  font-size: 26px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  color: var(--fg-2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.studio-source b { color: var(--fg-3); font-weight: 500; text-transform: uppercase; letter-spacing: 0.12em; margin-right: 10px; }
+
+/* ---------------------------------------------------------------- captions */
+#captions {
+  position: absolute;
+  left: 60px;
+  right: 60px;
+  top: var(--caption-center);
+  transform: translateY(-50%);
+  display: flex;
+  justify-content: center;
+  z-index: 60;
+}
+#captions.pos-middle { top: 960px; }
+.cap-chunk {
+  max-width: 880px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: var(--caption-size);
+  font-weight: var(--caption-weight);
+  line-height: 1.12;
+  letter-spacing: -0.02em;
+  color: var(--caption-fg);
+  transform-origin: 50% 60%;
+  text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35), 0 6px 26px rgba(0, 0, 0, 0.55);
+}
+.cap-w {
+  display: inline-block;
+  padding: 0 0.13em 0.04em;
+  margin: 0.03em -0.06em;
+  border-radius: 0.16em;
+}
+.style-karaoke .cap-w.on {
+  background: var(--caption-active-bg);
+  color: var(--caption-active-fg);
+  text-shadow: none;
+}
+.style-karaoke .cap-w.todo { opacity: 0.92; }
+.style-pop .cap-w.todo { visibility: hidden; }
+.style-pop .cap-w.on { color: var(--accent); }
+
+/* ------------------------------------------------------------------- media */
+[data-studio-media] { position: relative; overflow: hidden; background: var(--bg-2); }
+[data-studio-media].is-empty { display: none; }
+.media-el { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+
+/* Ken Burns over the whole scene (images only) */
+.kb-in .is-image .media-el, .kb-in.is-image .media-el { animation: kb-in var(--scene-dur) linear both; }
+.kb-out .is-image .media-el, .kb-out.is-image .media-el { animation: kb-out var(--scene-dur) linear both; }
+.kb-left .is-image .media-el, .kb-left.is-image .media-el { animation: kb-left var(--scene-dur) linear both; }
+.kb-right .is-image .media-el, .kb-right.is-image .media-el { animation: kb-right var(--scene-dur) linear both; }
+@keyframes kb-in { from { transform: scale(1.02); } to { transform: scale(1.14); } }
+@keyframes kb-out { from { transform: scale(1.15); } to { transform: scale(1.03); } }
+@keyframes kb-left { from { transform: scale(1.12) translateX(3%); } to { transform: scale(1.12) translateX(-3%); } }
+@keyframes kb-right { from { transform: scale(1.12) translateX(-3%); } to { transform: scale(1.12) translateX(3%); } }
+
+/* -------------------------------------------------------- shared type bits */
+.kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 16px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-size: 32px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+.kicker::before { content: ""; width: 16px; height: 16px; background: var(--accent); border-radius: 3px; flex: none; }
+.kicker.pill { background: var(--accent); color: var(--accent-ink); padding: 10px 20px 10px 18px; border-radius: 10px; }
+.kicker.pill::before { background: var(--accent-ink); width: 12px; height: 12px; border-radius: 50%; }
+
+.display {
+  font-family: var(--font-display);
+  font-weight: 800;
+  letter-spacing: var(--tracking-display);
+  line-height: 0.98;
+  color: var(--fg);
+  overflow-wrap: normal;
+  word-break: normal;
+  hyphens: none;
+  text-wrap: balance;
+}
+.hl { color: var(--accent); }
+.muted { color: var(--fg-2); }
+
+/* -------------------------------------------------- animation vocabulary */
+/* Use: class + style="animation-delay: .2s". All run on the scene clock. */
+.a-rise { animation: a-rise 0.42s cubic-bezier(.2, .8, .2, 1) both; }
+.a-fade { animation: a-fade 0.35s ease-out both; }
+.a-slide { animation: a-slide 0.4s cubic-bezier(.2, .8, .2, 1) both; }
+.a-slide-r { animation: a-slide-r 0.4s cubic-bezier(.2, .8, .2, 1) both; }
+.a-pop { animation: a-pop 0.42s cubic-bezier(.2, 1.4, .4, 1) both; }
+.a-wipe { animation: a-wipe 0.45s cubic-bezier(.7, 0, .2, 1) both; transform-origin: left center; }
+.a-settle { animation: a-settle 0.7s cubic-bezier(.2, .8, .2, 1) both; }
+@keyframes a-rise { from { opacity: 0; transform: translateY(46px); } to { opacity: 1; transform: none; } }
+@keyframes a-fade { from { opacity: 0; } to { opacity: 1; } }
+@keyframes a-slide { from { opacity: 0; transform: translateX(-60px); } to { opacity: 1; transform: none; } }
+@keyframes a-slide-r { from { opacity: 0; transform: translateX(60px); } to { opacity: 1; transform: none; } }
+@keyframes a-pop { from { opacity: 0; transform: scale(0.6); } to { opacity: 1; transform: none; } }
+@keyframes a-wipe { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+/* visible from frame 0 (used by the hook): slight scale settle */
+@keyframes a-settle { from { transform: scale(1.06); } to { transform: none; } }

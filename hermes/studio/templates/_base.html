@@ -1,0 +1,24 @@
+<!doctype html>
+<!-- Scene shell: theme + shared CSS + runtime + one template fragment. Rendered by studio/render.py -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>{{ title }} · scene {{ index }}</title>
+<link rel="stylesheet" href="{{ theme_css }}">
+<link rel="stylesheet" href="{{ base_css }}">
+<script>window.STUDIO = {{ config | safe }};</script>
+<script src="{{ runtime_js }}"></script>
+</head>
+<body class="tpl-{{ template }}{% if has_media %} has-media{% endif %}">
+<div id="stage">
+  <div id="scene">
+{{ content | safe }}
+  </div>
+  <div id="chrome">
+    {% if brand.bug %}<div class="studio-bug"><svg class="brand-mark" viewBox="240 285 520 430" aria-hidden="true"><path fill="var(--fg)" d="M246 608h508v52H246z"/><path fill="var(--accent)" d="M557 291h128L592 709H464z"/></svg><span>{{ brand.wordmark }}</span></div>{% endif %}
+    {% if source %}<div class="studio-source"><b>Source</b>{{ source }}</div>{% endif %}
+  </div>
+  <div id="captions" class="pos-{{ caption_position }}"></div>
+</div>
+</body>
+</html>

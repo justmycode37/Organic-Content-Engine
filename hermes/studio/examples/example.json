@@ -1,0 +1,109 @@
+{
+  "title": "Example: open model beats GPT-class coding scores",
+  "voice": {
+    "provider": "edge",
+    "voice": "en-US-AndrewMultilingualNeural",
+    "rate": "+10%"
+  },
+  "theme": "default",
+  "captions": {
+    "enabled": true,
+    "style": "karaoke",
+    "max_words": 3
+  },
+  "scenes": [
+    {
+      "template": "hook",
+      "narration": "A free model just matched the best paid coding AI.",
+      "props": {
+        "headline": "Free beats paid",
+        "highlight": "Free",
+        "kicker": "Just in"
+      },
+      "media": "assets/placeholder.jpg",
+      "cover": true,
+      "min_duration": 2.0
+    },
+    {
+      "template": "headline",
+      "narration": "Example Labs released Nova Two today, with open weights anyone can download.",
+      "props": {
+        "kicker": "Example Labs · Today",
+        "headline": "Nova-2 is open weights and free to download",
+        "highlight": "open weights",
+        "dek": "Released under Apache 2.0 for commercial use."
+      },
+      "source": "Example Labs blog"
+    },
+    {
+      "template": "stat",
+      "narration": "It solves seventy one percent of real GitHub issues on SWE bench.",
+      "props": {
+        "kicker": "SWE-bench Verified",
+        "value": "71.4%",
+        "label": "of real GitHub issues solved",
+        "context": "up from 49% for Nova-1 last year"
+      },
+      "source": "Example Labs technical report"
+    },
+    {
+      "template": "compare",
+      "narration": "That ties the leading closed model, at a fraction of the price.",
+      "props": {
+        "title": "Cost per million tokens",
+        "a": {
+          "name": "Nova-2",
+          "value": "$0.40",
+          "note": "open weights"
+        },
+        "b": {
+          "name": "Closed leader",
+          "value": "$3.00",
+          "note": "API only"
+        },
+        "winner": "a"
+      }
+    },
+    {
+      "template": "media",
+      "narration": "And it trained on just four thousand GPUs.",
+      "props": {
+        "label": "Training",
+        "caption": "4,096 GPUs, 41 days",
+        "motion": "left"
+      },
+      "media": "assets/placeholder.jpg"
+    },
+    {
+      "template": "list",
+      "narration": "What it means: cheaper agents, private local coding, faster startups.",
+      "props": {
+        "title": "What it means",
+        "items": [
+          "Cheaper agents",
+          "Private local coding",
+          "Faster startups"
+        ]
+      }
+    },
+    {
+      "template": "quote",
+      "narration": "Their CEO: open models are now the default, not the compromise.",
+      "props": {
+        "quote": "Open models are now the default, not the compromise.",
+        "name": "Jane Doe",
+        "role": "CEO, Example Labs",
+        "highlight": "default"
+      }
+    },
+    {
+      "template": "outro",
+      "narration": "Follow Frontier Feed for the AI news that matters.",
+      "props": {
+        "cta": "The AI news that matters. Daily.",
+        "sub": "Save this · share it with a builder"
+      },
+      "min_duration": 2.5
+    }
+  ]
+}

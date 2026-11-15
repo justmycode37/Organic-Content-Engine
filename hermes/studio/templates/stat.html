@@ -1,0 +1,57 @@
+<!-- studio:meta
+{
+  "description": "One big number that counts up, with a label. Prefix/suffix and decimals are kept: '$2.5B', '87%', '10x', '1,000,000'.",
+  "media": "none",
+  "props": {
+    "value": {"type": "string", "required": true, "max": 14, "description": "the number as displayed, e.g. '$2.5B', '87%', '4.2x'"},
+    "label": {"type": "string", "required": true, "max": 80, "description": "what the number means, e.g. 'raised in its Series C'"},
+    "kicker": {"type": "string", "max": 32, "description": "small label above the number"},
+    "context": {"type": "string", "max": 90, "description": "optional comparison line, e.g. 'up from $300M in 2024'"},
+    "count": {"type": "boolean", "default": true, "description": "animate the count-up"},
+    "count_duration": {"type": "number", "default": 1.1, "min": 0.2, "max": 5, "description": "count-up length in seconds"}
+  }
+}
+-->
+<style>
+  .tpl-stat .content { justify-content: center; }
+  .tpl-stat .num {
+    font-family: var(--font-display); font-weight: 900; letter-spacing: -0.05em; line-height: 0.9;
+    color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; width: 100%; height: 320px;
+    display: flex; align-items: center; margin: 30px 0 20px;
+  }
+  .tpl-stat .num span { display: block; }
+  .tpl-stat .bar { height: 10px; background: var(--fg); width: 100%; margin-bottom: 44px; }
+  .tpl-stat .label { font-size: 70px; font-weight: 800; line-height: 1.04; letter-spacing: -0.025em; width: 100%; }
+  .tpl-stat .context { margin-top: 36px; font-size: 40px; font-weight: 500; color: var(--fg-2); line-height: 1.25; }
+</style>
+<div class="content">
+  {% if p.kicker %}<div class="a-slide" style="animation-delay:0s"><span class="kicker">{{ p.kicker }}</span></div>{% endif %}
+  <div class="num" data-fit="330,120" id="stat-num"><span class="a-rise" style="animation-delay:.02s" id="stat-val">{{ p.value }}</span></div>
+  <div class="bar a-wipe" style="animation-delay:.1s"></div>
+  <div class="label a-rise" style="animation-delay:.22s" data-fit="70,44" data-fit-h="300"><div>{{ p.label }}</div></div>
+  {% if p.context %}<div class="context a-rise" style="animation-delay:.4s">{{ p.context }}</div>{% endif %}
+</div>
+<script>
+(() => {
+  const raw = {{ p.value | tojson }};
+  const el = document.getElementById("stat-val");
+  const m = raw.match(/^(.*?)(\d[\d,]*(?:\.\d+)?)(.*)$/);
+  if (!m || !{{ p.count | tojson }}) return;
+  const [, pre, numStr, post] = m;
+  const target = parseFloat(numStr.replace(/,/g, ""));
+  const decimals = (numStr.split(".")[1] || "").length;
+  const grouped = numStr.includes(",");
+  const dur = {{ p.count_duration | tojson }};
+  const fmt = (v) => {
+    let s = v.toFixed(decimals);
+    if (grouped) { const [i, d] = s.split("."); s = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (d ? "." + d : ""); }
+    return pre + s + post;
+  };
+  // keep the final width during the count so the layout does not jump
+  studio.onInit(() => { el.style.display = "inline-block"; el.style.minWidth = el.offsetWidth + "px"; });
+  studio.onFrame((t) => {
+    const k = studio.ease.outExpo(studio.progress(t, 0.05, dur));
+    el.textContent = fmt(k >= 1 ? target : target * k);
+  });
+})();
+</script>

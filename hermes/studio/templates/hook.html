@@ -1,0 +1,42 @@
+<!-- studio:meta
+{
+  "description": "Opening scene. Huge 2-6 word headline that is fully visible on frame 1 (no fade from black). Optional full-bleed media behind it.",
+  "media": "optional",
+  "props": {
+    "headline": {"type": "string", "required": true, "min": 2, "max": 60, "description": "2-6 punchy words, e.g. 'GPT-6 just dropped'"},
+    "highlight": {"type": "any", "description": "word or list of words from the headline to color in the accent"},
+    "kicker": {"type": "string", "max": 28, "description": "small label above, e.g. 'BREAKING' or 'JUST IN'"},
+    "uppercase": {"type": "boolean", "default": true, "description": "set the headline in caps"},
+    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "none"], "default": "in", "description": "Ken Burns direction for image media"}
+  }
+}
+-->
+<style>
+  .tpl-hook [data-studio-media] { position: absolute; inset: 0; }
+  .tpl-hook .shade {
+    position: absolute; inset: 0;
+    background:
+      linear-gradient(180deg, rgba(11,11,12,.70) 0%, rgba(11,11,12,.10) 22%, rgba(11,11,12,.05) 38%, rgba(11,11,12,.78) 58%, var(--bg) 80%);
+  }
+  .tpl-hook .content { justify-content: flex-end; padding-bottom: 10px; }
+  .tpl-hook:not(.has-media) .content { justify-content: center; }
+  .tpl-hook .rule { height: 14px; width: 220px; background: var(--accent); margin: 34px 0 40px; }
+  .tpl-hook .headline { font-weight: 900; line-height: 0.9; width: 100%; height: 620px; display: flex; align-items: flex-end; }
+  .tpl-hook:not(.has-media) .headline { height: 760px; align-items: center; }
+  .tpl-hook .headline > span { display: block; width: 100%; }
+  .tpl-hook .upper { text-transform: uppercase; letter-spacing: -0.03em; }
+  .tpl-hook .edge { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: var(--accent); }
+</style>
+{% if has_media %}
+<div class="kb-{{ p.motion }}" data-studio-media></div>
+<div class="shade"></div>
+{% else %}
+<div class="edge"></div>
+{% endif %}
+<div class="content">
+  {% if p.kicker %}<div><span class="kicker pill">{{ p.kicker }}</span></div>{% endif %}
+  <div class="rule a-wipe" style="animation-delay:.05s"></div>
+  <div class="headline display" data-fit="200,96">
+    <span class="a-settle{% if p.uppercase %} upper{% endif %}">{{ p.headline | hl(p.highlight) }}</span>
+  </div>
+</div>

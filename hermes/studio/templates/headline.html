@@ -1,0 +1,34 @@
+<!-- studio:meta
+{
+  "description": "News headline card: kicker + headline + optional dek. Optional media shown as an image card above the text (article screenshot, product shot).",
+  "media": "optional",
+  "props": {
+    "headline": {"type": "string", "required": true, "max": 120, "description": "the news in one sentence, ~4-14 words"},
+    "kicker": {"type": "string", "max": 32, "description": "topic/company label, e.g. 'OpenAI · Today'"},
+    "dek": {"type": "string", "max": 140, "description": "optional one-line explanation under the headline"},
+    "highlight": {"type": "any", "description": "word or list of words to color in the accent"}
+  }
+}
+-->
+<style>
+  .tpl-headline .content { justify-content: center; gap: 0; }
+  .tpl-headline .card {
+    height: 470px; border-radius: var(--radius); margin-bottom: 56px;
+    border: 2px solid var(--line); box-shadow: 0 30px 60px rgba(0,0,0,.45);
+  }
+  .tpl-headline .kicker { margin-bottom: 34px; }
+  .tpl-headline .headline { font-size: 104px; width: 100%; }
+  .tpl-headline.has-media .headline { font-size: 84px; }
+  .tpl-headline .dek {
+    margin-top: 40px; font-size: 44px; line-height: 1.22; font-weight: 500; color: var(--fg-2);
+    max-width: 840px; padding-left: 26px; border-left: 6px solid var(--accent);
+  }
+  .tpl-headline .lines { position: absolute; left: var(--safe-left); right: var(--safe-right); top: var(--safe-top); height: 2px; background: var(--line); }
+</style>
+<div class="lines a-wipe" style="animation-delay:0s"></div>
+<div class="content">
+  {% if has_media %}<div class="card a-rise kb-in" style="animation-delay:0s" data-studio-media></div>{% endif %}
+  {% if p.kicker %}<div class="a-slide" style="animation-delay:.02s"><span class="kicker">{{ p.kicker }}</span></div>{% endif %}
+  <div class="headline display a-rise" style="animation-delay:.08s" data-fit="{{ 84 if has_media else 108 }},56" data-fit-h="{{ 420 if has_media else 640 }}"><div>{{ p.headline | hl(p.highlight) }}</div></div>
+  {% if p.dek %}<div class="dek a-rise" style="animation-delay:.28s">{{ p.dek }}</div>{% endif %}
+</div>

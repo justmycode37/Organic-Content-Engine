@@ -1,0 +1,18 @@
+#!/bin/sh
+# Launcher for the Newsroom Studio CLI. Resolves its own location, so it can be
+# called from anywhere (absolute path, symlink-free relative path, or PATH).
+set -eu
+
+BIN_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+STUDIO_DIR=$(CDPATH= cd -- "$BIN_DIR/.." && pwd)
+VENV_PY="$STUDIO_DIR/.venv/bin/python"
+
+if [ ! -x "$VENV_PY" ]; then
+  printf '{"ok": false, "error": "studio is not set up; run %s/setup.sh"}\n' "$STUDIO_DIR"
+  printf '[studio] ERROR: virtualenv missing; run %s/setup.sh\n' "$STUDIO_DIR" >&2
+  exit 1
+fi
+
+PYTHONPATH="$STUDIO_DIR/src${PYTHONPATH:+:$PYTHONPATH}"
+export PYTHONPATH
+exec "$VENV_PY" -m studio.cli "$@"

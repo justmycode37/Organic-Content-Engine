@@ -1,0 +1,55 @@
+/*
+ * Frontier Feed default theme: brand tokens in ONE place.
+ *
+ * Change the accent, colors or fonts here and every template follows.
+ * Fonts (SIL Open Font License 1.1) are downloaded by setup.sh into
+ * assets/fonts/: Inter Tight (display/body) and JetBrains Mono (labels).
+ */
+
+@font-face {
+  font-family: "Inter Tight";
+  src: url("../assets/fonts/InterTight-Variable.ttf") format("truetype");
+  font-weight: 100 900;
+  font-style: normal;
+}
+@font-face {
+  font-family: "JetBrains Mono";
+  src: url("../assets/fonts/JetBrainsMono-Variable.ttf") format("truetype");
+  font-weight: 100 800;
+  font-style: normal;
+}
+
+:root {
+  /* palette */
+  --bg: #101820;          /* page background */
+  --bg-2: #18222c;        /* panels, cards */
+  --bg-3: #212c37;        /* raised panels */
+  --line: #2d3a46;        /* hairlines */
+  --fg: #f6f3ea;          /* primary text (off-white) */
+  --fg-2: #a6a39b;        /* secondary text */
+  --fg-3: #6c6a65;        /* tertiary text */
+  --accent: #e66b45;      /* the one brand accent */
+  --accent-ink: #101820;  /* text on accent */
+  --good: #3ddc84;        /* rarely used: positive deltas */
+
+  /* type */
+  --font-display: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-body: "Inter Tight", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --tracking-display: -0.035em;
+
+  /* caption look */
+  --caption-size: 76px;
+  --caption-weight: 800;
+  --caption-fg: #ffffff;
+  --caption-active-bg: var(--accent);
+  --caption-active-fg: var(--accent-ink);
+
+  /* geometry (1080x1920 canvas). Instagram covers ~bottom 20% and right 12%. */
+  --safe-top: 250px;      /* below the Reels header */
+  --safe-left: 72px;
+  --safe-right: 140px;    /* like/comment/share rail */
+  --content-bottom: 1190px; /* templates keep their content above this line */
+  --caption-center: 1395px; /* vertical center of the caption block */
+  --radius: 20px;
+}

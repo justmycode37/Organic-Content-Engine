@@ -1,0 +1,37 @@
+<!-- studio:meta
+{
+  "description": "Closing scene: wordmark, short CTA line and the handle. Hides the corner bug.",
+  "media": "none",
+  "props": {
+    "cta": {"type": "string", "default": "Follow for the AI news that matters.", "max": 60, "description": "short call to action"},
+    "handle": {"type": "string", "max": 32, "description": "defaults to brand.handle; hidden when empty"},
+    "sub": {"type": "string", "max": 60, "description": "optional small line, e.g. 'New stories every day'"}
+  }
+}
+-->
+<style>
+  .tpl-outro .studio-bug { display: none; }
+  .tpl-outro .content { justify-content: center; align-items: flex-start; }
+  .tpl-outro .logo { width: 150px; margin-bottom: 44px; }
+  .tpl-outro .logo .brand-mark { width: 150px; height: auto; display: block; }
+  .tpl-outro .word {
+    font-family: var(--font-display); font-weight: 900; letter-spacing: 0.02em; line-height: 0.9;
+    width: 100%; white-space: nowrap; overflow: hidden; display: block;
+  }
+  .tpl-outro .word span { display: inline-block; }
+  .tpl-outro .cta { font-size: 64px; font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; margin-top: 56px; max-width: 860px; }
+  .tpl-outro .handle {
+    margin-top: 48px; display: inline-flex; align-items: center; gap: 18px;
+    background: var(--fg); color: var(--bg); border-radius: 999px; padding: 18px 34px 20px;
+    font-size: 46px; font-weight: 800; letter-spacing: -0.01em;
+  }
+  .tpl-outro .handle i { width: 18px; height: 18px; border-radius: 50%; background: var(--accent); }
+  .tpl-outro .sub { margin-top: 30px; font-family: var(--font-mono); font-size: 30px; color: var(--fg-2); letter-spacing: .04em; }
+</style>
+<div class="content">
+  <div class="logo a-pop" style="animation-delay:0s"><svg class="brand-mark" viewBox="240 285 520 430" aria-hidden="true"><path fill="var(--fg)" d="M246 608h508v52H246z"/><path fill="var(--accent)" d="M557 291h128L592 709H464z"/></svg></div>
+  <div class="word" data-fit="196,90">{% for ch in brand.wordmark %}{% if ch == " " %}<br>{% else %}<span class="a-rise" style="animation-delay:{{ '%.3f' % (0.04 + loop.index0 * 0.035) }}s">{{ ch }}</span>{% endif %}{% endfor %}</div>
+  <div class="cta a-rise" style="animation-delay:.38s">{{ p.cta }}</div>
+  {% if p.handle or brand.handle %}<div class="handle a-rise" style="animation-delay:.55s"><i></i>{{ p.handle or brand.handle }}</div>{% endif %}
+  {% if p.sub %}<div class="sub a-fade" style="animation-delay:.75s">{{ p.sub }}</div>{% endif %}
+</div>

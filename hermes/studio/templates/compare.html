@@ -1,0 +1,66 @@
+<!-- studio:meta
+{
+  "description": "A vs B side by side (models, companies, prices, benchmarks). If both values are numeric, bars show the ratio.",
+  "media": "none",
+  "props": {
+    "a": {"type": "object", "required": true, "properties": {"name": {"type": "string", "required": true, "max": 22}, "value": {"type": "string", "max": 10}, "note": {"type": "string", "max": 40}}, "description": "{name, value?, note?}"},
+    "b": {"type": "object", "required": true, "properties": {"name": {"type": "string", "required": true, "max": 22}, "value": {"type": "string", "max": 10}, "note": {"type": "string", "max": 40}}, "description": "{name, value?, note?}"},
+    "title": {"type": "string", "max": 60, "description": "what is compared, e.g. 'SWE-bench Verified'"},
+    "kicker": {"type": "string", "max": 32, "description": "small label above the title"},
+    "winner": {"type": "string", "enum": ["a", "b", "none"], "default": "none", "description": "side to emphasize with the accent"},
+    "bars": {"type": "boolean", "default": true, "description": "draw value bars when both values are numeric"}
+  }
+}
+-->
+<style>
+  .tpl-compare .content { justify-content: center; }
+  .tpl-compare .title { font-size: 76px; font-weight: 800; margin: 24px 0 50px; width: 100%; }
+  .tpl-compare .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 26px; position: relative; }
+  .tpl-compare .side {
+    background: var(--bg-2); border: 2px solid var(--line); border-radius: var(--radius);
+    padding: 36px 34px 34px; min-height: 470px; display: flex; flex-direction: column; position: relative; overflow: hidden;
+  }
+  .tpl-compare .side.sa { padding-right: 58px; }
+  .tpl-compare .side.sb { padding-left: 58px; }
+  .tpl-compare .side.win { border-color: var(--accent); }
+  .tpl-compare .name { font-size: 46px; font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; min-height: 100px; }
+  .tpl-compare .val {
+    font-family: var(--font-display); font-weight: 900; font-size: 116px; letter-spacing: -0.05em; line-height: 1;
+    margin-top: 16px; white-space: nowrap; color: var(--fg); font-variant-numeric: tabular-nums;
+  }
+  .tpl-compare .win .val { color: var(--accent); }
+  .tpl-compare .lose .val { color: var(--fg-2); }
+  .tpl-compare .note { font-size: 32px; color: var(--fg-2); margin-top: 12px; line-height: 1.2; }
+  .tpl-compare .barwrap { margin-top: auto; padding-top: 36px; height: 190px; display: flex; align-items: flex-end; }
+  .tpl-compare .bar { width: 100%; background: var(--fg-3); border-radius: 8px; transform-origin: bottom; }
+  .tpl-compare .win .bar { background: var(--accent); }
+  .tpl-compare .lose .bar { background: var(--bg-3); border: 2px solid var(--line); }
+  .tpl-compare .vs {
+    position: absolute; left: 50%; top: 50%; width: 92px; height: 92px; margin: -46px 0 0 -46px; border-radius: 50%;
+    background: var(--fg); color: var(--bg); display: flex; align-items: center; justify-content: center;
+    font-family: var(--font-mono); font-weight: 800; font-size: 30px; z-index: 2; box-shadow: 0 0 0 10px var(--bg);
+  }
+  @keyframes cmp-grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+  .tpl-compare .grow { animation: cmp-grow .7s cubic-bezier(.2,.8,.2,1) both; }
+</style>
+{% set na = p.a.value | number %}{% set nb = p.b.value | number %}
+{% set showbars = p.bars and na is not none and nb is not none and (na > 0 or nb > 0) %}
+{% set mx = [na or 0, nb or 0] | max if showbars else 1 %}
+<div class="content">
+  {% if p.kicker %}<div class="a-slide"><span class="kicker">{{ p.kicker }}</span></div>{% endif %}
+  {% if p.title %}<div class="title display a-rise" style="animation-delay:.03s" data-fit="76,48" data-fit-h="180"><div>{{ p.title }}</div></div>{% endif %}
+  <div class="grid">
+    {% for key, side in [("a", p.a), ("b", p.b)] %}
+    <div class="side s{{ key }} {% if p.winner == key %}win{% elif p.winner != 'none' %}lose{% endif %} {{ 'a-slide' if key == 'a' else 'a-slide-r' }}" style="animation-delay:{{ '.08s' if key == 'a' else '.2s' }}">
+      <div class="name">{{ side.name }}</div>
+      {% if side.value %}<div class="val" data-fit="116,56">{{ side.value }}</div>{% endif %}
+      {% if side.note %}<div class="note">{{ side.note }}</div>{% endif %}
+      {% if showbars %}
+      {% set v = na if key == 'a' else nb %}
+      <div class="barwrap"><div class="bar grow" style="height:{{ (100 * v / mx) | round(1) }}%; animation-delay:{{ '.45s' if key == 'a' else '.6s' }}"></div></div>
+      {% endif %}
+    </div>
+    {% endfor %}
+    <div class="vs a-pop" style="animation-delay:.32s">VS</div>
+  </div>
+</div>
