@@ -248,10 +248,12 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
   const {mergeHistory}=await import('../../worker/acryllex-history.ts');
   const all=mergeHistory(history,await readLedger());log(`history: ${all.length} earlier reels checked for repeats`);
   const r=await measure('story generation total',()=>gen.generateAcryllexReel({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},topic,cat,usage,all,sourcing,ask));
-  Object.assign(provenance,r.provenance);await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
+  Object.assign(provenance,r.provenance,{model:clientContext.generationModel,effort:clientContext.generationEffort??clientContext.effort});await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
- provenance.modelRouting=clientContext;provenance.model=clientContext.generationModel;provenance.effort=clientContext.generationEffort??clientContext.effort;provenance.reviewModel=clientContext.reviewModel;provenance.reviewEffort=clientContext.reviewEffort??clientContext.effort;await save();
+ // Preserve the actual author of a saved draft; new repair routing cannot relabel its origin.
+ provenance.modelRouting={...clientContext,generationModel:provenance.model??'provided-spec',generationEffort:provenance.effort??'unknown',repairModel:clientContext.generationModel,repairEffort:clientContext.generationEffort??clientContext.effort};
+ provenance.reviewModel=clientContext.reviewModel;provenance.reviewEffort=clientContext.reviewEffort??clientContext.effort;await save();
  const reviewContext={styleReference:styleReference.hash,...clientContext,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8')),rendererCode:hash(await buildRenderBundle())};
  // 6. Distinct, required visual specialists; legacy reviewed filenames do not bypass them.
  const renderEvidence=async(current,dir,stage)=>{

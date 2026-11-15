@@ -13,6 +13,7 @@ test('default routing separates all authoring/repairs from every review specialt
  assert.ok(hasDefaultAcryllexProfile({modelRouting:ACRYLLEX_CLIENT_CONTEXT}));
  assert.ok(!hasDefaultAcryllexProfile({model:'gpt-6.1-sol',effort:'xhigh'}));
  assert.ok(!hasDefaultAcryllexProfile({modelRouting:{...ACRYLLEX_CLIENT_CONTEXT,reviewEffort:'medium'}}));
+ assert.ok(!hasDefaultAcryllexProfile({model:'gpt-6.1-sol',effort:'xhigh',modelRouting:ACRYLLEX_CLIENT_CONTEXT}),'New repair settings cannot relabel an older draft as Opus-authored');
 });
 
 const anthropicStream=text=>[

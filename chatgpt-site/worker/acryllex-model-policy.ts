@@ -8,6 +8,6 @@ export function acryllexStepRole(step:string):'generation'|'review'{
 export const ACRYLLEX_CLIENT_CONTEXT={generationModel:ACRYLLEX_MODELS.generation.model,generationEffort:ACRYLLEX_MODELS.generation.effort,reviewModel:ACRYLLEX_MODELS.review.model,reviewEffort:ACRYLLEX_MODELS.review.effort} as const;
 export function hasDefaultAcryllexProfile(provenance:Record<string,any>){
  const p=provenance,r=p.modelRouting??{};
- return (r.generationModel??p.model)===ACRYLLEX_MODELS.generation.model&&(r.generationEffort??p.effort)===ACRYLLEX_MODELS.generation.effort&&
+ return (p.model??r.generationModel)===ACRYLLEX_MODELS.generation.model&&(p.effort??r.generationEffort)===ACRYLLEX_MODELS.generation.effort&&
   (r.reviewModel??p.reviewModel)===ACRYLLEX_MODELS.review.model&&(r.reviewEffort??p.reviewEffort)===ACRYLLEX_MODELS.review.effort;
 }
