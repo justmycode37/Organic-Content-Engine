@@ -19,6 +19,12 @@ test('camera authoring schema enforces the actual engine fill limit for openings
  assert.ok(!sceneSchema.safeParse({...scene,events:[{at:'wet',camera:{fill:1.2}}]}).success);
 });
 
+test('text authoring rejects normalized font sizes that silently become unreadable labels',()=>{
+ const scene={say:'These ingredients mix.',objects:[{id:'hero',model:'led'}],text:[{text:'SIMPLIFIED',style:'tag',size:54}]};
+ assert.ok(sceneSchema.safeParse(scene).success);
+ assert.ok(!sceneSchema.safeParse({...scene,text:[{...scene.text[0],size:.04}]}).success);
+});
+
 test('source plane cuts crossing triangles cleanly and preserves interpolated UVs',()=>{
  const geometry=new THREE.BufferGeometry();
  geometry.setAttribute('position',new THREE.Float32BufferAttribute([-1,0,0,1,0,0,0,1,0],3));

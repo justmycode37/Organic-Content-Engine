@@ -46,6 +46,11 @@ they follow the actually rendered surface. This is explanatory geometry, not
 filmed physiology. The default `head-mesh` scan is unchanged; explicit
 `source:"anatomical"` selects the bundled anatomical extraction.
 
+Narrow black surface ribbons beside the menisci and tiny canthus beads separate
+wetness from adjacent facial dots at phone size. The bead boundary uses the same
+fixed ink. This is local coverage separation, with no global light/ink change,
+emissive halo or long cheek track.
+
 `gas-pixel-mist` uses hundreds of much smaller independent motes throughout a
 broad3D air volume. `center`/`radius` define the surrounding air; `progress`
 changes occupancy without collapsing the cloud into a wedge or eye-targeted
