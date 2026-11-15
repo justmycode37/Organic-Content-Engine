@@ -49,18 +49,18 @@ EOF
 
 "$HERMES" cron create "0 11 * * *" "$(reel_prompt A '13:00-15:30')" --name newsroom-reel-a \
     --skill newsroom-news-radar --skill newsroom-reel-production --skill newsroom-publish \
-    "${MODEL[@]}" "${COMMON[@]}" "${EXTRA[@]}"
+    "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 
 "$HERMES" cron create "0 20 * * *" "$(reel_prompt B '22:30-00:30')" --name newsroom-reel-b \
     --skill newsroom-news-radar --skill newsroom-reel-production --skill newsroom-publish \
-    "${MODEL[@]}" "${COMMON[@]}" "${EXTRA[@]}"
+    "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 
 "$HERMES" cron create "30 9 * * *" "Daily growth review for Frontier Feed. Follow newsroom-growth-review (daily mode): collect analytics, compare recent posts, update playbook.md with dated, evidence-backed learnings and the experiment status. Today's two production runs read the playbook, so make the guidance concrete. End with the 5-line summary." \
     --name newsroom-growth-daily --skill newsroom-growth-review \
-    "${MODEL[@]}" "${COMMON[@]}" "${EXTRA[@]}"
+    "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 
 "$HERMES" cron create "0 10 * * 0" "Weekly deep review for Frontier Feed. Follow newsroom-growth-review (weekly mode): analyse every post so far, close or start experiments, revise topic priorities, scoring weights and posting windows where the data supports it, and improve the Frontier Feed skills (skill_manage) and the studio templates where recurring problems come from them. Prune data/backlog.md. End with the 5-line summary." \
     --name newsroom-growth-weekly --skill newsroom-growth-review --skill newsroom-reel-production \
-    "${MODEL[@]}" "${COMMON[@]}" "${EXTRA[@]}"
+    "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 
 "$HERMES" cron list
