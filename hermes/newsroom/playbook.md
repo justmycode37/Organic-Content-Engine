@@ -68,6 +68,7 @@ Hard gate: source confidence ≤ 2 → reject or frame explicitly as "unconfirme
 - Credit sources on screen ("Source: OpenAI blog") and in the caption.
 - Footage: own screen recordings, press-kit assets, short credited excerpts with heavy commentary. Never full re-uploads.
 - Label AI voice (`made_with_ai` stays on unless the voice is human).
+- Voice: ElevenLabs (`"voice": {"provider": "elevenlabs", "voice": "nPczCjzI2devNBz1zQrb", "rate": "+5%"}`, "Brian", deep US narrator) `[prior]`. Keep one voice across Reels so the channel sounds recognisable; Edge is only the automatic fallback.
 
 ## Caption rules `[prior]`
 
@@ -81,7 +82,7 @@ Run one at a time, at least 4 posts per arm, record results below.
 
 1. Hook style: bold claim vs. question vs. "watch this".
 2. Length: ~30 s vs. ~50 s on the same topic type.
-3. Voice: Edge default voice vs. alternative voice (or ElevenLabs once a key exists).
+3. Voice: Brian vs. a second ElevenLabs voice (e.g. Sarah `EXAVITQu4vr4xnVDxPEm`), only after hooks and length are settled.
 4. Trial Reels: test two hooks for the same story (one as trial) when a story is strong.
 
 ## Learnings log
