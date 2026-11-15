@@ -6,6 +6,12 @@ import {clamp,lerp,rng,smooth} from '../kit.ts';
 type V3=[number,number,number];
 const vector=(value:unknown,fallback:V3):V3=>Array.isArray(value)&&value.length===3&&value.every(Number.isFinite)?value as V3:fallback;
 
+/** Filled silhouette, deliberately without an inner contour or stroke geometry. */
+export function filledTeardropGeometry(rx:number,ry:number){
+ const shape=new THREE.Shape();shape.moveTo(0,ry);shape.bezierCurveTo(-rx*.22,ry*.55,-rx,-ry*.02,-rx,-ry*.30);shape.bezierCurveTo(-rx,-ry*.76,-rx*.52,-ry,0,-ry);shape.bezierCurveTo(rx*.52,-ry,rx,-ry*.76,rx,-ry*.30);shape.bezierCurveTo(rx,-ry*.02,rx*.22,ry*.55,0,ry);
+ return new THREE.ShapeGeometry(shape,24);
+}
+
 /** Diffuse airborne tracers: numerous tiny independent pixels, never an eye-targeted line. */
 export const gasPixelMist=defineModel({
  id:'gas-pixel-mist',
@@ -39,17 +45,16 @@ export const gasPixelMist=defineModel({
 /** Authored tear geometry on a plain source-backed bust; no expressions or invented scan rig. */
 export const neutralTearingFace=defineModel({
  id:'neutral-tearing-face',
- describe:'Ordinary neutral front-facing modelled head and neck from the bundled CC0 MakeHuman anatomical source, with its original neutral eye geometry and no jewellery or dramatic emotional performance. The lower bust fades smoothly to black. Restrained lower-lid menisci and small source-conforming tear beads with narrow fixed-ink optical edges follow raycast source surfaces, controlled by tears; no long cheek tracks. This is a 3D explanation, not filmed physiology or a blink/expression rig. Keep the face front-facing. Source-derived left eye anchor is approximately [-.0851,.1863,.3249] times height, right [.0851,.1863,.3249] times height, plus object placement. Landmarks come from the original eyeball geometry and projected surfaces. Iris/pupil discs and wetness are authored explanatory surface details; no eyelid animation is invented.',
- params:{height:'total bust height in metres, default 1; keep proportions',tone:'source-face surface density multiplier .2..1, default .72; tune material density rather than global style calibration',tearWidth:'restrained tear-film width multiplier .6..1.5, clamped to that range; default 1'},
- controls:{tears:'0 dry neutral face ..1 seated lower-lid wetness and small attached canthus beads'},defaults:{tears:0},size:'1 m explanatory bust',
+ describe:'Ordinary neutral front-facing modelled head and neck from the bundled CC0 MakeHuman anatomical source, with unchanged static eye geometry and no jewellery or emotional acting. The lower bust fades smoothly into black. Owner-selected tear treatment: two clearly visible, fully filled pixel teardrop silhouettes on the cheeks, slightly asymmetric and source-seated, with a small downward reveal. No water inside the eyes, wet film, menisci, bright eyelid margins, hollow outlines or long tear tracks. The drops are an intentional illustrative abstraction, not a physiological liquid simulation. Keep the face frontal. Source-derived eye anchor is approximately [-.0851,.1863,.3249] times height, plus object placement.',
+ params:{height:'total bust height metres, default1',tone:'source-face density .2..1, default.72',tearSize:'filled teardrop size .6..1.6, default1; make drops clearly readable',tearWidth:'legacy alias for tearSize'},
+ controls:{tears:'0 no drops ..1 two fully revealed, filled pixel teardrops; does not change eyes or add a water film'},defaults:{tears:0},size:'1 m explanatory bust',
  build(ctx){
-  const height=ctx.num('height',1,.3,2),width=ctx.num('tearWidth',1,.6,1.5);
+  const height=ctx.num('height',1,.3,2),dropSize=ctx.num('tearSize',ctx.num('tearWidth',1,.6,1.5),.6,1.6);
   const bust=portrait.build({...ctx,params:{source:'anatomical',height:1,detail:0,neckCut:.2},num:(key,f,min=-Infinity,max=Infinity)=>key==='height'?1:key==='detail'?0:key==='neckCut'?.2:Math.max(min,Math.min(max,Number(ctx.params[key]??f)))});
   const root=new THREE.Group();root.add(bust.root);bust.root.updateMatrixWorld(true);
   const ray=new THREE.Raycaster(),surfaces:THREE.Object3D[]=[],eyePoints=[new THREE.Box3(),new THREE.Box3()];
   bust.root.traverse(o=>{
    const m=o as THREE.Mesh;if(!m.isMesh)return;
-   if(/^eyes$/i.test(m.name)){const sclera=new THREE.MeshBasicMaterial({color:0x909090,alphaHash:true});sclera.userData={tone:.56,explicit:true};m.material=sclera;}
    if(!/hair|eyelash/i.test(m.name))surfaces.push(m);
    if(/eyelash|^eyes$/i.test(m.name)){
     const p=m.geometry.getAttribute('position');
@@ -88,59 +93,28 @@ export const neutralTearingFace=defineModel({
     mat.customProgramCacheKey=()=>key()+'|neutral-bust-projected-fade-v2';
    }
   });
-  const wet=new THREE.Group(),gaze=new THREE.Group();root.add(wet,gaze);const irises:THREE.Mesh[]=[],rims:THREE.Mesh[]=[],beadGaps:THREE.Mesh[]=[];
-  const highlight=new THREE.MeshBasicMaterial({color:0xd0d0d0,alphaHash:true});highlight.userData={tone:.82,explicit:true};
-  const negative=new THREE.MeshBasicMaterial({color:0x000000,side:THREE.DoubleSide});negative.userData={tone:0,explicit:true};
-  for(let i=0;i<2;i++){const iris=ctx.mesh(new THREE.CircleGeometry(.017,32),{tone:.28,rough:.6}),pupil=ctx.mesh(new THREE.CircleGeometry(.008,24),{tone:.025,rough:.6});gaze.add(iris,pupil);irises.push(iris,pupil);}const films:{mesh:THREE.Mesh;geometry:THREE.BufferGeometry;kind:'lid'|'bead';gap?:THREE.Mesh}[]=[];
-  const baseLiquid=ctx.mat({tone:.99,rough:.075});
-  const liquid=new THREE.MeshPhysicalMaterial({color:baseLiquid.color.clone().multiplyScalar(.32),roughness:.035,metalness:0,clearcoat:1,clearcoatRoughness:.02,ior:1.333,specularIntensity:2});
-  liquid.userData={...baseLiquid.userData,tone:.32};baseLiquid.dispose();
-  for(const [eyeIndex,side] of [-1,1].entries()){
-   const eye=landmarks[eyeIndex]!;
-   // A seated lower-lid meniscus, followed by a small attached canthus bead.
-   // No long glowing ropes down the cheeks or disconnected drops.
-   const lid=Array.from({length:29},(_,i)=>{const u=i/28,x=lerp(eye.inner,eye.outer,u),y=eye.lower+.011*Math.pow(2*u-1,2);return contact(x,y);});
-   const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lid),84,.0048*width,8,false);
-   const meniscus=new THREE.Mesh(geometry,highlight),gap=new THREE.Mesh(new THREE.BufferGeometry(),negative);wet.add(gap,meniscus);films.push({mesh:meniscus,geometry,kind:'lid',gap});
-   const beadGeometry=new THREE.SphereGeometry(.02,20,16),bead=new THREE.Mesh(beadGeometry,liquid),rim=new THREE.Mesh(new THREE.BufferGeometry(),highlight),beadGap=new THREE.Mesh(new THREE.BufferGeometry(),negative);bead.add(beadGap,rim);rims.push(rim);beadGaps.push(beadGap);
-   const at=contact(lerp(eye.inner,eye.centre,.10)+side*.004,eye.lower-.018);bead.position.copy(at);bead.scale.setScalar(1);wet.add(bead);films.push({mesh:bead,geometry:beadGeometry,kind:'bead'});
-  }
-  // Resolve the wet surfaces after the engine has placed the skinned source.
-  // Source bind matrices are updated by that placement; pre-placement ray hits
-  // are insufficient to guarantee contact on the actually rendered face.
-  const seatWetness=()=>{
+  // Owner direction: filled pixel teardrops only. The eyes never gain water,
+  // menisci, wet-film layers, bright outlines or tear-track geometry.
+  const dropsRoot=new THREE.Group(),gaze=new THREE.Group();root.add(dropsRoot,gaze);
+  const irises:THREE.Mesh[]=[];
+  for(let i=0;i<2;i++){const iris=ctx.mesh(new THREE.CircleGeometry(.017,32),{tone:.28,rough:.6}),pupil=ctx.mesh(new THREE.CircleGeometry(.008,24),{tone:.025,rough:.6});gaze.add(iris,pupil);irises.push(iris,pupil);}
+  // High uniform radiance saturates dot coverage inside the silhouette. The
+  // shared post pass still supplies the exact scene ink, pitch and edge optics.
+  const dropMaterial=new THREE.MeshBasicMaterial({color:new THREE.Color(2,2,2),side:THREE.DoubleSide,toneMapped:false});dropMaterial.userData={tone:1,explicit:true};
+  const drops=landmarks.map((_,index)=>{const mesh=new THREE.Mesh(new THREE.BufferGeometry(),dropMaterial);dropsRoot.add(mesh);return {mesh,index,bx:0,by:0,tip:new THREE.Vector3(),ready:false};});
+  const seatDrops=()=>{
    root.updateWorldMatrix(true,true);const inverse=root.matrixWorld.clone().invert(),boxes=[new THREE.Box3(),new THREE.Box3()];
    bust.root.traverse(o=>{const m=o as THREE.Mesh;if(!m.isMesh||!/eyelash|^eyes$/i.test(m.name))return;const positions=m.geometry.getAttribute('position');for(let i=0;i<positions.count;i++){const v=new THREE.Vector3();if((m as THREE.SkinnedMesh).isSkinnedMesh)(m as THREE.SkinnedMesh).getVertexPosition(i,v);else v.fromBufferAttribute(positions,i);v.applyMatrix4(m.matrixWorld).applyMatrix4(inverse);boxes[v.x<0?0:1]!.expandByPoint(v);}});
-   for(const [index,side] of [-1,1].entries()){
-    const box=boxes[index]!;if(!box.isEmpty()){const size=box.getSize(new THREE.Vector3());Object.assign(landmarks[index]!,{inner:index?box.min.x:box.max.x,outer:index?box.max.x:box.min.x,centre:(box.min.x+box.max.x)/2,y:(box.min.y+box.max.y)/2,lower:(box.min.y+box.max.y)/2-.012});}
-    const eye=landmarks[index]!,film=films[index*2]!,bead=films[index*2+1]!;const centre=contact(eye.centre,eye.y);irises[index*2]!.position.copy(centre).add(new THREE.Vector3(0,0,.001));irises[index*2+1]!.position.copy(centre).add(new THREE.Vector3(0,0,.002));
-    const points=Array.from({length:29},(_,i)=>{const u=i/28;return contact(lerp(eye.inner,eye.outer,u),eye.lower+.011*Math.pow(2*u-1,2));});
-    const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),84,.0048*width,8,false);geometry.setDrawRange(film.geometry.drawRange.start,film.geometry.drawRange.count);film.geometry.dispose();film.geometry=geometry;film.mesh.geometry=geometry;
-    // A narrow black surface ribbon separates the wet rim from facial dots.
-    // This redistributes local coverage; it adds no glow or long cheek track.
-    const ribbon:number[]=[],ribbonIndices:number[]=[];
-    for(let k=0;k<points.length;k++){
-     const point=points[k]!,tangent=points[Math.min(k+1,points.length-1)]!.clone().sub(points[Math.max(k-1,0)]!),normal=new THREE.Vector2(-tangent.y,tangent.x).normalize().multiplyScalar(.009*width);
-     for(const sign of [-1,1]){const v=contact(point.x+normal.x*sign,point.y+normal.y*sign);v.z-=.003;ribbon.push(...v.toArray());}
-     if(k){const a=(k-1)*2;ribbonIndices.push(a,a+1,a+2,a+1,a+3,a+2);}
-    }
-    const ribbonGeometry=new THREE.BufferGeometry();ribbonGeometry.setAttribute('position',new THREE.Float32BufferAttribute(ribbon,3));ribbonGeometry.setIndex(ribbonIndices);film.gap!.geometry.dispose();film.gap!.geometry=ribbonGeometry;
-    const bx=lerp(eye.inner,eye.centre,.10)+side*.004,by=eye.lower-.0195*width,base=contact(bx,by),top=contact(bx,eye.lower);
-    const rx=.010*width,ry=.019*width,rz=.008;
-    const drop=new THREE.SphereGeometry(1,20,16),positions=drop.getAttribute('position');
-    for(let k=0;k<positions.count;k++){
-     const nx=positions.getX(k),ny=positions.getY(k),nz=positions.getZ(k),taper=1-.62*Math.pow(Math.max(0,ny),1.4),x=bx+nx*rx*taper,y=by+ny*ry,surface=contact(x,y);
-     positions.setXYZ(k,x-base.x,y-base.y,surface.z-base.z+Math.max(0,nz)*rz);
-    }
-    drop.computeVertexNormals();bead.geometry.dispose();bead.geometry=drop;bead.mesh.geometry=drop;bead.mesh.position.copy(base);bead.mesh.userData.tearBase=base;bead.mesh.userData.tearTop=top;
-    const backdrop:number[]=[0,0,-.003],backIndices:number[]=[];
-    for(let k=0;k<48;k++){const angle=k/48*Math.PI*2,v=Math.cos(angle),x=bx+Math.sin(angle)*rx*1.3*(1-.62*Math.pow(Math.max(0,v),1.4)),y=by+ry*v*1.14,surface=contact(x,y);backdrop.push(x-base.x,y-base.y,surface.z-base.z-.003);backIndices.push(0,k+1,(k+1)%48+1);}
-    const back=new THREE.BufferGeometry();back.setAttribute('position',new THREE.Float32BufferAttribute(backdrop,3));back.setIndex(backIndices);beadGaps[index]!.geometry.dispose();beadGaps[index]!.geometry=back;
-    // A complete tiny drop boundary stays readable within that negative space.
-    const ridge=Array.from({length:48},(_,k)=>{const angle=k/48*Math.PI*2,v=Math.cos(angle),x=bx+Math.sin(angle)*rx*(1-.62*Math.pow(Math.max(0,v),1.4)),y=by+ry*v,surface=contact(x,y);return new THREE.Vector3(x-base.x,y-base.y,surface.z-base.z+.0015);});
-    const edge=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ridge,true),80,.0018*width,6,true);rims[index]!.geometry.dispose();rims[index]!.geometry=edge;
+   for(const drop of drops){
+    const index=drop.index,side=index?1:-1,box=boxes[index]!;
+    if(!box.isEmpty())Object.assign(landmarks[index]!,{inner:index?box.min.x:box.max.x,outer:index?box.max.x:box.min.x,centre:(box.min.x+box.max.x)/2,y:(box.min.y+box.max.y)/2,lower:(box.min.y+box.max.y)/2-.012});
+    const eye=landmarks[index]!,centre=contact(eye.centre,eye.y);irises[index*2]!.position.copy(centre).add(new THREE.Vector3(0,0,.001));irises[index*2+1]!.position.copy(centre).add(new THREE.Vector3(0,0,.002));
+    const rx=.010*dropSize*(index?.82:1),ry=.016*dropSize*(index?.88:1);
+    drop.bx=lerp(eye.inner,eye.centre,index?.38:.24)+side*.002;drop.by=eye.lower-(index?.034:.030);drop.tip=contact(drop.bx,eye.lower-.009);
+    const geometry=filledTeardropGeometry(rx,ry),positions=geometry.getAttribute('position'),base=contact(drop.bx,drop.by);
+    for(let i=0;i<positions.count;i++){const x=positions.getX(i),y=positions.getY(i),surface=contact(drop.bx+x,drop.by+y);positions.setXYZ(i,x,y,surface.z-base.z+.006);}
+    geometry.computeVertexNormals();drop.mesh.geometry.dispose();drop.mesh.geometry=geometry;drop.mesh.position.copy(base);drop.ready=true;
    }
-   if(ctx.params.debugSource===true)console.warn('neutral-face-seated-landmarks '+JSON.stringify(landmarks));
   };
   root.scale.setScalar(height);
   const leftEye=contact(landmarks[0]!.centre,landmarks[0]!.y).multiplyScalar(height),rightEye=contact(landmarks[1]!.centre,landmarks[1]!.y).multiplyScalar(height);
@@ -148,9 +122,9 @@ export const neutralTearingFace=defineModel({
   // Keep those temporary bounds from culling the face after its scene transform.
   bust.root.traverse(o=>{const m=o as THREE.SkinnedMesh;if(m.isSkinnedMesh){m.frustumCulled=false;const queried=m as unknown as {boundingBox:THREE.Box3|null;boundingSphere:THREE.Sphere|null};queried.boundingBox=null;queried.boundingSphere=null;}});
   if(ctx.params.debugSource===true)console.warn('neutral-face-eye-anchors '+JSON.stringify({left:leftEye.toArray(),right:rightEye.toArray()}));
-  return {root,grounded:false,onPlaced:seatWetness,framingPoints:[new THREE.Vector3(-.45,-.5,-.4),new THREE.Vector3(.45,.5,.45)].map(p=>p.multiplyScalar(height)),anchors:{leftEye:leftEye.toArray() as V3,rightEye:rightEye.toArray() as V3},update(c){
-   const tears=clamp(c.tears??0);wet.visible=tears>.01;
-   for(const film of films){const amount=film.kind==='lid'?smooth(clamp(tears/.55)):smooth(clamp((tears-.45)/.55));film.mesh.visible=amount>.015;if(film.kind==='lid'){film.geometry.setDrawRange(0,Math.floor((film.geometry.index?.count??0)*amount/6)*6);if(film.gap){film.gap.visible=film.mesh.visible;film.gap.geometry.setDrawRange(0,Math.floor((film.gap.geometry.index?.count??0)*amount/6)*6);}}else{const growth=Math.sqrt(amount);film.mesh.scale.setScalar(growth);const base=film.mesh.userData.tearBase as THREE.Vector3|undefined,top=film.mesh.userData.tearTop as THREE.Vector3|undefined;if(base&&top)film.mesh.position.copy(top).lerp(base,growth);}}
+  return {root,grounded:false,onPlaced:seatDrops,framingPoints:[new THREE.Vector3(-.45,-.5,-.4),new THREE.Vector3(.45,.5,.45)].map(p=>p.multiplyScalar(height)),anchors:{leftEye:leftEye.toArray() as V3,rightEye:rightEye.toArray() as V3},update(c){
+   const tears=clamp(c.tears??0);dropsRoot.visible=tears>.01;
+   for(const drop of drops){const level=clamp((tears-(drop.index?.10:0))/(drop.index?.90:1)),growth=Math.sqrt(smooth(level));drop.mesh.visible=growth>.08;drop.mesh.scale.setScalar(growth);if(drop.ready){const fall=.025*smooth(clamp((level-.35)/.65)),base=contact(drop.bx,drop.by-fall);drop.mesh.position.copy(drop.tip).lerp(base,growth);}}
   }};
  },
 });
