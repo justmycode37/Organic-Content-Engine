@@ -76,7 +76,7 @@ export function drawText(tc:TextCtx,item:TextItem){
  const family=item.font==='oswald'?OSWALD:item.font==='roboto-condensed'?ROBOTO_CONDENSED:item.font==='roboto-mono'?ROBOTO_MONO:item.font==='plex-mono'?MONO:mono?MONO:COND;
  ctx.font=`${weight} ${size}px ${family}`;
  ctx.textBaseline='alphabetic';
- const hlWords=(item.highlight??'').toUpperCase().split(/\s+/).filter(Boolean);
+ const hlWords=(item.highlight??'').toUpperCase().split(/\s+/).map(w=>w.replace(/[^A-Z0-9'%$€.-]/gi,'')).filter(Boolean);
  const words=raw.split(/\s+/).filter(Boolean);
  const toks:Tok[]=words.map(w=>{const clean=w.replace(/[^A-Z0-9'%$€.-]/gi,'').toUpperCase();
   const pre=hlWords.find(h=>h!==clean&&clean.startsWith(h)&&h.length<clean.length);
@@ -136,7 +136,7 @@ export function drawText(tc:TextCtx,item:TextItem){
     ctx.fillStyle=style==='tag'?(tc.textColor??'#d0d0d0'):hue;
     ctx.fillRect(cx-padX+boxX,by-capH-padY+boxY,bw,capH+padY*2);
    }
-   if(n>0){ctx.fillStyle=style==='number'?'#e8e8e8':textCol;if(tk.hl&&style!=='tag')ctx.fillStyle=tc.textColor??TEXT_GREY;ctx.fillText(tk.text.slice(0,n),cx,by);}
+   if(n>0){ctx.fillStyle=style==='number'?'#e8e8e8':textCol;if(tk.hl&&style!=='tag')ctx.fillStyle='#0a0a0a';ctx.fillText(tk.text.slice(0,n),cx,by);}
    if(n>0||count-tk.text.length<=shown){cursorX=cx+ctx.measureText(tk.text.slice(0,n)).width+(n?size*0.06:0);cursorY=by;}
    cx+=tk.w;
   });
