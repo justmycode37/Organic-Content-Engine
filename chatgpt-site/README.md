@@ -138,8 +138,10 @@ success. Only `PUBLISHED` confirms success. Ambiguous create responses stop with
 pause is also respected. This account automation currently supports the two
 configured Instagram brands; other accounts require a production pipeline.
 
-Enable **Keep me in the loop** to persist generation, successful-post and error
-events. ChatGPT can read `list_reel_notifications` and acknowledge specific IDs
+Enable **Keep me in the loop** to persist confirmed posting successes, failures
+and uncertain posting outcomes. Intermediate generation updates are excluded,
+including any older queued generation notices. Background notification checks
+are instructed to stay silent when no new final outcomes exist. ChatGPT can read `list_reel_notifications` and acknowledge specific IDs
 with `acknowledge_reel_notifications` after reporting. These tools work while
 production is stopped. A linked ChatGPT task can check these events; notification
 permission/delivery is controlled in ChatGPT. No arbitrary immediate ChatGPT push
