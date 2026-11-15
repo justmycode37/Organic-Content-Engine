@@ -60,7 +60,7 @@ face visible. Framewise Apple Vision foreground segmentation removes unrelated
 surroundings and the earlier added board-support patch. The largest connected
 foreground component retains the hand, knife and held bulb; mask rows274 onward
 (source y822) exclude the lower board/offcut area. Original RGB and action are
-preserved. Instance-local linear source transfer and levels retain blade detail
+preserved. Instance-local sRGB source transfer and levels retain blade detail
 without changing shared ink, lighting or dot calibration. Source
 and matte share1920×1080 coordinates and25fps; the same crop applies to both.
 The distribution mask is H.264 CRF12. Original source RGB and motion are unchanged.

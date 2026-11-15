@@ -171,7 +171,8 @@ export function drawCaptions(tc:TextCtx){
  let text='';
  for(const w of g){if(t<w.start-0.03)break;const k=Math.min(1,(t-w.start+0.03)/Math.max(0.08,(w.end-w.start)*0.8));text+=(text?' ':'')+w.text.slice(0,Math.max(1,Math.ceil(w.text.length*k)));}
  ctx.save();ctx.font=`${40*TS}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='alphabetic';
- const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.896;
+ // Keep the running line above the bottom interface region of a portrait reel.
+ const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.8;
  ctx.fillStyle='#d2d2d2';ctx.fillText(text,x,y);
  const cw=ctx.measureText(text).width;
  if(Math.floor(t*5)%2===0||text.length<full.length){ctx.fillStyle=tc.hue;ctx.fillRect(x+cw+6*TS,y-30*TS,4*TS,38*TS);}
