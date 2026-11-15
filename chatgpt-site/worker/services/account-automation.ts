@@ -1,30 +1,36 @@
 import type {Container,Env} from '../container.ts';
 import {AppError} from '../errors.ts';
-import {SocialAccounts,platformOf} from './social.ts';
-import {VideoPublisher} from '../publishing/adapters/video.ts';
-import {PublishError} from '../publishing/types.ts';
-import {listAccounts} from './accounts.ts';
+import {listAccounts,accountSlots,type Account} from './accounts.ts';
+import {Postiz} from './postiz.ts';
+import {accountNotice} from './account-notifications.ts';
 const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
-/** What a published or finished reel covered, so the next one can avoid its concept, item and music. */
-export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});
- return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
+export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
 export const runtime=(env:Env)=>Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
 export async function tickAccounts(c:Container,env:Env){
- const accounts=await listAccounts(c.db);let queued=0;
- for(const a of accounts){if(!a.enabled||a.platform!=='instagram')continue;
- const social=new SocialAccounts(c.db,runtime(env),fetch,a.id);if(!await social.account('instagram')||social.config('instagram').missing.length)continue;
- for(const slot of a.schedule.filter(s=>Date.parse(s.scheduledAt)-Date.now()<24*3600000)){
- const r=await c.db.prepare('INSERT OR IGNORE INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?)').bind(crypto.randomUUID(),a.id,slot.scheduledAt,now(),now()).run();queued+=Number(r.meta.changes??0);
- }}return {queued};
+ const at=new Date(),tickAt=at.toISOString(),accounts=await listAccounts(c.db),postiz=new Postiz(env);let queued=0;
+ const enabled=accounts.filter(a=>a.enabled&&a.platform==='instagram'&&['hedgy','acryllex'].includes(a.id)&&a.postizIntegrationId);
+ if(!enabled.length||!postiz.configured)return {queued};
+ const targets=await postiz.integrations();
+ for(const a of enabled){
+  const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);if(!target)continue;
+  const previous=await c.settings.getJob(`account_schedule:${a.id}`),since=Math.max(Date.parse(a.enabledSince??tickAt),previous.lastRunAt?Date.parse(previous.lastRunAt):at.getTime()-86400000,at.getTime()-86400000);
+  for(const slot of accountSlots(a,at,-1,3).filter(s=>Date.parse(s.scheduledAt)>=since&&Date.parse(s.scheduledAt)<=at.getTime())){
+   const missed=Date.now()-Date.parse(slot.scheduledAt)>15*60000,id=crypto.randomUUID();
+   const r=await c.db.prepare('INSERT OR IGNORE INTO account_automation_jobs(id,account_id,scheduled_at,status,provenance,error,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?)').bind(id,a.id,slot.scheduledAt,missed?'failed':'pending',JSON.stringify({delivery:target}),missed?'Generation start missed while worker was offline':null,now(),now()).run();
+   if(r.meta.changes){if(missed)await accountNotice(c,{id,account_id:a.id,scheduled_at:slot.scheduledAt},'failed','Generation start missed while worker was offline');else queued++;}
+  }
+  await c.settings.setJob(`account_schedule:${a.id}`,tickAt,{});
+ }return {queued};
 }
 export async function claimAccountJob(c:Container){
  await c.settings.setJob('account_worker',now(),{online:true});
- await c.db.prepare("UPDATE account_automation_jobs SET status='needs_attention',error='Worker stopped during production; inspect cached output before retrying',lease_id=NULL WHERE status='leased' AND lease_until<?").bind(now()).run();
+ const expired=await c.db.prepare("UPDATE account_automation_jobs SET status='needs_attention',error='Worker stopped during production; inspect cached output before retrying',lease_id=NULL,updated_at=? WHERE status='leased' AND lease_until<? RETURNING *").bind(now(),now()).all<any>();
+ for(const row of expired.results)await accountNotice(c,row,'needs_attention',row.error);
  const lease=crypto.randomUUID(),until=new Date(Date.now()+20*60000).toISOString();
- const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND json_extract(a.value,'$.enabled')=1 ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now()).first<any>();
+ const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND j.scheduled_at<=? AND json_extract(a.value,'$.enabled')=1 AND a.id IN ('hedgy','acryllex') ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now(),now()).first<any>();
  if(!row)return {job:null};const a=await c.db.prepare('SELECT value FROM accounts WHERE id=?').bind(row.account_id).first<{value:string}>();
- const past=await c.db.prepare("SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC LIMIT 2000").bind(row.account_id,row.id).all<{spec:string;provenance:string|null}>();
+ const past=await c.db.prepare('SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC LIMIT 2000').bind(row.account_id,row.id).all<{spec:string;provenance:string|null}>();
  return {job:{id:row.id,lease,account:JSON.parse(a!.value),scheduledAt:row.scheduled_at,history:past.results.map(reelHistory)}};
 }
 export async function accountLease(c:Container,id:string,lease:string){const row=await c.db.prepare("SELECT * FROM account_automation_jobs WHERE id=? AND lease_id=? AND status='leased' AND lease_until>?").bind(id,lease,now()).first<any>();if(!row)throw new AppError(409,'stale_lease','This job is no longer leased to this worker');return row;}
@@ -33,20 +39,55 @@ export async function completeAccountJob(c:Container,id:string,lease:string,inpu
  const done=await c.db.prepare("SELECT id FROM account_automation_jobs WHERE id=? AND lease_id=? AND status='completed' AND output_material_id=?").bind(id,lease,input.materialId).first();if(done)return{ok:true};
  const row=await accountLease(c,id,lease);if(row.output_material_id!==input.materialId)throw new AppError(409,'output_mismatch','This output belongs to another job');
  const m=await c.materials.get(input.materialId);if(!m.uploaded||m.kind!=='finished'||m.mime!=='video/mp4')throw new AppError(409,'output_invalid','Upload a finished MP4 first');
- await c.db.prepare("UPDATE account_automation_jobs SET status='completed',spec=?,provenance=?,error=NULL,updated_at=? WHERE id=? AND lease_id=? AND status='leased'").bind(JSON.stringify(input.spec),JSON.stringify(input.provenance),now(),id,lease).run();return {ok:true};
+ if(row.account_id==='acryllex'){
+  const p=input.provenance as any,stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];
+  if(!p||p.reviewsDisabled||p.model!=='gpt-6.1-sol'||p.effort!=='xhigh'||stages.some(s=>p[s]?.passed!==true)||p.voiceReview?.passed!==true||!p.styleReference?.hash||!p.mixStatsFinal||!['fact-check+coherence','storyboard-review','sound-review'].every(s=>p.steps?.includes(s)))throw new AppError(409,'reviews_required','Acryllex requires the full approved review pipeline before completion');
+ }
+ const provenance={...(input.provenance as object),delivery:parse(row.provenance).delivery};
+ await c.db.prepare("UPDATE account_automation_jobs SET status='completed',spec=?,provenance=?,error=NULL,updated_at=? WHERE id=? AND lease_id=? AND status='leased'").bind(JSON.stringify(input.spec),JSON.stringify(provenance),now(),id,lease).run();
+ await accountNotice(c,row,'generated','Reel generation and required reviews completed. Awaiting publication.');return {ok:true};
 }
-export async function failAccountJob(c:Container,id:string,lease:string,input:{code:string;message:string}){await accountLease(c,id,lease);await c.db.prepare("UPDATE account_automation_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND lease_id=?").bind(input.message.slice(0,300),now(),id,lease).run();return {ok:true};}
+export async function failAccountJob(c:Container,id:string,lease:string,input:{code:string;message:string}){const row=await accountLease(c,id,lease),message=c.redact(input.message).slice(0,300);await c.db.prepare("UPDATE account_automation_jobs SET status='failed',error=?,updated_at=? WHERE id=? AND lease_id=?").bind(message,now(),id,lease).run();await accountNotice(c,row,'failed',message);return {ok:true};}
+/** Publication is non-idempotent at Postiz: persist the send boundary and never blindly retry it. */
 export async function publishAccountJobs(c:Container,env:Env){
- if((await c.settings.get()).publishingPaused)return {published:0,paused:true};let published=0;
+ const paused=(await c.settings.get()).publishingPaused,postiz=new Postiz(env);let published=0;
  const jobs=await c.db.prepare("SELECT j.*,a.value FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status IN ('completed','publishing') AND j.scheduled_at<=? AND (j.publish_until IS NULL OR j.publish_until<?) ORDER BY j.scheduled_at LIMIT 5").bind(now(),now()).all<any>();
- for(const row of jobs.results){const a=JSON.parse(row.value);if(!a.enabled)continue;
- if(Date.now()-Date.parse(row.scheduled_at)>3600000){await c.db.prepare("UPDATE account_automation_jobs SET status='failed',error='Publishing window missed' WHERE id=?").bind(row.id).run();continue;}
- const until=new Date(Date.now()+5*60000).toISOString();const claimed=await c.db.prepare("UPDATE account_automation_jobs SET publish_until=? WHERE id=? AND (publish_until IS NULL OR publish_until<?)").bind(until,row.id,now()).run();if(!claimed.meta.changes)continue;
- try{const social=new SocialAccounts(c.db,runtime(env),fetch,a.id),platform=platformOf(a.platform);const linked=await social.account(platform);if(!linked)throw new AppError(409,'account_missing','Reconnect this account');
- const publisher=new VideoPublisher(c.db,social,c.materials);const spec=JSON.parse(row.spec??'{}');
- const r=await publisher.publish(platform,{platform,text:spec.title??a.topic,mediaUrls:[`storage:${row.output_material_id}`],options:{accountId:linked.account_id},idempotencyKey:`account:${row.id}`});
- if('pending' in r)await c.db.prepare("UPDATE account_automation_jobs SET status='publishing',publish_until=?,updated_at=? WHERE id=?").bind(new Date(Date.now()+60000).toISOString(),now(),row.id).run();
- else{await c.db.prepare("UPDATE account_automation_jobs SET status='published',external_id=?,external_url=?,publish_until=NULL,updated_at=? WHERE id=?").bind(r.externalId,r.externalUrl,now(),row.id).run();published++;}
- }catch(e){const uncertain=e instanceof PublishError&&e.kind==='ambiguous';await c.db.prepare('UPDATE account_automation_jobs SET status=?,error=?,publish_until=NULL,updated_at=? WHERE id=?').bind(uncertain?'needs_attention':'failed',uncertain?'Check Instagram before retrying; delivery may have occurred':'Publishing failed; check connection and permissions',now(),row.id).run();}
- }return {published};
+ for(const row of jobs.results){
+  const a=JSON.parse(row.value) as Account;if(row.status==='completed'&&(!a.enabled||paused))continue;
+  const until=new Date(Date.now()+5*60000).toISOString(),claimed=await c.db.prepare('UPDATE account_automation_jobs SET publish_until=? WHERE id=? AND (publish_until IS NULL OR publish_until<?)').bind(until,row.id,now()).run();if(!claimed.meta.changes)continue;
+  let sending=false;
+  try{
+   const target=parse(row.provenance).delivery;
+   if(row.status==='publishing'&&!row.post_id)throw new AppError(409,'ambiguous_publish','A previous Postiz request may have succeeded. Check Postiz before retrying.');
+   if(row.post_id){
+    const p=await postiz.status(row.post_id,row.created_at);
+    if(p?.integration?.id&&p.integration.id!==target?.id)throw new AppError(409,'account_mismatch','Postiz returned another account');
+    if(p?.state==='PUBLISHED'){
+     const url=p.releaseURL?.startsWith('https://')?p.releaseURL:null;
+     await c.db.prepare("UPDATE account_automation_jobs SET status='published',external_id=?,external_url=?,error=NULL,publish_until=NULL,updated_at=? WHERE id=?").bind(p.id,url,now(),row.id).run();await accountNotice(c,row,'published','Instagram confirmed publication.',url??undefined);published++;continue;
+    }
+    if(p?.state==='ERROR')throw new AppError(409,'postiz_post_failed','Instagram publication failed. Open Postiz for the provider error.');
+    if(Date.now()-Date.parse(row.updated_at)>24*3600000)throw new AppError(409,'ambiguous_publish','Postiz has not confirmed publication within 24 hours. Check Postiz.');
+    await c.db.prepare('UPDATE account_automation_jobs SET publish_until=? WHERE id=?').bind(new Date(Date.now()+60000).toISOString(),row.id).run();continue;
+   }
+   if(!target?.id||target.id!==a.postizIntegrationId)throw new AppError(409,'account_mismatch','Destination changed. This reel requires review before publishing.');
+   await postiz.target(target.id);
+   if(c.config.publishMode!=='live')throw new AppError(409,'publishing_not_live','Live publishing is not enabled');
+   const m=await c.materials.get(row.output_material_id);if(m.kind!=='finished'||!m.uploaded)throw new AppError(409,'output_invalid','Finished media is required');
+   const uploadState=await c.settings.getJob(`account_upload:${row.id}`);let media=uploadState.lastResult as {id:string;path:string}|null;
+   if(!media){const file=await c.materials.read(m.id);media=await postiz.upload(file.stream,m.name);await c.settings.setJob(`account_upload:${row.id}`,now(),media);}
+   // Re-read the stop control after upload and immediately before the irreversible send.
+   const current=await c.db.prepare('SELECT value FROM accounts WHERE id=?').bind(a.id).first<{value:string}>();const latest=JSON.parse(current!.value);
+   if(!latest.enabled||(await c.settings.get()).publishingPaused) {await c.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(row.id).run();continue;}
+   if(latest.postizIntegrationId!==target.id)throw new AppError(409,'account_mismatch','Destination changed during upload');
+   await c.db.prepare("UPDATE account_automation_jobs SET status='publishing',updated_at=? WHERE id=?").bind(now(),row.id).run();sending=true;
+   const id=await postiz.create(target,media,parse(row.spec).title??a.topic);
+   await c.db.prepare('UPDATE account_automation_jobs SET post_id=?,publish_until=?,updated_at=? WHERE id=?').bind(id,new Date(Date.now()+60000).toISOString(),now(),row.id).run();
+  }catch(e){
+   // Status polling is safe to retry; creation is not. Keep a known Postiz ID for reconciliation.
+   if(row.post_id&&e instanceof AppError&&e.status===502){await c.db.prepare('UPDATE account_automation_jobs SET publish_until=?,error=? WHERE id=?').bind(new Date(Date.now()+60000).toISOString(),e.message,row.id).run();continue;}
+   const uncertain=sending||(e instanceof AppError&&e.code==='ambiguous_publish'),status=uncertain?'needs_attention':'failed',message=e instanceof AppError?e.message:'Publishing failed. Check the Postiz connection.';
+   await c.db.prepare('UPDATE account_automation_jobs SET status=?,error=?,publish_until=NULL,updated_at=? WHERE id=?').bind(status,message,now(),row.id).run();await accountNotice(c,row,status,message);
+  }
+ }return {published,paused};
 }
