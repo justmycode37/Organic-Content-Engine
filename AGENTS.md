@@ -18,11 +18,12 @@ replacement for content reviews. The November 14 raw onion reel was a one-off
 experiment; its no-review producer and unreviewed cache are not the normal workflow.
 
 Every visual repair must be rendered and reviewed again. Save review findings and
-before/after versions. Allow up to 10 rendered reviews per visual stage, up to 5
-technical repair proposals per round, and up to 6 generated voice takes. After
-the bounded attempts, select the best version that was actually rendered and
-reviewed and continue finishing the reel. Never discard a good earlier version
-merely because a later repair is worse. Save the selection and its reason, retain
+before/after versions. Allow up to 5 rendered reviews per visual stage, up to 5
+technical repair proposals per round, and up to 5 generated voice takes. These
+are total attempts, including the initial version or take. After five attempts,
+select the best version that was actually rendered and reviewed and continue
+finishing the reel. Never discard a good earlier version merely because a later
+repair is worse. Save the selection and its reason, retain
 all findings and versions, and label unresolved results as unapproved rather than
 claiming that they passed. This does not authorize posting unapproved reels.
 Voice should feel calm, natural and unhurried, with pauses at thought boundaries.
