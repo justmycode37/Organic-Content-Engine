@@ -139,15 +139,31 @@ test('invalid visual repair is retried, and accepted edits are rendered and revi
  assert.equal(checks,4,'A changed review brief must not inherit an old verdict');
 }));
 
-test('ten visual reviews retain and select the best actually reviewed version, rather than the final repair',()=>temporary(async workdir=>{
- let checks=0,result;
- const selected=await runVisualReviewStage({spec:{revision:0},stage:VISUAL_REVIEW_STAGES[1],workdir,
-  renderEvidence:async s=>({files:[`frame-${s.revision}.png`]}),review:async s=>{checks++;return {...bad,findings:Array.from({length:s.revision===1?1:3},()=>({...bad.findings[0]}))};},
-  repair:async s=>({valid:true,spec:{revision:s.revision+1}}),onResult:async r=>{result=r;}});
- assert.equal(checks,10);assert.deepEqual(selected,{revision:1});assert.equal(result.selectedAttempt,2);assert.equal(result.passed,false);
+test('five visual reviews select the best reviewed version and resume without another render or repair',()=>temporary(async workdir=>{
+ let checks=0,renders=0,repairs=0,result;
+ const options={spec:{revision:0},stage:VISUAL_REVIEW_STAGES[1],workdir,
+  renderEvidence:async s=>{renders++;return {files:[`frame-${s.revision}.png`]};},review:async s=>{checks++;return {...bad,findings:Array.from({length:s.revision===1?1:3},()=>({...bad.findings[0]}))};},
+  repair:async s=>{repairs++;return {valid:true,spec:{revision:s.revision+1}};},onResult:async r=>{result=r;}};
+ const selected=await runVisualReviewStage(options);
+ assert.equal(checks,5);assert.equal(renders,5);assert.equal(repairs,4);assert.equal(result.attempts.length,5);
+ assert.deepEqual(selected,{revision:1});assert.equal(result.selectedAttempt,2);assert.equal(result.passed,false);
  assert.deepEqual(result.attempts[1].evidence,['frame-1.png']);
  const root=join(workdir,'reviews',VISUAL_REVIEW_STAGES[1].id),[hash]=await readdir(root);
  const files=await readdir(join(root,hash));assert.ok(files.includes('failure.json'));assert.ok(files.includes('selected-best.json'));assert.ok(!files.includes('accepted.json'));
+ assert.deepEqual(await runVisualReviewStage(options),selected);
+ assert.equal(checks,5);assert.equal(renders,5);assert.equal(repairs,4);
+}));
+
+test('five invalid repair proposals retain the reviewed candidate and continue with unresolved findings',()=>temporary(async workdir=>{
+ let proposals=0,result;
+ const selected=await runVisualReviewStage({spec:{revision:0},stage:VISUAL_REVIEW_STAGES[0],workdir,
+  renderEvidence:async()=>({files:['frame.png']}),review:async()=>bad,
+  repair:async()=>{proposals++;return {valid:false,problems:['Invalid scene authoring']};},onResult:async r=>{result=r;}});
+ assert.equal(proposals,5);assert.deepEqual(selected,{revision:0});assert.equal(result.passed,false);assert.equal(result.selectedBest,true);
+ assert.equal(result.attempts.length,1);assert.match(result.error,/no valid repair/);
+ const files=await readdir(result.attempts[0].directory);
+ assert.equal(files.filter(name=>/^repair-\d+\.json$/.test(name)).length,5);
+ assert.deepEqual(result.attempts[0].verdict,bad);
 }));
 
 test('a diagnostic review records failures without approving or authoring further repairs',()=>temporary(async workdir=>{
@@ -166,7 +182,7 @@ test('raising the visual cap resumes the latest reviewed candidate and retains t
   review:async s=>{checks++;return s.revision>=3?good:bad;},repair:async s=>({valid:true,spec:{revision:s.revision+1}})};
  await assert.rejects(runVisualReviewStage({...options,maxRenderedReviews:3,onExhaustion:'stop'}),/after 3/);
  let result;
- const selected=await runVisualReviewStage({...options,maxRenderedReviews:10,onResult:async r=>{result=r;}});
+ const selected=await runVisualReviewStage({...options,maxRenderedReviews:5,onResult:async r=>{result=r;}});
  assert.deepEqual(selected,{revision:3});assert.equal(checks,4);assert.equal(result.attempts.length,4);assert.equal(result.passed,true);
  assert.equal(JSON.parse(await readFile(join(result.attempts[0].directory,'spec.before.json'),'utf8')).revision,0);
  assert.ok(result.attempts[2].repairDirectory.includes('resume-after-3'));
@@ -220,13 +236,13 @@ test('timing retakes preserve provider-default speed and retain the actual takes
  assert.equal((await readdir(join(root,hash))).filter(name=>name.startsWith('run-')).length,2,'A rerun preserves the first run and its takes');
 }));
 
-test('six imperfect voice takes select the best measured timing while retaining every take and warning',()=>temporary(async workdir=>{
+test('five imperfect voice takes select the best measured timing while retaining every take and warning',()=>temporary(async workdir=>{
  const audio=join(workdir,'fixture.wav');let takes=0,result;
  const options={text,workdir,reviewDelivery:async()=>delivery(),
   narrate:async()=>{takes++;await writeFile(audio,`take${takes}`);return {audio,...alignment(takes===2?{step:.3,pause:.4}:{step:.2,pause:0})};},
   reviewPacing:async(_t,d)=>({passed:false,summary:'Too fast',issues:['Rushed'],nextDelivery:{...d}}),onResult:async r=>{result=r;}};
  const voice=await runVoiceReviews(options);
- assert.equal(takes,6);assert.equal(result.passed,false);assert.equal(result.selectedTake,2);assert.equal(await readFile(voice.audio,'utf8'),'take2');
+ assert.equal(takes,5);assert.equal(result.attempts.length,5);assert.equal(result.passed,false);assert.equal(result.selectedTake,2);assert.equal(await readFile(voice.audio,'utf8'),'take2');
  const root=join(workdir,'reviews','voice'),[hash]=await readdir(root),files=await readdir(join(root,hash));
  assert.ok(files.includes('failure.json'));assert.ok(files.includes('selected-best.json'));assert.ok(!files.includes('accepted.json'));
  await runVoiceReviews({...options,narrate:async()=>{throw new Error('Selected reviewed take must resume without paying again');}});
@@ -237,7 +253,7 @@ test('raising the voice cap keeps the earlier takes and generates only the extra
  const options={text,workdir,reviewDelivery:async()=>delivery(),narrate:async(_d,take)=>{calls++;return {audio,...alignment(take>=3?{}:{step:.2,pause:0})};},
   reviewPacing:async(_t,d,metrics)=>({passed:!metrics.problems.length,summary:'Timing',issues:metrics.problems,nextDelivery:d})};
  await assert.rejects(runVoiceReviews({...options,maxTakes:2,onExhaustion:'stop'}),/after 2 takes/);
- let selected;await runVoiceReviews({...options,maxTakes:6,onResult:async r=>{selected=r;}});
+ let selected;await runVoiceReviews({...options,maxTakes:5,onResult:async r=>{selected=r;}});
  assert.equal(calls,3);assert.equal(selected.attempts.length,3);assert.equal(selected.take,3);assert.equal(selected.passed,true);
 }));
 

@@ -27,11 +27,11 @@ The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-Each visual stage returns explicit findings and a verdict, with up to ten rendered
-review attempts and five authoring proposals per repair round. Every accepted
-repair receives fresh rendered evidence and a new review. After the bounded
-attempts, select the best actually reviewed candidate and continue finishing the
-reel, retaining all versions and unresolved findings. The selection favors a
+Each visual stage returns explicit findings and a verdict, with up to five rendered
+review attempts (including the initial version) and five authoring proposals per
+repair round. Every accepted repair receives fresh rendered evidence and a new
+review. After five attempts, select the best actually reviewed candidate and
+continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late
 frames, both sides of cuts, action boundaries, text reveals and text holds. This is
@@ -43,8 +43,9 @@ ElevenLabs uses its unchanged default speed: the request sends no speed override
 reviews and retakes cannot change it, and narration is never time-stretched.
 Word rates are descriptive; a brief fast passage never triggers global slowing.
 Timing reviews check connected phrasing and natural thought boundaries. Pause hints
-are guidance, not mandatory silence lengths. Allow up to six reviewed takes and
-then select the best measured timing with any unresolved findings retained.
+are guidance, not mandatory silence lengths. Allow up to five reviewed takes,
+including the initial take, then select the best measured timing with any unresolved
+findings retained.
 
 Voice reviews assess text and actual generated word timings. **They do not listen
 to the audio or certify pronunciation, vocal emotion, timbre or audible artifacts.**
