@@ -827,7 +827,7 @@ test('account worker leases exclusively, persists one finished output and comple
  const bytes=new Uint8Array(256);const response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...headers,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});assert.equal(response.status,200);const {materialId}=await response.json();
  const completed=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(completed.status,200);
  const twice=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(twice.status,200);
- const row=await s.db.prepare('SELECT status,output_material_id FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'completed');assert.equal(row.output_material_id,materialId);
+ const row=await s.db.prepare('SELECT status,output_material_id FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'completed');assert.equal(row.output_material_id,materialId);assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events.length,0);
  }finally{await s.stop()}
 });
 
@@ -914,6 +914,12 @@ test('Acryllex completion rejects an unreviewed reel and preserves the failed qu
   const bytes=new Uint8Array(256),response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...accountHeaders,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});const {materialId}=await response.json();
   const result=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Unreviewed'},provenance:{reviewsDisabled:true}}});assert.equal(result.status,409);assert.equal(result.body.error.code,'reviews_required');
   assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'leased');
+  const stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];
+  const provenance={model:'claude-opus-5-5',effort:'medium',reviewModel:'gpt-6.1-sol',reviewEffort:'xhigh',styleReference:{hash:'pinned-owner-reference'},voiceReview:{passed:true},mixStatsFinal:'Measured mix',steps:['fact-check+coherence','storyboard-review','sound-review'],...Object.fromEntries(stages.map(stage=>[stage,{passed:true}]))};
+  const warning=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Retained test'},provenance:{...provenance,'visual-final-review':{passed:false,selectedBest:true}}}});
+  assert.equal(warning.status,409,'Retaining a useful candidate does not approve it for publication');
+  const approved=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Reviewed Opus/Sol reel'},provenance}});
+  assert.equal(approved.status,200,JSON.stringify(approved.body));
  }finally{await s.stop();}
 });
 
@@ -927,5 +933,19 @@ test('Stop holds finished reels and changing destinations cannot redirect their 
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(creates,0);assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'completed');
   await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:another.id,enabled:true}});
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(creates,0);const row=await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'failed');assert.match(row.error,/Destination changed/);
+ }finally{await s.stop();}
+});
+
+
+test('reel notifications exclude old intermediate events and only report unacknowledged final outcomes',async()=>{
+ const s=await start({}, {persist:'final-outcomes-only'});
+ try{
+  for(const status of ['generated','published','failed','needs_attention']){
+   const id=`account_notice:fixture:${status}`;await s.db.prepare('INSERT INTO job_state(name,last_run_at,last_result) VALUES(?,?,?)').bind(id,new Date().toISOString(),JSON.stringify({id,status,acknowledged:false})).run();
+  }
+  const read=()=>mcp(s,'list_reel_notifications').then(r=>JSON.parse(r.result.content[0].text).events);
+  const events=await read();assert.deepEqual(events.map(e=>e.status).sort(),['failed','needs_attention','published']);
+  await mcp(s,'acknowledge_reel_notifications',{ids:events.map(e=>e.id)});assert.deepEqual(await read(),[]);
+  assert.equal(JSON.parse((await s.db.prepare("SELECT last_result FROM job_state WHERE name='account_notice:fixture:generated'").first()).last_result).acknowledged,false);
  }finally{await s.stop();}
 });

@@ -8,7 +8,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
 const safe=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,'_');
 async function run(bin,args,env){await new Promise((resolve,reject)=>{const c=spawn(bin,args,{env,stdio:['ignore','ignore','ignore']});c.once('error',reject);c.once('close',n=>n===0?resolve():reject(Error(`${bin} failed (${n})`)));});}
-/** ACRYLLEX has its own pipeline (Sol-only generation, visual + sound review layers, dithered 3D renderer). */
+/** Acryllex: Opus medium authors, Sol reviews, then the dithered 3D renderer. */
 async function makeAcryllex(job){
  const cache=join(CACHE,`${safe(job.id)}`);await mkdir(cache,{recursive:true});
  const done=join(cache,'finished.mp4');
@@ -45,7 +45,7 @@ export async function runOnce(config=workerConfig()){
   const {materialId}=await (await siteRequest(config,`/api/jobs/accounts/${job.id}/${job.lease}/output`,{method:'PUT',headers:{'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes})).json();
   await siteRequest(config,`/api/jobs/accounts/${job.id}/${job.lease}/complete`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({materialId,spec:result.spec,provenance:result.provenance})});
   console.log(`Account job ${safe(job.id)} complete`);
- }catch(error){const raw=String(error),message=/OPENAI_API_KEY|ELEVENLABS_API_KEY/.test(raw)?'Account generation credentials are not configured.':/review|pacing|defects/i.test(raw)?'A required quality review failed after bounded repairs. Inspect the saved review evidence.':/style reference/i.test(raw)?'Required private owner style reference is unavailable.':'Account video generation failed. Inspect the private worker logs and cached review evidence.';await siteRequest(config,`/api/jobs/accounts/${job.id}/${job.lease}/fail`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'account_failed',message})}).catch(()=>{});console.error(`Account job ${safe(job.id)} failed`);
+ }catch(error){const raw=String(error),message=/OPENAI_API_KEY|ANTHROPIC_API_KEY|ELEVENLABS_API_KEY/.test(raw)?'Account generation credentials are not configured.':/review|pacing|defects/i.test(raw)?'A required quality review failed after bounded repairs. Inspect the saved review evidence.':/style reference/i.test(raw)?'Required private owner style reference is unavailable.':'Account video generation failed. Inspect the private worker logs and cached review evidence.';await siteRequest(config,`/api/jobs/accounts/${job.id}/${job.lease}/fail`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'account_failed',message})}).catch(()=>{});console.error(`Account job ${safe(job.id)} failed`);
  }finally{clearInterval(heartbeat);await rm(scratch,{recursive:true,force:true});}return true;
 }
 export async function tick(config=workerConfig()){await siteRequest(config,'/api/jobs/accounts/tick',{method:'POST'});}

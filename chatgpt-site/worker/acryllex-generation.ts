@@ -5,9 +5,13 @@ import {specSchema,specProblems} from '../src/acryllex/schema.ts';
 import type {AcryllexSpec} from '../src/acryllex/spec.ts';
 import {CAMERA_DIRECTION_RULES,cameraProblems,planCameras} from '../src/acryllex/camera-direction.ts';
 import {SHOT_TRANSITION_RULES,planTransitions,transitionList,transitionProblems} from '../src/acryllex/shot-transitions.ts';
+import {ACRYLLEX_MODELS,ACRYLLEX_CLIENT_CONTEXT} from './acryllex-model-policy.ts';
+import {opusClient,routeAcryllexClients} from './acryllex-model-client.ts';
 
-/** Every ACRYLLEX step runs on gpt-6.1-sol at xhigh reasoning effort (owner rule, 2026-11-14). */
-export const MODEL='gpt-6.1-sol',EFFORT=(globalThis as {process?:{env?:Record<string,string|undefined>}}).process?.env?.ACRYLLEX_REASONING_EFFORT||'xhigh';
+/** Opus medium authors; Sol reviews retain the standing xhigh preference. */
+export const MODEL=ACRYLLEX_MODELS.generation.model,EFFORT=ACRYLLEX_MODELS.generation.effort,REVIEW_MODEL=ACRYLLEX_MODELS.review.model;
+export const REVIEW_EFFORT=(globalThis as {process?:{env?:Record<string,string|undefined>}}).process?.env?.ACRYLLEX_REASONING_EFFORT||ACRYLLEX_MODELS.review.effort;
+export {ACRYLLEX_CLIENT_CONTEXT};
 
 import {type AcryllexHistoryEntry,findRepeat,freshSeeds,historyLines,topicKey} from './acryllex-history.ts';
 export type {AcryllexHistoryEntry};
@@ -41,15 +45,15 @@ export function solClient(key:string,onUsage?:Usage){
    let r:Resp|undefined;const started=performance.now();
    try{
     const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-     body:JSON.stringify({model:MODEL,reasoning:{effort:EFFORT},input:[{role:'user',content}],store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
+     body:JSON.stringify({model:REVIEW_MODEL,reasoning:{effort:REVIEW_EFFORT},input:[{role:'user',content}],store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
     if(!response.ok||!response.body){last=`${response.status}`;if(response.status>=500||response.status===429){await new Promise(res=>setTimeout(res,5000*(attempt+1)));continue;}throw new Error(`Sol request failed (${response.status}) at step ${step}: ${(await response.text()).slice(0,300)}`);}
     r=await readStream(response.body);
    }catch(e){
     if(e instanceof Error&&e.message.startsWith('Sol request failed'))throw e;
-    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:MODEL,effort:EFFORT,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
+    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:REVIEW_MODEL,effort:REVIEW_EFFORT,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
     await new Promise(res=>setTimeout(res,5000*(attempt+1)));continue;
    }
-   onUsage?.({step,model:MODEL,effort:EFFORT,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
+   onUsage?.({step,model:REVIEW_MODEL,effort:REVIEW_EFFORT,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
    if(r?.status!=='completed'){last=String(r?.status);continue;}
    return (r.output??[]).flatMap(v=>v.content??[]).filter(v=>v.type==='output_text').map(v=>v.text??'').join('');
   }
@@ -57,6 +61,10 @@ export function solClient(key:string,onUsage?:Usage){
  };
 }
 export type Ask=ReturnType<typeof solClient>;
+export function acryllexClient(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},onUsage?:Usage):Ask{
+ if(!env.OPENAI_API_KEY?.trim())throw new Error('Configure OPENAI_API_KEY for Acryllex reviews');
+ return routeAcryllexClients(opusClient(env.ANTHROPIC_API_KEY??'',onUsage),solClient(env.OPENAI_API_KEY.trim(),onUsage));
+}
 const json=(t:string)=>{try{return JSON.parse(t)}catch{const m=/\{[\s\S]*\}/.exec(t);if(m)try{return JSON.parse(m[0])}catch{}return undefined}};
 
 export const ACRYLLEX_TOPIC_SEEDS=[
@@ -127,16 +135,16 @@ TRANSITIONS: mostly cut on the beat, preferably match cuts on the anchor; dissol
 
 function schemaText(){return JSON.stringify(z.toJSONSchema(specSchema));}
 
-/** Ideation → script → fact/story reviews → storyboard → director review. Every call: Sol, xhigh. */
+/** Ideation → script → fact/story reviews → storyboard → director review. Opus medium authors; Sol xhigh reviews. */
 export interface Catalog {text:string;assets:string;has:(id:string)=>boolean}
 /** Optional real-model sourcing (node producer only): finds, verifies and adds realistic models from external libraries. */
 export interface Sourcing {find:(needs:{thing:string;query:string;as?:string}[])=>Promise<{cat:Catalog;added:string[]}>}
 const noveltySchema=z.object({repeat:z.boolean(),of:z.string().max(200)}).strict();
 const needsSchema=z.object({missing:z.array(z.object({thing:z.string(),query:z.string(),why:z.string()})).max(8)});
 const catalogText=(c:Catalog)=>`${c.text}\nREAL SCANNED OBJECTS (photoscans; use the id as model for editable 3D; complex subjects default to licensed media where available, not "compose"): ${c.assets}`;
-export async function generateAcryllexReel(env:{OPENAI_API_KEY?:string},topicHint:string,cat:Catalog,onUsage?:Usage,history:AcryllexHistoryEntry[]=[],sourcing?:Sourcing){
+export async function generateAcryllexReel(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},topicHint:string,cat:Catalog,onUsage?:Usage,history:AcryllexHistoryEntry[]=[],sourcing?:Sourcing,client?:Ask){
  const key=env.OPENAI_API_KEY?.trim();if(!key)throw new Error('Configure OPENAI_API_KEY');
- const ask=solClient(key,onUsage);const log:Record<string,unknown>={};
+ const ask=client??acryllexClient(env,onUsage);const log:Record<string,unknown>={};
  const past=historyLines(history),seeds=freshSeeds(ACRYLLEX_TOPIC_SEEDS,history);
  // 1. Plan the explanation (the golden thread) before writing a single line
  // never a subject an earlier reel covered: local topic-key check + Sol novelty check against the full ledger
@@ -204,7 +212,7 @@ export async function generateAcryllexReel(env:{OPENAI_API_KEY?:string},topicHin
  if(reviewed&&!reviewProblems.length&&sameLines(spec,reviewed))spec=reviewed;else log.storyboardReviewRejected=reviewed?reviewProblems:'invalid';
  spec={...spec,version:1,series:'ACRYLLEX',title:script.title,musicBrief:script.musicBrief};
  log.thread=threadText(plan);
- return {spec,provenance:{model:MODEL,effort:EFFORT,steps:['plan','script','fact-check+coherence','storyboard','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','voice-delivery-review','voice-pacing-review','visual-final-review','sound-design','sound-review'],...log}};
+ return {spec,provenance:{model:MODEL,effort:EFFORT,reviewModel:REVIEW_MODEL,reviewEffort:REVIEW_EFFORT,steps:['plan','script','fact-check+coherence','storyboard','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','voice-delivery-review','voice-pacing-review','visual-final-review','sound-design','sound-review'],...log}};
 }
 /** Camera planner safety net: repairs repeated views, dishonest flat-source angles and orbit/pumping excess, and logs every change. */
 export function directCameras(spec:AcryllexSpec,log:Record<string,unknown>,step:string){const {spec:planned,changes}=planCameras(spec);const {spec:out,changes:cuts}=planTransitions(planned);const all=[...changes,...cuts];if(all.length)log[`${step}CameraPlan`]=all;return out;}

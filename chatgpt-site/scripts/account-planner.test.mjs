@@ -23,7 +23,7 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
    if(url.pathname==='/api/accounts')return route.fulfill({json:{accounts:[a]}});
    return route.abort();
   });
-  await page.goto('https://planner.invalid');await page.addStyleTag({content:css.replace(/@import[^;]+;/g,'')});
+  await page.goto('https://planner.invalid');await page.addStyleTag({content:css.replace(/^@import[^\n]+\n/gm,'')});
   await page.getByRole('heading',{name:'Your weekly rhythm'}).waitFor();
   await page.getByRole('combobox',{name:'Reels on Monday'}).selectOption('2');
   const times=page.locator('input[type=time]');assert.equal(await times.count(),2);await times.nth(0).fill('08:15');await times.nth(1).fill('17:45');
@@ -33,6 +33,24 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   await page.getByText('Reels from hedgy will post to @test_brand.').waitFor();
   await page.getByRole('button',{name:'Start',exact:true}).click();await page.getByRole('button',{name:'Stop',exact:true}).waitFor();
   await page.getByRole('button',{name:'Stop',exact:true}).click();await page.getByRole('button',{name:'Start',exact:true}).waitFor();assert.deepEqual(patches.slice(-2),[{enabled:true},{enabled:false}]);
+  await page.getByRole('button',{name:'Edit Monday times'}).click();
+  assert.equal(await page.getByRole('combobox',{name:'Reels on Monday'}).isVisible(),false);
+  await page.getByRole('switch',{name:'Post on Wednesday',exact:true}).check();
+  await page.getByRole('combobox',{name:'Reels on Wednesday'}).waitFor();
+  await page.getByRole('combobox',{name:'Reels on Wednesday'}).selectOption('2');
+  const wednesday=page.locator('#day-config-hedgy-2 input[type=time]');
+  await wednesday.nth(0).fill('14:00');await wednesday.nth(1).fill('19:45');
+  await page.getByRole('button',{name:'Save weekly plan'}).click();await page.getByRole('button',{name:'Saved',exact:true}).waitFor();
+  assert.deepEqual(patches.filter(p=>p.week).at(-1).week[2].times,['14:00','19:45']);
+  await page.getByRole('button',{name:'Edit Tuesday times'}).click();
+  assert.equal(await page.getByRole('combobox',{name:'Reels on Wednesday'}).isVisible(),false);
+  assert.equal(await page.getByRole('combobox',{name:'Reels on Tuesday'}).inputValue(),'0');
+  assert.equal(await page.getByRole('switch',{name:'Post on Tuesday',exact:true}).isChecked(),false);
+  await page.getByRole('switch',{name:'Report reel results to ChatGPT',exact:true}).click();
+  await page.getByRole('switch',{name:'Report reel results to ChatGPT',exact:true,checked:false}).waitFor();
+  assert.equal(patches.at(-1).notifyResults,false);
+  await page.emulateMedia({colorScheme:'dark'});
+  assert.equal(await page.locator('.account-shell').evaluate(el=>getComputedStyle(el).colorScheme),'light');
   await page.setViewportSize({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'mobile layout must not overflow horizontally');
  }finally{await browser.close();}
