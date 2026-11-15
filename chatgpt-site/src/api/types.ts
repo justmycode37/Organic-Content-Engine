@@ -4,7 +4,8 @@ export type PlatformId =
   | 'bluesky' | 'mastodon' | 'linkedin' | 'x' | 'threads'
   | 'facebook' | 'instagram' | 'tiktok' | 'youtube' | 'pinterest';
 
-export interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;connectionStatus?:{connected:boolean;setupRequired:string[]};recentRuns?:{scheduled_at:string;status:string;error:string|null;external_url:string|null}[];health:{state:'blocked'|'running';issues:string[]};schedule:{date:string;scheduledAt:string;status:string}[]}
+export interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;week:{day:number;times:string[]}[];postizIntegrationId:string|null;notifyResults:boolean;connectionStatus?:{connected:boolean;setupRequired:string[];provider?:string;profile?:string};recentRuns?:{id:string;scheduled_at:string;status:string;error:string|null;external_url:string|null}[];health:{state:'blocked'|'running'|'paused';issues:string[]};schedule:{date:string;scheduledAt:string;status:string}[]}
+export interface PostizIntegration {id:string;name:string;identifier:string;profile?:string;disabled:boolean}
 
 export interface PlatformStatus {
   id: PlatformId;

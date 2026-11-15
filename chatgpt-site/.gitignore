@@ -16,3 +16,5 @@
 .acryllex-assets/
 .acryllex-cache/
 .acryllex-history.json
+
+/.account-cache/
