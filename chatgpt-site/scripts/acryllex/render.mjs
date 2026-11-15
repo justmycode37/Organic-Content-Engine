@@ -31,8 +31,13 @@ export async function imageSheet(files,outPath,{columns=3,width=360,labels=[]}={
  }finally{await browser.close();}
 }
 
+/** The exact renderer bundle also identifies review evidence, including text and compositing code. */
+export async function buildRenderBundle(){
+ return (await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',define:{'import.meta.url':JSON.stringify('http://acx.local/modules/render.js')},loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
+}
+
 export async function openAcryllex(spec){
- const bundle=(await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',define:{'import.meta.url':JSON.stringify('http://acx.local/modules/render.js')},loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
+ const bundle=await buildRenderBundle();
  const assets=await assetsForSpec(spec);
  const browser=await chromium.launch({headless:true,executablePath:CHROME,args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
  const page=await browser.newPage();

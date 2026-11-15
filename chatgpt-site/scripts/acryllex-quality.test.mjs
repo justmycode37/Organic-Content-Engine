@@ -11,6 +11,20 @@ import {clipStaticSourcePlane} from '../src/acryllex/models/source-region.ts';
 import {sceneSchema} from '../src/acryllex/schema.ts';
 import {verifyStyleReference} from './acryllex/style-reference.mjs';
 import {createHash} from 'node:crypto';
+import {drawText,drawCaptions} from '../src/acryllex/text.ts';
+
+test('running captions remain above the bottom interface region of a portrait reel',()=>{
+ const glyphs=[];const ctx={save(){},restore(){},fillRect(){},measureText:text=>({width:text.length*20}),fillText(text,x,y){glyphs.push({text,x,y});}};
+ drawCaptions({ctx,t:1,dur:5,scene:{say:'These ingredients mix.',objects:[],words:[{text:'These',start:0,end:.2},{text:'ingredients',start:.3,end:.6},{text:'mix.',start:.7,end:.9}]},hue:'#382ef5',project:()=>null});
+ assert.equal(glyphs.length,1);assert.ok(glyphs[0].y<=1920*.82,'Caption baseline must clear the bottom18%');assert.ok(glyphs[0].y>=1920*.72,'The running line remains in its lower caption band');
+});
+
+test('highlight boxes use dark knockout glyphs while adjacent headline text stays gray',()=>{
+ const glyphs=[];
+ const ctx={fillStyle:'',save(){},restore(){},translate(){},scale(){},fillRect(){},measureText:text=>({width:text.length*40,actualBoundingBoxAscent:70,actualBoundingBoxDescent:0}),fillText(text){glyphs.push({text,color:this.fillStyle});}};
+ drawText({ctx,t:1,dur:5,scene:{say:'Why tears?',objects:[]},hue:'#382ef5',textColor:'#c5c5c5',project:()=>null},{text:'WHY TEARS?',style:'headline',highlight:'TEARS?',at:0,cps:32,erase:false,cursor:false,glitchOnLand:false});
+ assert.deepEqual(glyphs,[{text:'WHY',color:'#c5c5c5'},{text:'TEARS?',color:'#0a0a0a'}]);
+});
 
 test('camera authoring schema enforces the actual engine fill limit for openings and events',()=>{
  const scene={say:'The eye becomes wet.',objects:[{id:'face',model:'neutral-tearing-face'}],camera:{angle:'front',fill:1.1}};

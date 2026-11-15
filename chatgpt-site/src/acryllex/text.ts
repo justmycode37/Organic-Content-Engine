@@ -76,7 +76,7 @@ export function drawText(tc:TextCtx,item:TextItem){
  const family=item.font==='oswald'?OSWALD:item.font==='roboto-condensed'?ROBOTO_CONDENSED:item.font==='roboto-mono'?ROBOTO_MONO:item.font==='plex-mono'?MONO:mono?MONO:COND;
  ctx.font=`${weight} ${size}px ${family}`;
  ctx.textBaseline='alphabetic';
- const hlWords=(item.highlight??'').toUpperCase().split(/\s+/).filter(Boolean);
+ const hlWords=(item.highlight??'').toUpperCase().split(/\s+/).map(w=>w.replace(/[^A-Z0-9'%$€.-]/gi,'')).filter(Boolean);
  const words=raw.split(/\s+/).filter(Boolean);
  const toks:Tok[]=words.map(w=>{const clean=w.replace(/[^A-Z0-9'%$€.-]/gi,'').toUpperCase();
   const pre=hlWords.find(h=>h!==clean&&clean.startsWith(h)&&h.length<clean.length);
@@ -136,7 +136,7 @@ export function drawText(tc:TextCtx,item:TextItem){
     ctx.fillStyle=style==='tag'?(tc.textColor??'#d0d0d0'):hue;
     ctx.fillRect(cx-padX+boxX,by-capH-padY+boxY,bw,capH+padY*2);
    }
-   if(n>0){ctx.fillStyle=style==='number'?'#e8e8e8':textCol;if(tk.hl&&style!=='tag')ctx.fillStyle=tc.textColor??TEXT_GREY;ctx.fillText(tk.text.slice(0,n),cx,by);}
+   if(n>0){ctx.fillStyle=style==='number'?'#e8e8e8':textCol;if(tk.hl&&style!=='tag')ctx.fillStyle='#0a0a0a';ctx.fillText(tk.text.slice(0,n),cx,by);}
    if(n>0||count-tk.text.length<=shown){cursorX=cx+ctx.measureText(tk.text.slice(0,n)).width+(n?size*0.06:0);cursorY=by;}
    cx+=tk.w;
   });
@@ -171,7 +171,8 @@ export function drawCaptions(tc:TextCtx){
  let text='';
  for(const w of g){if(t<w.start-0.03)break;const k=Math.min(1,(t-w.start+0.03)/Math.max(0.08,(w.end-w.start)*0.8));text+=(text?' ':'')+w.text.slice(0,Math.max(1,Math.ceil(w.text.length*k)));}
  ctx.save();ctx.font=`${40*TS}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='alphabetic';
- const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.896;
+ // Keep the running line above the bottom interface region of a portrait reel.
+ const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.8;
  ctx.fillStyle='#d2d2d2';ctx.fillText(text,x,y);
  const cw=ctx.measureText(text).width;
  if(Math.floor(t*5)%2===0||text.length<full.length){ctx.fillStyle=tc.hue;ctx.fillRect(x+cw+6*TS,y-30*TS,4*TS,38*TS);}

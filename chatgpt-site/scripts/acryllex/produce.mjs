@@ -11,7 +11,7 @@ import {access,mkdir,readFile,writeFile,rm,appendFile,rename,copyFile} from 'nod
 import {spawn,execFileSync,spawnSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
-import {stills,renderVideo} from './render.mjs';
+import {stills,renderVideo,buildRenderBundle} from './render.mjs';
 import {sfxLibrary,SFX_KINDS} from './sfx.mjs';
 import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
@@ -244,7 +244,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
   Object.assign(provenance,r.provenance);await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
- const reviewContext={styleReference:styleReference.hash,model:gen.MODEL,effort:gen.EFFORT,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8'))};
+ const reviewContext={styleReference:styleReference.hash,model:gen.MODEL,effort:gen.EFFORT,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8')),rendererCode:hash(await buildRenderBundle())};
  // 6. Distinct, required visual specialists; legacy reviewed filenames do not bypass them.
  const renderEvidence=async(current,dir,stage)=>{
   const samples=[];let offset=0;
