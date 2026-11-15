@@ -24,15 +24,20 @@ test('normal production rejects explicitly unreviewed experiment caches before p
  try{
   process.env.OPENAI_API_KEY='test';process.env.ELEVENLABS_API_KEY='test';
   globalThis.fetch=async()=>{requests++;throw new Error('Provider must not be called');};
-  for(const provenance of [{reviewsDisabled:true},{reviewMode:'raw-first-draft'}]){
+  for(const provenance of [{reviewsDisabled:true},{reviewMode:'raw-first-draft'},{unapprovedTest:true,modelRouting:{variant:'opus-sol'}}]){
    await writeFile(join(dir,'provenance.json'),JSON.stringify(provenance));
-   await assert.rejects(produce(dir),/Unreviewed experiment cache cannot be used/);
+   await assert.rejects(produce(dir),/Unreviewed experiment cache cannot be used|Unapproved test cache requires the explicit private experiment override/);
   }
   assert.equal(requests,0,'A raw cache must not trigger paid work or become reviewed output');
  }finally{
   for(const [key,value]of [['OPENAI_API_KEY',before.openai],['ELEVENLABS_API_KEY',before.eleven]])if(value===undefined)delete process.env[key];else process.env[key]=value;
   globalThis.fetch=before.fetch;await rm(dir,{recursive:true,force:true});
  }
+});
+
+test('unapproved preview override cannot be enabled on the normal producer or history ledger',async()=>{
+ await assert.rejects(produce('/tmp/not-created',{allowUnapproved:true}),/explicit private experiment clients and disabled history/);
+ await assert.rejects(produce('/tmp/not-created',{allowUnapproved:true,clients:{ask:async()=>''},recordHistory:true}),/explicit private experiment clients and disabled history/);
 });
 
 test('normal production requires the pinned style recording before any paid work',async()=>{

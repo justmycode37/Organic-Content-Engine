@@ -54,11 +54,8 @@ test('local ledger records each finished reel once',async()=>{
 });
 
 function fakeSol(answers){
- const steps=[];const real=globalThis.fetch;
- globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);const text=body.input[0].content[0].text;const step=body.text?.format?.name;steps.push({step,text});
-  const out=answers(step,steps);const response={status:'completed',usage:{},output:[{content:[{type:'output_text',text:JSON.stringify(out)}]}]};
-  return new Response(`data: ${JSON.stringify({type:'response.completed',response})}\n\n`,{status:200,headers:{'content-type':'text/event-stream'}});};
- return {steps,restore:()=>{globalThis.fetch=real;}};
+ const steps=[];
+ return {steps,restore:()=>{},ask:async(_step,text,_max,format)=>{const step=format?.name;steps.push({step,text});return JSON.stringify(answers(step,steps));}};
 }
 // explainer plans (the ideation step is the plan step); topicKey is derived from the topic
 const idea=(topic)=>({topic,question:'q',answer:'a',goldenThread:'g',anchor:{thing:'x',why:'w'},analogy:'none',steps:[{idea:'1',because:'b',show:'s'},{idea:'2',because:'b',show:'s'},{idea:'3',because:'b',show:'s'}],hook:'h',payoff:'p',facts:['1','2','3'],heroObjects:['x'],leftOut:[]});
@@ -72,7 +69,7 @@ test('planning rejects a repeated subject and retries before any paid step',asyn
   return {bad:true};// script stage: stop the test here
  });
  try{
-  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'',cat,undefined,[blue]),/Script failed/);
+  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'',cat,undefined,[blue],undefined,sol.ask),/Script failed/);
   const names=sol.steps.map(s=>s.step);
   assert.equal(ideations,2);
   assert.match(sol.steps[1].text,/Already rejected as repeats this run \(pick something else\): Why blue LEDs/);
@@ -89,14 +86,14 @@ test('Sol novelty check can veto an idea that the word check misses',async()=>{
   if(step==='acryllex_novelty')return ideations===1?{repeat:true,of:blue.topic}:{repeat:false,of:''};
   return {bad:true};
  });
- try{await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'',cat,undefined,[blue]),/Script failed/);assert.equal(ideations,2);}
+ try{await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'',cat,undefined,[blue],undefined,sol.ask),/Script failed/);assert.equal(ideations,2);}
  finally{sol.restore();}
 });
 
 test('a requested topic that repeats an earlier reel stops immediately',async()=>{
  const sol=fakeSol(step=>step==='acryllex_plan'?idea('Why the blue LED was so hard to invent','blue-led-invention'):{bad:true});
  try{
-  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'blue LED',cat,undefined,[blue]),/repeats an earlier ACRYLLEX reel/);
+  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'blue LED',cat,undefined,[blue],undefined,sol.ask),/repeats an earlier ACRYLLEX reel/);
   assert.equal(sol.steps.length,1);
  }finally{sol.restore();}
 });
@@ -112,7 +109,7 @@ test('explained technical terms pass unchanged and comprehensibility is separate
   return {bad:true};
  });
  try{
-  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'onion',cat,undefined,[]),/Storyboard invalid/);
+  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'onion',cat,undefined,[],undefined,sol.ask),/Storyboard invalid/);
   assert.equal(scripts,1);assert.match(sol.steps.find(s=>s.step==='acryllex_spec').text,/Enzymes, tiny helpers inside the onion/);
   const fact=sol.steps.find(s=>s.step==='acryllex_review').text,coherence=sol.steps.find(s=>s.step==='acryllex_coherence').text;
   assert.match(fact,/never fail a fact check solely because a word is complex/);

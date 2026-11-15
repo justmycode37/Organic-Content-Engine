@@ -10,8 +10,12 @@ to a stranger with the sound off.
 
 ## Required review workflow
 
-Normal production always uses `gpt-6.1-sol` at `xhigh` for every generation,
-review and repair. The sequence is:
+Normal production uses `claude-opus-5-5` at `medium` for planning, authoring,
+asset selection, sound design and repairs. Every review uses `gpt-6.1-sol` at
+`xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+`ELEVENLABS_API_KEY` (kept in private runtime configuration). For a future local run,
+load the private `.env.acryllex` file; configuring defaults does not start generation.
+The sequence is:
 
 1. Plan → script → factual accuracy and story coherence/clarity reviews.
 2. Storyboard → director review.
@@ -23,20 +27,24 @@ review and repair. The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-Each visual stage returns explicit findings and a verdict. A failed stage gets
-up to two accepted repairs, each followed by freshly rendered evidence and a new
-review. Each repair author gets up to three attempts to return a valid spec.
-Unresolved or invalid visual repairs stop production. Samples cover early/middle/late
+Each visual stage returns explicit findings and a verdict, with up to ten rendered
+review attempts and five authoring proposals per repair round. Every accepted
+repair receives fresh rendered evidence and a new review. After the bounded
+attempts, select the best actually reviewed candidate and continue finishing the
+reel, retaining all versions and unresolved findings. The selection favors a
+passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
+findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late
 frames, both sides of cuts, action boundaries, text reveals and text holds. This is
 sampled-frame motion review, not full-video playback. The final stage rechecks all
 visual specialties to catch regressions from later changes.
 
-Voice direction preserves the script's words and changes punctuation only. Default
-speed is 0.82, adjustable within 0.72–0.95 (the raw narrator was measured above 200 WPM); project targets are about 140–165 WPM,
-with hard gates at 175 average WPM, 220 WPM over any 12-word passage and missing
-planned/sentence pauses. Let the runtime grow rather than squeezing the narration.
-Failed pacing gets up to three generated takes with updated direction/settings;
-unresolved failures stop production. No post-generation time stretching is used.
+Voice direction preserves the script's words and changes punctuation only.
+ElevenLabs uses its unchanged default speed: the request sends no speed override,
+reviews and retakes cannot change it, and narration is never time-stretched.
+Word rates are descriptive; a brief fast passage never triggers global slowing.
+Timing reviews check connected phrasing and natural thought boundaries. Pause hints
+are guidance, not mandatory silence lengths. Allow up to six reviewed takes and
+then select the best measured timing with any unresolved findings retained.
 
 Voice reviews assess text and actual generated word timings. **They do not listen
 to the audio or certify pronunciation, vocal emotion, timbre or audible artifacts.**
@@ -48,7 +56,7 @@ measured mix statistics. ElevenLabs supports per-request
 and [speed control](https://elevenlabs.io/docs/api-reference/voices/settings/get).
 
 `reviews/<stage>/<input-hash>/` retains verdicts, rendered sheets/frame indexes,
-before/after specs, invalid repair proposals, and accepted or failed gate records.
+before/after specs, invalid repair proposals, and accepted, failed or selected-best records.
 `reviews/voice/<input-hash>/` retains delivery direction, each WAV take, settings,
 word timings and verdicts. Usage and stage durations remain in `usage.jsonl` and
 `timings.jsonl`. Cache reuse requires the current review version and matching
@@ -406,7 +414,7 @@ Optical materials set `material.userData.screenAO=false`: their first-interface 
 - **Library:** realistic scanned / engineering models live in `src/acryllex/assets/catalog.json` (`file: real/...`), at real-world size (`scale`) with orientation fixes (`rot`). Sources: NASA 3D Resources, Smithsonian Open Access 3D (CC0), Khronos samples, three.js examples, Objaverse/Sketchfab (CC-BY 4.0 / CC0 only; author + page kept in `license`/`page` for attribution).
 - **Curated lists:** `scripts/acryllex/realistic-assets.mjs`, `objaverse-picks.json`, `sourced-assets.json`. Rebuild everything with `node scripts/acryllex/ingest-assets.mjs` (or pass ids).
 - **External index:** `node scripts/acryllex/source-search.mjs build` (one-time, ≈600 MB Objaverse metadata into `.acryllex-cache/sources/`); `node scripts/acryllex/source-search.mjs "fire truck"` to search.
-- **Auto-sourcing in `produce.mjs`:** after the script, Sol lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Sol picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
+- **Auto-sourcing in `produce.mjs`:** after the script, Opus lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Opus picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
 - **Review sheets:** `node scripts/acryllex/gallery.mjs <out.png> <ids...>`.
 
 ## No repeated topics

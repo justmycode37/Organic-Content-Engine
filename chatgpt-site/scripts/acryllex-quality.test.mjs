@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtemp,readFile,writeFile,readdir,rm} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
-import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,validateDelivery,voicePacingMetrics,reviewVoicePacing} from '../worker/acryllex-quality.ts';
+import {reviewNarrationDelivery,VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,validateDelivery,voicePacingMetrics,reviewVoicePacing} from '../worker/acryllex-quality.ts';
 import {runVisualReviewStage,runVoiceReviews} from './acryllex/quality-reviews.mjs';
 import * as THREE from 'three';
 import {gasPixelMist,filledTeardropGeometry} from '../src/acryllex/models/onion-atmosphere.ts';
@@ -95,6 +95,20 @@ test('visual repairs retain per-scene narration and actual runtime timing',async
  assert.equal(rejected.valid,false);assert.ok(rejected.problems.some(p=>p.includes('Narration')));
 });
 
+test('planned 40ms camera cuts can pass through an authoring repair without invalid input',async()=>{
+ const spec=reel();spec.scenes[0].camera={angle:'front',fill:.8};
+ spec.scenes[0].events=[{at:2,camera:{angle:'side',fill:.8},easing:'hold',dur:.04}];
+ const result=await repairVisuals(async(_step,prompt)=>{
+  const input=JSON.parse(prompt.split('Input spec: ')[1].split('\nSchema: ')[0]);
+  assert.equal(input.scenes[0].events[0].dur,.05);
+  assert.ok(sceneSchema.safeParse(input.scenes[0]).success);
+  return JSON.stringify(input);
+ },spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
+ assert.equal(result.valid,true,JSON.stringify(result.problems));
+ assert.equal(result.spec.scenes[0].events[0].easing,'hold');
+ assert.equal(spec.scenes[0].events[0].dur,.04,'Runtime input remains immutable');
+});
+
 test('invalid visual repair is retried, and accepted edits are rendered and reviewed again',()=>temporary(async workdir=>{
  const seen=[],feedback=[];let repairs=0,checks=0,result;
  const options={spec:{scale:1},stage:VISUAL_REVIEW_STAGES[0],workdir,
@@ -114,32 +128,56 @@ test('invalid visual repair is retried, and accepted edits are rendered and revi
  assert.equal(checks,4,'A changed review brief must not inherit an old verdict');
 }));
 
-test('unresolved visual defects stop after bounded attempts and never write an accepted gate',()=>temporary(async workdir=>{
- let checks=0;
- await assert.rejects(runVisualReviewStage({spec:{revision:0},stage:VISUAL_REVIEW_STAGES[1],workdir,
-  renderEvidence:async()=>({}),review:async()=>{checks++;return bad;},
-  repair:async s=>({valid:true,spec:{revision:s.revision+1}})}),/unresolved visual defects/);
- assert.equal(checks,3);
+test('ten visual reviews retain and select the best actually reviewed version, rather than the final repair',()=>temporary(async workdir=>{
+ let checks=0,result;
+ const selected=await runVisualReviewStage({spec:{revision:0},stage:VISUAL_REVIEW_STAGES[1],workdir,
+  renderEvidence:async s=>({files:[`frame-${s.revision}.png`]}),review:async s=>{checks++;return {...bad,findings:Array.from({length:s.revision===1?1:3},()=>({...bad.findings[0]}))};},
+  repair:async s=>({valid:true,spec:{revision:s.revision+1}}),onResult:async r=>{result=r;}});
+ assert.equal(checks,10);assert.deepEqual(selected,{revision:1});assert.equal(result.selectedAttempt,2);assert.equal(result.passed,false);
+ assert.deepEqual(result.attempts[1].evidence,['frame-1.png']);
  const root=join(workdir,'reviews',VISUAL_REVIEW_STAGES[1].id),[hash]=await readdir(root);
- const files=await readdir(join(root,hash));assert.ok(files.includes('failure.json'));assert.ok(!files.includes('accepted.json'));
+ const files=await readdir(join(root,hash));assert.ok(files.includes('failure.json'));assert.ok(files.includes('selected-best.json'));assert.ok(!files.includes('accepted.json'));
+}));
+
+test('a diagnostic review records failures without approving or authoring further repairs',()=>temporary(async workdir=>{
+ let checks=0;
+ await assert.rejects(runVisualReviewStage({spec:{revision:2},stage:VISUAL_REVIEW_STAGES[1],workdir,maxRenderedReviews:1,onExhaustion:'stop',
+  renderEvidence:async()=>({files:['actual-frame.png']}),review:async()=>{checks++;return bad;},
+  repair:async()=>{throw new Error('Known-unapproved diagnostics must preserve the visual version');}}),error=>{
+   assert.equal(error.reviewFailure.passed,false);assert.equal(error.reviewFailure.attempts.length,1);return true;
+  });
+ assert.equal(checks,1);
+}));
+
+test('raising the visual cap resumes the latest reviewed candidate and retains the earlier attempts',()=>temporary(async workdir=>{
+ let checks=0;
+ const options={spec:{revision:0},stage:VISUAL_REVIEW_STAGES[0],workdir,renderEvidence:async()=>({files:['frame.png']}),
+  review:async s=>{checks++;return s.revision>=3?good:bad;},repair:async s=>({valid:true,spec:{revision:s.revision+1}})};
+ await assert.rejects(runVisualReviewStage({...options,maxRenderedReviews:3,onExhaustion:'stop'}),/after 3/);
+ let result;
+ const selected=await runVisualReviewStage({...options,maxRenderedReviews:10,onResult:async r=>{result=r;}});
+ assert.deepEqual(selected,{revision:3});assert.equal(checks,4);assert.equal(result.attempts.length,4);assert.equal(result.passed,true);
+ assert.equal(JSON.parse(await readFile(join(result.attempts[0].directory,'spec.before.json'),'utf8')).revision,0);
+ assert.ok(result.attempts[2].repairDirectory.includes('resume-after-3'));
 }));
 
 const text=Array.from({length:24},(_,i)=>`word${i+1}${i===11||i===23?'.':''}`).join(' ');
-const delivery=()=>({text,speed:0.92,notes:'Calm and conversational.',pauses:[{afterWord:12,minSeconds:0.3,why:'Thought boundary'}]});
+const delivery=()=>({text,notes:'Calm and conversational.',pauses:[{afterWord:12,minSeconds:0.3,why:'Thought boundary'}]});
 function alignment({step=0.4,pause=0.4}={}){let t=0;const words=text.split(' ').map((word,i)=>{if(i===12)t+=pause;const start=t;t+=step;return {text:word,start,end:t-0.04};});return {words,total:t+0.2};}
 
 test('voice delivery may adjust punctuation but cannot rewrite or merge spoken words',()=>{
- assert.equal(validateDelivery({...delivery(),text:text.replace('word1 ','word1, ')},text).speed,0.92);
+ assert.equal(validateDelivery({...delivery(),text:text.replace('word1 ','word1, ')},text).text,text.replace('word1 ','word1, '));
+ assert.throws(()=>validateDelivery({...delivery(),speed:.72},text),/speed/);
  assert.throws(()=>validateDelivery({...delivery(),text:text.replace('word1 ','different ')},text),/preserve every spoken word/);
  assert.throws(()=>validateDelivery({...delivery(),text:text.replace('word1 word2','word1-word2')},text),/word boundary/);
 });
 
-test('voice timing gate catches fast speech and missing thought pauses independently',()=>{
+test('word-rate measurements stay descriptive while missing thought boundaries are detected',()=>{
  const calm=alignment(),normal=voicePacingMetrics(calm.words,calm.total,delivery());assert.deepEqual(normal.problems,[]);
  const fast=alignment({step:0.2,pause:0}),rushed=voicePacingMetrics(fast.words,fast.total,delivery());
- assert.ok(rushed.problems.some(p=>p.includes('Average')));assert.ok(rushed.problems.some(p=>p.includes('12-word')));assert.ok(rushed.problems.some(p=>p.includes('Missing breath')));
+ assert.ok(rushed.wpm>200);assert.ok(rushed.fastestPhraseWpm>200);assert.ok(!rushed.problems.some(p=>p.includes('WPM')));assert.ok(rushed.problems.some(p=>p.includes('Missing thought boundary')));
  const noBreath=alignment({step:0.4,pause:0}),missing=voicePacingMetrics(noBreath.words,noBreath.total,delivery());
- assert.ok(missing.problems.some(p=>p.includes('Missing breath')));assert.ok(!missing.problems.some(p=>p.includes('Average')));
+ assert.ok(missing.problems.some(p=>p.includes('Missing thought boundary')));assert.ok(!missing.problems.some(p=>p.includes('Average')));
  assert.throws(()=>voicePacingMetrics(calm.words.slice(1),calm.total,delivery()),/alignment must match/);
 });
 
@@ -152,14 +190,14 @@ test('voice reviewer sees actual timings and cannot override a measured failure'
  assert.equal(verdict.passed,false);assert.match(verdict.evidence,/no audio listening/);
 });
 
-test('rushed voice is regenerated slower, reviewed again, and retains the actual takes',()=>temporary(async workdir=>{
+test('timing retakes preserve provider-default speed and retain the actual takes',()=>temporary(async workdir=>{
  let checks=0;const settings=[];let accepted;
  const audio=join(workdir,'fixture.wav');await writeFile(audio,'fixture audio');
  const options={text,workdir,reviewDelivery:async()=>delivery(),
   narrate:async(d,take)=>{settings.push(d.speed);return {audio,...alignment(take===1?{step:0.2,pause:0}:{})};},
   reviewPacing:async(_text,d)=>{checks++;return {passed:true,summary:'Reviewed timing evidence',issues:[],nextDelivery:{...d}};},
   onResult:async r=>{accepted=r;}};
- const voice=await runVoiceReviews(options);assert.ok(voice.total>9);assert.equal(checks,2);assert.ok(settings[1]<settings[0]);
+ const voice=await runVoiceReviews(options);assert.ok(voice.total>9);assert.equal(checks,2);assert.ok(settings.every(s=>s===undefined),'Review/retakes must never introduce a speed override');
  assert.equal(accepted.attempts.length,2);assert.match(accepted.evidence,/no audio listening/);
  assert.equal(await readFile(accepted.attempts[0].audio,'utf8'),'fixture audio');
  await runVoiceReviews({...options,reviewPacing:async()=>{throw new Error('Identical reviewed audio should resume');}});
@@ -171,14 +209,25 @@ test('rushed voice is regenerated slower, reviewed again, and retains the actual
  assert.equal((await readdir(join(root,hash))).filter(name=>name.startsWith('run-')).length,2,'A rerun preserves the first run and its takes');
 }));
 
-test('three failed voice takes stop production instead of exporting the last take',()=>temporary(async workdir=>{
- const audio=join(workdir,'fixture.wav');await writeFile(audio,'fixture audio');let takes=0;
- await assert.rejects(runVoiceReviews({text,workdir,reviewDelivery:async()=>delivery(),
-  narrate:async()=>{takes++;return {audio,...alignment({step:0.2,pause:0})};},
-  reviewPacing:async(_t,d)=>({passed:false,summary:'Too fast',issues:['Rushed'],nextDelivery:{...d}})}),/still rushed/);
- assert.equal(takes,3);
+test('six imperfect voice takes select the best measured timing while retaining every take and warning',()=>temporary(async workdir=>{
+ const audio=join(workdir,'fixture.wav');let takes=0,result;
+ const options={text,workdir,reviewDelivery:async()=>delivery(),
+  narrate:async()=>{takes++;await writeFile(audio,`take${takes}`);return {audio,...alignment(takes===2?{step:.3,pause:.4}:{step:.2,pause:0})};},
+  reviewPacing:async(_t,d)=>({passed:false,summary:'Too fast',issues:['Rushed'],nextDelivery:{...d}}),onResult:async r=>{result=r;}};
+ const voice=await runVoiceReviews(options);
+ assert.equal(takes,6);assert.equal(result.passed,false);assert.equal(result.selectedTake,2);assert.equal(await readFile(voice.audio,'utf8'),'take2');
  const root=join(workdir,'reviews','voice'),[hash]=await readdir(root),files=await readdir(join(root,hash));
- assert.ok(files.includes('failure.json'));assert.ok(!files.includes('accepted.json'));
+ assert.ok(files.includes('failure.json'));assert.ok(files.includes('selected-best.json'));assert.ok(!files.includes('accepted.json'));
+ await runVoiceReviews({...options,narrate:async()=>{throw new Error('Selected reviewed take must resume without paying again');}});
+}));
+
+test('raising the voice cap keeps the earlier takes and generates only the extra reviewed take',()=>temporary(async workdir=>{
+ const audio=join(workdir,'fixture.wav');await writeFile(audio,'voice');let calls=0;
+ const options={text,workdir,reviewDelivery:async()=>delivery(),narrate:async(_d,take)=>{calls++;return {audio,...alignment(take>=3?{}:{step:.2,pause:0})};},
+  reviewPacing:async(_t,d,metrics)=>({passed:!metrics.problems.length,summary:'Timing',issues:metrics.problems,nextDelivery:d})};
+ await assert.rejects(runVoiceReviews({...options,maxTakes:2,onExhaustion:'stop'}),/after 2 takes/);
+ let selected;await runVoiceReviews({...options,maxTakes:6,onResult:async r=>{selected=r;}});
+ assert.equal(calls,3);assert.equal(selected.attempts.length,3);assert.equal(selected.take,3);assert.equal(selected.passed,true);
 }));
 
 
