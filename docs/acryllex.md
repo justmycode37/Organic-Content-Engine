@@ -367,3 +367,11 @@ Every finished reel is remembered, and a new reel never covers a subject an earl
   4 ideas); a requested `--topic` that repeats fails immediately.
 
 `mesh.params.sourceAlbedo` optionally maps exact source material names to strengths 0..1. It retains selected source reflectance (for example pupils/irises) under the shared lights without copying photographic skin brightness. Unselected surfaces remain neutral. Source textures with baked lighting still need review; the shader does not infer intrinsic albedo. Defaults are unchanged. Native checks are in `scripts/acryllex/verify-source-albedo.mjs`.
+
+## Comprehensibility scoring
+
+The stored `simplicity` score measures comprehension on first listen, not basic
+vocabulary. Useful terms such as **enzymes** are allowed when their role is clear
+from context or a brief explanation. There is no technical-word quota or banned
+word list. The reviewer scores clear meaning, causal links, references and
+conceptual load; factual review does not reject a word merely for being technical.

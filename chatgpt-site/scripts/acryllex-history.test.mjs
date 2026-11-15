@@ -100,3 +100,23 @@ test('a requested topic that repeats an earlier reel stops immediately',async()=
   assert.equal(sol.steps.length,1);
  }finally{sol.restore();}
 });
+
+test('explained technical terms pass unchanged and comprehensibility is separate from facts',async()=>{
+ const lines=['Why does cutting an onion make us cry?','Cutting breaks open the cells inside this onion.','So ingredients that were apart can now mix.','Enzymes, tiny helpers inside the onion, change those ingredients.','A catalyst helps a reaction happen without being used up.','These reactions produce a gas that spreads into the air.','When the gas reaches your eyes, their surface stings.','Your eyes make extra tears to help wash it away.'];
+ let scripts=0;
+ const sol=fakeSol(step=>{
+  if(step==='acryllex_plan')return idea('Why onions make eyes water');
+  if(step==='acryllex_script'){scripts++;return {title:'Onion tears',lines:lines.map((say,i)=>({say,step:i,link:'Continues the cause and effect.'})),musicBrief:'Calm instrumental.',factNotes:['Enzymes catalyse the reactions producing the irritant.']};}
+  if(step==='acryllex_review')return {ok:true,problems:[]};
+  if(step==='acryllex_coherence')return {heardQuestion:lines[0],heardAnswer:lines.at(-1),retell:'Cutting lets ingredients mix and react. The resulting gas stings the eyes, so extra tears wash it away.',links:lines.slice(1).map((_,i)=>({line:i+2,follows:true,why:'Causal step.'})),scores:{thread:9,flow:9,simplicity:9,payoff:9,explains:9},problems:[]};
+  return {bad:true};
+ });
+ try{
+  await assert.rejects(generateAcryllexReel({OPENAI_API_KEY:'k'},'onion',cat,undefined,[]),/Storyboard invalid/);
+  assert.equal(scripts,1);assert.match(sol.steps.find(s=>s.step==='acryllex_spec').text,/Enzymes, tiny helpers inside the onion/);
+  const fact=sol.steps.find(s=>s.step==='acryllex_review').text,coherence=sol.steps.find(s=>s.step==='acryllex_coherence').text;
+  assert.match(fact,/never fail a fact check solely because a word is complex/);
+  assert.match(coherence,/COMPREHENSIBILITY/);assert.match(coherence,/never lower this score for complex vocabulary alone/);
+  assert.doesNotMatch(sol.steps.find(s=>s.step==='acryllex_script').text,/At most one technical word|No jargon \(never/);
+ }finally{sol.restore();}
+});
