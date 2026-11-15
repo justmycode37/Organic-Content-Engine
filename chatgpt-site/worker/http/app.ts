@@ -1,4 +1,6 @@
 import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime} from '../services/account-automation.ts';
+import {Postiz} from '../services/postiz.ts';
+import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
 import {SocialAccounts,platformOf as scopedPlatformOf} from '../services/social.ts';
 import {generateHedgyReel} from '../hedgy-generation.ts';
 import {listAccounts,addAccount,updateAccount,accountCreate,accountPatch} from '../services/accounts.ts';
@@ -201,6 +203,9 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.use('/api/jobs/accounts/*',async(c,next)=>{await assertRenderCaller(c,{...c.get('container').config,renderWorkerToken:typeof c.env.ACCOUNT_WORKER_TOKEN==='string'?c.env.ACCOUNT_WORKER_TOKEN:null},c.get('access'));await next();});
+  app.post('/api/jobs/accounts/tick',async c=>{const x=c.get('container');await x.settings.setJob('account_worker',new Date().toISOString(),{online:true});const publication=await publishAccountJobs(x,c.env);return c.json({...publication,...await tickAccounts(x,c.env)});});
+  app.get('/api/jobs/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
+  app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
   app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
   app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
   app.post('/api/jobs/accounts/:id/:lease/heartbeat',async c=>c.json(await heartbeatAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'))));
@@ -223,10 +228,36 @@ export function createApp(): Hono<AppEnv> {
   });
 
   api.post('/accounts/:id/connect',async c=>{const x=c.get('container'),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();if(!row)throw notFound('Account',c.req.param('id'));const account=JSON.parse(row.value);const social=new SocialAccounts(x.db,runtime(c.env),fetch,account.id);const browser=randomHex(32);const url=await social.start(scopedPlatformOf(account.platform),browser);setCookie(c,'oce_oauth',browser,{httpOnly:true,secure:true,sameSite:'Lax',path:'/api/social',maxAge:600});return c.json({url});});
-  api.post('/accounts/:id/generate',async c=>{const x=c.get('container'),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first();if(!row)throw notFound('Account',c.req.param('id'));const at=new Date(Date.now()+3600000).toISOString();const id=crypto.randomUUID();await x.db.prepare('INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,?,?,?,?)').bind(id,c.req.param('id'),at,new Date().toISOString(),new Date().toISOString()).run();return c.json({id,status:'pending'},202);});
-  api.get('/accounts',async c=>{const x=c.get('container');const accounts=await listAccounts(x.db);const heartbeat=await x.settings.getJob('account_worker');for(const a of accounts){const social=new SocialAccounts(x.db,runtime(c.env),fetch,a.id),platform=scopedPlatformOf(a.platform);const linked=await social.account(platform);const missing=social.config(platform).missing;const issues=[...missing.map(k=>`App setup: ${k}`),...(!linked?['Connect Instagram']:[]),...(!c.env.OPENAI_API_KEY?['Generation key missing']:[]),...(!c.env.ELEVENLABS_API_KEY?['Audio key missing']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[]),...(!a.enabled?['Automation paused']:[])];(a as any).connectionStatus={connected:!!linked,setupRequired:missing};(a as any).health={state:issues.length?'blocked':'running',issues};const runs=await x.db.prepare('SELECT scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();for(const slot of a.schedule){const run=runs.results.find(r=>r.scheduled_at===slot.scheduledAt);slot.status=run?.status??(issues.length?'blocked':'planned');}(a as any).recentRuns=runs.results;if(['failed','needs_attention'].includes(runs.results[0]?.status)){issues.push(runs.results[0].error??'Latest reel needs attention');(a as any).health={state:'blocked',issues};}}return c.json({accounts});});
+  api.get('/postiz/integrations',async c=>{const p=new Postiz(c.env);return c.json({configured:p.configured,integrations:p.configured?await p.integrations():[]});});
+  api.get('/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
+  api.get('/accounts',async c=>{
+   const x=c.get('container'),accounts=await listAccounts(x.db),heartbeat=await x.settings.getJob('account_worker'),postiz=new Postiz(c.env);
+   let targets:Awaited<ReturnType<Postiz['integrations']>>=[],postizError='';
+   if(postiz.configured)try{targets=await postiz.integrations();}catch{postizError='Postiz connection unavailable';}
+   for(const a of accounts){
+    const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);
+    const issues=[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','acryllex'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Acryllex and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
+    (a as any).connectionStatus={connected:!!target,setupRequired:postiz.configured?[]:['POSTIZ_API_KEY'],provider:'postiz',profile:target?.profile};
+    (a as any).health={state:!a.enabled?'paused':issues.length?'blocked':'running',issues};
+    const runs=await x.db.prepare('SELECT id,scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();
+    for(const slot of a.schedule)slot.status=!a.enabled?'paused':issues.length?'blocked':'planned';
+    (a as any).recentRuns=runs.results;
+   }return c.json({accounts});
+  });
   api.post('/accounts',async c=>c.json(await addAccount(c.get('container').db,await readBody(c,accountCreate)),201));
-  api.patch('/accounts/:id',async c=>c.json(await updateAccount(c.get('container').db,c.req.param('id'),await readBody(c,accountPatch))));
+  api.patch('/accounts/:id',async c=>{
+   const x=c.get('container'),patch=await readBody(c,accountPatch),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();
+   if(!row)throw notFound('Account',c.req.param('id'));const next={...JSON.parse(row.value),...patch};
+   if(patch.postizIntegrationId)await new Postiz(c.env).target(patch.postizIntegrationId);
+   if(patch.enabled===true){
+    if(!['hedgy','acryllex'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','Automatic reel production supports Acryllex and Hedgy on Instagram');
+    if(!next.week?.some((d:{times:string[]})=>d.times.length)&&next.week)throw new AppError(409,'schedule_empty','Choose at least one day and generation time');
+    if(!next.postizIntegrationId)throw new AppError(409,'account_missing','Choose a Postiz Instagram account first');
+    await new Postiz(c.env).target(next.postizIntegrationId);
+    if(x.config.publishMode!=='live')throw new AppError(409,'publishing_not_live','Enable live publishing before starting');
+   }
+   await updateAccount(x.db,c.req.param('id'),patch);return c.json((await listAccounts(x.db)).find(a=>a.id===c.req.param('id')));
+  });
 
   const present = (container: Container, post: Post) => ({ ...post, issues: container.gateway.validate(post.platform, post.body, post.mediaUrls) });
 

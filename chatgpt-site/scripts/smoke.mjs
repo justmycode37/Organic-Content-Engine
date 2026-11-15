@@ -807,7 +807,7 @@ test('the scheduled MCP writer records its tick and honors the publishing pause'
 test('account automation scopes connections, waits for Meta setup and enforces a dedicated machine token',async()=>{
  const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token,OPENAI_API_KEY:'test-key',ELEVENLABS_API_KEY:'test-audio'},{persist:'account-scope'});
  try{
- const a=await s.call('GET','/api/accounts');assert.equal(a.status,200);assert.equal(a.body.accounts[0].id,'hedgy');assert.ok(a.body.accounts[0].connectionStatus.setupRequired.includes('INSTAGRAM_CLIENT_ID'));
+ const a=await s.call('GET','/api/accounts');assert.equal(a.status,200);assert.equal(a.body.accounts[0].id,'hedgy');assert.ok(a.body.accounts[0].connectionStatus.setupRequired.includes('POSTIZ_API_KEY'));
  const conn=await s.call('POST','/api/accounts/hedgy/connect');assert.equal(conn.status,409);assert.equal(conn.body.error.code,'provider_setup_required');
  assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers:{}})).status,401);
  const result=await s.call('POST','/api/jobs/accounts/claim',{headers:{authorization:`Bearer ${token}`}});assert.equal(result.status,200);assert.equal(result.body.job,null);
@@ -820,7 +820,7 @@ test('account automation scopes connections, waits for Meta setup and enforces a
 
 test('account worker leases exclusively, persists one finished output and completes idempotently',async()=>{
  const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token},{persist:'account-leases'});const headers={authorization:`Bearer ${token}`};
- try{await s.call('GET','/api/accounts');const id=crypto.randomUUID(),date=new Date(Date.now()+3600000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
+ try{await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='hedgy'").run();const id=crypto.randomUUID(),date=new Date(Date.now()-1000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
  const first=await s.call('POST','/api/jobs/accounts/claim',{headers});assert.equal(first.status,200);const job=first.body.job;assert.equal(job.id,id);assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers})).body.job,null);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/wrong/heartbeat`,{headers})).status,409);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/heartbeat`,{headers})).status,200);
@@ -829,4 +829,103 @@ test('account worker leases exclusively, persists one finished output and comple
  const twice=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(twice.status,200);
  const row=await s.db.prepare('SELECT status,output_material_id FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'completed');assert.equal(row.output_material_id,materialId);
  }finally{await s.stop()}
+});
+
+const postizTarget={id:'ig-postiz-1',name:'Test brand',identifier:'instagram-standalone',profile:'test_brand',disabled:false};
+const accountToken='account-worker-token-account-worker-token';
+const accountHeaders={authorization:`Bearer ${accountToken}`};
+test('weekly account schedules validate, bind a Postiz account, and require an explicit start',async()=>{
+ const s=await start({POSTIZ_API_KEY:'postiz-private-key',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-settings',outboundService:async()=>Response.json([postizTarget])});
+ try{
+  const accounts=(await s.call('GET','/api/accounts')).body.accounts;assert.equal(accounts[0].enabled,false);assert.equal(accounts[0].week.length,7);
+  assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{enabled:true}})).body.error.code,'account_missing');
+  const week=Array.from({length:7},(_,day)=>({day,times:day===0?['09:00','15:30']:[]}));
+  const saved=await s.call('PATCH','/api/accounts/hedgy',{json:{week,postizIntegrationId:postizTarget.id,timezone:'UTC'}});assert.equal(saved.status,200);assert.deepEqual(saved.body.week,week);assert.equal(saved.body.enabled,false);
+  week[0].times=['09:00','09:00'];assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{week}})).status,400);
+  assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{enabled:true}})).status,200);
+  const api=(await s.call('GET','/api/accounts')).body;assert.ok(!JSON.stringify(api).includes('postiz-private-key'));
+ }finally{await s.stop();}
+});
+
+test('account ticks queue only due starts, deduplicate overlapping ticks and cancel unstarted work on Stop',async()=>{
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-tick',outboundService:async()=>Response.json([postizTarget])});
+ try{
+  await s.call('GET','/api/accounts');const due=new Date(Date.now()-60000),future=new Date(Date.now()+120000),week=Array.from({length:7},(_,day)=>({day,times:[]}));
+  for(const at of [due,future])week[(at.getUTCDay()+6)%7].times.push(at.toISOString().slice(11,16));
+  const value={id:'hedgy',name:'hedgy',platform:'instagram',topic:'finance',timezone:'UTC',postingTime:'18:00',postsPerDay:1,week,enabled:true,schedulerVersion:2,enabledSince:past(10),postizIntegrationId:postizTarget.id};
+  await s.db.prepare("UPDATE accounts SET value=? WHERE id='hedgy'").bind(JSON.stringify(value)).run();
+  assert.equal((await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders})).body.queued,1);
+  assert.equal((await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders})).body.queued,0);
+  const jobs=await s.db.prepare('SELECT * FROM account_automation_jobs').all();assert.equal(jobs.results.length,1);assert.equal(JSON.parse(jobs.results[0].provenance).delivery.id,postizTarget.id);
+  await s.call('PATCH','/api/accounts/hedgy',{json:{enabled:false}});
+  assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs').first()).status,'cancelled');
+  assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers:accountHeaders})).body.job,null);
+ }finally{await s.stop();}
+});
+
+test('Postiz acceptance stays processing until confirmed, with durable deduplicated ChatGPT result events',async()=>{
+ let created=0,state='QUEUE';
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-publish',outboundService:async request=>{
+  const u=new URL(request.url);if(u.pathname.endsWith('/integrations'))return Response.json([postizTarget]);
+  if(u.pathname.endsWith('/upload'))return Response.json({id:'upload-1',path:'https://uploads.postiz.com/finished.mp4'});
+  if(request.method==='POST'){created++;const body=await request.json();assert.equal(body.posts[0].integration.id,postizTarget.id);return Response.json([{postId:'postiz-1',integration:postizTarget.id}]);}
+  return Response.json({posts:[{id:'postiz-1',state,releaseURL:state==='PUBLISHED'?'https://www.instagram.com/reel/abc/':undefined,integration:{id:postizTarget.id}}]});
+ }});
+ try{
+  await s.call('GET','/api/accounts');const started=await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id,enabled:true}});assert.equal(started.status,200,JSON.stringify(started.body));
+  const m=await storeFile(s,{kind:'finished'}),id=crypto.randomUUID(),at=past(2);
+  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,JSON.stringify({title:'A finished reel'}),JSON.stringify({delivery:postizTarget}),at,at).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(created,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
+  let row=await s.db.prepare('SELECT * FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'publishing');assert.equal(row.post_id,'postiz-1');
+  assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events.length,0);
+  await s.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(id).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(created,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
+  state='PUBLISHED';await s.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(id).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(created,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
+  row=await s.db.prepare('SELECT * FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'published');
+  const {events}=JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text);assert.equal(events.length,1);assert.equal(events[0].status,'published');assert.match(events[0].url,/instagram/);
+  await mcp(s,'acknowledge_reel_notifications',{ids:[events[0].id]});assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events.length,0);
+ }finally{await s.stop();}
+});
+
+test('an uncertain Postiz create request stops with needs_attention and never creates a duplicate',async()=>{
+ let creates=0;
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-uncertain',outboundService:async request=>{
+  if(new URL(request.url).pathname.endsWith('/integrations'))return Response.json([postizTarget]);
+  if(new URL(request.url).pathname.endsWith('/upload'))return Response.json({id:'m1',path:'https://uploads.postiz.com/file.mp4'});
+  creates++;return new Response('upstream error',{status:502});
+ }});
+ try{
+  await s.call('GET','/api/accounts');const started=await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id,enabled:true}});assert.equal(started.status,200,JSON.stringify(started.body));
+  const m=await storeFile(s,{kind:'finished'}),id=crypto.randomUUID(),at=past(1);
+  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,'{}',JSON.stringify({delivery:postizTarget}),at,at).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});
+  assert.equal(creates,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'needs_attention');
+  assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events[0].status,'needs_attention');
+ }finally{await s.stop();}
+});
+
+test('Acryllex completion rejects an unreviewed reel and preserves the failed quality gate',async()=>{
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'acryllex-completion-gate'});
+ try{
+  await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='acryllex'").run();
+  const id=crypto.randomUUID(),at=past(1);await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'acryllex',?,?,?)").bind(id,at,at,at).run();
+  const {job}= (await s.call('POST','/api/jobs/accounts/claim',{headers:accountHeaders})).body;
+  const bytes=new Uint8Array(256),response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...accountHeaders,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});const {materialId}=await response.json();
+  const result=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Unreviewed'},provenance:{reviewsDisabled:true}}});assert.equal(result.status,409);assert.equal(result.body.error.code,'reviews_required');
+  assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'leased');
+ }finally{await s.stop();}
+});
+
+test('Stop holds finished reels and changing destinations cannot redirect their publication',async()=>{
+ let creates=0;const another={...postizTarget,id:'other-integration'};
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-stop-binding',outboundService:async request=>{if(request.method==='POST')creates++;return Response.json([postizTarget,another]);}});
+ try{
+  await s.call('GET','/api/accounts');await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id}});
+  const m=await storeFile(s,{kind:'finished'}),id=crypto.randomUUID(),at=past(1);
+  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,'{}',JSON.stringify({delivery:postizTarget}),at,at).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(creates,0);assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'completed');
+  await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:another.id,enabled:true}});
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(creates,0);const row=await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'failed');assert.match(row.error,/Destination changed/);
+ }finally{await s.stop();}
 });

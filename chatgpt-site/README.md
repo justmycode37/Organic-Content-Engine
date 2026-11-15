@@ -102,3 +102,46 @@ npm run check
 `check` typechecks the frontend and Worker, builds `dist/server/index.js`, validates its manifest, and runs the actual Worker in workerd with D1/R2 and mocked providers. Tests cover password access, owner isolation, uploads, generation tools, the footage → edit plan → finished-video gate, Studio timeline and text logic, ElevenLabs voice selection/pagination, private narration storage, normalized word timings, error handling and generation locks, OAuth state, delivery processing and retries. When Chrome/Chromium and FFmpeg are installed, the suite also renders a real narrated video, verifies H.264/AAC output and exercises automatic trim extension; this test skips when those binaries are absent. Queue tests cover exclusive claims, narration reuse, waiting credentials, bounded repairs, stale leases and idempotent uploads. Mocked provider tests do not verify a live ElevenLabs key, real app approvals, account eligibility, or live social delivery.
 
 Schema changes are declared in `db/schema.ts` and appended under `drizzle/`; applied migrations are immutable. `.openai/hosting.json` preserves the existing Site ID and declares D1, R2, and MCP. Publish with the Sites workflow to apply pending migrations before deployment.
+
+
+## Weekly reel automation with Postiz
+
+Accounts → select **Acryllex** or **Hedgy** → choose its Instagram destination from
+Postiz. The destination list is loaded on the server using `POSTIZ_API_KEY`; it
+contains no API key. Connect additional Instagram accounts in Postiz and refresh
+this list. Existing accounts migrate to stopped once, so selecting a destination
+does not unexpectedly launch paid production.
+
+Click weekdays to turn them on/off. Select a day to set 0–6 reels and a separate
+**generation start time** for each reel. Save the weekly plan and timezone, then
+press **Start**. **Stop** cancels unstarted jobs and holds unsent finished reels.
+A Postiz request already accepted continues processing and is still reconciled.
+Changes to a destination never redirect a reel already generated for another
+account. Plans repeat weekly in the saved IANA timezone; spring DST gaps are
+skipped and fall overlap times occur once.
+
+The account worker checks the durable weekly plan every 30 seconds, including
+while another reel renders. Starts go into an exclusive queue; overlapping reels
+wait for the producer. It never creates a future job early. A start missed by
+more than 15 minutes after an outage is reported as failed instead of launching a
+surprise paid generation. Editing a plan cancels unstarted jobs. Normal Acryllex
+production uses the complete Sol/xhigh review pipeline and fails closed when
+required evidence or approvals are missing. Voice review evaluates delivery and
+timing, not listened-to audio quality. Generation uses the worker's existing
+OpenAI and ElevenLabs API credentials and their billing, independently of the
+Site's ChatGPT-plan text handoff.
+
+Finished private MP4s upload to Postiz, then create a `now` Instagram feed/Reel
+post bound to the selected integration. A Postiz ID means processing, not posting
+success. Only `PUBLISHED` confirms success. Ambiguous create responses stop with
+`needs_attention`; they are never automatically resent. The global publishing
+pause is also respected. This account automation currently supports the two
+configured Instagram brands; other accounts require a production pipeline.
+
+Enable **Keep me in the loop** to persist generation, successful-post and error
+events. ChatGPT can read `list_reel_notifications` and acknowledge specific IDs
+with `acknowledge_reel_notifications` after reporting. These tools work while
+production is stopped. A linked ChatGPT task can check these events; notification
+permission/delivery is controlled in ChatGPT. No arbitrary immediate ChatGPT push
+API is assumed. The Site and its renderer must be deployed, and the existing Mac
+account worker must remain awake and online; an open browser is unnecessary.

@@ -1,4 +1,4 @@
-# Hedgy account worker
+# Account reel worker
 
 The account worker claims scheduled account jobs and generates a reel using the local `OPENAI_API_KEY`, then invokes `scripts/motion-audio.mjs` with `ELEVENLABS_API_KEY`. Speech settings are tempo `0.85`, lead `0.04`, tail `0.12`. It uses the authenticated `workerConfig` and `siteRequest` shared with the render worker and uses an isolated headless Chromium for rendering; no open user tab is needed.
 
@@ -6,4 +6,4 @@ Run with Node 24 from `chatgpt-site`: `node scripts/account-worker.mjs`. Require
 
 On macOS install a login LaunchAgent with `node scripts/install-account-worker.mjs`, providing a JSON object on stdin, . Include the required environment values in that object. The installer copies worker sources to `~/Library/Application Support/Organic Content Engine/account-worker` and stores credentials in a mode-0600 env file; it prints no credential values. The LaunchAgent starts at login and restarts after exit. Keep Node, ffmpeg, and ffprobe installed and available at their usual paths.
 
-The Mac must remain awake and online. The dedicated ACCOUNT_WORKER_TOKEN on the Site matches this worker's OCE_RENDER_TOKEN. Meta App credentials and Instagram authorization remain required for posting.
+The Mac must remain awake and online. The dedicated ACCOUNT_WORKER_TOKEN on the Site matches this worker's OCE_RENDER_TOKEN. Configure the server-only POSTIZ_API_KEY on the Site. Each account selects its own Postiz Instagram integration and weekly generation times. Publication happens after completion; it remains processing until Postiz confirms PUBLISHED. The worker ticks scheduling and reconciliation every 30 seconds during long production. The installer includes Acryllex sources, all reviews, complete Node dependencies and private asset/reference caches. No credentials or private evidence are committed.
