@@ -8,6 +8,58 @@ difference**. Preserve sparse details, dense highlights and dark openings withou
 Silhouette, local shading and real motion make the subject recognisable. Every subject must read instantly
 to a stranger with the sound off.
 
+## Required review workflow
+
+Normal production always uses `gpt-6.1-sol` at `xhigh` for every generation,
+review and repair. The sequence is:
+
+1. Plan → script → factual accuracy and story coherence/clarity reviews.
+2. Storyboard → director review.
+3. Rendered subject review: recognition, anatomy, physical contact, source fidelity.
+4. Rendered composition review: framing, clutter, contrast, readable text/captions.
+5. Rendered continuity review: visual explanation, recurring anchor, movement and cuts.
+6. Reference-style review: direct comparison with the owner's perfect animation reference.
+7. Voice delivery review → Adam narration → generated-word pacing/pauses review.
+8. Final combined visual and reference-style review using the actual narration timings.
+9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
+
+Each visual stage returns explicit findings and a verdict. A failed stage gets
+up to two accepted repairs, each followed by freshly rendered evidence and a new
+review. Each repair author gets up to three attempts to return a valid spec.
+Unresolved or invalid visual repairs stop production. Samples cover early/middle/late
+frames, both sides of cuts, action boundaries, text reveals and text holds. This is
+sampled-frame motion review, not full-video playback. The final stage rechecks all
+visual specialties to catch regressions from later changes.
+
+Voice direction preserves the script's words and changes punctuation only. Default
+speed is 0.82, adjustable within 0.72–0.95 (the raw narrator was measured above 200 WPM); project targets are about 140–165 WPM,
+with hard gates at 175 average WPM, 220 WPM over any 12-word passage and missing
+planned/sentence pauses. Let the runtime grow rather than squeezing the narration.
+Failed pacing gets up to three generated takes with updated direction/settings;
+unresolved failures stop production. No post-generation time stretching is used.
+
+Voice reviews assess text and actual generated word timings. **They do not listen
+to the audio or certify pronunciation, vocal emotion, timbre or audible artifacts.**
+[Official OpenAI documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+lists Sol input as text/images. A true listening reviewer needs a separately
+authorized audio-capable model. The existing sound review also uses cue sheets and
+measured mix statistics. ElevenLabs supports per-request
+[voice settings](https://elevenlabs.io/docs/api-reference/text-to-speech/convert-with-timestamps)
+and [speed control](https://elevenlabs.io/docs/api-reference/voices/settings/get).
+
+`reviews/<stage>/<input-hash>/` retains verdicts, rendered sheets/frame indexes,
+before/after specs, invalid repair proposals, and accepted or failed gate records.
+`reviews/voice/<input-hash>/` retains delivery direction, each WAV take, settings,
+word timings and verdicts. Usage and stage durations remain in `usage.jsonl` and
+`timings.jsonl`. Cache reuse requires the current review version and matching
+inputs/output fingerprints; an old `spec.reviewed.json` alone cannot skip checks.
+Sound cue caches are invalidated when final visual timing or accepted voice changes.
+
+The raw onion reel was an isolated experiment and does not change this workflow.
+The producer requires the review provider even when a spec is already saved, and
+refuses caches marked as unreviewed experiments. Encoding and asset-load checks
+are technical validation; they do not replace the content reviews.
+
 ## Choose the asset for the shot
 
 Complex natural subjects default to licensed photo/video-backed library assets. A curling wave, breaking
@@ -368,6 +420,18 @@ Every finished reel is remembered, and a new reel never covers a subject an earl
 
 `mesh.params.sourceAlbedo` optionally maps exact source material names to strengths 0..1. It retains selected source reflectance (for example pupils/irises) under the shared lights without copying photographic skin brightness. Unselected surfaces remain neutral. Source textures with baked lighting still need review; the shader does not infer intrinsic albedo. Defaults are unchanged. Native checks are in `scripts/acryllex/verify-source-albedo.mjs`.
 
+## Neutral subject defaults
+
+Source searches, picks, verification and visual reviews prefer ordinary, plain
+objects and a generic neutral front-facing modelled face. Avoid ornate spoons,
+distinctive styling/accessories and dramatic emotional stock performances unless
+explicitly requested. This applies to references as well as final subjects.
+
+For onion gas, use `gas-pixel-mist`: tiny sparse glimmering pixels drifting like a
+light airborne mist. Keep it clearly explanatory; the actual gas is invisible.
+The plain `neutral-tearing-face` uses the bundled CC0 MakeHuman anatomical head with authored iris/pupil details and
+source-projected tear geometry; its neutral expression is not animated.
+
 ## Comprehensibility scoring
 
 The stored `simplicity` score measures comprehension on first listen, not basic
@@ -375,3 +439,26 @@ vocabulary. Useful terms such as **enzymes** are allowed when their role is clea
 from context or a brief explanation. There is no technical-word quota or banned
 word list. The reviewer scores clear meaning, causal links, references and
 conceptual load; factual review does not reject a word merely for being technical.
+
+Latest onion visuals use a smooth lower-bust fade, numerous smaller motes in a
+broad surrounding air volume, and restrained source-seated lower-lid wetness and
+small canthus beads. Gas does not form a straight path aimed at the eye.
+
+## Owner-reference style review
+
+The supplied screen recording is the perfect animation-style standard. The
+required `visual-style-reference-review` follows composition/continuity and
+compares rendered reel frames plus12Hz motion strips directly against cropped,
+labelled reference frames and motion strips. It judges contrast, sparse versus
+dense dot coverage, normalized dot pitch/softness, ink, black space, text and
+motion/transition cadence. Final visual review repeats the comparison on actual
+voice timings. A declared profile alone is not a pass.
+
+The pinned SHA256 and crop/time selections are in `src/acryllex/style-reference.json`.
+The recording stays in the private asset cache at
+`.acryllex-assets/style-reference/owner-approved.mov`; `ACRYLLEX_STYLE_REFERENCE`
+can select another local location for the same approved bytes. A missing or
+mismatched reference stops normal production before paid generation. Source
+frames, review evidence and before/after verdicts are saved with the local run,
+and the reference hash participates in review-cache identity. The recording is
+not redistributed in the repository.

@@ -1,12 +1,13 @@
 // ACRYLLEX producer: the whole reel, every creative step on gpt-6.1-sol (xhigh).
 //   node --env-file=.env.motion scripts/acryllex/produce.mjs <workdir> [--topic "Why we dream"] [--spec spec.json] [--history history.json]
 // Layers: explainer plan (golden thread) → script → fact check + coherence review → storyboard → storyboard review (worker/acryllex-generation.ts)
-//         → render frames → VISUAL REVIEW (Sol sees the frames) → narration (ElevenLabs Adam, word timings)
+//         → subject / composition / continuity / reference-style reviews → voice delivery + actual pacing review
+//         → final visual review on real word timings → sound design + mix review → video
 //         → SOUND DESIGN (Sol cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
 //         → final mix, auto-calibrated so the narrator clears music/effects on every word → video.
 // Every step is cached in <workdir>, so a rerun resumes instead of paying twice.
 import {createHash} from 'node:crypto';
-import {access,mkdir,readFile,writeFile,rm,appendFile,rename} from 'node:fs/promises';
+import {access,mkdir,readFile,writeFile,rm,appendFile,rename,copyFile} from 'node:fs/promises';
 import {spawn,execFileSync,spawnSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
@@ -14,6 +15,10 @@ import {stills,renderVideo} from './render.mjs';
 import {sfxLibrary,SFX_KINDS} from './sfx.mjs';
 import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
+import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
+import {runVisualReviewStage,runVoiceReviews,reviewFingerprint} from './quality-reviews.mjs';
+import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/acryllex-quality.ts';
+import {sceneDuration,resolveAt} from '../../src/acryllex/spec.ts';
 import {createRequire} from 'node:module';
 // long xhigh reasoning calls: no client-side header/body timeouts
 {const {Agent,setGlobalDispatcher}=createRequire(import.meta.url)('undici');setGlobalDispatcher(new Agent({headersTimeout:0,bodyTimeout:0}));}
@@ -42,12 +47,15 @@ async function eleven(path,body,key,usage,attempt=0){
 }
 
 /** Whole narration in one take with per-word timing (natural prosody across scene cuts). */
-async function narrate(text,key,usage){
- const model='eleven_multilingual_v2',id=hash({text,VOICE_ID,model,v:1}),audio=join(CACHE,`voice-${id}.wav`),meta=join(CACHE,`voice-${id}.json`);
+async function narrate(delivery,take,key,usage){
+ const {text,speed}=delivery,model='eleven_multilingual_v2';
+ const voice_settings={stability:0.5,similarity_boost:0.75,style:0,use_speaker_boost:true,speed};
+ const seed=parseInt(hash({text,speed,take}).slice(0,8),16),body={text,model_id:model,voice_settings,seed};
+ const id=hash({body,VOICE_ID,v:2}),audio=join(CACHE,`voice-${id}.wav`),meta=join(CACHE,`voice-${id}.json`);
  if(!(await exists(audio))||!(await exists(meta))){
   let data,pcm=true;
-  try{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=pcm_44100`,{text,model_id:model},key,usage)).json();}
-  catch{pcm=false;try{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=mp3_44100_192`,{text,model_id:model},key,usage)).json();}catch{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=mp3_44100_128`,{text,model_id:model},key,usage)).json();}}
+  try{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=pcm_44100`,body,key,usage)).json();}
+  catch{pcm=false;try{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=mp3_44100_192`,body,key,usage)).json();}catch{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=mp3_44100_128`,body,key,usage)).json();}}
   const a=data.alignment??data.normalized_alignment;if(!data.audio_base64||!a)throw new Error('No narration audio/timing');
   const words=[];let cur=null;
   a.characters.forEach((ch,i)=>{if(/\s/.test(ch)){if(cur){words.push(cur);cur=null;}return;}cur??={text:'',start:a.character_start_times_seconds[i],end:0};cur.text+=ch;cur.end=a.character_end_times_seconds[i];});
@@ -55,10 +63,10 @@ async function narrate(text,key,usage){
   const raw=Buffer.from(data.audio_base64,'base64');
   if(pcm){const tmp=`${audio}.pcm`;await writeFile(tmp,raw);await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-f','s16le','-ar','44100','-ac','1','-i',tmp,'-ar','48000','-ac','2',audio]);await rm(tmp,{force:true});}
   else{const tmp=`${audio}.mp3`;await writeFile(tmp,raw);await run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',tmp,'-ar','48000','-ac','2',audio]);await rm(tmp,{force:true});}
-  await writeFile(meta,JSON.stringify({words}));
+  await writeFile(meta,JSON.stringify({words,voice_settings,seed}));
  }
  const total=Number(execFileSync('ffprobe',['-v','error','-show_entries','format=duration','-of','csv=p=0',audio],{encoding:'utf8'}).trim());
- return {audio,words:(await readJson(meta)).words,total};
+ return {audio,words:(await readJson(meta)).words,total,model,voiceId:VOICE_ID,settings:voice_settings,seed};
 }
 
 /** Split the take into scenes at the pauses; each scene gets its words relative to its own start. */
@@ -208,15 +216,19 @@ async function mixStats(out,cues,total,hasBed,clarity){
 
 export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
  const openai=process.env.OPENAI_API_KEY?.trim(),key=process.env.ELEVENLABS_API_KEY?.trim();
+ if(!openai)throw new Error('Set OPENAI_API_KEY: Acryllex content reviews are required, including for saved specs');
  if(!key)throw new Error('Set ELEVENLABS_API_KEY');
  await mkdir(workdir,{recursive:true});await mkdir(CACHE,{recursive:true});
  const usageFile=join(workdir,'usage.jsonl');const usage=e=>appendFile(usageFile,JSON.stringify({at:new Date().toISOString(),...e})+'\n');
  const measure=async(stage,fn)=>{const start=performance.now();try{return await fn();}finally{await appendFile(join(workdir,'timings.jsonl'),JSON.stringify({stage,seconds:(performance.now()-start)/1000,at:new Date().toISOString()})+'\n');}};
  const gen=await import('../../worker/acryllex-generation.ts');
- const ask=openai?gen.solClient(openai,usage):null;
- let cat=await measure('catalogue preparation',()=>loadCatalog());
+ const ask=gen.solClient(openai,usage);
  const provenance=await readJson(join(workdir,'provenance.json')).catch(()=>({}));
+ if(provenance.reviewsDisabled===true||provenance.reviewMode==='raw-first-draft')throw new Error('Unreviewed experiment cache cannot be used for normal Acryllex production; use a fresh workdir with the full review pipeline');
+ let cat=await measure('catalogue preparation',()=>loadCatalog());
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
+ const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
+ provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
  // 1-5 story + storyboard
  const draft=join(workdir,'spec.draft.json');
  if(specFile&&!await exists(draft))await writeFile(draft,await readFile(specFile));
@@ -232,33 +244,70 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
   Object.assign(provenance,r.provenance);await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
- // 6. visual review on rendered frames (two rounds max)
- const reviewed=join(workdir,'spec.reviewed.json');
- if(!await exists(reviewed)){
-  for(let round=0;round<2&&ask;round++){
-   const {sceneDuration}=await import('../../src/acryllex/spec.ts');
-   const times=[],labels=[];let t=0;spec.scenes.forEach((s,i)=>{const d=sceneDuration(s);for(const k of [0.08,0.3,0.55,0.75,0.95]){times.push(+(t+d*k).toFixed(2));labels.push(`S${i+1} ${Math.round(k*100)}%`);}t+=d;});
-   const sheets=[];
-   for(let i=0;i<times.length;i+=12){const p=join(workdir,`review-r${round}-${i/12}.png`);await measure(`review frames round ${round+1} sheet ${i/12+1}`,()=>stills(spec,p,times.slice(i,i+12),0.25,labels.slice(i,i+12),6));sheets.push({mime:'image/png',base64:(await readFile(p)).toString('base64')});}
-   log(`Sol: visual review round ${round+1} (${sheets.length} sheets)`);
-   const references=await referenceSheets(spec,workdir);
-   const r=await gen.reviewVisuals(ask,spec,[...sheets,...references],`frames at 8%, 30%, 55%, 75% and 95% of each scene, labelled S<scene> <percent>; captions estimated. Last ${references.length} images are source comparisons: ${references.map(r=>r.label).join(' | ')}`,cat,provenance.thread??'');
-   provenance[`visualReview${round}`]=r.notes;await save();
-   if(!r.notes.startsWith('applied'))break;
-   spec=r.spec;
+ const reviewContext={styleReference:styleReference.hash,model:gen.MODEL,effort:gen.EFFORT,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8'))};
+ // 6. Distinct, required visual specialists; legacy reviewed filenames do not bypass them.
+ const renderEvidence=async(current,dir,stage)=>{
+  const samples=[];let offset=0;
+  current.scenes.forEach((scene,i)=>{
+   const d=sceneDuration(scene);
+   const add=(local,label)=>samples.push({time:offset+Math.max(0.001,Math.min(d-0.001,local)),label:`S${i+1} ${label}`});
+   for(const k of [0.08,0.3,0.55,0.75,0.95])add(d*k,`${Math.round(k*100)}%`);
+   add(0.04,'cut in');add(d-0.04,'cut out');
+   for(const text of scene.text??[]){const at=resolveAt(scene,text.at,d,0.1);add(at+0.15,'text reveal');add(at+(text.text.length/(text.cps??13))+0.1,'text held');}
+   for(const event of scene.events??[]){const at=resolveAt(scene,event.at,d);add(at,'action starts');add(at+(event.dur??0.3),'action lands');}
+   offset+=d;
+  });
+  samples.sort((a,b)=>a.time-b.time);
+  const unique=samples.filter((s,i)=>!i||s.time-samples[i-1].time>0.015);
+  // Larger samples in the readability/final passes keep small captions inspectable.
+  const detailed=['visual-composition-review','visual-style-reference-review','visual-final-review'].includes(stage.id);
+  const batchSize=detailed?6:12,scale=detailed?0.5:0.25,columns=detailed?3:6;
+  const sheets=[],files=[];
+  for(let i=0;i<unique.length;i+=batchSize){
+   const path=join(dir,`frames-${i/batchSize+1}.png`),batch=unique.slice(i,i+batchSize);
+   await stills(current,path,batch.map(s=>s.time),scale,batch.map(s=>`${s.label} @${s.time.toFixed(2)}s`),columns);
+   files.push(path);sheets.push({mime:'image/png',base64:(await readFile(path)).toString('base64')});
   }
-  await writeFile(reviewed,JSON.stringify(spec,null,1));
- }
- spec=await readJson(reviewed);
- // 7. narration + timing
- log('ElevenLabs: narration (Adam)');
- const voice=await measure('narration generation and preparation',()=>narrate(spec.scenes.map(s=>s.say.trim()).join(' '),key,usage));
+  const references=await referenceSheets(current,dir);
+  let index=`Ordered scene samples at 8/30/55/75/95%, both sides of cuts, text reveals/holds and action boundaries. ${current.scenes.every(s=>s.words)?'Actual narration timings.':'Estimated narration timings.'} After the ${sheets.length} reel sheets are ${references.length} subject-source references: ${references.map(r=>r.label).join(' | ')}`;
+  const compareStyle=['visual-style-reference-review','visual-final-review'].includes(stage.id),extra=[];let motion;
+  if(compareStyle){
+   for(const file of styleReference.files.filter(f=>f.endsWith('.png'))){const to=join(dir,'owner-style-'+file.split('/').at(-1));await copyFile(file,to);files.push(to);}
+   extra.push(...styleReference.sheets);index+='\n'+styleReference.index;
+   motion=await candidateMotionEvidence(current,dir);extra.push(...motion.sheets);files.push(...motion.files);index+='\n'+motion.index;
+  }
+  await writeFile(join(dir,'frame-index.json'),JSON.stringify({samples:unique,index,...(compareStyle?{styleReferenceHash:styleReference.hash,styleSourceHash:styleReference.sourceHash,motionSamples:motion.samples}:{})},null,1));
+  return {sheets:[...sheets,...references,...extra],index,files};
+ };
+ const visualStage=async(current,stage)=>{
+  log(`Sol: ${stage.id}`);
+  return runVisualReviewStage({spec:current,stage,workdir,context:reviewContext,renderEvidence,measure,
+   review:(s,e,focus)=>reviewVisuals(ask,s,e.sheets,e.index,cat,provenance.thread??'',focus),
+   repair:(s,r,focus,e,feedback)=>repairVisuals(ask,s,r,cat,focus,e.sheets,feedback),
+   onResult:async r=>{provenance[stage.id]={...r,spec:undefined};await save();}});
+ };
+ for(const stage of VISUAL_REVIEW_STAGES.slice(0,-1))spec=await visualStage(spec,stage);
+ await writeFile(join(workdir,'spec.reviewed.json'),JSON.stringify(spec,null,1));
+ // 7. Spoken phrasing review, then generated-voice timing review with bounded retakes.
+ log('Sol: voice delivery and pacing reviews; ElevenLabs Adam at an unhurried pace');
+ const voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{model:gen.MODEL,effort:gen.EFFORT},measure,
+  narrate:(delivery,take)=>narrate(delivery,take,key,usage),
+  reviewDelivery:text=>reviewNarrationDelivery(ask,text),
+  reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
+  onResult:async r=>{provenance.voiceReview=r;await save();}});
  const roughTotal=voice.total+2.2;
  const bed=process.env.ACRYLLEX_MUSIC==='0'?null:await measure('music generation',()=>music(spec.musicBrief,roughTotal+1,key,usage)).catch(e=>{log(`music unavailable (${e.message}); continuing without a bed`);provenance.music='unavailable';return null;});
  const beat=bed?detectBeats(bed):null;if(beat){log(`beat grid ${beat.bpm} BPM, phase ${beat.phase}s, beat enters at ${beat.from}s`);provenance.beat=beat;}
  const timed=timeScenes(spec,voice,beat);spec={...timed.spec,...(beat?{beat}:{})};const total=timed.total;
+ spec=await visualStage(spec,VISUAL_REVIEW_STAGES.at(-1));
  await writeFile(join(workdir,'spec.timed.json'),JSON.stringify(spec,null,1));
- // 8. sound design + review
+ // 8. Rebuild sound when visual timing or voice changes; an old cue cache is not review evidence.
+ const soundInput=reviewFingerprint({spec,voice:provenance.voiceReview.outputHash});
+ if((await readJson(join(workdir,'sound-input.json')).catch(()=>null))?.hash!==soundInput){
+  for(const file of ['cues.designed.json','cues.final.json'])await rm(join(workdir,file),{force:true});
+  await writeFile(join(workdir,'sound-input.json'),JSON.stringify({hash:soundInput}));
+ }
+ // Sound design + review
  const {autoCues}=await import('../../src/acryllex/cues.ts');
  const sfx=sfxLibrary(join(CACHE,'sfx'),key,{onUsage:usage,onReject:r=>log(`sfx rejected (musical): ${r.prompt}`)});
  const timeline=timelineText(spec);await writeFile(join(workdir,'timeline.txt'),timeline);

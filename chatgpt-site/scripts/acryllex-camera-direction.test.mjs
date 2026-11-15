@@ -110,3 +110,16 @@ test('generation wiring: prompt rules, planner log and review shot list',()=>{
  assert.deepEqual(cameraProblems(out),[]);
  assert.match(shotList(out),/^1:high 0\.58 \| 2:side 1 focus glass \| /);
 });
+
+test('neutral face stays frontal while both camera planners vary framing',()=>{
+ const face=()=>({id:'face',model:'neutral-tearing-face',origin:'model',pos:[0,0,0]});
+ const spec=reel(['Gas approaches the face.','It reaches the eyes.','The eyes sting.','Extra tears spread.','Tears clear the gas.'].map(say=>({say,objects:[face()],camera:{angle:'side',fill:.8,move:'orbit'}})));
+ assert.ok(cameraProblems(spec).some(p=>p.includes('must stay front-facing')));
+ const result=directCameras(spec,{},'frontalTest');
+ assert.deepEqual(cameraProblems(result),[]);
+ const views=result.scenes.map(s=>sceneViews(s).first);
+ assert.ok(views.every(v=>v.kind==='mesh'&&v.angle==='front'));
+ assert.ok(result.scenes.every(s=>!['orbit','rise','fall','crane','drift'].includes(s.camera.move)));
+ assert.ok(new Set(views.map(v=>v.band)).size>1);
+ for(let i=1;i<views.length;i++)assert.ok(!sameView(views[i-1],views[i]));
+});

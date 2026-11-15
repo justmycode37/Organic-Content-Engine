@@ -1,0 +1,74 @@
+{
+  "createdAt": "2026-11-14T21:19:40.886Z",
+  "capture": "authored-3d-animation-and-schematic-cutaways",
+  "models": [
+    "onion-cutting-take",
+    "onion-cell-separated-cutaway",
+    "onion-cell-ruptured-cutaway",
+    "onion-cell-mixed-cutaway"
+  ],
+  "recipe": "../../models/onion.ts",
+  "sources": [
+    {
+      "id": "yellow_onion",
+      "source": "https://polyhaven.com/a/yellow_onion",
+      "download": "https://api.polyhaven.com/files/yellow_onion",
+      "license": "CC0; Kuutti Siitonen / Poly Haven",
+      "files": [
+        {
+          "file": "ph/yellow_onion/yellow_onion_1k.gltf",
+          "sha256": "0d4aaa4046c5b471ea7f9197c453f3d48699bc85e06fd13606c8ea09a1dce699",
+          "bytes": 2785
+        },
+        {
+          "file": "ph/yellow_onion/yellow_onion.bin",
+          "sha256": "586c1e459e31e0647d090df4497e88c4e905e598607e9632590fb74cce7ef5f5",
+          "bytes": 139832
+        },
+        {
+          "file": "ph/yellow_onion/textures/yellow_onion_nor_gl_1k.jpg",
+          "sha256": "f471dbeb82baaf3d743f28a254ed94587f83bd6131f03e656655c6d48717f137",
+          "bytes": 715114
+        },
+        {
+          "file": "ph/yellow_onion/textures/yellow_onion_diff_1k.jpg",
+          "sha256": "ad28b9926c9190398f1006fcf0b89c44255eb41aee5d52391a41ad5fc0f13e80",
+          "bytes": 455175
+        },
+        {
+          "file": "ph/yellow_onion/textures/yellow_onion_arm_1k.jpg",
+          "sha256": "77398ea7072602555a86510bfe37a7427a22932efc13de799c6fe2bbe62d2b8d",
+          "bytes": 492495
+        }
+      ]
+    },
+    {
+      "id": "chef-knife",
+      "source": "https://sketchfab.com/3d-models/48a6aed1dff24e57b6836ade47a46ead",
+      "download": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-083/48a6aed1dff24e57b6836ade47a46ead.glb",
+      "license": "CC-BY 4.0, by Yanez-Designs",
+      "files": [
+        {
+          "file": "real/objaverse/chef-knife.glb",
+          "sha256": "6a502808747407ef753b05bb740e0ca74e056848b5ead3630bc100a7db94ea2a",
+          "bytes": 2283960
+        }
+      ]
+    },
+    {
+      "id": "man-head-scan",
+      "source": "https://sketchfab.com/3d-models/90fead28cf694f85800a351ed26f4b03",
+      "download": "https://huggingface.co/datasets/allenai/objaverse/resolve/main/glbs/000-096/90fead28cf694f85800a351ed26f4b03.glb",
+      "license": "CC-BY 4.0, by tojek_vfx",
+      "files": [
+        {
+          "file": "real/objaverse/man-head-scan.glb",
+          "sha256": "6e8c1b7b327a7789cacd317647ddd8f79cf425a2d0aaf14e8c1c74e2194d6581",
+          "bytes": 5074496
+        }
+      ]
+    }
+  ],
+  "reviewPasses": 0,
+  "sourcePreservation": "Original downloaded source files remain unchanged; per-instance clones, region extraction, transforms and new diagram geometry form the authored assets."
+}

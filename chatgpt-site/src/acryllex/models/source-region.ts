@@ -1,5 +1,31 @@
 import * as THREE from 'three';
 
+/** Slice static source triangles at a true plane; keep/interpolate UVs and normals. */
+export function clipStaticSourcePlane(root:THREE.Object3D,plane:THREE.Plane){
+ root.updateMatrixWorld(true);const inverse=root.matrixWorld.clone().invert();
+ root.traverse(object=>{
+  const mesh=object as THREE.Mesh;if(!mesh.isMesh)return;
+  if((mesh as THREE.SkinnedMesh).isSkinnedMesh)throw new Error('Static plane slicing does not support skinned sources');
+  const source=mesh.geometry,attrs=Object.entries(source.attributes),values=Object.fromEntries(attrs.map(([key])=>[key,[] as number[]]));
+  const geometry=new THREE.BufferGeometry();let count=0;
+  type Vertex={d:number;attributes:Record<string,number[]>};
+  const vertex=(i:number):Vertex=>{const index=source.index?source.index.getX(i):i;const attributes=Object.fromEntries(attrs.map(([key,a])=>[key,Array.from({length:a.itemSize},(_,c)=>a.getComponent(index,c))]));const point=new THREE.Vector3(...attributes.position as [number,number,number]).applyMatrix4(mesh.matrixWorld).applyMatrix4(inverse);return {d:plane.distanceToPoint(point),attributes};};
+  const emit=(v:Vertex)=>{for(const [key]of attrs)values[key]!.push(...v.attributes[key]!);count++;};
+  for(let i=0;i<(source.index?.count??source.attributes.position!.count);i+=3){
+   const triangle=[vertex(i),vertex(i+1),vertex(i+2)],polygon:Vertex[]=[];
+   for(let j=0;j<3;j++){
+    const a=triangle[j]!,b=triangle[(j+1)%3]!;
+    if(a.d>=-1e-9)polygon.push(a);
+    if((a.d>=0)!==(b.d>=0)){const t=a.d/(a.d-b.d);polygon.push({d:0,attributes:Object.fromEntries(attrs.map(([key])=>[key,a.attributes[key]!.map((v,c)=>v+(b.attributes[key]![c]!-v)*t)]))});}
+   }
+   const start=count;for(let j=1;j<polygon.length-1;j++){emit(polygon[0]!);emit(polygon[j]!);emit(polygon[j+1]!);}
+   if(count>start)geometry.addGroup(start,count-start,source.groups.find(g=>i>=g.start&&i<g.start+g.count)?.materialIndex??0);
+  }
+  for(const [key,a]of attrs)geometry.setAttribute(key,new THREE.Float32BufferAttribute(values[key]!,a.itemSize));
+  if(count){geometry.computeBoundingBox();geometry.computeBoundingSphere();}mesh.geometry=geometry;
+ });
+}
+
 /** Extract a source region without inventing anatomy or mutating cached geometry, skin weights or morphs. */
 export function retainSourceTriangles(root:THREE.Object3D,keep:(p:THREE.Vector3)=>boolean){
  root.updateMatrixWorld(true);const inverse=root.matrixWorld.clone().invert(),p=new THREE.Vector3();let kept=0;

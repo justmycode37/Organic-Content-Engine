@@ -214,6 +214,8 @@ class SceneRuntime {
    this.objs.push(obj);this.byId.set(o.id,obj);
   }
   this.place();
+  this.scene.updateMatrixWorld(true);
+  for(const o of this.objs)o.built.onPlaced?.();
  }
 
  /** Half extents of an object in world units (after scale). */

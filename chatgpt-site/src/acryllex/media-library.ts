@@ -1,8 +1,10 @@
 import {referenceKind,referenceDefaults} from './reference-media.ts';
 import {REFERENCE_CATALOG} from './reference-catalog.ts';
+import {ONION_MEDIA} from './onion-media.ts';
 /** Fixed-view subjects. Stock originals use the private download cache; generated human sources include bundled provenance. */
 export const MEDIA_LIBRARY={
  ...REFERENCE_CATALOG,
+ ...ONION_MEDIA,
 "human-male-clay-motion": {
   "name": "Adult male in neutral clay material, walking, sitting and typing",
   "creator": "Organic Content Engine; image_gen and Kling AI",
