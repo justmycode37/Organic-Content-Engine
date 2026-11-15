@@ -446,8 +446,9 @@ word list. The reviewer scores clear meaning, causal links, references and
 conceptual load; factual review does not reject a word merely for being technical.
 
 Latest onion visuals use a smooth lower-bust fade, numerous smaller motes in a
-broad surrounding air volume, and restrained source-seated lower-lid wetness and
-small canthus beads. Gas does not form a straight path aimed at the eye.
+broad surrounding air volume, and clearly visible filled pixel teardrops on the
+cheeks. The owner explicitly excludes water inside the eyes, wet-film layers and
+menisci; the drops are an illustrative abstraction. Gas does not form a straight path aimed at the eye.
 
 ## Owner-reference style review
 

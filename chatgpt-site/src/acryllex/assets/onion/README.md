@@ -40,16 +40,13 @@ No editorial, visual, sound or factual review pass was run for this experiment.
 The current `neutral-tearing-face` uses the bundled CC0 MakeHuman anatomical
 head and neck, with authored iris/pupil details. It keeps a neutral frontal pose;
 no expressions or eyelid animation are invented. The lower bust fades through
-projected dot-density coverage into black. Thin lower-lid menisci and small
-attached canthus beads are ray-projected after the scene places the source, so
-they follow the actually rendered surface. This is explanatory geometry, not
-filmed physiology. The default `head-mesh` scan is unchanged; explicit
-`source:"anatomical"` selects the bundled anatomical extraction.
-
-Narrow black surface ribbons beside the menisci and tiny canthus beads separate
-wetness from adjacent facial dots at phone size. The bead boundary uses the same
-fixed ink. This is local coverage separation, with no global light/ink change,
-emissive halo or long cheek track.
+projected dot-density coverage into black. The owner selected two fully filled
+pixel teardrops on the cheeks, with a small asymmetric downward reveal. They
+follow source-projected cheek positions. No water is added inside the eyes;
+there are no wet-film layers, menisci, bright eyelid margins or hollow outlines.
+The drops are an explicit illustrative abstraction, with dense coverage under
+the shared fixed ink and dot pitch. The default `head-mesh` scan is unchanged;
+explicit `source:"anatomical"` selects the bundled extraction.
 
 `gas-pixel-mist` uses hundreds of much smaller independent motes throughout a
 broad3D air volume. `center`/`radius` define the surrounding air; `progress`
@@ -60,7 +57,8 @@ motes remain. The pixels illustrate gas that is invisible in reality.
 Both `onion-cutting-media` and `onion-cutting-bulb-media` now select Samir Hope’s
 Pexels3797834 clip: ordinary hands and knife slicing a bulb with its layered cut
 face visible. Framewise Apple Vision foreground segmentation removes unrelated
-surroundings while a faint local board patch preserves support context. Source
+surroundings and the earlier added board-support patch. Only the captured hand,
+knife and onion remain; original RGB and action are preserved. Source
 and matte share1920×1080 coordinates and25fps; the same crop applies to both.
 The distribution mask is H.264 CRF12. Original source RGB and motion are unchanged.
 Creator, license, source URL, exact hashes and preparation are retained in

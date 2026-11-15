@@ -81,7 +81,7 @@
     "attribution": "Samir Hope / Pexels; credit retained although not required by the published license.",
     "thirdPartyRights": "No endorsement implied. Educational use of ordinary cutting source.",
     "alphaFile": "library:onion-bulb-cutting-alpha.mkv",
-    "alphaSHA256": "f2e958325525598bef38d2a0dc340aecdd7cdc2cb7fd66dd662eab29639953a1",
-    "preparation": "Apple Vision foreground-instance segmentation on every captured frame at640x360/25fps, preserving real hand, knife and bulb silhouettes. A faint local board-contact patch remains directly below the onion; unrelated surroundings are removed. Matte resampled to source1920x1080 coordinates, H.264 CRF12. Original source RGB and motion unchanged."
+    "alphaSHA256": "4d1be40ec5561e0220c6ea5b75b3aec2b96bf1a617692892ed2a71da49a921c6",
+    "preparation": "Apple Vision foreground-instance segmentation on every captured frame at640x360/25fps, preserving actual hand, knife and bulb silhouettes. No added cutting-board support patch: all non-subject board/background is transparent. Matte resampled to source1920x1080 coordinates, H.264 CRF12. Original source RGB and recorded motion unchanged."
   }
 }

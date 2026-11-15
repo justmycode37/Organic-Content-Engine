@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,validateDelivery,voicePacingMetrics,reviewVoicePacing} from '../worker/acryllex-quality.ts';
 import {runVisualReviewStage,runVoiceReviews} from './acryllex/quality-reviews.mjs';
 import * as THREE from 'three';
-import {gasPixelMist} from '../src/acryllex/models/onion-atmosphere.ts';
+import {gasPixelMist,filledTeardropGeometry} from '../src/acryllex/models/onion-atmosphere.ts';
 import {clipStaticSourcePlane} from '../src/acryllex/models/source-region.ts';
 import {sceneSchema} from '../src/acryllex/schema.ts';
 import {verifyStyleReference} from './acryllex/style-reference.mjs';
@@ -43,6 +43,12 @@ const catalogue={text:'led',assets:'',has:id=>id==='led'};
 const reel=()=>({version:1,series:'ACRYLLEX',title:'Light',beat:{period:0.6,phase:0},scenes:Array.from({length:8},(_,i)=>({say:`One two three four five six seven eight nine ten eleven twelve ${i}.`,duration:5,hue:'blue',objects:[{id:'hero',model:'led',scale:1}],words:[{text:'One',start:0.3,end:0.6}]}))});
 const author=spec=>{const {beat,...base}=structuredClone(spec);base.scenes.forEach(s=>delete s.words);return base;};
 const temporary=async fn=>{const dir=await mkdtemp(join(tmpdir(),'acryllex-quality-'));try{return await fn(dir);}finally{await rm(dir,{recursive:true,force:true});}};
+
+test('pixel teardrops contain a filled interior rather than a hollow outline',()=>{
+ const geometry=filledTeardropGeometry(1,1.6),material=new THREE.MeshBasicMaterial({side:THREE.DoubleSide}),mesh=new THREE.Mesh(geometry,material);mesh.updateMatrixWorld(true);
+ const inside=new THREE.Raycaster(new THREE.Vector3(0,-.3,1),new THREE.Vector3(0,0,-1));assert.ok(inside.intersectObject(mesh).length>0,'A ray through the drop interior must hit its filled face');
+ const outside=new THREE.Raycaster(new THREE.Vector3(1.3,0,1),new THREE.Vector3(0,0,-1));assert.equal(outside.intersectObject(mesh).length,0);geometry.dispose();material.dispose();
+});
 
 test('gas mist uses tiny independent motes, preserves reverse seeking and respects reveal controls',()=>{
  const params={count:360,pixelSize:.005,spread:.06},ctx={params,seed:27,mat:()=>new THREE.MeshStandardMaterial(),num:(k,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number(params[k]??f)))};

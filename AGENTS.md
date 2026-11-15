@@ -35,8 +35,10 @@ broadly throughout the surrounding air, on both sides of the face. Never align
 them into a straight eye-targeted route, solid stream, arrow or opaque smoke.
 Keep independent gentle drift and asynchronous glimmer within the fixed-ink style.
 Fade the lower end of the neutral bust smoothly into black, keep the approved
-onion, and use restrained source-attached ocular wetness/menisci and small beads
-without long glowing tear tracks.
+onion. Show only clearly visible, fully filled pixel teardrops on the cheeks.
+Do not add water inside the eyes, wet-film layers, menisci, bright wet eyelid
+margins, hollow outlines or long tear tracks. The filled drops are the owner’s
+chosen illustrative treatment; do not demand a physiological eye-water simulation.
 
 ## Comprehensibility and integration
 
