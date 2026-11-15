@@ -88,9 +88,10 @@ export const neutralTearingFace=defineModel({
     mat.customProgramCacheKey=()=>key()+'|neutral-bust-projected-fade-v2';
    }
   });
-  const wet=new THREE.Group(),gaze=new THREE.Group();root.add(wet,gaze);const irises:THREE.Mesh[]=[],rims:THREE.Mesh[]=[];
+  const wet=new THREE.Group(),gaze=new THREE.Group();root.add(wet,gaze);const irises:THREE.Mesh[]=[],rims:THREE.Mesh[]=[],beadGaps:THREE.Mesh[]=[];
   const highlight=new THREE.MeshBasicMaterial({color:0xd0d0d0,alphaHash:true});highlight.userData={tone:.82,explicit:true};
-  for(let i=0;i<2;i++){const iris=ctx.mesh(new THREE.CircleGeometry(.017,32),{tone:.28,rough:.6}),pupil=ctx.mesh(new THREE.CircleGeometry(.008,24),{tone:.025,rough:.6});gaze.add(iris,pupil);irises.push(iris,pupil);}const films:{mesh:THREE.Mesh;geometry:THREE.BufferGeometry;kind:'lid'|'bead'}[]=[];
+  const negative=new THREE.MeshBasicMaterial({color:0x000000,side:THREE.DoubleSide});negative.userData={tone:0,explicit:true};
+  for(let i=0;i<2;i++){const iris=ctx.mesh(new THREE.CircleGeometry(.017,32),{tone:.28,rough:.6}),pupil=ctx.mesh(new THREE.CircleGeometry(.008,24),{tone:.025,rough:.6});gaze.add(iris,pupil);irises.push(iris,pupil);}const films:{mesh:THREE.Mesh;geometry:THREE.BufferGeometry;kind:'lid'|'bead';gap?:THREE.Mesh}[]=[];
   const baseLiquid=ctx.mat({tone:.99,rough:.075});
   const liquid=new THREE.MeshPhysicalMaterial({color:baseLiquid.color.clone().multiplyScalar(.32),roughness:.035,metalness:0,clearcoat:1,clearcoatRoughness:.02,ior:1.333,specularIntensity:2});
   liquid.userData={...baseLiquid.userData,tone:.32};baseLiquid.dispose();
@@ -100,8 +101,8 @@ export const neutralTearingFace=defineModel({
    // No long glowing ropes down the cheeks or disconnected drops.
    const lid=Array.from({length:29},(_,i)=>{const u=i/28,x=lerp(eye.inner,eye.outer,u),y=eye.lower+.011*Math.pow(2*u-1,2);return contact(x,y);});
    const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(lid),84,.0048*width,8,false);
-   const meniscus=new THREE.Mesh(geometry,highlight);wet.add(meniscus);films.push({mesh:meniscus,geometry,kind:'lid'});
-   const beadGeometry=new THREE.SphereGeometry(1,20,16),bead=new THREE.Mesh(beadGeometry,liquid),rim=new THREE.Mesh(new THREE.BufferGeometry(),highlight);bead.add(rim);rims.push(rim);
+   const meniscus=new THREE.Mesh(geometry,highlight),gap=new THREE.Mesh(new THREE.BufferGeometry(),negative);wet.add(gap,meniscus);films.push({mesh:meniscus,geometry,kind:'lid',gap});
+   const beadGeometry=new THREE.SphereGeometry(.02,20,16),bead=new THREE.Mesh(beadGeometry,liquid),rim=new THREE.Mesh(new THREE.BufferGeometry(),highlight),beadGap=new THREE.Mesh(new THREE.BufferGeometry(),negative);bead.add(beadGap,rim);rims.push(rim);beadGaps.push(beadGap);
    const at=contact(lerp(eye.inner,eye.centre,.10)+side*.004,eye.lower-.018);bead.position.copy(at);bead.scale.setScalar(1);wet.add(bead);films.push({mesh:bead,geometry:beadGeometry,kind:'bead'});
   }
   // Resolve the wet surfaces after the engine has placed the skinned source.
@@ -115,6 +116,15 @@ export const neutralTearingFace=defineModel({
     const eye=landmarks[index]!,film=films[index*2]!,bead=films[index*2+1]!;const centre=contact(eye.centre,eye.y);irises[index*2]!.position.copy(centre).add(new THREE.Vector3(0,0,.001));irises[index*2+1]!.position.copy(centre).add(new THREE.Vector3(0,0,.002));
     const points=Array.from({length:29},(_,i)=>{const u=i/28;return contact(lerp(eye.inner,eye.outer,u),eye.lower+.011*Math.pow(2*u-1,2));});
     const geometry=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(points),84,.0048*width,8,false);geometry.setDrawRange(film.geometry.drawRange.start,film.geometry.drawRange.count);film.geometry.dispose();film.geometry=geometry;film.mesh.geometry=geometry;
+    // A narrow black surface ribbon separates the wet rim from facial dots.
+    // This redistributes local coverage; it adds no glow or long cheek track.
+    const ribbon:number[]=[],ribbonIndices:number[]=[];
+    for(let k=0;k<points.length;k++){
+     const point=points[k]!,tangent=points[Math.min(k+1,points.length-1)]!.clone().sub(points[Math.max(k-1,0)]!),normal=new THREE.Vector2(-tangent.y,tangent.x).normalize().multiplyScalar(.009*width);
+     for(const sign of [-1,1]){const v=contact(point.x+normal.x*sign,point.y+normal.y*sign);v.z-=.003;ribbon.push(...v.toArray());}
+     if(k){const a=(k-1)*2;ribbonIndices.push(a,a+1,a+2,a+1,a+3,a+2);}
+    }
+    const ribbonGeometry=new THREE.BufferGeometry();ribbonGeometry.setAttribute('position',new THREE.Float32BufferAttribute(ribbon,3));ribbonGeometry.setIndex(ribbonIndices);film.gap!.geometry.dispose();film.gap!.geometry=ribbonGeometry;
     const bx=lerp(eye.inner,eye.centre,.10)+side*.004,by=eye.lower-.0195*width,base=contact(bx,by),top=contact(bx,eye.lower);
     const rx=.010*width,ry=.019*width,rz=.008;
     const drop=new THREE.SphereGeometry(1,20,16),positions=drop.getAttribute('position');
@@ -123,9 +133,12 @@ export const neutralTearingFace=defineModel({
      positions.setXYZ(k,x-base.x,y-base.y,surface.z-base.z+Math.max(0,nz)*rz);
     }
     drop.computeVertexNormals();bead.geometry.dispose();bead.geometry=drop;bead.mesh.geometry=drop;bead.mesh.position.copy(base);bead.mesh.userData.tearBase=base;bead.mesh.userData.tearTop=top;
-    // A tiny optical edge is expressed as denser fixed ink, with no emissive halo.
-    const ridge=Array.from({length:19},(_,k)=>{const v=.75-k/18*1.5,x=bx+rx*.62*Math.sqrt(1-v*v)*(1-.62*Math.pow(Math.max(0,v),1.4)),y=by+ry*v,surface=contact(x,y);return new THREE.Vector3(x-base.x,y-base.y,surface.z-base.z+rz*.72*Math.sqrt(1-v*v));});
-    const edge=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ridge),40,.0018*width,6,false);rims[index]!.geometry.dispose();rims[index]!.geometry=edge;
+    const backdrop:number[]=[0,0,-.003],backIndices:number[]=[];
+    for(let k=0;k<48;k++){const angle=k/48*Math.PI*2,v=Math.cos(angle),x=bx+Math.sin(angle)*rx*1.3*(1-.62*Math.pow(Math.max(0,v),1.4)),y=by+ry*v*1.14,surface=contact(x,y);backdrop.push(x-base.x,y-base.y,surface.z-base.z-.003);backIndices.push(0,k+1,(k+1)%48+1);}
+    const back=new THREE.BufferGeometry();back.setAttribute('position',new THREE.Float32BufferAttribute(backdrop,3));back.setIndex(backIndices);beadGaps[index]!.geometry.dispose();beadGaps[index]!.geometry=back;
+    // A complete tiny drop boundary stays readable within that negative space.
+    const ridge=Array.from({length:48},(_,k)=>{const angle=k/48*Math.PI*2,v=Math.cos(angle),x=bx+Math.sin(angle)*rx*(1-.62*Math.pow(Math.max(0,v),1.4)),y=by+ry*v,surface=contact(x,y);return new THREE.Vector3(x-base.x,y-base.y,surface.z-base.z+.0015);});
+    const edge=new THREE.TubeGeometry(new THREE.CatmullRomCurve3(ridge,true),80,.0018*width,6,true);rims[index]!.geometry.dispose();rims[index]!.geometry=edge;
    }
    if(ctx.params.debugSource===true)console.warn('neutral-face-seated-landmarks '+JSON.stringify(landmarks));
   };
@@ -137,7 +150,7 @@ export const neutralTearingFace=defineModel({
   if(ctx.params.debugSource===true)console.warn('neutral-face-eye-anchors '+JSON.stringify({left:leftEye.toArray(),right:rightEye.toArray()}));
   return {root,grounded:false,onPlaced:seatWetness,framingPoints:[new THREE.Vector3(-.45,-.5,-.4),new THREE.Vector3(.45,.5,.45)].map(p=>p.multiplyScalar(height)),anchors:{leftEye:leftEye.toArray() as V3,rightEye:rightEye.toArray() as V3},update(c){
    const tears=clamp(c.tears??0);wet.visible=tears>.01;
-   for(const film of films){const amount=film.kind==='lid'?smooth(clamp(tears/.55)):smooth(clamp((tears-.45)/.55));film.mesh.visible=amount>.015;if(film.kind==='lid')film.geometry.setDrawRange(0,Math.floor((film.geometry.index?.count??0)*amount/6)*6);else{const growth=Math.sqrt(amount);film.mesh.scale.setScalar(growth);const base=film.mesh.userData.tearBase as THREE.Vector3|undefined,top=film.mesh.userData.tearTop as THREE.Vector3|undefined;if(base&&top)film.mesh.position.copy(top).lerp(base,growth);}}
+   for(const film of films){const amount=film.kind==='lid'?smooth(clamp(tears/.55)):smooth(clamp((tears-.45)/.55));film.mesh.visible=amount>.015;if(film.kind==='lid'){film.geometry.setDrawRange(0,Math.floor((film.geometry.index?.count??0)*amount/6)*6);if(film.gap){film.gap.visible=film.mesh.visible;film.gap.geometry.setDrawRange(0,Math.floor((film.gap.geometry.index?.count??0)*amount/6)*6);}}else{const growth=Math.sqrt(amount);film.mesh.scale.setScalar(growth);const base=film.mesh.userData.tearBase as THREE.Vector3|undefined,top=film.mesh.userData.tearTop as THREE.Vector3|undefined;if(base&&top)film.mesh.position.copy(top).lerp(base,growth);}}
   }};
  },
 });
