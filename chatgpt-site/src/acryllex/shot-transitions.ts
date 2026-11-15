@@ -16,7 +16,7 @@
  * Only `scene.camera`, camera events and `scene.transition(Dur)` are touched; style, ink, dither, lighting,
  * contrast and pixel pitch are never read or written.
  */
-import {FLAT_ROTATION,MESH_ROTATION,cameraProblems,isFlatObject,sceneViews,shotCamera,storyShot,subjects,viewOf,type Angle,type View} from './camera-direction.ts';
+import {FLAT_ROTATION,MESH_ROTATION,cameraProblems,isFlatObject,sceneViews,shotCamera,storyShot,subjects,viewOf,prefersFrontalCamera,type Angle,type View} from './camera-direction.ts';
 import {resolveAt,sceneDuration,type AcryllexSpec,type CameraMove,type Scene,type SceneEvent} from './spec.ts';
 
 /** Same yaw/pitch table as engine.ts fit(); flat sources always use their captured front view. */
@@ -102,7 +102,7 @@ export interface TransitionPlan {spec:AcryllexSpec;changes:string[]}
 
 /** A distinct opening shot for scene s after `prev`: never a nudge, never adds camera-direction problems. */
 function distinctOpening(spec:AcryllexSpec,i:number,prev:Geo):CameraMove|undefined{
- const s=spec.scenes[i]!;const flat=geo(s,s.camera).view.kind==='flat';
+ const s=spec.scenes[i]!;const flat=geo(s,s.camera).view.kind==='flat'||prefersFrontalCamera(s);
  const pool=[storyShot(s,flat,i===0),...(flat?FLAT_ROTATION:MESH_ROTATION)].filter((k,j,a):k is NonNullable<typeof k>=>!!k&&a.indexOf(k)===j);
  const base=cameraProblems(spec).length;const next=spec.scenes[i+1];
  const fits=(cam:CameraMove,strict:boolean)=>{

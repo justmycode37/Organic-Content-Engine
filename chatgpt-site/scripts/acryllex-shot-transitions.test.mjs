@@ -104,6 +104,8 @@ test('generation wiring: planner runs transitions, both review gates reject jump
  assert.match(shotList(out),/\|\| cuts: 2:cut /);
  assert.match(SHOT_TRANSITION_RULES,new RegExp(`${MIN_ANGLE}°`));
  const src=readFileSync(new URL('../worker/acryllex-generation.ts',import.meta.url),'utf8');
- assert.equal(src.match(/\.\.\.transitionProblems\(/g)?.length,3,'storyboard, storyboard-review and visual-review gates');
+ const quality=readFileSync(new URL('../worker/acryllex-quality.ts',import.meta.url),'utf8');
+ assert.equal((src+quality).match(/\.\.\.transitionProblems\(/g)?.length,3,'storyboard, storyboard-review and visual-repair gates');
  assert.match(src,/\$\{SHOT_TRANSITION_RULES\}/);
+ assert.match(quality,/\$\{SHOT_TRANSITION_RULES\}/);
 });

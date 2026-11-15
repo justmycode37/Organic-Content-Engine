@@ -13,6 +13,24 @@ const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 const CHROME=process.env.CHROME_PATH?.trim()||(process.platform==='darwin'?'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome':'/usr/bin/chromium');
 export const FPS=30;
 
+/** Compose immutable image evidence without resampling a live WebGL canvas. */
+export async function imageSheet(files,outPath,{columns=3,width=360,labels=[]}={}){
+ const frames=await Promise.all(files.map(async file=>(await readFile(file)).toString('base64')));
+ const browser=await chromium.launch({headless:true,executablePath:CHROME,args:['--disable-gpu']});
+ try{
+  const page=await browser.newPage();
+  const data=await page.evaluate(async({frames,columns,width,labels})=>{
+   const images=await Promise.all(frames.map(src=>new Promise(resolve=>{const image=new Image();image.onload=()=>resolve(image);image.src='data:image/png;base64,'+src;})));
+   const height=Math.round(images[0].height*width/images[0].width),cols=Math.min(columns,images.length),rows=Math.ceil(images.length/cols),canvas=document.createElement('canvas');
+   canvas.width=cols*(width+8)+8;canvas.height=rows*(height+30)+8;
+   const c=canvas.getContext('2d');c.fillStyle='#151515';c.fillRect(0,0,canvas.width,canvas.height);
+   images.forEach((image,i)=>{const x=8+i%cols*(width+8),y=8+Math.floor(i/cols)*(height+30);c.drawImage(image,x,y,width,height);c.fillStyle='#ddd';c.font='15px monospace';c.fillText(labels[i]??String(i+1),x,y+height+20);});
+   return canvas.toDataURL('image/png').split(',')[1];
+  },{frames,columns,width,labels});
+  await writeFile(outPath,Buffer.from(data,'base64'));
+ }finally{await browser.close();}
+}
+
 export async function openAcryllex(spec){
  const bundle=(await build({entryPoints:[join(ROOT,'src/acryllex/page.ts')],bundle:true,write:false,format:'iife',target:'es2022',define:{'import.meta.url':JSON.stringify('http://acx.local/modules/render.js')},loader:{'.ttf':'dataurl'},logLevel:'error'})).outputFiles[0].text;
  const assets=await assetsForSpec(spec);
@@ -39,17 +57,21 @@ export async function stills(spec,outPath,times,scale=0.32,labels=null,cols=6){
  const {browser,page,errors}=await openAcryllex(spec);
  try{
   if(times.length===1){const data=await page.evaluate(t=>window.acryllex.shot(t),times[0]);checkRenderErrors(errors);await writeFile(outPath,Buffer.from(data,'base64'));return;}
-  const data=await page.evaluate(async([ts,scale,labels,maxCols])=>{
-   const probe=new Image();await new Promise(r=>{probe.onload=r;probe.src='data:image/png;base64,'+window.acryllex.shot(ts[0],1);});
-   const w=Math.round(probe.width*scale),h=Math.round(probe.height*scale),cols=Math.min(ts.length,maxCols),rows=Math.ceil(ts.length/cols);
+  // Give each WebGL readback its own browser task. Resizing/copying the live
+  // render canvas repeatedly in one task can produce stale/partial Metal reads.
+  const frames=[];
+  for(const t of times)frames.push(await page.evaluate(t=>window.acryllex.shot(t),t));
+  const data=await page.evaluate(async([frames,scale,labels,maxCols])=>{
+   const probe=new Image();await new Promise(r=>{probe.onload=r;probe.src='data:image/png;base64,'+frames[0];});
+   const w=Math.round(probe.width*scale),h=Math.round(probe.height*scale),cols=Math.min(frames.length,maxCols),rows=Math.ceil(frames.length/cols);
    const sheet=document.createElement('canvas');sheet.width=cols*(w+8)+8;sheet.height=rows*(h+36)+8;
    const ctx=sheet.getContext('2d');ctx.fillStyle='#333';ctx.fillRect(0,0,sheet.width,sheet.height);
-   for(let i=0;i<ts.length;i++){
-    const img=new Image();await new Promise(r=>{img.onload=r;img.src='data:image/png;base64,'+window.acryllex.shot(ts[i],scale);});
-    const x=8+(i%cols)*(w+8),y=8+Math.floor(i/cols)*(h+36);ctx.drawImage(img,x,y,w,h);ctx.fillStyle='#fff';ctx.font='20px monospace';ctx.fillText(labels?labels[i]:`${ts[i]}s`,x,y+h+24);
+   for(let i=0;i<frames.length;i++){
+    const img=new Image();await new Promise(r=>{img.onload=r;img.src='data:image/png;base64,'+frames[i];});
+    const x=8+(i%cols)*(w+8),y=8+Math.floor(i/cols)*(h+36);ctx.drawImage(img,x,y,w,h);ctx.fillStyle='#fff';ctx.font='20px monospace';ctx.fillText(labels[i],x,y+h+24);
    }
    return sheet.toDataURL('image/png').split(',')[1];
-  },[times,scale,labels,cols]);
+  },[frames,scale,labels??times.map(t=>`${t}s`),cols]);
   checkRenderErrors(errors);await writeFile(outPath,Buffer.from(data,'base64'));
  }finally{await browser.close();}
 }

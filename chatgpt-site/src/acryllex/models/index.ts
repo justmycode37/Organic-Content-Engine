@@ -18,6 +18,8 @@ import * as objects from './objects.ts';
 import * as computing from './computing.ts';
 import * as reference from './reference.ts';
 import * as shapes from './shapes.ts';
+import * as onion from './onion.ts';
+import * as onionAtmosphere from './onion-atmosphere.ts';
 import * as fluids from './fluids.ts';
 import {waterGlass,opticalRay} from './optics.ts';
 import {glassOptics} from './glass-optics.ts';
@@ -28,7 +30,7 @@ import {riggedHand} from './rigged-hand.ts';
 
 /** Every model module exports ModelDefs; add new modules here. */
 // reference/shapes first so their ids win over older packs
-const MODULES:Record<string,unknown>[]=[{person,humanMale,humanFemale,portrait,riggedHand,importedMesh,footage,referenceImage,referenceVideo,waveFootage,humanMaleFootage,humanFemaleFootage,fluidCache,waterGlass,opticalRay,glassOptics},reference,fluids,shapes,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
+const MODULES:Record<string,unknown>[]=[{person,humanMale,humanFemale,portrait,riggedHand,importedMesh,footage,referenceImage,referenceVideo,waveFootage,humanMaleFootage,humanFemaleFootage,fluidCache,waterGlass,opticalRay,glassOptics},reference,fluids,shapes,onion,onionAtmosphere,tech,basic,biology,nature,animals,everyday,science,home,industry,transport,places,living,objects,computing];
 
 export const MODELS:ModelDef[]=MODULES.flatMap(m=>Object.values(m).filter((v):v is ModelDef=>!!v&&typeof v==='object'&&'id' in v&&'build' in v&&typeof (v as ModelDef).build==='function'));
 

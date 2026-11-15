@@ -14,6 +14,7 @@ import {objaverseSource} from '../../src/acryllex/objaverse-source.ts';
 import {prepareObjaverseMesh} from './objaverse-assets.mjs';
 import {prepareImportedMesh} from './mesh-assets.mjs';
 import {writeAtomic} from './atomic-file.mjs';
+import {modelAssetDependencies} from '../../src/acryllex/model-asset-dependencies.ts';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 export const ASSET_DIR=join(ROOT,'.acryllex-assets');
@@ -69,7 +70,7 @@ export async function assetsForSpec(spec){
  ]);const HUMAN=/^(human|person|man|woman|child|people|scientist|engineer|worker|student|human-body)$/i;
  const isHuman=id=>HUMAN.test(id)||PROFILES.has(id);
  for(const s of spec.scenes??[])for(const o of s.objects??[]){
-  const model=norm(o.model);ids.add(model);if(!isHuman(model))continue;
+  const model=norm(o.model);ids.add(model);for(const dependency of modelAssetDependencies(model))ids.add(norm(dependency));if(!isHuman(model))continue;
   const custom=parseBodySource(o.params?.bodySource,o.params?.body);if(custom)continue;
   const profile=PROFILES.get(model),body=String(o.params?.body??'').toLowerCase();if(profile)profileAssets.add(profile);
   if(profile&&!body&&String(o.params?.mesh??'anatomical')==='anatomical')continue;
@@ -90,9 +91,9 @@ export async function assetsForSpec(spec){
    const anatomical=source==='anatomical',rel=`hands/${anatomical?'anatomical-right':side}.glb`;
    await mkdir(join(ASSET_DIR,'hands'),{recursive:true});await copyStable(join(ROOT,'src/acryllex/assets',rel),join(ASSET_DIR,rel));out['hand-mesh:'+(anatomical?'anatomical':side)]=rel;
   }
-  if(/^(head-mesh|portrait|face-mesh|human-face|human-head)$/i.test(String(o.model))){
-   const source=headSource(o.params);
-   if(source.kind==='scan'){
+  if(/^(head-mesh|portrait|face-mesh|human-face|human-head|neutral-tearing-face)$/i.test(String(o.model))){
+   const source=headSource(o.model==='neutral-tearing-face'?{...o.params,source:'anatomical'}:o.params);
+   if(source.kind!=='body'){
     await mkdir(dirname(join(ASSET_DIR,source.file)),{recursive:true});
     await copyStable(join(ROOT,'src/acryllex/assets',source.file),join(ASSET_DIR,source.file));out[source.key]=source.file;
    }else{const e=await findAsset(source.key);if(!e)throw new Error('head-mesh source is not in the library');out[e.id]=await ensureAsset(e);}

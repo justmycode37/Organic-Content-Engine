@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "authority": "Owner-approved perfect animation-style reference",
+  "label": "ScreenRecording_11-12-2026 18-32-11_1.mov",
+  "sha256": "9b9a516d37e4f90187bd4a9267f0683d565cbf7f839348ae6f1316c8466b6abc",
+  "cacheFile": "style-reference/owner-approved.mov",
+  "width": 1206,
+  "height": 2192,
+  "fps": 60,
+  "duration": 36.775,
+  "activeCrop": [
+    42,
+    684,
+    1164,
+    670
+  ],
+  "stillTimes": [
+    1.8,
+    5.8,
+    9.8,
+    13.8,
+    17.8,
+    21.8,
+    25.8,
+    29.8,
+    33.8
+  ],
+  "motionStarts": [
+    1.5,
+    5.0,
+    17.0,
+    20.0,
+    33.0
+  ],
+  "motionStep": 0.08333333333333333,
+  "motionCount": 6,
+  "use": "User-supplied reference for internal style comparison; recording is not redistributed in the repository."
+}

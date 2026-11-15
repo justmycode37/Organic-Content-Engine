@@ -49,6 +49,8 @@ const SIDE=/\b(side|profile|thin|layer\w*|flat|through|across|inside|level|half)
 const LIQUID_THING=/water|liquid|glass|bottle|cup|jar|mug|tea|coffee|milk|juice|ocean|sea|wave|pool|drop/i;
 
 export const isFlatObject=(o:{model:string})=>{try{return isFootageModel(String(o.model));}catch{return false;}};
+/** Frontal presentation requested for this neutral face; the subject remains editable 3D geometry. */
+export const prefersFrontalCamera=(s:Scene)=>s.objects.some(o=>o.model==='neutral-tearing-face');
 const framed=(s:Scene)=>s.objects.filter(o=>o.frame!==false);
 const focusIds=(s:Scene,c?:CameraMove)=>{const f=c?.focus;const ids=f===undefined?[]:Array.isArray(f)?f:[f];const known=ids.filter(id=>s.objects.some(o=>o.id===id));return known.length?known:framed(s).map(o=>o.id);};
 /** Objects the camera actually frames for a camera move. */
@@ -121,7 +123,8 @@ export function cameraProblems(spec:AcryllexSpec):string[]{
   if(pushRun===4)out.push(`${tag}: four scenes in a row push/pull; hold some shots static so moves stay motivated.`);
   if([s.camera,...evs.map(e=>e.camera)].some(c=>c?.move&&ORBITS.has(c.move)))orbitScenes++;
   if(s.objects.some(o=>o.idle&&SPIN_IDLES.has(o.idle)))spinScenes++;
-  if(v.first.kind==='mesh')meshAngles.push(v.first.angle);
+  if(prefersFrontalCamera(s))for(const c of [s.camera,...evs.map(e=>e.camera)])if(c&&((c.angle&&c.angle!=='front')||(c.move&&ROTATING_MOVES.has(c.move))))out.push(`${tag}: neutral modelled face must stay front-facing; vary shot size instead.`);
+  if(v.first.kind==='mesh'&&!prefersFrontalCamera(s))meshAngles.push(v.first.angle);
  });
  const orbitMax=n>=12?2:1;
  if(orbitScenes>orbitMax)out.push(`reel: ${orbitScenes} scenes orbit; at most ${orbitMax}. Choose a fixed angle that explains the subject instead of orbiting.`);
@@ -196,11 +199,12 @@ export function planCameras(input:AcryllexSpec):CameraPlan{
    else spinScenes++;
   }
   const explicit=!!(s.camera&&((Array.isArray(s.camera.pos)&&Array.isArray(s.camera.look))||s.camera.follow));
-  let first=viewOf(s,s.camera);const flat=first.kind==='flat';
-  const flatAngle=[s.camera,...cameraEvents(s).map(e=>e.camera)].some(c=>c&&subjects(s,c).some(isFlatObject)&&((c.angle&&c.angle!=='front')||(c.move&&ROTATING_MOVES.has(c.move))));
+  const frontOnly=prefersFrontalCamera(s);
+  let first=viewOf(s,s.camera);const flat=first.kind==='flat'||frontOnly;
+  const flatAngle=[s.camera,...cameraEvents(s).map(e=>e.camera)].some(c=>c&&(frontOnly||subjects(s,c).some(isFlatObject))&&((c.angle&&c.angle!=='front')||(c.move&&ROTATING_MOVES.has(c.move))));
   if(flatAngle){
-   for(const c of [s.camera,...cameraEvents(s).map(e=>e.camera)]){if(!c||!subjects(s,c).some(isFlatObject))continue;if(c.angle&&c.angle!=='front')c.angle='front';if(c.move&&ROTATING_MOVES.has(c.move))c.move='static';}
-   changes.push(`${tag}: flat source kept at its captured front view`);first=viewOf(s,s.camera);
+   for(const c of [s.camera,...cameraEvents(s).map(e=>e.camera)]){if(!c||!frontOnly&&!subjects(s,c).some(isFlatObject))continue;if(c.angle&&c.angle!=='front')c.angle='front';if(c.move&&ROTATING_MOVES.has(c.move))c.move='static';}
+   changes.push(`${tag}: ${frontOnly?'neutral face kept front-facing':'flat source kept at its captured front view'}`);first=viewOf(s,s.camera);
   }
   const orbiting=[s.camera,...cameraEvents(s).map(e=>e.camera)].some(c=>c?.move&&ORBITS.has(c.move));
   if(orbiting){
@@ -208,8 +212,8 @@ export function planCameras(input:AcryllexSpec):CameraPlan{
    else orbitScenes++;
   }
   const meshCount=recentAngles.length;
-  const overused=first.kind==='mesh'&&meshCount>=3&&(used.get(first.angle)??0)+1>Math.max(2,Math.floor(0.5*(meshCount+1)));
-  const triple=first.kind==='mesh'&&recentAngles.length>=2&&recentAngles.at(-1)===first.angle&&recentAngles.at(-2)===first.angle;
+  const overused=first.kind==='mesh'&&!frontOnly&&meshCount>=3&&(used.get(first.angle)??0)+1>Math.max(2,Math.floor(0.5*(meshCount+1)));
+  const triple=first.kind==='mesh'&&!frontOnly&&recentAngles.length>=2&&recentAngles.at(-1)===first.angle&&recentAngles.at(-2)===first.angle;
   const repeat=prevLast!==undefined&&sameView(prevLast,first);
   const unauthored=!s.camera&&!cameraEvents(s).length;const story=storyShot(s,flat,i===0);
   const cue=unauthored&&story!==undefined;
@@ -233,11 +237,11 @@ export function planCameras(input:AcryllexSpec):CameraPlan{
   // keep moves motivated: no long push/pull runs
   pushRun=(s.camera?.move==='push'||s.camera?.move==='pull')?pushRun+1:0;
   if(pushRun>=4&&s.camera){s.camera.move='static';delete s.camera.amount;pushRun=0;changes.push(`${tag}: push/pull run → static`);}
-  if(first.kind==='mesh'){recentAngles.push(first.angle);used.set(first.angle,(used.get(first.angle)??0)+1);}
+  if(first.kind==='mesh'&&!frontOnly){recentAngles.push(first.angle);used.set(first.angle,(used.get(first.angle)??0)+1);}
   prevLast=sceneViews(s).last;
  });
  return {spec,changes};
 }
 
 /** Prompt guidance shared by storyboard, storyboard review and visual review. */
-export const CAMERA_DIRECTION_RULES=`CAMERA DIRECTION (perspective variety; never changes pixel size, ink, dither, contrast or light): a reel about one object (a spoon, a glass, a water bottle) must not hold one perspective throughout. Shot vocabulary (scene.camera angle/fill/focus/move): ${Object.values(SHOTS).map(s=>`${s.kind} = ${s.angle}${s.fill?` fill ${s.fill}`:''}${s.move?` ${s.move}`:''}${s.flat?' [flat ok]':''}: ${s.use}`).join('; ')}. Story drives the cut: establish or high first, then move in as the explanation narrows; contact and material lines get a macro-contact (focus both touching objects, fill 1.0-1.1); liquid level, bending, floating and bubbles get the waterline (side, eye level with the surface, focus the container); round/ring/ripple lines get top; tall/strong lines get low; the payoff may return to the hook framing as a callback. Consecutive scenes must not repeat the same angle + shot size + focus; no angle three 3D scenes in a row; at least three perspectives per reel; at most one orbit per reel (two for 12+ scenes) and never auto-spin every object. Camera events: at most 2 per scene, each motivated by the spoken action; keep one push or pull direction per scene; do not pump the camera on the beat. Editable meshes may take any supported angle. A flat reference image/video/footage has ONE captured viewpoint: keep angle front and no orbit/rise/fall/crane/drift; vary it with a distinct genuine source view when one exists (another library asset, file or crop that really shows that view) and otherwise with push, pull, insert crops (fill ~1.05) and reveals (fill ~0.6). Never ask a flat source for a side, top or back it never recorded.`;
+export const CAMERA_DIRECTION_RULES=`CAMERA DIRECTION (perspective variety; never changes pixel size, ink, dither, contrast or light): a reel about one object (a spoon, a glass, a water bottle) must not hold one perspective throughout. Shot vocabulary (scene.camera angle/fill/focus/move): ${Object.values(SHOTS).map(s=>`${s.kind} = ${s.angle}${s.fill?` fill ${s.fill}`:''}${s.move?` ${s.move}`:''}${s.flat?' [flat ok]':''}: ${s.use}`).join('; ')}. Story drives the cut: establish or high first, then move in as the explanation narrows; contact and material lines get a macro-contact (focus both touching objects, fill 1.0-1.1); liquid level, bending, floating and bubbles get the waterline (side, eye level with the surface, focus the container); round/ring/ripple lines get top; tall/strong lines get low; the payoff may return to the hook framing as a callback. Consecutive scenes must not repeat the same angle + shot size + focus; no angle three 3D scenes in a row; at least three perspectives per reel; at most one orbit per reel (two for 12+ scenes) and never auto-spin every object. Camera events: at most 2 per scene, each motivated by the spoken action; keep one push or pull direction per scene; do not pump the camera on the beat. Editable meshes may take any supported angle except neutral-tearing-face, which must remain front-facing with framing changes; these face scenes are exempt from global perspective quotas. A flat reference image/video/footage has ONE captured viewpoint: keep angle front and no orbit/rise/fall/crane/drift; vary it with a distinct genuine source view when one exists (another library asset, file or crop that really shows that view) and otherwise with push, pull, insert crops (fill ~1.05) and reveals (fill ~0.6). Never ask a flat source for a side, top or back it never recorded.`;

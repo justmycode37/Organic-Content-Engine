@@ -26,6 +26,8 @@ export interface Built {
  update?(controls:Record<string,number>,t:number,pose:PoseState):void;
  /** Model rests on the ground (y=0 is its bottom). Default true. Floating models are centred. */
  grounded?:boolean;
+ /** One-time source-surface setup after scene placement, before the first render. */
+ onPlaced?:()=>void;
  /** Optional model-space points covering known pose extents for a steady automatic
   * camera fit. These do not alter the visible mesh or resize the camera per frame. */
  framingPoints?:readonly THREE.Vector3[];
