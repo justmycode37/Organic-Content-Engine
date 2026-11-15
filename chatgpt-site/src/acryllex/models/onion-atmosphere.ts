@@ -22,7 +22,12 @@ export const gasPixelMist=defineModel({
   const root=new THREE.Group(),random=rng(ctx.seed+971),from=vector(ctx.params.from,[-.46,-.38,.04]),eye=vector(ctx.params.to,[.17,.34,.26]);
   const centre=vector(ctx.params.center,[-.04,.10,.30]),radius=vector(ctx.params.radius,[.8,.7,.3]);
   const count=Math.round(ctx.num('count',420,120,800)),size=ctx.num('pixelSize',.0055,.003,.008),speed=ctx.num('speed',.12,.03,.35),clearRadius=ctx.num('clearRadius',.11,.04,.2);
-  const geometry=new THREE.BoxGeometry(size,size,size*.35),material=ctx.mat({tone:.95,rough:1,glow:.08});
+  // Independent visibility/size phases supply the glimmer; emissive glow would
+  // enable the scene-wide halo sampler and change the onion's surface grain.
+  const geometry=new THREE.BoxGeometry(size,size,size*.35),material=ctx.mat({tone:.95,rough:1});
+  // Illustrative airborne tracers must not turn into solid depth occluders:
+  // their depth otherwise produces large AO blotches on the onion and face.
+  material.depthWrite=false;
   const motes=Array.from({length:count},()=>{
    const z=random()*2-1,a=random()*Math.PI*2,r=Math.cbrt(random()),xy=Math.sqrt(1-z*z);
    const mesh=new THREE.Mesh(geometry,material);root.add(mesh);

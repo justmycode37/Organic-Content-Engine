@@ -12,6 +12,15 @@ import {sceneSchema} from '../src/acryllex/schema.ts';
 import {verifyStyleReference} from './acryllex/style-reference.mjs';
 import {createHash} from 'node:crypto';
 import {drawText,drawCaptions} from '../src/acryllex/text.ts';
+import {onionDensityResponse} from '../src/acryllex/models/onion.ts';
+
+test('onion material opens dark recesses while keeping coherent dense illuminated planes',()=>{
+ assert.equal(onionDensityResponse(.20),0);
+ assert.ok(onionDensityResponse(.32)<.1,'Shadow-side reflectance must stay sparse');
+ assert.ok(onionDensityResponse(.81)>1.2,'Lit flesh must reach dense coverage under the locked profile');
+ const response=Array.from({length:101},(_,i)=>onionDensityResponse(i/100));
+ assert.ok(response.every((v,i)=>Number.isFinite(v)&&v>=0&&v<=1.6&&(!i||v>=response[i-1])),'The response must be monotonic and bounded');
+});
 
 test('running captions remain above the bottom interface region of a portrait reel',()=>{
  const glyphs=[];const ctx={save(){},restore(){},fillRect(){},measureText:text=>({width:text.length*20}),fillText(text,x,y){glyphs.push({text,x,y});}};
@@ -65,9 +74,11 @@ test('pixel teardrops contain a filled interior rather than a hollow outline',()
 });
 
 test('gas mist uses tiny independent motes, preserves reverse seeking and respects reveal controls',()=>{
- const params={count:360,pixelSize:.005,spread:.06},ctx={params,seed:27,mat:()=>new THREE.MeshStandardMaterial(),num:(k,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number(params[k]??f)))};
+ const params={count:360,pixelSize:.005,spread:.06},ctx={params,seed:27,mat:opts=>{const material=new THREE.MeshStandardMaterial();material.userData.glow=opts?.glow??0;return material;},num:(k,f,min=-Infinity,max=Infinity)=>Math.max(min,Math.min(max,Number(params[k]??f)))};
  const built=gasPixelMist.build(ctx);
  assert.equal(built.root.children.length,360);
+ assert.ok(built.root.children.every(m=>m.material.depthWrite===false),'Invisible-gas tracers must not cast depth-based occlusion patches');
+ assert.ok(built.root.children.every(m=>m.material.userData.glow===0),'Gas glimmer must not enable the scene-wide halo sampler');
  const positions=()=>built.root.children.map(m=>[...m.position.toArray(),...m.scale.toArray(),m.visible]);
  built.update({progress:1,density:1},1);const first=positions();const xs=first.map(p=>p[0]),ys=first.map(p=>p[1]);const mx=xs.reduce((a,b)=>a+b,0)/xs.length,my=ys.reduce((a,b)=>a+b,0)/ys.length;const cov=xs.reduce((sum,x,i)=>sum+(x-mx)*(ys[i]-my),0),xx=xs.reduce((sum,x)=>sum+(x-mx)**2,0),yy=ys.reduce((sum,y)=>sum+(y-my)**2,0);assert.ok(Math.abs(cov/Math.sqrt(xx*yy))<.25,'Gas fills the surrounding air rather than a diagonal line');built.update({progress:1,density:1},4);assert.notDeepEqual(positions(),first);
  built.update({progress:1,density:1},1);assert.deepEqual(positions(),first,'Motion must depend on time rather than accumulated frames');

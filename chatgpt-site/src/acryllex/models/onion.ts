@@ -7,6 +7,21 @@ import {retainSourceTriangles,clipStaticSourcePlane} from './source-region.ts';
 /** Authored educational assets, not captured onion footage or microscopy.
  * Component source/attribution and limitations: assets/onion/README.md. */
 type V3=[number,number,number];
+/** Local reflectance response: sparse recesses and dense lit flesh, before the shared dot pass. */
+export const onionDensityResponse=(linear:number)=>Math.min(1.6,Math.pow(Math.max(0,(linear-.25)/.6),1.4)*1.5);
+function onionDensityMaterial(material:THREE.Material){
+ const previous=material.onBeforeCompile,key=material.customProgramCacheKey.bind(material);
+ material.onBeforeCompile=function(shader,renderer){
+  previous.call(this,shader,renderer);
+  shader.fragmentShader=shader.fragmentShader.replace('#include <opaque_fragment>',`{
+   float onionIntensity=max(outgoingLight.r,max(outgoingLight.g,outgoingLight.b));
+   float onionDensity=min(1.6,pow(max(0.,(onionIntensity-.25)/.6),1.4)*1.5);
+   outgoingLight*=onionDensity/max(onionIntensity,.000001);
+  }
+  #include <opaque_fragment>`);
+ };
+ material.customProgramCacheKey=()=>key()+'|onion-local-density-v1';
+}
 function source(ctx:ModelCtx,id:string,height:number){
  const loaded=instance(id,ctx,.83,true,0,{sourceAlpha:true});
  if(!loaded)throw new Error(`onion assets: required licensed source ${id} was not preloaded`);
@@ -150,6 +165,7 @@ export const onionCutHalf=defineModel({
    const shape=new THREE.Shape(ring(radii[i]!));if(radii[i+1]!>0)shape.holes.push(new THREE.Path(ring(radii[i+1]!).reverse()));
    const flesh=ctx.mesh(new THREE.ShapeGeometry(shape),{tone:i%2?.96:.28,rough:.62});flesh.position.z=.0015;root.add(flesh);
   }
+  root.traverse(o=>{const m=o as THREE.Mesh;if(m.isMesh)for(const material of Array.isArray(m.material)?m.material:[m.material])onionDensityMaterial(material);});
   const size=ctx.num('height',.5,.1,2),bounds=new THREE.Box3().setFromObject(root,true);root.scale.setScalar(size/Math.max(.01,bounds.max.y-bounds.min.y));
   return {root,grounded:false};
  },

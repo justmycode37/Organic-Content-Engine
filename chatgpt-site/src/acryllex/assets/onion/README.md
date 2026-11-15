@@ -57,15 +57,23 @@ motes remain. The pixels illustrate gas that is invisible in reality.
 Both `onion-cutting-media` and `onion-cutting-bulb-media` now select Samir Hope’s
 Pexels3797834 clip: ordinary hands and knife slicing a bulb with its layered cut
 face visible. Framewise Apple Vision foreground segmentation removes unrelated
-surroundings and the earlier added board-support patch. The largest connected
-foreground component retains the hand, knife and held bulb; mask rows274 onward
-(source y822) exclude the lower board/offcut area. Original RGB and action are
-preserved. Instance-local sRGB source transfer and levels retain blade detail
+surroundings and the earlier added board-support patch. A small morphological
+opening disconnects loose offcuts, then the principal foreground component
+recovers its original fine edge. The captured wrist boundary fades smoothly
+into black over38mask rows; there is no added arm or hard lower-mask cutoff.
+Original RGB and action are preserved. Instance-local sRGB source transfer and levels retain blade detail
 without changing shared ink, lighting or dot calibration. Source
 and matte share1920×1080 coordinates and25fps; the same crop applies to both.
-The distribution mask is H.264 CRF12. Original source RGB and motion are unchanged.
+The distribution mask is lossless FFV1 grayscale, so transparent background stays
+exactly zero instead of acquiring codec residue. Original RGB and motion are unchanged.
 Creator, license, source URL, exact hashes and preparation are retained in
 `footage-provenance.json`.
+
+The approved `onion-cut-half` shape and rings stay unchanged. A local monotonic
+material response opens its existing dark recesses and gives lit flesh denser
+dot coverage before the shared fixed-ink pass. Gas tracers do not write depth or
+enable emissive halos: their independent visibility/size phases create the
+glimmer without changing the onion's surface grain when gas appears.
 
 The Pressmaster3195946 segment and earlier Mixkit candidates were retired after
 rendered review/user direction. Their original sources and masks remain in the
