@@ -64,7 +64,8 @@ into black over38mask rows; there is no added arm or hard lower-mask cutoff.
 Original RGB and action are preserved. Instance-local sRGB source transfer and levels retain blade detail
 without changing shared ink, lighting or dot calibration. Source
 and matte share1920×1080 coordinates and25fps; the same crop applies to both.
-The distribution mask is H.264 CRF12. Original source RGB and motion are unchanged.
+The distribution mask is lossless FFV1 grayscale, so transparent background stays
+exactly zero instead of acquiring codec residue. Original RGB and motion are unchanged.
 Creator, license, source URL, exact hashes and preparation are retained in
 `footage-provenance.json`.
 
