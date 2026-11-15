@@ -1,9 +1,9 @@
-// ACRYLLEX producer: the whole reel, every creative step on gpt-6.1-sol (xhigh).
+// ACRYLLEX producer: Opus 5.5 medium authors; Sol 6.1 xhigh reviews.
 //   node --env-file=.env.motion scripts/acryllex/produce.mjs <workdir> [--topic "Why we dream"] [--spec spec.json] [--history history.json]
 // Layers: explainer plan (golden thread) → script → fact check + coherence review → storyboard → storyboard review (worker/acryllex-generation.ts)
 //         → subject / composition / continuity / reference-style reviews → voice delivery + actual pacing review
 //         → final visual review on real word timings → sound design + mix review → video
-//         → SOUND DESIGN (Sol cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
+//         → SOUND DESIGN (Opus cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
 //         → final mix, auto-calibrated so the narrator clears music/effects on every word → video.
 // Every step is cached in <workdir>, so a rerun resumes instead of paying twice.
 import {createHash} from 'node:crypto';
@@ -16,7 +16,7 @@ import {sfxLibrary,SFX_KINDS} from './sfx.mjs';
 import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
-import {runVisualReviewStage,runVoiceReviews,reviewFingerprint} from './quality-reviews.mjs';
+import {runVisualReviewStage,runVoiceReviews,reviewFingerprint,bestReviewedVisual,REVIEW_LIMITS} from './quality-reviews.mjs';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/acryllex-quality.ts';
 import {sceneDuration,resolveAt} from '../../src/acryllex/spec.ts';
 import {createRequire} from 'node:module';
@@ -25,6 +25,7 @@ import {createRequire} from 'node:module';
 
 const ROOT=fileURLToPath(new URL('../../',import.meta.url));
 const CACHE=join(ROOT,'.acryllex-cache');
+const AUDIO_CACHE=process.env.ACRYLLEX_AUDIO_CACHE?.trim()||CACHE;
 /** Local ledger of every finished ACRYLLEX reel (manual runs and worker jobs), so no topic repeats. */
 export const HISTORY_FILE=process.env.ACRYLLEX_HISTORY_FILE?.trim()||join(ROOT,'.acryllex-history.json');
 export async function readLedger(file=HISTORY_FILE){try{const v=JSON.parse(await readFile(file,'utf8'));return Array.isArray(v)?v:[];}catch(e){if(e.code==='ENOENT')return [];throw new Error(`ACRYLLEX history ledger unreadable (${file}): ${e.message}`);}}
@@ -47,11 +48,13 @@ async function eleven(path,body,key,usage,attempt=0){
 }
 
 /** Whole narration in one take with per-word timing (natural prosody across scene cuts). */
+export function narrationRequest(delivery,take){
+ const voice_settings={stability:0.5,similarity_boost:0.75,style:0,use_speaker_boost:true};
+ return {text:delivery.text,model_id:'eleven_multilingual_v2',voice_settings,seed:parseInt(hash({text:delivery.text,speedMode:'elevenlabs-default',take}).slice(0,8),16)};
+}
 async function narrate(delivery,take,key,usage){
- const {text,speed}=delivery,model='eleven_multilingual_v2';
- const voice_settings={stability:0.5,similarity_boost:0.75,style:0,use_speaker_boost:true,speed};
- const seed=parseInt(hash({text,speed,take}).slice(0,8),16),body={text,model_id:model,voice_settings,seed};
- const id=hash({body,VOICE_ID,v:2}),audio=join(CACHE,`voice-${id}.wav`),meta=join(CACHE,`voice-${id}.json`);
+ const body=narrationRequest(delivery,take),{model_id:model,voice_settings,seed}=body;
+ const id=hash({body,VOICE_ID,v:3}),audio=join(AUDIO_CACHE,`voice-${id}.wav`),meta=join(AUDIO_CACHE,`voice-${id}.json`);
  if(!(await exists(audio))||!(await exists(meta))){
   let data,pcm=true;
   try{data=await (await eleven(`/v1/text-to-speech/${VOICE_ID}/with-timestamps?output_format=pcm_44100`,body,key,usage)).json();}
@@ -109,7 +112,7 @@ function governCues(cues,total){
 async function music(brief,seconds,key,usage){
  const prompt=`Instrumental only, no vocals. A real piece of MUSIC with melody and chords, not just a drum beat. Exactly 100 BPM, 4/4, minor key. Electronic synthwave / electro style: a catchy memorable lead synth melody (bright analog saw lead, call-and-response phrases), a pulsing arpeggiated synth sequence in sixteenth notes, warm evolving pad chords (i - VI - III - VII progression), a driving electric bass line that follows the chords, and a punchy electronic drum kit underneath. Structure: 4 seconds of filtered arpeggio intro with pads, then drums and bass enter and the lead melody states the main hook; a short breakdown around two thirds where only pads and arpeggio remain with a riser, then the full arrangement returns with the hook an octave higher for the finale and ends on one clean chord hit. Inspiring, cinematic, modern tech feel. ${brief||''} Keep the lead melody in the gaps and the mid range open so a narrator stays clear on top.`;
  const length=Math.min(150,Math.max(15,Math.ceil((seconds+2)/5)*5));
- const file=join(CACHE,`music-${hash({prompt,length})}.mp3`);
+ const file=join(AUDIO_CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!await exists(file)){const r=await eleven('/v1/music?output_format=mp3_44100_128',{prompt,music_length_ms:length*1000,force_instrumental:true},key,usage);await writeFile(file,Buffer.from(await r.arrayBuffer()));}
  return file;
 }
@@ -214,37 +217,44 @@ async function mixStats(out,cues,total,hasBed,clarity){
  return `${parts.join('; ')}; narrator clarity per word (voice minus bed, overall/worst 5%): music +${clarity?.music.overall}/${clarity?.music.worst} dB, sfx +${clarity?.sfx.overall}/${clarity?.sfx.worst} dB (levels are auto-calibrated afterwards, do not try to fix loudness via gain); ${cues.length} cues over ${total.toFixed(1)} s (${(cues.length/total).toFixed(2)}/s); by kind ${JSON.stringify(kinds)}`;
 }
 
-export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
+export async function produce(workdir,{topic='',specFile=null,history=[],clients=null,recordHistory=true,allowUnapproved=false}={}){
+ if(allowUnapproved&&(!clients||recordHistory))throw new Error('Unapproved previews require explicit private experiment clients and disabled history');
  const openai=process.env.OPENAI_API_KEY?.trim(),key=process.env.ELEVENLABS_API_KEY?.trim();
  if(!openai)throw new Error('Set OPENAI_API_KEY: Acryllex content reviews are required, including for saved specs');
  if(!key)throw new Error('Set ELEVENLABS_API_KEY');
- await mkdir(workdir,{recursive:true});await mkdir(CACHE,{recursive:true});
+ await mkdir(workdir,{recursive:true});await mkdir(CACHE,{recursive:true});await mkdir(AUDIO_CACHE,{recursive:true});
  const usageFile=join(workdir,'usage.jsonl');const usage=e=>appendFile(usageFile,JSON.stringify({at:new Date().toISOString(),...e})+'\n');
  const measure=async(stage,fn)=>{const start=performance.now();try{return await fn();}finally{await appendFile(join(workdir,'timings.jsonl'),JSON.stringify({stage,seconds:(performance.now()-start)/1000,at:new Date().toISOString()})+'\n');}};
  const gen=await import('../../worker/acryllex-generation.ts');
- const ask=gen.solClient(openai,usage);
+ const clientContext=clients?.context??{...gen.ACRYLLEX_CLIENT_CONTEXT,reviewEffort:gen.REVIEW_EFFORT};
+ const generationLabel=clientContext.generationModel??gen.MODEL,reviewLabel=clientContext.reviewModel??gen.REVIEW_MODEL;
  const provenance=await readJson(join(workdir,'provenance.json')).catch(()=>({}));
+ if(provenance.unapprovedTest&&provenance.modelRouting?.variant&&!allowUnapproved)throw new Error('Unapproved test cache requires the explicit private experiment override');
  if(provenance.reviewsDisabled===true||provenance.reviewMode==='raw-first-draft')throw new Error('Unreviewed experiment cache cannot be used for normal Acryllex production; use a fresh workdir with the full review pipeline');
  let cat=await measure('catalogue preparation',()=>loadCatalog());
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
  provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
+ const ask=clients?.ask??gen.acryllexClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage);
  // 1-5 story + storyboard
  const draft=join(workdir,'spec.draft.json');
  if(specFile&&!await exists(draft))await writeFile(draft,await readFile(specFile));
  if(!await exists(draft)){
   if(!ask)throw new Error('Set OPENAI_API_KEY');
-  log(`Sol ${gen.EFFORT}: plan → script → fact check + coherence → storyboard → storyboard review`);
+  log(`${generationLabel} ${clientContext.generationEffort??clientContext.effort}: plan → script → ${reviewLabel} fact check + coherence → storyboard → storyboard review`);
   // objects the library lacks are searched in real-model libraries (Objaverse / Smithsonian / NASA), verified by Sol and added for good
   const {sourceAssets}=await import('./asset-sourcing.mjs');
   const sourcing={find:async needs=>{log(`sourcing real models: ${needs.map(n=>n.thing).join(', ')}`);const r=await measure('asset sourcing',()=>sourceAssets(ask,needs,{log,workdir:join(workdir,'sourcing'),hasModel:cat.has}));cat=await loadCatalog({fresh:true});provenance.sourcedAssets=[...(provenance.sourcedAssets??[]),...r.added.map(e=>({id:e.id,source:e.source,license:e.license,page:e.page}))];await save();return {cat,added:r.added.map(e=>e.id)};}};
   const {mergeHistory}=await import('../../worker/acryllex-history.ts');
   const all=mergeHistory(history,await readLedger());log(`history: ${all.length} earlier reels checked for repeats`);
-  const r=await measure('story generation total',()=>gen.generateAcryllexReel({OPENAI_API_KEY:openai},topic,cat,usage,all,sourcing));
-  Object.assign(provenance,r.provenance);await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
+  const r=await measure('story generation total',()=>gen.generateAcryllexReel({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},topic,cat,usage,all,sourcing,ask));
+  Object.assign(provenance,r.provenance,{model:clientContext.generationModel,effort:clientContext.generationEffort??clientContext.effort});await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
- const reviewContext={styleReference:styleReference.hash,model:gen.MODEL,effort:gen.EFFORT,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8')),rendererCode:hash(await buildRenderBundle())};
+ // Preserve the actual author of a saved draft; new repair routing cannot relabel its origin.
+ provenance.modelRouting={...clientContext,generationModel:provenance.model??'provided-spec',generationEffort:provenance.effort??'unknown',repairModel:clientContext.generationModel,repairEffort:clientContext.generationEffort??clientContext.effort};
+ provenance.reviewModel=clientContext.reviewModel;provenance.reviewEffort=clientContext.reviewEffort??clientContext.effort;await save();
+ const reviewContext={styleReference:styleReference.hash,...clientContext,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8')),rendererCode:hash(await buildRenderBundle())};
  // 6. Distinct, required visual specialists; legacy reviewed filenames do not bypass them.
  const renderEvidence=async(current,dir,stage)=>{
   const samples=[];let offset=0;
@@ -280,21 +290,39 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
   return {sheets:[...sheets,...references,...extra],index,files};
  };
  const visualStage=async(current,stage)=>{
-  log(`Sol: ${stage.id}`);
-  return runVisualReviewStage({spec:current,stage,workdir,context:reviewContext,renderEvidence,measure,
+  log(`${reviewLabel}: ${stage.id}`);
+  const retainFailure=async failure=>{
+   const chosen=await bestReviewedVisual(failure.attempts??[]);
+   provenance.unapprovedTest=true;provenance[stage.id]={...failure,selectedBest:true,selectedAttempt:chosen.attempt.attempt,selectionReason:chosen.reason};
+   provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),stage.id])];await save();return chosen.spec;
+  };
+  if(allowUnapproved){
+   const inputHash=reviewFingerprint({spec:current,stage,context:reviewContext});
+   const previous=await readJson(join(workdir,'reviews',stage.id,inputHash.slice(0,16),'failure.json')).catch(()=>null);
+   if(previous?.attempts?.length&&(provenance.freezeVisualVersion||previous.attempts.length>=REVIEW_LIMITS.visual)){log(`Unapproved test: selecting best saved reviewed ${stage.id}`);return retainFailure(previous);}
+  }
+  const diagnostic=allowUnapproved&&provenance.freezeVisualVersion===true;
+  try{return await runVisualReviewStage({spec:current,stage,workdir,context:{...reviewContext,...(diagnostic?{diagnostic:true}:{})},renderEvidence,measure,
+   maxRenderedReviews:diagnostic?1:REVIEW_LIMITS.visual,
    review:(s,e,focus)=>reviewVisuals(ask,s,e.sheets,e.index,cat,provenance.thread??'',focus),
    repair:(s,r,focus,e,feedback)=>repairVisuals(ask,s,r,cat,focus,e.sheets,feedback),
-   onResult:async r=>{provenance[stage.id]={...r,spec:undefined};await save();}});
+   onResult:async r=>{provenance[stage.id]={...r,spec:undefined};if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),stage.id])];}await save();}});
+  }catch(e){if(!allowUnapproved||!e.reviewFailure)throw e;return retainFailure(e.reviewFailure);}
  };
  for(const stage of VISUAL_REVIEW_STAGES.slice(0,-1))spec=await visualStage(spec,stage);
  await writeFile(join(workdir,'spec.reviewed.json'),JSON.stringify(spec,null,1));
  // 7. Spoken phrasing review, then generated-voice timing review with bounded retakes.
- log('Sol: voice delivery and pacing reviews; ElevenLabs Adam at an unhurried pace');
- const voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{model:gen.MODEL,effort:gen.EFFORT},measure,
+ log(`${reviewLabel}: delivery and timing reviews; ElevenLabs Adam at unchanged provider-default speed`);
+ let voice;try{voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{...clientContext,narrationSpeed:'elevenlabs-default'},measure,
   narrate:(delivery,take)=>narrate(delivery,take,key,usage),
   reviewDelivery:text=>reviewNarrationDelivery(ask,text),
   reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
-  onResult:async r=>{provenance.voiceReview=r;await save();}});
+  onResult:async r=>{provenance.voiceReview=r;if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];}await save();}});
+ }catch(e){
+  if(!allowUnapproved||!e.voiceFailure||!e.lastVoice)throw e;
+  voice=e.lastVoice;provenance.unapprovedTest=true;provenance.voiceReview=e.voiceFailure;
+  provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];await save();
+ }
  const roughTotal=voice.total+2.2;
  const bed=process.env.ACRYLLEX_MUSIC==='0'?null:await measure('music generation',()=>music(spec.musicBrief,roughTotal+1,key,usage)).catch(e=>{log(`music unavailable (${e.message}); continuing without a bed`);provenance.music='unavailable';return null;});
  const beat=bed?detectBeats(bed):null;if(beat){log(`beat grid ${beat.bpm} BPM, phase ${beat.phase}s, beat enters at ${beat.from}s`);provenance.beat=beat;}
@@ -309,7 +337,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
  }
  // Sound design + review
  const {autoCues}=await import('../../src/acryllex/cues.ts');
- const sfx=sfxLibrary(join(CACHE,'sfx'),key,{onUsage:usage,onReject:r=>log(`sfx rejected (musical): ${r.prompt}`)});
+ const sfx=sfxLibrary(join(AUDIO_CACHE,'sfx'),key,{onUsage:usage,onReject:r=>log(`sfx rejected (musical): ${r.prompt}`)});
  const timeline=timelineText(spec);await writeFile(join(workdir,'timeline.txt'),timeline);
  const cueFile=join(workdir,'cues.designed.json');
  if(!await exists(cueFile)){
@@ -325,7 +353,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
   log(`mix v1 (${cues.length} cues)`);
   const c1=await measure('mix calibration and effects preparation',()=>calibrateMix({voice,lead:timed.lead,cues,sfx,bed,total,out:audio},log));
   const stats=await mixStats(audio,cues,total,!!bed,c1.clarity);provenance.mixStatsV1=stats;await save();
-  if(ask){log('Sol: sound review');cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,timeline,cues,stats)),total);}
+  if(ask){log(`${reviewLabel}: sound review`);cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,timeline,cues,stats)),total);}
   await writeFile(finalCues,JSON.stringify(cues,null,1));
  }
  cues=await readJson(finalCues);
@@ -337,10 +365,11 @@ export async function produce(workdir,{topic='',specFile=null,history=[]}={}){
  log('render video');
  const silent=join(workdir,'video.mp4');
  await measure('final video rendering',()=>renderVideo(spec,silent));
- const finished=join(workdir,'finished.mp4');
- await measure('final audio video mux',()=>run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',audio,'-map','0:v','-map','1:a','-c:v','copy','-c:a','copy','-t',total.toFixed(3),'-movflags','+faststart',finished]));
+ const finished=join(workdir,provenance.unapprovedTest?'unapproved-test.mp4':'finished.mp4');
+ const picture=['-c:v','copy',...(provenance.unapprovedTest?['-metadata','title=UNAPPROVED PRIVATE TEST','-metadata',`comment=Failed reviews: ${(provenance.failedReviews??[]).join(', ')}. Private experiment only; never approved for publication.`]:[])];
+ await measure('final audio video mux',()=>run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',audio,'-map','0:v','-map','1:a',...picture,'-c:a','copy','-t',total.toFixed(3),'-movflags','+faststart',finished]));
  for(const i of [0,1,2])await rm(`${audio}.stem${i}.wav`,{force:true});
- {const {topicKey}=await import('../../worker/acryllex-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
+ if(recordHistory&&!provenance.unapprovedTest){const {topicKey}=await import('../../worker/acryllex-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
   await recordReel({at:new Date().toISOString(),title:spec.title,topic:idea.topic??spec.title,topicKey:idea.topicKey||topicKey(idea.topic??spec.title??''),summary:spec.scenes.map(s=>s.say).join(' ').slice(0,200),workdir});}
  log(`done: ${finished} (${total.toFixed(1)} s)`);
  return {finished,spec,provenance};

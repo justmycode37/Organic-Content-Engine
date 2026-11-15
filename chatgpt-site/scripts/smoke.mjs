@@ -914,6 +914,12 @@ test('Acryllex completion rejects an unreviewed reel and preserves the failed qu
   const bytes=new Uint8Array(256),response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...accountHeaders,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});const {materialId}=await response.json();
   const result=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Unreviewed'},provenance:{reviewsDisabled:true}}});assert.equal(result.status,409);assert.equal(result.body.error.code,'reviews_required');
   assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'leased');
+  const stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];
+  const provenance={model:'claude-opus-5-5',effort:'medium',reviewModel:'gpt-6.1-sol',reviewEffort:'xhigh',styleReference:{hash:'pinned-owner-reference'},voiceReview:{passed:true},mixStatsFinal:'Measured mix',steps:['fact-check+coherence','storyboard-review','sound-review'],...Object.fromEntries(stages.map(stage=>[stage,{passed:true}]))};
+  const warning=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Retained test'},provenance:{...provenance,'visual-final-review':{passed:false,selectedBest:true}}}});
+  assert.equal(warning.status,409,'Retaining a useful candidate does not approve it for publication');
+  const approved=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Reviewed Opus/Sol reel'},provenance}});
+  assert.equal(approved.status,200,JSON.stringify(approved.body));
  }finally{await s.stop();}
 });
 

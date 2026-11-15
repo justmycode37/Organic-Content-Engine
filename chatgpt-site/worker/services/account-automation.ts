@@ -3,6 +3,7 @@ import {AppError} from '../errors.ts';
 import {listAccounts,accountSlots,type Account} from './accounts.ts';
 import {Postiz} from './postiz.ts';
 import {accountNotice} from './account-notifications.ts';
+import {hasDefaultAcryllexProfile} from '../acryllex-model-policy.ts';
 const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
 export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
@@ -41,7 +42,7 @@ export async function completeAccountJob(c:Container,id:string,lease:string,inpu
  const m=await c.materials.get(input.materialId);if(!m.uploaded||m.kind!=='finished'||m.mime!=='video/mp4')throw new AppError(409,'output_invalid','Upload a finished MP4 first');
  if(row.account_id==='acryllex'){
   const p=input.provenance as any,stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];
-  if(!p||p.reviewsDisabled||p.model!=='gpt-6.1-sol'||p.effort!=='xhigh'||stages.some(s=>p[s]?.passed!==true)||p.voiceReview?.passed!==true||!p.styleReference?.hash||!p.mixStatsFinal||!['fact-check+coherence','storyboard-review','sound-review'].every(s=>p.steps?.includes(s)))throw new AppError(409,'reviews_required','Acryllex requires the full approved review pipeline before completion');
+  if(!p||p.reviewsDisabled||!hasDefaultAcryllexProfile(p)||stages.some(s=>p[s]?.passed!==true)||p.voiceReview?.passed!==true||!p.styleReference?.hash||!p.mixStatsFinal||!['fact-check+coherence','storyboard-review','sound-review'].every(s=>p.steps?.includes(s)))throw new AppError(409,'reviews_required','Acryllex requires the full approved review pipeline before completion');
  }
  const provenance={...(input.provenance as object),delivery:parse(row.provenance).delivery};
  await c.db.prepare("UPDATE account_automation_jobs SET status='completed',spec=?,provenance=?,error=NULL,updated_at=? WHERE id=? AND lease_id=? AND status='leased'").bind(JSON.stringify(input.spec),JSON.stringify(provenance),now(),id,lease).run();
