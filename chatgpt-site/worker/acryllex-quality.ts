@@ -32,9 +32,16 @@ export async function reviewVisuals(ask:Ask,spec:AcryllexSpec,sheets:Img[],frame
 }
 
 /** Runtime timing fields are not authorable; preserve them exactly through a visual repair. */
-function authorSpec(spec:AcryllexSpec){const {beat:_,...base}=spec;return {...base,scenes:base.scenes.map(({words:_,...scene})=>scene)};}
+function authorSpec(spec:AcryllexSpec){
+ const {beat:_,...base}=spec;
+ return {...base,scenes:base.scenes.map(({words:_,...scene})=>({...scene,
+  // The camera planner emits 40ms hard cuts; the authoring schema starts at
+  // 50ms. Present a valid authoring value that still qualifies as a hard cut.
+  ...(scene.events?{events:scene.events.map(e=>e.camera&&e.easing==='hold'&&e.dur===0.04?{...e,dur:0.05}:e)}:{}),
+ }))};
+}
 export async function repairVisuals(ask:Ask,spec:AcryllexSpec,review:VisualVerdict,cat:Catalog,stage:VisualStage,sheets:Img[],validationFeedback=''){
- const raw=await ask(`${stage.id}-repair`,`${JSON.stringify(ACRYLLEX_POLICY)}\n${CAMERA_DIRECTION_RULES}\n${SHOT_TRANSITION_RULES}\nRepair the must-fix findings from ${stage.id}: ${JSON.stringify(review)}. Preserve good earlier work. Keep scene count, order and EVERY say line EXACTLY. Never change duration; runtime words/beat are restored separately. Use at most four objects per scene. Keep event durations >=0.05 seconds. Use only verified catalogue assets and supported controls; do not invent a source/rig. If the requested repair needs an unavailable asset, leave the issue unresolved rather than fake one. Return the complete authorable spec JSON.\nPrevious invalid proposal feedback: ${validationFeedback||'none'}\nCatalogue: ${cat.text}\nAssets: ${cat.assets}\nInput spec: ${JSON.stringify(authorSpec(spec))}\nSchema: ${JSON.stringify(z.toJSONSchema(specSchema))}`,0,{name:'acryllex_visual_repair',schema:specSchema},sheets);
+ const raw=await ask(`${stage.id}-repair`,`${JSON.stringify(ACRYLLEX_POLICY)}\n${CAMERA_DIRECTION_RULES}\n${SHOT_TRANSITION_RULES}\nRepair the must-fix findings from ${stage.id}: ${JSON.stringify(review)}. Preserve good earlier work. Keep scene count, order and EVERY say line EXACTLY. Never change duration; runtime words/beat are restored separately. Use at most four objects per scene. Keep event durations >=0.05 seconds. For authored camera hard cuts use easing:"hold", dur:0.05; the 0.04 value in the shot rules describes internal planner output and is not valid authoring JSON. Use only verified catalogue assets and supported controls; do not invent a source/rig. If the requested repair needs an unavailable asset, leave the issue unresolved rather than fake one. Return the complete authorable spec JSON.\nPrevious invalid proposal feedback: ${validationFeedback||'none'}\nCatalogue: ${cat.text}\nAssets: ${cat.assets}\nInput spec: ${JSON.stringify(authorSpec(spec))}\nSchema: ${JSON.stringify(z.toJSONSchema(specSchema))}`,0,{name:'acryllex_visual_repair',schema:specSchema},sheets);
  let data:unknown;try{data=parse(raw);}catch{return {valid:false as const,problems:['invalid JSON'],proposal:raw};}
  const p=specSchema.safeParse(data);
  if(!p.success)return {valid:false as const,problems:p.error.issues.map(e=>`${e.path.join('.')}: ${e.message}`),proposal:raw};
@@ -48,10 +55,10 @@ export async function repairVisuals(ask:Ask,spec:AcryllexSpec,review:VisualVerdi
  return {valid:true as const,spec:out,changes:[...cameras.changes,...cuts.changes],proposal:raw};
 }
 
-// These are project pacing targets, not a claim that timing measures audible naturalness.
-export const VOICE_PACING={defaultSpeed:0.82,minSpeed:0.72,maxSpeed:0.95,targetWpm:160,maxWpm:175,maxPhraseWpm:220,minSentencePause:0.18};
+// Native provider speed is fixed. Timing measurements never authorize a rate change.
+export const VOICE_PACING={speedMode:'elevenlabs-default',minSentencePause:0.18} as const;
 export const spokenTokens=(text:string)=>text.toLowerCase().match(/[\p{L}\p{N}]+(?:['’][\p{L}\p{N}]+)*/gu)??[];
-const deliverySchema=z.object({text:z.string().min(1),speed:z.number().min(VOICE_PACING.minSpeed).max(VOICE_PACING.maxSpeed),notes:z.string(),pauses:z.array(z.object({afterWord:z.number().int().min(1),minSeconds:z.number().min(0.18).max(0.7),why:z.string()}).strict()).max(8)}).strict();
+const deliverySchema=z.object({text:z.string().min(1),notes:z.string(),pauses:z.array(z.object({afterWord:z.number().int().min(1),minSeconds:z.number().min(0.18).max(1.5),why:z.string()}).strict()).max(8)}).strict();
 export type Delivery=z.infer<typeof deliverySchema>;
 export function validateDelivery(value:unknown,original:string){
  const d=deliverySchema.parse(value);
@@ -63,7 +70,7 @@ export function validateDelivery(value:unknown,original:string){
  return d;
 }
 export async function reviewNarrationDelivery(ask:Ask,text:string){
- const raw=await ask('voice-delivery-review',`Review this narration for speaking naturally to one curious person. Calm, warm, conversational, never a hurried announcer or a staccato list. Mark natural thought boundaries with punctuation; allow a sentence to flow across visual scene cuts. Keep EVERY word, spelling, order and whitespace word boundary; only punctuation may change. Preserve contractions and hyphens within words. Choose TTS speed 0.72-0.95 (start near 0.82; this narrator was measured over 200 WPM at its raw setting). Select at most eight meaningful breaths/thought pauses using 1-based whitespace word indices; never pause just because a scene ends, never inside a phrase. Let the hook breathe and the answer land. Aim around 140-165 words/minute; let the reel become longer instead of cramming speech into 40 seconds. This is text direction, not an audio listening review.\nNarration: ${text}`,0,{name:'acryllex_delivery',schema:deliverySchema});
+ const raw=await ask('voice-delivery-review',`Review this narration for natural connected speech to one curious person. ElevenLabs must use its unchanged DEFAULT SPEED. Do not propose a speed setting, slowing, speeding up or time stretching. Mark natural thought boundaries with punctuation; allow a sentence to flow across visual scene cuts. Keep EVERY word, spelling, order and whitespace word boundary; only punctuation may change. Preserve contractions and hyphens within words. Select at most eight meaningful thought boundaries using 1-based whitespace word indices, with brief pause hints. Never pause just because a scene ends, never inside a connected phrase, and never add long pauses to hit a word-rate target. Pause hints are guidance, not mandatory silence lengths. This is text direction, not an audio listening review.\nNarration: ${text}`,0,{name:'acryllex_delivery',schema:deliverySchema});
  return validateDelivery(parse(raw),text);
 }
 type Word={text:string;start:number;end:number};
@@ -77,13 +84,13 @@ export function voicePacingMetrics(words:Word[],total:number,delivery:Delivery){
  for(let i=0;i+12<=words.length;i++)fastestPhraseWpm=Math.max(fastestPhraseWpm,720/(words[i+11]!.end-words[i]!.start));
  const gaps=words.slice(0,-1).map((w,i)=>({afterWord:i+1,text:w.text,gapSeconds:+Math.max(0,words[i+1]!.start-w.end).toFixed(3)}));
  const requested=new Map(delivery.pauses.map(p=>[p.afterWord,p.minSeconds]));
- const pauses=gaps.filter(g=>requested.has(g.afterWord)||/[.!?]["'”’)]*$/.test(original[g.afterWord-1]!)).map(g=>({...g,minimumSeconds:requested.get(g.afterWord)??VOICE_PACING.minSentencePause}));
- const problems=[...(wpm>VOICE_PACING.maxWpm?[`Average ${wpm.toFixed(1)} WPM exceeds ${VOICE_PACING.maxWpm}`]:[]),...(fastestPhraseWpm>VOICE_PACING.maxPhraseWpm?[`Fastest 12-word phrase ${fastestPhraseWpm.toFixed(1)} WPM exceeds ${VOICE_PACING.maxPhraseWpm}`]:[]),...pauses.filter(p=>p.gapSeconds+0.015<p.minimumSeconds).map(p=>`Missing breath after word ${p.afterWord}: ${p.gapSeconds}s, needs ${p.minimumSeconds}s`)];
+ const pauses=gaps.filter(g=>requested.has(g.afterWord)||/[.!?]["'”’)]*$/.test(original[g.afterWord-1]!)).map(g=>({...g,minimumSeconds:VOICE_PACING.minSentencePause,preferredSeconds:requested.get(g.afterWord)}));
+ const problems=pauses.filter(p=>p.gapSeconds+0.015<p.minimumSeconds).map(p=>`Missing thought boundary after word ${p.afterWord}: ${p.gapSeconds}s, needs ${p.minimumSeconds}s`);
  return {wordCount:words.length,totalSeconds:total,wpm:+wpm.toFixed(1),fastestPhraseWpm:+fastestPhraseWpm.toFixed(1),pauses,gaps,problems};
 }
 const voiceVerdictSchema=z.object({passed:z.boolean(),summary:z.string(),issues:z.array(z.string()),nextDelivery:deliverySchema}).strict();
 export async function reviewVoicePacing(ask:Ask,text:string,delivery:Delivery,metrics:ReturnType<typeof voicePacingMetrics>){
- const raw=await ask('voice-pacing-review',`Independently review the GENERATED narration's measured word timings against the delivery direction. Check average pace, rushed local phrases, sentence/thought pauses, breathing room after the hook and before the answer, and overly choppy delivery. The user wants natural, unhurried speech. Timing problems must fail. Suggest punctuation and a lower TTS speed when needed. Keep every word and whitespace word boundary unchanged; do not insert SSML/audio tags. On a pass, nextDelivery must equal the current delivery. You have TEXT AND ALIGNMENT ONLY; no audio is attached. Do not claim to hear pronunciation, emotion, timbre, breaths or artifacts, or certify audible naturalness.\nOriginal: ${text}\nDirection: ${JSON.stringify(delivery)}\nActual measurements: ${JSON.stringify(metrics)}\nPacing targets: ${JSON.stringify(VOICE_PACING)}`,0,{name:'acryllex_voice_verdict',schema:voiceVerdictSchema});
+ const raw=await ask('voice-pacing-review',`Review the GENERATED narration's word timings at ElevenLabs' unchanged DEFAULT SPEED. Speed must never be changed. WPM and fastest-phrase measurements are descriptive, not pass/fail thresholds; do not fail a take solely for those numbers or ask for slower speech. Check connected phrasing, genuinely missing thought boundaries and disruptive internal pauses. Preferred pause hints are guidance; a small shortfall is not a defect when the boundary is clear. If needed, suggest punctuation only. Keep every word and whitespace word boundary unchanged; do not insert SSML/audio tags or add long silences to reach a word-rate target. On a pass, nextDelivery must equal the current delivery. You have TEXT AND ALIGNMENT ONLY; no audio is attached. Do not claim to hear pronunciation, emotion, timbre, breaths or artifacts, or certify audible naturalness.\nOriginal: ${text}\nDirection: ${JSON.stringify(delivery)}\nActual measurements: ${JSON.stringify(metrics)}\nTiming policy: ${JSON.stringify(VOICE_PACING)}`,0,{name:'acryllex_voice_verdict',schema:voiceVerdictSchema});
  const verdict=voiceVerdictSchema.parse(parse(raw));
  validateDelivery(verdict.nextDelivery,text);
  return {...verdict,passed:verdict.passed&&verdict.issues.length===0&&metrics.problems.length===0,evidence:'text-and-generated-word-timings; no audio listening'};
