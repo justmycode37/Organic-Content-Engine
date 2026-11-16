@@ -27,16 +27,16 @@ The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-There are at most **two Opus repair API calls total per reel**, shared across script,
+There are at most **five Opus repair API calls total per reel**, shared across script,
 storyboard and every visual stage. Invalid proposals, transport retries and
 interrupted calls consume this allowance. Private reservations are saved before
 sending; restarting the worker cannot reset them. Earlier caches are counted from
 recorded usage. Initial plan/script/storyboard/sound authoring is separate.
 
-Each visual stage returns explicit findings and a verdict, with up to three rendered
-review attempts (initial version plus at most two revisions) and two authoring proposals per
-repair round, subject to the shared two-call budget. Every accepted repair receives fresh rendered evidence and a new
-review. After three candidates, select the best actually reviewed candidate and
+Each visual stage returns explicit findings and a verdict, with up to six rendered
+review attempts (initial version plus at most five revisions) and five authoring proposals per
+repair round, subject to the shared five-call budget. Every accepted repair receives fresh rendered evidence and a new
+review. After six candidates or exhaustion of the shared repair budget, select the best actually reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late

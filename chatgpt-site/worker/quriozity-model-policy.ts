@@ -1,4 +1,6 @@
 /** Persistent Quriozity defaults; one-off comparison settings stay in their runner. */
+// Shared across every Opus repair request in a reel; durable reservations enforce this cap.
+export const OPUS_REPAIR_LIMIT=5;
 export const QURIOZITY_MODELS={generation:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'xhigh'}} as const;
 export function quriozityStepRole(step:string):'generation'|'review'{
  if(step.endsWith('-repair'))return 'generation';

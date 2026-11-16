@@ -18,11 +18,11 @@ replacement for content reviews. The November 14 raw onion reel was a one-off
 experiment; its no-review producer and unreviewed cache are not the normal workflow.
 
 Every visual repair must be rendered and reviewed again. Save review findings and
-before/after versions. Allow at most 2 Opus repair API calls TOTAL per reel,
+before/after versions. Allow at most 5 Opus repair API calls TOTAL per reel,
 shared across script, storyboard and all visual stages, including invalid
 proposals, transport retries and interrupted requests. Persist reservations before
 requests; restarts must not reset the budget. Each visual stage may review the
-initial version plus at most 2 revisions (3 candidates); that is not a new repair
+initial version plus at most 5 revisions (6 candidates); that is not a new repair
 allowance. Allow up to 3 generated voice takes. When the repair budget is spent,
 select the best version that was actually rendered and reviewed and continue
 finishing the reel. Never discard a good earlier version merely because a later
