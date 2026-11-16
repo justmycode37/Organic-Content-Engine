@@ -1,5 +1,20 @@
 # Hedgy sound direction and reference measurements
 
+## Current music direction — November 16, 2026
+
+Keep strong rhythmic drive, plenty of action and a clear melody, with slightly less
+trailer-like drama. Fast percussive keyboard or piano-like melodic patterns,
+syncopated accents, answering synth phrases, warm moving bass and tight supporting
+drums are useful starting points. A roughly 90–120 BPM pulse can carry much faster
+double-time note motion. Vary the instrumentation and hook for each story while
+leaving room for narration.
+
+The owner's supplied opening reference and subsequent feedback favored this
+energetic direction. The sparse, gentle solo-piano interpretation was rejected;
+do not use it as the template. Avoid huge trailer booms, aggressive industrial
+distortion, sleepy ambient passages and overly dramatic builds. Reference audio,
+generated auditions and provider traces remain local under `artifacts/`.
+
 **Shot-author guidance:** For weight or arrival, use `thump`, `thud`, `land`, `clunk`, `stamp`, `sub`, or `drop`; for movement, use `swish`, `whoosh`, `whump`, `slide`, or `whip` (the cinematic default falls into an arrival; set `direction: "up"` for a departure); use `pop`, `pluck`, `coin`, `ding`, `sparkle`, `click`, `tick`, and `tap` as short scale-tuned accents rather than literal clicks; use `build`, `rise`, `reverse`, or `rumble` for a build, with the rise ending exactly on its target cue. Keep `footfall`, `rustle`, `paper`, and `knock` as quiet foley underneath narration. At scene changes, leave room for the soft swell to land on the cut, then the low boom and one tuned accent; keep every effect below the spoken line. `MOTION_SFX_STYLE=cinematic` selects this sound, and `MOTION_SFX_STYLE=foley` restores the earlier dry palette.
 
 ## What the reference sounds like

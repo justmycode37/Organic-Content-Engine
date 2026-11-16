@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "series": "QURIOZITY",
+  "title": "Objaverse brain — strong contrast",
+  "captions": false,
+  "format": {
+    "width": 2048,
+    "height": 2048,
+    "cell": 6.545154639175258
+  },
+  "scenes": [
+    {
+      "say": "",
+      "duration": 3,
+      "hue": "white",
+      "camera": {
+        "angle": "three-quarter-left",
+        "fill": 0.8,
+        "move": "static"
+      },
+      "objects": [
+        {
+          "id": "brain",
+          "model": "mesh",
+          "params": {
+            "objaverse": "0aa0e33c5c854d1bab7bac9e1c7acaec"
+          },
+          "enter": "none",
+          "idle": "none"
+        }
+      ],
+      "raster": {
+        "activity": 0.06,
+        "activityRate": 12,
+        "cell": 6.545154639175258,
+        "dotRoundness": 1,
+        "dotSoftness": 0.8797250859106529
+      },
+      "light": {
+        "dir": [
+          1.5,
+          1.1,
+          1.2
+        ],
+        "key": 0.65,
+        "fill": 0.08,
+        "ambient": 0.065,
+        "rim": 0.35,
+        "contrast": 2.4,
+        "exposure": 0.68,
+        "blackPoint": 0.025,
+        "whitePoint": 0.9,
+        "inkLo": 0.16,
+        "gamma": 0.8,
+        "softness": 1.6714776632302404
+      }
+    }
+  ],
+  "look": {
+    "inkMode": "fixed",
+    "palette": {
+      "blue": "#382ef5",
+      "red": "#d00a3e",
+      "azure": "#1e56c9",
+      "white": "#c5c5c5"
+    },
+    "textColor": "#c5c5c5",
+    "dotRoundness": 1,
+    "dotSoftness": 0.8797250859106529,
+    "noise": 0.015,
+    "fuzz": 0,
+    "blackPoint": 0.025,
+    "whitePoint": 0.9,
+    "inkLo": 0.16,
+    "gamma": 1,
+    "aoMethod": "legacy",
+    "contrast": 0.8,
+    "shadows": 1,
+    "ao": 1,
+    "gap": 0,
+    "ink": 1,
+    "key": 0.65,
+    "fill": 0.08,
+    "ambient": 0.065,
+    "rim": 0.35,
+    "dir": [
+      1.5,
+      1.1,
+      1.2
+    ]
+  }
+}

@@ -47,9 +47,9 @@ export const HEDGY_CONCEPTS=[
  {id:'correlation-crash',name:'Correlation: in a crash, things that usually move apart fall together'},
 ] as const;
 export type HedgyConceptId=(typeof HEDGY_CONCEPTS)[number]['id'];
-/** Hedgy scores are always action / electric: driving or dark-driving. Never happy, playful or lo-fi. */
+/** Hedgy keeps action and forward motion, led by a clear melody rather than trailer drama. */
 export const HEDGY_MOODS=['drive','tense'] as const;
-export const HEDGY_MUSIC_STYLE='High-energy electronic ACTION score (think heist/chase trailer, cyberpunk, electro, darksynth, drum-and-bass, industrial, electric guitar riffs): punchy drums, distorted or pulsing synth bass, 120–150 BPM, tense and propulsive. Never happy, cute, playful, whimsical, jazzy, acoustic, lo-fi, swing, chamber or orchestral-comedy.';
+export const HEDGY_MUSIC_STYLE='Energetic, melodic electronic / experimental indie instrumental with strong rhythmic drive and a clearly audible melodic hook. Favor fast, percussive piano-like or slightly gritty electric-keyboard patterns, answering synth phrases, syncopated accents, moving warm bass and tight supporting drums. Roughly 90–120 BPM with brisk double-time melodic motion; vary the lead, rhythm and harmony between stories. Keep plenty of action and forward momentum, with slightly less cinematic drama: controlled builds, no huge trailer booms or aggressive industrial distortion. Leave space for narration. Never sparse slow solo piano, ambient meditation, sleepy lo-fi, cute whimsy or orchestral comedy; no vocals.';
 
 /** What a past reel used; built from stored provenance (or a title for older reels). */
 export interface HedgyHistoryEntry {title?:string;concept?:string;item?:string;music?:string;musicBrief?:string;setting?:string;summary?:string}

@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "series": "QURIOZITY",
+  "title": "Objaverse anatomical brain in white",
+  "style": "reference-recording",
+  "captions": false,
+  "format": {
+    "width": 2048,
+    "height": 2048
+  },
+  "scenes": [
+    {
+      "say": "",
+      "duration": 3,
+      "hue": "white",
+      "camera": {
+        "angle": "three-quarter-left",
+        "fill": 0.8,
+        "move": "static"
+      },
+      "objects": [
+        {
+          "id": "brain",
+          "model": "mesh",
+          "params": {
+            "objaverse": "0aa0e33c5c854d1bab7bac9e1c7acaec"
+          },
+          "enter": "none",
+          "idle": "none"
+        }
+      ]
+    }
+  ]
+}
