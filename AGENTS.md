@@ -1,14 +1,14 @@
 
 ## User model preference
 
-For Acryllex, use `claude-opus-5-5` at `medium` effort for generation, creative
+For Quriozity, use `claude-opus-5-5` at `medium` effort for generation, creative
 specialists and repairs. Use `gpt-6.1-sol` for every review, retaining `xhigh`
 review effort unless the user explicitly changes it. Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
 
-## Required Acryllex reviews
+## Required Quriozity reviews
 
-Every normal Acryllex reel must run the full review pipeline: factual accuracy,
+Every normal Quriozity reel must run the full review pipeline: factual accuracy,
 story coherence and clarity, storyboard direction, subject realism/source fidelity,
 composition/text readability, motion/visual continuity, owner-reference style comparison, spoken-delivery direction,
 generated-voice pacing/pauses, final visual review on actual narration timing, and

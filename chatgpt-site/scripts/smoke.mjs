@@ -59,6 +59,38 @@ after(async () => {
 const future = (hours = 24) => new Date(Date.now() + hours * 3_600_000).toISOString();
 const past = (minutes) => new Date(Date.now() - minutes * 60_000).toISOString();
 
+test('Quriozity rebrand migrates the saved account, schedule, connections and history once', async () => {
+ const {db,call,stop}=await start({}, {persist:'quriozity-rebrand'});
+ const at=new Date().toISOString(),week=Array.from({length:7},(_,day)=>({day,times:['07:15','19:30']}));
+ const legacy={id:'acryllex',name:'acryllex',platform:'instagram',topic:'Owner topic',postsPerDay:2,postingTime:'07:15',timezone:'Europe/Zurich',enabled:true,enabledSince:at,schedulerVersion:2,week,postizIntegrationId:'owner-instagram',notifyResults:false};
+ await db.batch([
+  db.prepare('INSERT INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind('acryllex',JSON.stringify(legacy),at,at),
+  db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,created_at,updated_at) VALUES('retained-job','acryllex',?,'published',?,?)").bind(at,at,at),
+  db.prepare("INSERT INTO account_runs(id,account_id,scheduled_at,status) VALUES('retained-run','acryllex',?,'completed')").bind(at),
+  db.prepare("INSERT INTO account_social_credentials(workspace_account_id,platform,account_id,name,credentials,updated_at) VALUES('acryllex','instagram','instagram-id','Owner profile','encrypted-credential',?)").bind(at),
+  db.prepare("INSERT INTO oauth_pending(state,platform,verifier,expires,browser_hash,workspace_account_id) VALUES('retained-state','instagram','verifier',9999999999999,'browser','acryllex')"),
+  db.prepare("INSERT INTO job_state(name,last_run_at,last_result) VALUES('account_schedule:acryllex',?,'{}')").bind(at),
+  db.prepare("INSERT INTO job_state(name,last_run_at,last_result) VALUES('account_notice:retained-job:published',?,?)").bind(at,JSON.stringify({accountId:'acryllex',accountName:'acryllex',status:'published',acknowledged:false})),
+ ]);
+ const result=await call('GET','/api/accounts');assert.equal(result.status,200);
+ const account=result.body.accounts.find(a=>a.id==='quriozity');
+ assert.ok(account);assert.equal(account.name,'Quriozity');assert.equal(account.enabled,true);
+ assert.equal(account.enabledSince,at);assert.equal(account.postizIntegrationId,'owner-instagram');assert.equal(account.notifyResults,false);
+ assert.deepEqual(account.week,week);assert.equal(account.topic,'Owner topic');assert.equal(account.brand.account,'quriozity');assert.equal(account.brand.series,'QURIOZITY');
+ assert.equal(await db.prepare("SELECT id FROM accounts WHERE id='acryllex'").first(),null);
+ for(const table of ['account_automation_jobs','account_runs'])assert.equal((await db.prepare(`SELECT account_id FROM ${table}`).first()).account_id,'quriozity');
+ assert.equal((await db.prepare('SELECT workspace_account_id,credentials FROM account_social_credentials').first()).credentials,'encrypted-credential');
+ for(const table of ['account_social_credentials','oauth_pending'])assert.equal((await db.prepare(`SELECT workspace_account_id FROM ${table}`).first()).workspace_account_id,'quriozity');
+ assert.equal((await db.prepare("SELECT last_run_at FROM job_state WHERE name='account_schedule:quriozity'").first()).last_run_at,at);
+ const notice=JSON.parse((await db.prepare("SELECT last_result FROM job_state WHERE name='account_notice:retained-job:published'").first()).last_result);
+ assert.deepEqual(notice,{accountId:'quriozity',accountName:'Quriozity',status:'published',acknowledged:false});
+ await call('PATCH','/api/accounts/quriozity',{json:{name:'Quriozity',notifyResults:true}});
+ const again=await call('GET','/api/accounts');assert.equal(again.body.accounts.filter(a=>a.id==='quriozity').length,1);
+ assert.equal(again.body.accounts.find(a=>a.id==='quriozity').notifyResults,true);
+ assert.equal((await db.prepare('SELECT count(*) AS n FROM account_automation_jobs').first()).n,1);
+ await stop();
+});
+
 test('anonymous callers and the frontend', async () => {
   const { call, stop } = await start({}, { persist: 'anon' });
   assert.deepEqual((await call('GET', '/api/health', { headers: {} })).body, { ok: true });
@@ -905,11 +937,11 @@ test('an uncertain Postiz create request stops with needs_attention and never cr
  }finally{await s.stop();}
 });
 
-test('Acryllex completion rejects an unreviewed reel and preserves the failed quality gate',async()=>{
- const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'acryllex-completion-gate'});
+test('Quriozity completion rejects an unreviewed reel and preserves the failed quality gate',async()=>{
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'quriozity-completion-gate'});
  try{
-  await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='acryllex'").run();
-  const id=crypto.randomUUID(),at=past(1);await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'acryllex',?,?,?)").bind(id,at,at,at).run();
+  await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='quriozity'").run();
+  const id=crypto.randomUUID(),at=past(1);await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'quriozity',?,?,?)").bind(id,at,at,at).run();
   const {job}= (await s.call('POST','/api/jobs/accounts/claim',{headers:accountHeaders})).body;
   const bytes=new Uint8Array(256),response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...accountHeaders,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});const {materialId}=await response.json();
   const result=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Unreviewed'},provenance:{reviewsDisabled:true}}});assert.equal(result.status,409);assert.equal(result.body.error.code,'reviews_required');

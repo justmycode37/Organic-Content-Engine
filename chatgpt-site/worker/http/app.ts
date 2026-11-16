@@ -236,7 +236,7 @@ export function createApp(): Hono<AppEnv> {
    if(postiz.configured)try{targets=await postiz.integrations();}catch{postizError='Postiz connection unavailable';}
    for(const a of accounts){
     const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);
-    const issues=[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','acryllex'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Acryllex and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
+    const issues=[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','quriozity'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Quriozity and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
     (a as any).connectionStatus={connected:!!target,setupRequired:postiz.configured?[]:['POSTIZ_API_KEY'],provider:'postiz',profile:target?.profile};
     (a as any).health={state:!a.enabled?'paused':issues.length?'blocked':'running',issues};
     const runs=await x.db.prepare('SELECT id,scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();
@@ -250,7 +250,7 @@ export function createApp(): Hono<AppEnv> {
    if(!row)throw notFound('Account',c.req.param('id'));const next={...JSON.parse(row.value),...patch};
    if(patch.postizIntegrationId)await new Postiz(c.env).target(patch.postizIntegrationId);
    if(patch.enabled===true){
-    if(!['hedgy','acryllex'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','Automatic reel production supports Acryllex and Hedgy on Instagram');
+    if(!['hedgy','quriozity'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','Automatic reel production supports Quriozity and Hedgy on Instagram');
     if(!next.week?.some((d:{times:string[]})=>d.times.length)&&next.week)throw new AppError(409,'schedule_empty','Choose at least one day and generation time');
     if(!next.postizIntegrationId)throw new AppError(409,'account_missing','Choose a Postiz Instagram account first');
     await new Postiz(c.env).target(next.postizIntegrationId);

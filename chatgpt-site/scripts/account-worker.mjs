@@ -8,17 +8,17 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
 const safe=s=>String(s).replace(/[^a-zA-Z0-9_-]/g,'_');
 async function run(bin,args,env){await new Promise((resolve,reject)=>{const c=spawn(bin,args,{env,stdio:['ignore','ignore','ignore']});c.once('error',reject);c.once('close',n=>n===0?resolve():reject(Error(`${bin} failed (${n})`)));});}
-/** Acryllex: Opus medium authors, Sol reviews, then the dithered 3D renderer. */
-async function makeAcryllex(job){
+/** Quriozity: Opus medium authors, Sol reviews, then the dithered 3D renderer. */
+async function makeQuriozity(job){
  const cache=join(CACHE,`${safe(job.id)}`);await mkdir(cache,{recursive:true});
  const done=join(cache,'finished.mp4');
- const {produce}=await import('./acryllex/produce.mjs');
+ const {produce}=await import('./quriozity/produce.mjs');
  const history=(Array.isArray(job.history)?job.history:[]).map(h=>({title:h.title,topic:h.topic,topicKey:h.topicKey,summary:h.summary}));
  const r=await produce(cache,{history});
  return {done:r.finished??done,spec:r.spec,provenance:r.provenance};
 }
 async function make(job,dir){
- if(job.account?.id==='acryllex')return makeAcryllex(job);
+ if(job.account?.id==='quriozity')return makeQuriozity(job);
  const cache=join(CACHE,`${safe(job.id)}`), done=join(cache,'finished.mp4'),specFile=join(cache,'spec.json'),provFile=join(cache,'provenance.json');
  await mkdir(cache,{recursive:true});let spec,provenance;
  try{spec=JSON.parse(await readFile(specFile));provenance=JSON.parse(await readFile(provFile));}catch{

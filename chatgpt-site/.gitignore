@@ -13,6 +13,10 @@
 *.pem
 .DS_Store
 /.motion-cache/
+.quriozity-assets/
+.quriozity-cache/
+.quriozity-history.json
+# Private paths retained by older installations.
 .acryllex-assets/
 .acryllex-cache/
 .acryllex-history.json
