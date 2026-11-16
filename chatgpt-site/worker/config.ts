@@ -16,6 +16,7 @@ const secureUrl = z.string().url().refine((value) => {
 
 const schema = z.object({
   OWNER_USER_ID: optionalString,
+  WORKSPACE_ACCESS: z.enum(['owner', 'password']).default('owner'),
   JOB_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
   RENDER_WORKER_TOKEN: z.string().min(32, 'must be at least 32 characters').optional(),
   SITES_SERVICE_ACCESS_TRUSTED: z.enum(['true', 'false']).default('false'),
@@ -45,6 +46,7 @@ const schema = z.object({
 
 export interface Config {
   ownerUserId: string | null;
+  workspaceAccess: 'owner' | 'password';
   jobToken: string | null;
   renderWorkerToken: string | null;
   serviceAccessTrusted: boolean;
@@ -101,9 +103,10 @@ export function loadConfig(rawEnv: object): Config {
 
   return {
     ownerUserId: e.OWNER_USER_ID ?? null,
+    workspaceAccess: e.WORKSPACE_ACCESS,
     jobToken: e.JOB_TOKEN ?? null,
     renderWorkerToken: e.RENDER_WORKER_TOKEN ?? null,
-    serviceAccessTrusted: e.SITES_SERVICE_ACCESS_TRUSTED === 'true',
+    serviceAccessTrusted: e.WORKSPACE_ACCESS === 'owner' && e.SITES_SERVICE_ACCESS_TRUSTED === 'true',
     localDevUserId: e.LOCAL_DEV_USER_ID ?? null,
     publishMode: e.PUBLISH_MODE,
     publishHttpTimeoutMs: e.PUBLISH_HTTP_TIMEOUT_MS,

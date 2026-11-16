@@ -141,6 +141,64 @@ test('OWNER_USER_ID pins the owner and spoofed local identity stays off hosted n
   await pinned.stop();
 });
 
+test('shared-password visitors can log in without claiming ownership or bypassing protected jobs', async () => {
+  const { call, db, stop } = await start({ WORKSPACE_ACCESS: 'password', SITES_SERVICE_ACCESS_TRUSTED: 'true', JOB_TOKEN }, { persist: 'shared-password' });
+  const session = await call('GET', '/api/session', { headers: {} });
+  assert.deepEqual([session.body.authenticated, session.body.passwordRequired, session.body.forbidden], [false, true, false]);
+  for (const headers of [{}, STRANGER]) {
+    for (const path of ['/api/status', '/api/posts', '/api/materials', '/api/accounts']) {
+      assert.equal((await call('GET', path, { headers })).status, 401);
+    }
+    assert.equal((await call('POST', '/api/session', { headers, json: { token: 'wrong' } })).status, 401);
+    const login = await call('POST', '/api/session', { headers, json: { token: 'test-password' } });
+    assert.equal(login.status, 200);
+    const setCookie = login.headers.get('set-cookie');
+    assert.match(setCookie, /HttpOnly/i);
+    assert.match(setCookie, /Secure/i);
+    const cookie = setCookie.split(';', 1)[0];
+    const visitor = { ...headers, cookie };
+    assert.equal((await call('GET', '/api/session', { headers: visitor })).body.authenticated, true);
+    assert.equal((await call('GET', '/api/accounts', { headers: visitor })).status, 200);
+    const brand = { name: 'Shared workspace', handle: '@shared', description: '', audience: '', voice: '', avoid: '' };
+    assert.equal((await call('PUT', '/api/brand', { headers: visitor, json: brand })).status, 200);
+    assert.equal((await call('POST', '/api/jobs/tick', { headers: visitor })).status, 401);
+    assert.equal((await call('POST', '/api/jobs/render/claim', { headers: visitor })).status, 401);
+    assert.equal((await call('POST', '/api/jobs/accounts/claim', { headers: visitor })).status, 401);
+    assert.equal((await call('POST', '/mcp', { headers: visitor, json: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'list_generation_requests', arguments: {} } } })).status, 403);
+    assert.equal((await call('GET', '/api/posts', { headers: { ...visitor, cookie: `${cookie}tampered` } })).status, 401);
+    assert.equal((await call('POST', '/api/session', { headers: { ...headers, 'sec-fetch-site': 'cross-site' }, json: { token: 'test-password' } })).status, 403);
+    assert.equal((await call('DELETE', '/api/session', { headers: visitor })).status, 204);
+  }
+  assert.equal((await call('POST', '/api/jobs/tick', { headers: {} })).status, 401, 'private-Site service trust cannot bypass password sharing');
+  assert.equal((await call('POST', '/api/jobs/tick', { headers: { authorization: `Bearer ${JOB_TOKEN}` } })).status, 200);
+  assert.equal(await db.prepare('SELECT user_id FROM workspace_owner WHERE id = 1').first(), null, 'no visitor, even with identity headers, can claim ownership');
+  await stop();
+});
+
+test('password sharing preserves the stored owner and fails closed without its signing secret', async () => {
+  const first = await start({}, { persist: 'shared-owner' });
+  assert.equal((await first.call('GET', '/api/session')).body.authenticated, true);
+  await first.stop();
+  const shared = await start({ WORKSPACE_ACCESS: 'password' }, { persist: 'shared-owner', migrate: false });
+  assert.equal((await shared.call('GET', '/api/session')).body.authenticated, true);
+  assert.equal((await shared.call('POST', '/api/jobs/tick')).status, 200);
+  await shared.stop();
+  const missing = await start({ WORKSPACE_ACCESS: 'password', SESSION_SECRET: '' }, { persist: 'shared-no-secret' });
+  assert.equal((await missing.call('POST', '/api/session', { headers: {}, json: { token: 'test-password' } })).status, 503);
+  assert.equal((await missing.call('GET', '/api/posts', { headers: { cookie: COOKIE } })).status, 401);
+  await missing.stop();
+});
+
+test('shared-password login rate limits are per visitor address', async () => {
+  const { call, stop } = await start({ WORKSPACE_ACCESS: 'password' }, { persist: 'shared-limit' });
+  const blocked = { 'cf-connecting-ip': '192.0.2.1' };
+  for (let i = 0; i < 10; i++) assert.equal((await call('POST', '/api/session', { headers: blocked, json: { token: 'wrong' } })).status, 401);
+  assert.equal((await call('POST', '/api/session', { headers: blocked, json: { token: 'test-password' } })).status, 429);
+  assert.equal((await call('POST', '/api/session', { headers: { ...STRANGER, ...blocked }, json: { token: 'test-password' } })).status, 429, 'changing signed-in identity does not reset the address limit');
+  assert.equal((await call('POST', '/api/session', { headers: { 'cf-connecting-ip': '192.0.2.2' }, json: { token: 'test-password' } })).status, 200);
+  await stop();
+});
+
 test('workspace data is durable across restarts', async () => {
   const first = await start({}, { persist: 'durable' });
   const { call } = first;
