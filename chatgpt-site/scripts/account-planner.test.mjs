@@ -38,8 +38,9 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   await page.waitForFunction(()=>[...document.querySelectorAll('.brand-icon img')].every(img=>img.complete&&img.naturalWidth>0));
   picture='https://images.example.com/expired.jpg';
   await page.getByRole('button',{name:'Refresh Postiz accounts'}).click();
-  await page.locator('.account-title .brand-icon svg').waitFor();
-  assert.equal(await page.locator('.brand-icon img').count(),0,'expired pictures fall back to the Instagram glyph');
+  await page.locator('.account-title .brand-initial').waitFor();
+  assert.equal(await page.locator('.account-title .brand-initial').innerText(),'h');
+  assert.equal(await page.locator('.brand-icon img').count(),0,'expired pictures fall back to the account initial');
   await page.getByRole('button',{name:'Start',exact:true}).click();await page.getByRole('button',{name:'Stop',exact:true}).waitFor();
   await page.getByRole('button',{name:'Stop',exact:true}).click();await page.getByRole('button',{name:'Start',exact:true}).waitFor();assert.deepEqual(patches.slice(-2),[{enabled:true},{enabled:false}]);
   await page.getByRole('button',{name:'Edit Monday times'}).click();
