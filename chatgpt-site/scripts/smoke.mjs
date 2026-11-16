@@ -955,18 +955,19 @@ test('account ticks queue only due starts, deduplicate overlapping ticks and can
 
 test('Postiz acceptance stays processing until confirmed, with durable deduplicated ChatGPT result events',async()=>{
  let created=0,state='QUEUE';
+ const postCaption='Extra stock has a price. Running out does too.\n\nHedgy keeps a few extra lemons for his stand because a busy afternoon can empty the basket faster than expected. Those spare lemons tie up money and might go to waste, but without them he could lose sales. The useful comparison is between the cost of holding a buffer and the cost of having nothing left to sell.\n\nThe right buffer depends on how unpredictable demand is and how quickly he can restock. More protection is not automatically better; it has to solve a problem worth paying for.\n\n#InventoryRisk #RiskManagement #FinanceExplained';
  const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-publish',outboundService:async request=>{
   const u=new URL(request.url);if(u.pathname.endsWith('/integrations'))return Response.json([postizTarget]);
   if(u.pathname.endsWith('/upload'))return Response.json({id:'upload-1',path:'https://uploads.postiz.com/finished.mp4'});
-  if(request.method==='POST'){created++;const body=await request.json();assert.equal(body.posts[0].integration.id,postizTarget.id);return Response.json([{postId:'postiz-1',integration:postizTarget.id}]);}
+  if(request.method==='POST'){created++;const body=await request.json();assert.equal(body.posts[0].integration.id,postizTarget.id);assert.equal(body.posts[0].value[0].content,postCaption,'publish the complete post caption, including paragraph breaks and hashtags');return Response.json([{postId:'postiz-1',integration:postizTarget.id}]);}
   return Response.json({posts:[{id:'postiz-1',state,releaseURL:state==='PUBLISHED'?'https://www.instagram.com/reel/abc/':undefined,integration:{id:postizTarget.id}}]});
  }});
  try{
   await s.call('GET','/api/accounts');const started=await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id,enabled:true}});assert.equal(started.status,200,JSON.stringify(started.body));
   const m=await storeFile(s,{kind:'finished'}),id=crypto.randomUUID(),at=past(2);
-  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,JSON.stringify({title:'A finished reel'}),JSON.stringify({delivery:postizTarget}),at,at).run();
+  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,JSON.stringify({title:'A finished reel',postCaption}),JSON.stringify({delivery:postizTarget}),at,at).run();
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(created,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
-  let row=await s.db.prepare('SELECT * FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'publishing');assert.equal(row.post_id,'postiz-1');
+  let row=await s.db.prepare('SELECT * FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'publishing');assert.equal(row.post_id,'postiz-1');assert.equal(JSON.parse(row.spec).postCaption,postCaption);
   assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events.length,0);
   await s.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(id).run();
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});assert.equal(created,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
@@ -983,12 +984,12 @@ test('an uncertain Postiz create request stops with needs_attention and never cr
  const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-uncertain',outboundService:async request=>{
   if(new URL(request.url).pathname.endsWith('/integrations'))return Response.json([postizTarget]);
   if(new URL(request.url).pathname.endsWith('/upload'))return Response.json({id:'m1',path:'https://uploads.postiz.com/file.mp4'});
-  creates++;return new Response('upstream error',{status:502});
+  creates++;assert.equal((await request.json()).posts[0].value[0].content,'An earlier reel','legacy specs still publish their title');return new Response('upstream error',{status:502});
  }});
  try{
   await s.call('GET','/api/accounts');const started=await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id,enabled:true}});assert.equal(started.status,200,JSON.stringify(started.body));
   const m=await storeFile(s,{kind:'finished'}),id=crypto.randomUUID(),at=past(1);
-  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,'{}',JSON.stringify({delivery:postizTarget}),at,at).run();
+  await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,status,output_material_id,spec,provenance,created_at,updated_at) VALUES(?,'hedgy',?,'completed',?,?,?,?,?)").bind(id,at,m.id,JSON.stringify({title:'An earlier reel'}),JSON.stringify({delivery:postizTarget}),at,at).run();
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});
   assert.equal(creates,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));assert.equal((await s.db.prepare('SELECT status FROM account_automation_jobs WHERE id=?').bind(id).first()).status,'needs_attention');
   assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events[0].status,'needs_attention');

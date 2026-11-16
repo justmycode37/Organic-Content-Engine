@@ -82,7 +82,8 @@ export async function publishAccountJobs(c:Container,env:Env){
    if(!latest.enabled||(await c.settings.get()).publishingPaused) {await c.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(row.id).run();continue;}
    if(latest.postizIntegrationId!==target.id)throw new AppError(409,'account_mismatch','Destination changed during upload');
    await c.db.prepare("UPDATE account_automation_jobs SET status='publishing',updated_at=? WHERE id=?").bind(now(),row.id).run();sending=true;
-   const id=await postiz.create(target,media,parse(row.spec).title??a.topic);
+   const spec=parse(row.spec),caption=a.id==='hedgy'&&typeof spec.postCaption==='string'&&spec.postCaption.trim()?spec.postCaption:spec.title??a.topic;
+   const id=await postiz.create(target,media,caption);
    await c.db.prepare('UPDATE account_automation_jobs SET post_id=?,publish_until=?,updated_at=? WHERE id=?').bind(id,new Date(Date.now()+60000).toISOString(),now(),row.id).run();
   }catch(e){
    // Status polling is safe to retry; creation is not. Keep a known Postiz ID for reconciliation.

@@ -268,6 +268,8 @@ export interface ReelSpec {
   version: 1;
   /** Working title; not drawn. */
   title?: string;
+  /** Social post copy below the reel; never rendered or spoken. */
+  postCaption?: string;
   mode?: Mode;
   /** Default 'rainbow'. */
   accent?: AccentName;

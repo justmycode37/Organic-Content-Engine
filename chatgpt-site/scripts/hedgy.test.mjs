@@ -1,13 +1,27 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateHedgyReel} from '../worker/hedgy-generation.ts';
+import {hedgyPostCaptionSchema} from '../worker/hedgy-caption.ts';
+const postCaption='The cheapest choice can still cost you more.\n\nHedgy buys just enough lemons for his stand, but a busy afternoon leaves him with customers he cannot serve. Keeping extra stock ties up money and risks waste. Keeping too little means missing sales when demand surprises him. The tradeoff is between the cost of holding a buffer and the cost of running out.\n\nA buffer does not have to cover every possible rush. It needs to reflect how unpredictable demand is and how quickly you can restock. That is the useful question behind the story: what would running out actually cost?\n\n#InventoryRisk #RiskManagement #FinanceExplained';
 test('missing API key blocks without subscription fallback',async()=>{await assert.rejects(generateHedgyReel({},'diversification'),e=>e.code==='api_key_missing')});
 const idea=input=>({concept:/Choose concept from exactly these ids: ([a-z-]+)/.exec(input)[1],angle:'Hedgy runs a lemonade stand.',setting:'a lemonade stand',heroItem:'lemonade',supportingItems:[],cast:['hedgy'],hook:'Ever run out of lemons?',music:'drive',musicBrief:'Darksynth chase at 136 BPM: distorted bass, hard drums, guitar stabs, building to a hit on the reveal.'});
 test('Sol xhigh coordinates twelve Sol xhigh specialists and validates reel',async()=>{
  const original=globalThis.fetch;const calls=[];let active=0,peak=0;
- const spec={version:1,title:'Risk',series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',scenes:Array.from({length:6},()=>({type:'hedgy',duration:4,beat:'lesson',action:'upside',headline:'Risk remains',say:'Diversification does not remove all risk.'}))};
+ const spec={version:1,title:'Risk',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',scenes:Array.from({length:6},()=>({type:'hedgy',duration:4,beat:'lesson',action:'upside',headline:'Risk remains',say:'Diversification does not remove all risk.'}))};
  globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body);calls.push(body);active++;peak=Math.max(peak,active);await new Promise(r=>setTimeout(r,1));active--;const format=body.text?.format?.name;return Response.json({status:'completed',output:[{content:[{type:'output_text',text:format==='hedgy_reel'?JSON.stringify(spec):format==='hedgy_idea'?JSON.stringify(idea(body.input)):'production brief'}]}]})};
- try{const r=await generateHedgyReel({OPENAI_API_KEY:'test'},'diversification');assert.equal(r.provenance.specialists,12);assert.equal(calls.length,15);assert.equal(r.spec.musicBrief,r.provenance.idea.musicBrief);assert.equal(calls.filter(x=>x.model==='gpt-6.1-sol').length,15);assert.ok(peak<=4);assert.ok(calls.every(x=>x.store===false&&x.reasoning.effort==='xhigh'));}finally{globalThis.fetch=original}
+ try{const r=await generateHedgyReel({OPENAI_API_KEY:'test'},'diversification');assert.equal(r.provenance.specialists,12);assert.equal(calls.length,15);assert.equal(r.spec.musicBrief,r.provenance.idea.musicBrief);assert.equal(r.spec.postCaption,postCaption);assert.equal(parseReelSpec(r.spec).ok,true,'post copy survives the strict render schema');assert.equal(calls.filter(x=>x.model==='gpt-6.1-sol').length,15);assert.ok(peak<=4);assert.ok(calls.every(x=>x.store===false&&x.reasoning.effort==='xhigh'));}finally{globalThis.fetch=original}
+});
+test('post captions require useful paragraphs and a small set of distinct hashtags',()=>{
+ assert.equal(hedgyPostCaptionSchema.safeParse(postCaption).success,true);
+ for(const invalid of [undefined,'Risk remains. #Finance #Money #Learning',postCaption.replace(/\n\n/g,' '),postCaption.replace(/#[A-Za-z]+/g,''),postCaption.replace('#InventoryRisk','#FinanceExplained'),postCaption+' #Money #Learning #Investing','x'.repeat(2201)]){
+  assert.equal(hedgyPostCaptionSchema.safeParse(invalid).success,false);
+ }
+});
+test('assembly repairs a one-line post caption without changing narration',async()=>{
+ const original=globalThis.fetch;let assemblies=0;
+ const spec={version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',scenes:Array.from({length:6},()=>({type:'hedgy',duration:4,beat:'lesson',action:'upside',headline:'Keep a buffer',say:'A buffer costs money but running out can cost sales.'}))};
+ globalThis.fetch=async(_url,init)=>{const body=JSON.parse(init.body),format=body.text?.format?.name;let text='production brief';if(format==='hedgy_idea')text=JSON.stringify(idea(body.input));if(format==='hedgy_reel'){assemblies++;assert.match(body.input,/postCaption/);text=JSON.stringify({...spec,postCaption:assemblies===1?'A buffer has a cost.':postCaption});}return Response.json({status:'completed',output:[{content:[{type:'output_text',text}]}]});};
+ try{const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');assert.equal(assemblies,2);assert.equal(result.spec.postCaption,postCaption);assert.deepEqual(result.spec.scenes,spec.scenes);}finally{globalThis.fetch=original;}
 });
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';
