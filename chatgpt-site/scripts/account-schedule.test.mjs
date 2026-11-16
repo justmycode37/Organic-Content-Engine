@@ -34,3 +34,11 @@ test('provider failures are sanitized and never return credentials or upstream r
  const p=new Postiz({POSTIZ_API_KEY:'private-test-key'},async()=>new Response('private-test-key',{status:401}));await assert.rejects(()=>p.integrations(),e=>!e.message.includes('private-test-key')&&e.message.includes('401'));
  const q=new Postiz({POSTIZ_API_KEY:'test'},async()=>Response.json([{id:'wrong',identifier:'instagram',disabled:true}]));await assert.rejects(()=>q.target('wrong'),/unavailable/);
 });
+test('Instagram integrations expose HTTPS profile pictures without leaking other provider fields',async()=>{
+ const pictures=['https://images.example.com/instagram.jpg',undefined,null,'http://images.example.com/photo.jpg','javascript:alert(1)','not a URL','https://user:secret@images.example.com/photo.jpg'];
+ const rows=pictures.map((picture,i)=>({id:String(i),name:'Brand',identifier:'instagram',profile:'brand',picture,accessToken:'private'}));
+ const p=new Postiz({POSTIZ_API_KEY:'test'},async()=>Response.json([...rows,{id:'other',identifier:'x',picture:pictures[0]}]));
+ const items=await p.integrations();assert.equal(items.length,pictures.length);assert.equal(items[0].picture,pictures[0]);
+ for(const item of items.slice(1))assert.equal(item.picture,undefined);
+ assert.ok(items.every(item=>!('accessToken' in item)));
+});

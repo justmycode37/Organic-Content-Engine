@@ -10,6 +10,7 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
  if(!await access(chrome).then(()=>true,()=>false)){t.skip('Chrome is not installed');return;}
  const bundle=await build({stdin:{contents:"import React from 'react';import{createRoot}from'react-dom/client';import{AccountsView}from'./src/views/Accounts.tsx';createRoot(document.getElementById('root')).render(<AccountsView/>);",resolveDir:root,loader:'tsx'},bundle:true,write:false,format:'iife',jsx:'automatic',define:{'process.env.NODE_ENV':'"production"'}});
  const css=await readFile(new URL('../src/style.css',import.meta.url),'utf8'),patches=[];
+ let picture='https://images.example.com/instagram.svg';
  const a={id:'hedgy',name:'hedgy',topic:'finance',platform:'instagram',postsPerDay:1,postingTime:'18:00',timezone:'Europe/Zurich',enabled:false,notifyResults:true,postizIntegrationId:null,week:Array.from({length:7},(_,day)=>({day,times:day===0?['09:00']:[]})),schedule:[],health:{state:'paused',issues:[]}};
  const browser=await chromium.launch({headless:true,executablePath:chrome});
  try{
@@ -18,7 +19,8 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
    const request=route.request(),url=new URL(request.url());
    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><div id="root"></div><script src="/app.js"></script>'});
    if(url.pathname==='/app.js')return route.fulfill({contentType:'text/javascript',body:bundle.outputFiles[0].text});
-   if(url.pathname==='/api/postiz/integrations')return route.fulfill({json:{configured:true,integrations:[{id:'insta1',name:'Test',profile:'test_brand',identifier:'instagram-standalone',disabled:false}]}});
+   if(url.hostname==='images.example.com'&&url.pathname==='/instagram.svg')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><path fill="white" d="M0 0h40v40H0z"/><circle fill="black" cx="20" cy="20" r="12"/></svg>'});
+   if(url.pathname==='/api/postiz/integrations')return route.fulfill({json:{configured:true,integrations:[{id:'insta1',name:'Test',profile:'test_brand',picture,identifier:'instagram-standalone',disabled:false}]}});
    if(request.method()==='PATCH'){const patch=request.postDataJSON();patches.push(patch);Object.assign(a,patch);a.health.state=a.enabled?'running':'paused';return route.fulfill({json:a});}
    if(url.pathname==='/api/accounts')return route.fulfill({json:{accounts:[a]}});
    return route.abort();
@@ -31,6 +33,14 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   assert.deepEqual(patches.find(p=>p.week).week[0].times,['08:15','17:45']);
   await page.getByRole('combobox',{name:'Postiz Instagram account'}).selectOption('insta1');
   await page.getByText('Reels from hedgy will post to @test_brand.').waitFor();
+  await page.locator('.account-title .brand-icon img').waitFor();
+  assert.equal(await page.locator('.account-title .brand-icon img').getAttribute('src'),picture);
+  await page.waitForFunction(()=>[...document.querySelectorAll('.brand-icon img')].every(img=>img.complete&&img.naturalWidth>0));
+  picture='https://images.example.com/expired.jpg';
+  await page.getByRole('button',{name:'Refresh Postiz accounts'}).click();
+  await page.locator('.account-title .brand-initial').waitFor();
+  assert.equal(await page.locator('.account-title .brand-initial').innerText(),'h');
+  assert.equal(await page.locator('.brand-icon img').count(),0,'expired pictures fall back to the account initial');
   await page.getByRole('button',{name:'Start',exact:true}).click();await page.getByRole('button',{name:'Stop',exact:true}).waitFor();
   await page.getByRole('button',{name:'Stop',exact:true}).click();await page.getByRole('button',{name:'Start',exact:true}).waitFor();assert.deepEqual(patches.slice(-2),[{enabled:true},{enabled:false}]);
   await page.getByRole('button',{name:'Edit Monday times'}).click();
@@ -53,5 +63,26 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   assert.equal(await page.locator('.account-shell').evaluate(el=>getComputedStyle(el).colorScheme),'light');
   await page.setViewportSize({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'mobile layout must not overflow horizontally');
+  const palette=await page.locator('.account-shell').evaluate(root=>[...root.querySelectorAll('*'),root].flatMap(el=>{const s=getComputedStyle(el);return [s.color,s.backgroundColor]}));
+  assert.deepEqual([...new Set(palette)].filter(c=>!['rgb(0, 0, 0)','rgb(255, 255, 255)','rgba(0, 0, 0, 0)'].includes(c)),[],'UI paint must stay black and white');
+  for(const selector of ['.account-sidebar','.account-topbar','.account-main section','.weekday-row','.day-editor-title','.upcoming-list > div','.activity-row']){
+   const framed=await page.locator(selector).evaluateAll(els=>els.some(el=>{const s=getComputedStyle(el);return [s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth].some(w=>w!=='0px')||s.boxShadow!=='none'}));
+   assert.equal(framed,false,`${selector} must have no frame or divider`);
+  }
+  const panel=page.locator('#day-config-hedgy-0');
+  await page.getByRole('button',{name:'Edit Monday times'}).click();
+  const motion=await panel.evaluate(async el=>{
+   getComputedStyle(el).gridTemplateRows;
+   const animation=el.getAnimations().find(a=>a.transitionProperty==='grid-template-rows');
+   if(!animation)return null;
+   await animation.ready;animation.pause();animation.currentTime=90;
+   const middle=el.getBoundingClientRect().height;animation.finish();
+   return {middle,full:el.getBoundingClientRect().height,fill:getComputedStyle(el).backgroundColor};
+  });
+  assert.ok(motion&&motion.middle>0&&motion.middle<motion.full,'day expansion must interpolate the panel height');
+  assert.equal(motion.fill,'rgb(255, 255, 255)');
+  await page.emulateMedia({reducedMotion:'reduce'});
+  await page.getByRole('button',{name:'Edit Monday times'}).click();
+  assert.equal(await panel.evaluate(el=>el.inert&&el.getBoundingClientRect().height===0),true,'collapsed controls must be inert and fully collapsed with reduced motion');
  }finally{await browser.close();}
 });
