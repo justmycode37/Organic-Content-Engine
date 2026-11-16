@@ -12,7 +12,7 @@ export function opusOutputFormat(format?:{name:string;schema:z.ZodType}){
  if(open(schema))return null;
  try{return zodOutputFormat(format.schema);}catch{return null;}
 }
-export function opusClient(key:string,onUsage?:Usage):Ask{
+export function opusClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<void>):Ask{
  if(!key.trim())throw new Error('Configure ANTHROPIC_API_KEY for Quriozity generation');
  const client=new Anthropic({apiKey:key.trim(),maxRetries:0,timeout:60*60*1000});
  return async(step,input,_max,format,images=[])=>{
@@ -20,6 +20,7 @@ export function opusClient(key:string,onUsage?:Usage):Ask{
   const prompt=format&&!structured?`${input}\nReturn ONLY a valid JSON object matching this schema, with no Markdown or commentary: ${JSON.stringify(z.toJSONSchema(format.schema))}`:input;
   const content:Anthropic.MessageParam['content']=[{type:'text',text:prompt},...images.map(i=>({type:'image' as const,source:{type:'base64' as const,media_type:i.mime as 'image/png'|'image/jpeg'|'image/gif'|'image/webp',data:i.base64}}))];
   for(let attempt=0;attempt<6;attempt++){
+   await beforeRequest?.(step);
    const started=performance.now();
    try{
     const response=await client.messages.stream({model:QURIOZITY_MODELS.generation.model,max_tokens:128000,output_config:{effort:QURIOZITY_MODELS.generation.effort,...(structured?{format:structured}:{})},messages:[{role:'user',content}]}).finalMessage();
