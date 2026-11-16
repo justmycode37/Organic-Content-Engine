@@ -27,10 +27,16 @@ The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-Each visual stage returns explicit findings and a verdict, with up to five rendered
-review attempts (including the initial version) and five authoring proposals per
-repair round. Every accepted repair receives fresh rendered evidence and a new
-review. After five attempts, select the best actually reviewed candidate and
+There are at most **two Opus repair API calls total per reel**, shared across script,
+storyboard and every visual stage. Invalid proposals, transport retries and
+interrupted calls consume this allowance. Private reservations are saved before
+sending; restarting the worker cannot reset them. Earlier caches are counted from
+recorded usage. Initial plan/script/storyboard/sound authoring is separate.
+
+Each visual stage returns explicit findings and a verdict, with up to three rendered
+review attempts (initial version plus at most two revisions) and two authoring proposals per
+repair round, subject to the shared two-call budget. Every accepted repair receives fresh rendered evidence and a new
+review. After three candidates, select the best actually reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late
@@ -43,7 +49,7 @@ ElevenLabs uses its unchanged default speed: the request sends no speed override
 reviews and retakes cannot change it, and narration is never time-stretched.
 Word rates are descriptive; a brief fast passage never triggers global slowing.
 Timing reviews check connected phrasing and natural thought boundaries. Pause hints
-are guidance, not mandatory silence lengths. Allow up to five reviewed takes,
+are guidance, not mandatory silence lengths. Allow up to three reviewed takes,
 including the initial take, then select the best measured timing with any unresolved
 findings retained.
 

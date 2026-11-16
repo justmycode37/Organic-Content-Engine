@@ -17,6 +17,7 @@ import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
 import {runVisualReviewStage,runVoiceReviews,reviewFingerprint,bestReviewedVisual,REVIEW_LIMITS} from './quality-reviews.mjs';
+import {opusRepairBudget} from './repair-budget.mjs';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/quriozity-quality.ts';
 import {sceneDuration,resolveAt} from '../../src/quriozity/spec.ts';
 import {createRequire} from 'node:module';
@@ -235,7 +236,8 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
  provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
- const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage);
+ const reserveRepair=await opusRepairBudget(workdir);
+ const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair);
  // 1-5 story + storyboard
  const draft=join(workdir,'spec.draft.json');
  if(specFile&&!await exists(draft))await writeFile(draft,await readFile(specFile));
