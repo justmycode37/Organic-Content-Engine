@@ -7,8 +7,9 @@ export const reviewFingerprint=value=>createHash('sha256').update(JSON.stringify
 const json=async file=>{try{return JSON.parse(await readFile(file,'utf8'));}catch(e){if(e.code==='ENOENT')return null;throw e;}};
 const save=(file,value)=>writeFile(file,JSON.stringify(value,null,1));
 const measured=async(_name,fn)=>fn();
-// Initial candidate plus at most two review-driven revisions; bound invalid proposals too.
-export const REVIEW_LIMITS=Object.freeze({visual:3,proposals:2,voice:3});
+import {OPUS_REPAIR_LIMIT} from '../../worker/quriozity-model-policy.ts';
+// Initial candidate plus revisions from the shared repair budget; invalid proposals consume it too.
+export const REVIEW_LIMITS=Object.freeze({visual:OPUS_REPAIR_LIMIT+1,proposals:OPUS_REPAIR_LIMIT,voice:3});
 const visualRank=a=>{const must=a.verdict.findings.filter(f=>f.severity==='must-fix');return [a.verdict.passed&&!must.length?0:1,must.length,new Set(must.map(f=>f.scene)).size,a.verdict.findings.length,-a.attempt];};
 const compareRank=(a,b)=>{for(let i=0;i<a.length;i++)if(a[i]!==b[i])return a[i]-b[i];return 0;};
 export async function bestReviewedVisual(attempts){

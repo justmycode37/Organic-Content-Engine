@@ -1,7 +1,8 @@
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 
-export const OPUS_REPAIR_LIMIT=2;
+import {OPUS_REPAIR_LIMIT} from '../../worker/quriozity-model-policy.ts';
+export {OPUS_REPAIR_LIMIT};
 export const isRepairBudgetError=error=>error?.code==='opus_repair_limit';
 
 /** Reserve before sending. Interrupted/invalid requests consume a slot; restarts cannot reset it. */
@@ -29,6 +30,6 @@ export async function opusRepairBudget(workdir){
     return;
    }catch(error){if(error.code!=='EEXIST')throw error;}
   }
-  throw Object.assign(new Error('Two Opus repair calls already reserved for this reel; retain the best reviewed candidate.'),{code:'opus_repair_limit'});
+  throw Object.assign(new Error(`${OPUS_REPAIR_LIMIT} Opus repair calls already reserved for this reel; retain the best reviewed candidate.`),{code:'opus_repair_limit'});
  };
 }
