@@ -19,7 +19,7 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
    const request=route.request(),url=new URL(request.url());
    if(url.pathname==='/')return route.fulfill({contentType:'text/html',body:'<!doctype html><div id="root"></div><script src="/app.js"></script>'});
    if(url.pathname==='/app.js')return route.fulfill({contentType:'text/javascript',body:bundle.outputFiles[0].text});
-   if(url.hostname==='images.example.com'&&url.pathname==='/instagram.svg')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><path fill="white" d="M0 0h40v40H0z"/><circle fill="black" cx="20" cy="20" r="12"/></svg>'});
+   if(url.hostname==='images.example.com'&&url.pathname==='/instagram.svg')return route.fulfill({contentType:'image/svg+xml',body:'<svg xmlns="http://www.w3.org/2000/svg" width="40" height="40"><path fill="#2463eb" d="M0 0h40v40H0z"/><circle fill="#fbc333" cx="20" cy="20" r="12"/></svg>'});
    if(url.pathname==='/api/postiz/integrations')return route.fulfill({json:{configured:true,integrations:[{id:'insta1',name:'Test',profile:'test_brand',picture,identifier:'instagram-standalone',disabled:false}]}});
    if(request.method()==='PATCH'){const patch=request.postDataJSON();patches.push(patch);Object.assign(a,patch);a.health.state=a.enabled?'running':'paused';return route.fulfill({json:a});}
    if(url.pathname==='/api/accounts')return route.fulfill({json:{accounts:[a]}});
@@ -35,6 +35,7 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   await page.getByText('Reels from hedgy will post to @test_brand.').waitFor();
   await page.locator('.account-title .brand-icon img').waitFor();
   assert.equal(await page.locator('.account-title .brand-icon img').getAttribute('src'),picture);
+  assert.ok(await page.locator('.brand-icon img').evaluateAll(imgs=>imgs.every(img=>getComputedStyle(img).filter==='none')),'Instagram account pictures must keep their original colours');
   await page.waitForFunction(()=>[...document.querySelectorAll('.brand-icon img')].every(img=>img.complete&&img.naturalWidth>0));
   picture='https://images.example.com/expired.jpg';
   await page.getByRole('button',{name:'Refresh Postiz accounts'}).click();
@@ -64,7 +65,11 @@ test('weekly planner saves separate start times, selects Postiz, starts/stops an
   await page.setViewportSize({width:390,height:844});
   assert.ok(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth),'mobile layout must not overflow horizontally');
   const palette=await page.locator('.account-shell').evaluate(root=>[...root.querySelectorAll('*'),root].flatMap(el=>{const s=getComputedStyle(el);return [s.color,s.backgroundColor]}));
-  assert.deepEqual([...new Set(palette)].filter(c=>!['rgb(0, 0, 0)','rgb(255, 255, 255)','rgba(0, 0, 0, 0)'].includes(c)),[],'UI paint must stay black and white');
+  assert.deepEqual([...new Set(palette)].filter(c=>!['rgb(0, 0, 0)','rgb(255, 255, 255)','rgb(245, 245, 245)','rgba(0, 0, 0, 0)'].includes(c)),[],'UI paint uses black, white and the soft grey canvas');
+  assert.equal(await page.locator('.account-shell').evaluate(el=>getComputedStyle(el).backgroundColor),'rgb(245, 245, 245)');
+  for(const selector of ['.connection-panel','.notification-panel','.upcoming-panel','.activity-panel','.weekday-row','.day-config']){
+   assert.ok(await page.locator(selector).evaluateAll(els=>els.length>0&&els.every(el=>getComputedStyle(el).backgroundColor==='rgb(255, 255, 255)')),`${selector} must stay filled white against the grey canvas`);
+  }
   for(const selector of ['.account-sidebar','.account-topbar','.account-main section','.weekday-row','.day-editor-title','.upcoming-list > div','.activity-row']){
    const framed=await page.locator(selector).evaluateAll(els=>els.some(el=>{const s=getComputedStyle(el);return [s.borderTopWidth,s.borderRightWidth,s.borderBottomWidth,s.borderLeftWidth].some(w=>w!=='0px')||s.boxShadow!=='none'}));
    assert.equal(framed,false,`${selector} must have no frame or divider`);
