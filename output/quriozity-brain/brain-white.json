@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "series": "QURIOZITY",
+  "title": "White brain",
+  "style": "reference-recording",
+  "captions": false,
+  "format": {
+    "width": 2048,
+    "height": 2048
+  },
+  "scenes": [
+    {
+      "say": "",
+      "duration": 3,
+      "hue": "white",
+      "camera": {
+        "angle": "three-quarter-left",
+        "fill": 0.78,
+        "move": "static"
+      },
+      "objects": [
+        {
+          "id": "brain",
+          "model": "brain",
+          "enter": "none",
+          "idle": "none",
+          "controls": {
+            "active": 0
+          }
+        }
+      ]
+    }
+  ]
+}
