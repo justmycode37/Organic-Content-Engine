@@ -106,7 +106,7 @@ Schema changes are declared in `db/schema.ts` and appended under `drizzle/`; app
 
 ## Weekly reel automation with Postiz
 
-Accounts → select **Acryllex** or **Hedgy** → choose its Instagram destination from
+Accounts → select **Quriozity** or **Hedgy** → choose its Instagram destination from
 Postiz. The destination list is loaded on the server using `POSTIZ_API_KEY`; it
 contains no API key. Connect additional Instagram accounts in Postiz and refresh
 this list. Existing accounts migrate to stopped once, so selecting a destination
@@ -124,7 +124,7 @@ The account worker checks the durable weekly plan every 30 seconds, including
 while another reel renders. Starts go into an exclusive queue; overlapping reels
 wait for the producer. It never creates a future job early. A start missed by
 more than 15 minutes after an outage is reported as failed instead of launching a
-surprise paid generation. Editing a plan cancels unstarted jobs. Normal Acryllex
+surprise paid generation. Editing a plan cancels unstarted jobs. Normal Quriozity
 production uses the complete Sol/xhigh review pipeline and fails closed when
 required evidence or approvals are missing. Voice review evaluates delivery and
 timing, not listened-to audio quality. Generation uses the worker's existing

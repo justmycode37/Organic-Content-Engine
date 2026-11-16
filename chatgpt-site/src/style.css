@@ -446,7 +446,7 @@ select { width: auto; max-width: 100%; }
   border: 1px solid #dfdfdf; border-radius: 11px; color: #3c3c3c;
   background: #f8f8f8; font: 700 30px/.9 var(--display); letter-spacing: -2px; padding: 0 2px 4px 0;
 }
-.brand-icon.acryllex { font-family: var(--display); }
+.brand-icon.quriozity { font-family: var(--display); }
 .chosen .brand-icon { border-color: #232323; color: #181818; background: #fff; }
 .account-main { margin-left: 136px; max-width: 1340px; padding: 0 clamp(28px, 5vw, 76px) 35px; }
 .account-topbar { height: 77px; display: flex; align-items: center; justify-content: space-between; gap: 16px; border-bottom: 1px solid var(--account-border); margin-bottom: 37px; }

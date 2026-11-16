@@ -1,5 +1,5 @@
 import {HEDGY_POLICY} from '../hedgy-policy.ts';
-import {ACRYLLEX_POLICY} from '../acryllex-policy.ts';
+import {QURIOZITY_POLICY} from '../quriozity-policy.ts';
 import {z} from 'zod';
 import type {Db} from '../db/database.ts';
 import {AppError} from '../errors.ts';
@@ -23,10 +23,22 @@ export function accountSlots(a:Account,at=new Date(),startDay=0,days=8){
   }
  }return slots.sort((a,b)=>a.scheduledAt.localeCompare(b.scheduledAt));
 }
-export function presentAccount(a:Account){return {...a,week:accountWeek(a),postizIntegrationId:a.postizIntegrationId??null,notifyResults:a.notifyResults!==false,...(a.id==='hedgy'?{brand:HEDGY_POLICY}:a.id==='acryllex'?{brand:ACRYLLEX_POLICY}:{}),health:{state:'blocked' as const,issues:['Choose a Postiz account']},schedule:accountSlots(a).filter(s=>Date.parse(s.scheduledAt)>Date.now())};}
+export function presentAccount(a:Account){return {...a,week:accountWeek(a),postizIntegrationId:a.postizIntegrationId??null,notifyResults:a.notifyResults!==false,...(a.id==='hedgy'?{brand:HEDGY_POLICY}:a.id==='quriozity'?{brand:QURIOZITY_POLICY}:{}),health:{state:'blocked' as const,issues:['Choose a Postiz account']},schedule:accountSlots(a).filter(s=>Date.parse(s.scheduledAt)>Date.now())};}
 export async function listAccounts(db:Db){
+ // Move the original brand atomically before seeding, retaining its plan and all related records.
+ if(await db.prepare("SELECT id FROM accounts WHERE id='acryllex'").first())await db.batch([
+  db.prepare("INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) SELECT 'quriozity',json_set(value,'$.id','quriozity','$.name','Quriozity','$.brand',json(?)),created_at,? FROM accounts WHERE id='acryllex'").bind(JSON.stringify(QURIOZITY_POLICY),new Date().toISOString()),
+  db.prepare("UPDATE account_automation_jobs SET account_id='quriozity' WHERE account_id='acryllex'"),
+  db.prepare("UPDATE account_runs SET account_id='quriozity' WHERE account_id='acryllex'"),
+  db.prepare("UPDATE account_social_credentials SET workspace_account_id='quriozity' WHERE workspace_account_id='acryllex'"),
+  db.prepare("UPDATE social_accounts SET workspace_account_id='quriozity' WHERE workspace_account_id='acryllex'"),
+  db.prepare("UPDATE oauth_pending SET workspace_account_id='quriozity' WHERE workspace_account_id='acryllex'"),
+  db.prepare("UPDATE job_state SET name='account_schedule:quriozity' WHERE name='account_schedule:acryllex'"),
+  db.prepare("UPDATE job_state SET last_result=json_set(last_result,'$.accountId','quriozity','$.accountName','Quriozity') WHERE json_valid(last_result) AND json_extract(last_result,'$.accountId')='acryllex'"),
+  db.prepare("DELETE FROM accounts WHERE id='acryllex'"),
+ ]);
  const common={platform:'instagram',postsPerDay:1,timezone:'Europe/Zurich',enabled:false,notifyResults:true};
- const seeds=[{...common,id:'hedgy',name:'hedgy',topic:'Simple finance and market explainers',postingTime:'18:00',brand:HEDGY_POLICY},{...common,id:'acryllex',name:'acryllex',topic:ACRYLLEX_POLICY.topic,postingTime:'19:00',brand:ACRYLLEX_POLICY}];
+ const seeds=[{...common,id:'hedgy',name:'hedgy',topic:'Simple finance and market explainers',postingTime:'18:00',brand:HEDGY_POLICY},{...common,id:'quriozity',name:'Quriozity',topic:QURIOZITY_POLICY.topic,postingTime:'19:00',brand:QURIOZITY_POLICY}];
  for(const [i,a] of seeds.entries())await db.prepare('INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(a.id,JSON.stringify(a),new Date(Date.now()+i).toISOString(),new Date().toISOString()).run();
  // Legacy accounts were enabled before they had an explicit publishing destination. Require a fresh Start.
  await db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('false'),'$.schedulerVersion',2) WHERE json_extract(value,'$.schedulerVersion') IS NULL").run();
