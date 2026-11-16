@@ -11,6 +11,7 @@ export interface User {
 
 export type Access =
   | { kind: 'owner'; user: User }
+  | { kind: 'guest'; user: User }
   | { kind: 'forbidden'; user: User }
   | { kind: 'anonymous' };
 
@@ -36,9 +37,14 @@ export function readUser(c: Context, config: Config | null): User | null {
   return null;
 }
 
-/** Signing in is not enough: only the workspace owner may read or change data. */
+/** Password sharing never claims ownership for a visitor, including a signed-in visitor. */
 export async function resolveAccess(c: Context, config: Config, settings: SettingsRepository, now: string): Promise<Access> {
   const user = readUser(c, config);
+  if (config.workspaceAccess === 'password') {
+    const owner = config.ownerUserId ?? await settings.getOwner();
+    if (user && user.userId === owner) return { kind: 'owner', user };
+    return { kind: 'guest', user: user ?? { userId: 'shared-password-guest', email: '', displayName: 'Guest' } };
+  }
   if (!user) return { kind: 'anonymous' };
   const owner = config.ownerUserId ?? await settings.claimOwner(user.userId, now);
   return user.userId === owner ? { kind: 'owner', user } : { kind: 'forbidden', user };
@@ -46,7 +52,13 @@ export async function resolveAccess(c: Context, config: Config, settings: Settin
 
 export function assertOwner(access: Access): void {
   if (access.kind === 'anonymous') throw new AppError(401, 'unauthorized', 'Sign in with ChatGPT to use this workspace');
-  if (access.kind === 'forbidden') throw new AppError(403, 'forbidden_user', 'This workspace belongs to another account');
+  if (access.kind === 'forbidden' || access.kind === 'guest') throw new AppError(403, 'forbidden_user', 'This operation requires the workspace owner');
+}
+
+/** Callers must also verify the password cookie before exposing any workspace data. */
+export function assertWorkspaceAccess(access: Access): asserts access is Extract<Access, { kind: 'owner' | 'guest' }> {
+  if (access.kind === 'guest') return;
+  assertOwner(access);
 }
 
 async function digest(value: string): Promise<Uint8Array> {
@@ -70,7 +82,7 @@ export async function assertJobCaller(c: Context, config: Config, access: Access
   if (access.kind === 'forbidden') throw new AppError(403, 'forbidden_user', 'This workspace belongs to another account');
   const header = c.req.header('authorization');
   if (config.jobToken && header?.startsWith('Bearer ') && await safeEqual(header.slice(7), config.jobToken)) return;
-  if (config.serviceAccessTrusted) return;
+  if (config.workspaceAccess === 'owner' && config.serviceAccessTrusted) return;
   throw new AppError(401, 'unauthorized', 'Job calls need the workspace owner or a valid JOB_TOKEN');
 }
 

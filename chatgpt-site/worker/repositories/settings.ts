@@ -85,6 +85,11 @@ export class SettingsRepository {
     return row !== null;
   }
 
+  async getOwner(): Promise<string | null> {
+    const row = await this.db.prepare('SELECT user_id FROM workspace_owner WHERE id = 1').first<{ user_id: string }>();
+    return row?.user_id ?? null;
+  }
+
   /** The first signed-in visitor of an owner-private Site is its owner. Later identities never replace it. */
   async claimOwner(userId: string, now: string): Promise<string> {
     await this.db

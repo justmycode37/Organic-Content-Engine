@@ -4,7 +4,9 @@ Private social content workspace on ChatGPT Sites, backed by D1 and R2. The enab
 
 ## Access
 
-Sites supplies signed-in identity and owner-only hosting. The browser then requires the workspace password. Password verification and rate limits live on the server; the browser receives a signed HttpOnly, Secure cookie bound to the owner identity. No password is included in the source or frontend bundle. Runtime `APP_PASSWORD_HASH` is a salt and 100,000-round PBKDF2-SHA256 hash. Account credentials are AES-GCM encrypted in D1 with a separate runtime secret.
+By default, Sites supplies signed-in identity and owner-only hosting. The browser then requires the workspace password. Set runtime `WORKSPACE_ACCESS=password` and the Site audience to public to let visitors open the shared workspace with the existing password, without ChatGPT sign-in. Anyone with that password can use the workspace. Visitors never claim ownership; MCP calls remain owner-only, and background endpoints still require their machine credentials. Password mode disables identity-free service-access trust even if `SITES_SERVICE_ACCESS_TRUSTED` was enabled.
+
+Password verification and rate limits live on the server; the browser receives a signed HttpOnly, Secure cookie. Owner and signed-in visitor cookies are bound to their identities; anonymous visitor cookies use a separate guest identity. Shared-password login attempts are rate-limited by the Cloudflare-supplied visitor address. No password is included in the source or frontend bundle. Runtime `APP_PASSWORD_HASH` is a salt and 100,000-round PBKDF2-SHA256 hash; `SESSION_SECRET` must also be configured. Account credentials are AES-GCM encrypted in D1 with a separate runtime secret.
 
 ## Generation with the ChatGPT plan
 

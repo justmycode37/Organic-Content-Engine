@@ -29,7 +29,7 @@ import { CYCLE_JOB, type CycleResult } from '../services/autonomy.ts';
 import type { PublishRunResult } from '../services/publisher.ts';
 import { serveAsset } from './assets.ts';
 import * as schemas from './schemas.ts';
-import { assertJobCaller, assertRenderCaller, assertOwner, assertSameOrigin, readUser, resolveAccess, type Access } from './security.ts';
+import { assertJobCaller, assertRenderCaller, assertWorkspaceAccess, assertSameOrigin, readUser, resolveAccess, type Access } from './security.ts';
 
 const MAX_BODY_BYTES = 1024 * 1024;
 const JOB_PATH = '/api/jobs/tick';
@@ -121,7 +121,7 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.get('/api/social/:platform/callback',async c=>{
- const container=await createContainer(c.env);const access=await resolveAccess(c,container.config,container.settings,new Date().toISOString());assertOwner(access);if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Unlock the workspace and try connecting again');
+ const container=await createContainer(c.env);const access=await resolveAccess(c,container.config,container.settings,new Date().toISOString());assertWorkspaceAccess(access);if(!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Unlock the workspace and try connecting again');
  const platform=scopedPlatformOf(c.req.param('platform')),state=c.req.query('state')??'';
  const pending=await container.db.prepare('SELECT workspace_account_id FROM oauth_pending WHERE state=? AND platform=?').bind(state,platform).first<{workspace_account_id:string|null}>();
  const social=new SocialAccounts(container.db,runtime(c.env),fetch,pending?.workspace_account_id??undefined);
@@ -139,13 +139,13 @@ export function createApp(): Hono<AppEnv> {
     const access = c.get('access');
     return c.json({
       authRequired: true,
-      authenticated: access.kind === 'owner' && await unlocked(c,c.env,access.user.userId),
-      passwordRequired: access.kind === 'owner',
+      authenticated: (access.kind === 'owner' || access.kind === 'guest') && await unlocked(c,c.env,access.user.userId),
+      passwordRequired: access.kind === 'owner' || access.kind === 'guest',
       forbidden: access.kind === 'forbidden',
       user: access.kind === 'anonymous' ? null : { displayName: access.user.displayName, email: access.user.email },
     });
   });
-  app.post('/api/session',async c=>{const access=c.get('access');assertOwner(access);if(access.kind!=='owner')throw new AppError(401,'unauthorized','Sign in first');const body=await readBody(c,validator.object({token:validator.string().min(1).max(1000)}).strict());return login(c,c.env,c.get('container').db,access.user.userId,body.token);});
+  app.post('/api/session',async c=>{const access=c.get('access');assertWorkspaceAccess(access);const body=await readBody(c,validator.object({token:validator.string().min(1).max(1000)}).strict());return login(c,c.env,c.get('container').db,access.user.userId,body.token);});
   app.delete('/api/session',c=>logout(c));
 
   /** The only way background work advances on this host. Call it from a Site schedule. */
@@ -219,11 +219,11 @@ export function createApp(): Hono<AppEnv> {
   app.post('/api/jobs/accounts/:id/:lease/complete',async c=>{const input=await readBody(c,validator.object({materialId:validator.string().uuid(),spec:validator.unknown(),provenance:validator.unknown()}).strict());return c.json(await completeAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'),input));});
   app.post('/api/jobs/accounts/:id/:lease/fail',async c=>c.json(await failAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'),await readBody(c,validator.object({code:validator.string().max(80),message:validator.string().max(300)}).strict()))));
 
-  // --- Everything below is for the workspace owner only ---
+  // Workspace data requires an owner or shared-password visitor with a valid password cookie.
   const api = new Hono<AppEnv>();
   api.use('*', async (c, next) => {
-    const access=c.get('access');assertOwner(access);
-    if(access.kind!=='owner'||!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Enter the workspace password');
+    const access=c.get('access');assertWorkspaceAccess(access);
+    if(!await unlocked(c,c.env,access.user.userId))throw new AppError(401,'password_required','Enter the workspace password');
     await next();
   });
 
