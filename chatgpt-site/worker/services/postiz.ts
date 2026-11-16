@@ -1,6 +1,10 @@
 import type {Env} from '../container.ts';
 import {AppError} from '../errors.ts';
-export interface PostizIntegration {id:string;name:string;identifier:string;profile?:string;disabled:boolean}
+export interface PostizIntegration {id:string;name:string;identifier:string;profile?:string;picture?:string;disabled:boolean}
+function profilePicture(value:unknown):string|undefined{
+ if(typeof value!=='string')return;
+ try{const url=new URL(value);if(url.protocol==='https:'&&!url.username&&!url.password)return url.href;}catch{}
+}
 export class Postiz {
  private env:Env;
  private send:typeof fetch;
@@ -12,7 +16,7 @@ export class Postiz {
   if(!r.ok)throw new AppError(502,'postiz_rejected',`Postiz request failed (${r.status}). Check account access and API limits.`);
   try{return await r.json() as any;}catch{throw new AppError(502,'postiz_invalid','Postiz returned an invalid response');}
  }
- async integrations():Promise<PostizIntegration[]>{const rows=await this.request('/integrations');if(!Array.isArray(rows))throw new AppError(502,'postiz_invalid','Postiz account list is invalid');return rows.filter(x=>['instagram','instagram-standalone'].includes(x.identifier)).map(x=>({id:x.id,name:x.name,identifier:x.identifier,profile:x.profile,disabled:!!x.disabled}));}
+ async integrations():Promise<PostizIntegration[]>{const rows=await this.request('/integrations');if(!Array.isArray(rows))throw new AppError(502,'postiz_invalid','Postiz account list is invalid');return rows.filter(x=>['instagram','instagram-standalone'].includes(x.identifier)).map(x=>({id:x.id,name:x.name,identifier:x.identifier,profile:x.profile,picture:profilePicture(x.picture),disabled:!!x.disabled}));}
  async target(id:string){const a=(await this.integrations()).find(x=>x.id===id&&!x.disabled);if(!a)throw new AppError(409,'postiz_account_missing','This Instagram account is unavailable in Postiz');return a;}
  async upload(source:ReadableStream<Uint8Array>,name:string){
   // Stream private R2 media through multipart instead of buffering a 100 MB reel in a 128 MB Worker.
