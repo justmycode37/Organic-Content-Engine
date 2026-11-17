@@ -29,7 +29,7 @@ The sequence is:
 
 There are at most **five Opus repair API calls total per reel**, shared across all
 stages, and **two Opus repair calls per stage**. Once either Opus limit is reached,
-that stage uses Sol for **up to five additional repair calls**. Once the reel-wide
+that stage uses Sol for **up to three additional repair calls**. Once the reel-wide
 Opus limit is reached, all remaining model work uses Sol, including new authoring.
 Reviews always use Sol. Invalid proposals, transport retries and interrupted
 repair requests consume the relevant provider's allowance. Private reservations
@@ -37,10 +37,12 @@ are saved before sending; restarting the worker cannot reset them. Earlier cache
 retain their recorded usage and reservations. Initial authoring is separate from
 the repair count, but cannot use Opus after the reel cap is reached.
 
-Each visual stage returns explicit findings and a verdict, with up to eight rendered
-review attempts (initial version plus at most two Opus and five Sol revisions),
+Each visual stage returns explicit findings and a verdict, with up to six rendered
+review attempts (initial version plus at most two Opus and three Sol revisions),
 subject to those durable API-call budgets. Every accepted repair receives fresh rendered evidence and a new
-review. After eight candidates or exhaustion of that stage's Sol repair budget, select the best actually reviewed candidate and
+review. A stage starting after the reel-wide Opus cap has at most four reviewed
+candidates: its initial version and three Sol revisions. After six candidates or
+exhaustion of that stage's Sol repair budget, select the best actually reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. Normal production publishes the best reviewed selection after its limits,

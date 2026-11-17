@@ -8,7 +8,7 @@ const json=async file=>{try{return JSON.parse(await readFile(file,'utf8'));}catc
 const save=(file,value)=>writeFile(file,JSON.stringify(value,null,1));
 const measured=async(_name,fn)=>fn();
 import {STAGE_REPAIR_LIMIT} from '../../worker/quriozity-model-policy.ts';
-// Initial candidate, up to two Opus repairs, then up to five Sol repairs.
+// Initial candidate, up to two Opus repairs, then up to three Sol repairs.
 // Durable model reservations also count invalid proposals and transport retries.
 export const REVIEW_LIMITS=Object.freeze({visual:STAGE_REPAIR_LIMIT+1,proposals:STAGE_REPAIR_LIMIT,voice:3});
 const visualRank=a=>{const must=a.verdict.findings.filter(f=>f.severity==='must-fix');return [a.verdict.passed&&!must.length?0:1,must.length,new Set(must.map(f=>f.scene)).size,a.verdict.findings.length,-a.attempt];};

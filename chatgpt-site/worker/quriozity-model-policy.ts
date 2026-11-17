@@ -2,7 +2,7 @@
 // Shared across every Opus repair request in a reel; durable reservations enforce this cap.
 export const OPUS_REPAIR_LIMIT=5;
 export const OPUS_STAGE_REPAIR_LIMIT=2;
-export const SOL_STAGE_REPAIR_LIMIT=5;
+export const SOL_STAGE_REPAIR_LIMIT=3;
 export const STAGE_REPAIR_LIMIT=OPUS_STAGE_REPAIR_LIMIT+SOL_STAGE_REPAIR_LIMIT;
 export const repairStage=(step:string)=>step.replace(/-repair$/,'');
 export const QURIOZITY_MODELS={generation:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'xhigh'}} as const;

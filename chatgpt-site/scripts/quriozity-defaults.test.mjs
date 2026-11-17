@@ -78,16 +78,16 @@ test('real client routing switches each stage to Sol and forbids all Opus work a
  const client=async()=>quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},undefined,await opusRepairBudget(workdir),await solRepairBudget(workdir));
  try{
   let ask=await client();
-  for(let i=0;i<7;i++)await ask('script-repair','Test',0);
-  assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5','claude-opus-5-5',...Array(5).fill('gpt-6.1-sol')]);
+  for(let i=0;i<5;i++)await ask('script-repair','Test',0);
+  assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5','claude-opus-5-5',...Array(3).fill('gpt-6.1-sol')]);
   ask=await client(); // Neither provider's count resets on a worker restart.
   await assert.rejects(ask('script-repair','Test',0),{code:'sol_stage_repair_limit'});
-  assert.equal(requests.length,7);
+  assert.equal(requests.length,5);
   await ask('storyboard-repair','Test',0);await ask('storyboard-repair','Test',0);
   await ask('visual-subject-review-repair','Test',0);
   for(const step of ['asset-pick','sound-design','visual-subject-review-repair','fact-check','voice-delivery-review-repair'])await ask(step,'Test',0);
   assert.equal(requests.filter(r=>r.model==='claude-opus-5-5').length,5);
-  assert.ok(requests.slice(10).every(r=>r.model==='gpt-6.1-sol'&&r.reasoning.effort==='xhigh'));
+  assert.ok(requests.slice(8).every(r=>r.model==='gpt-6.1-sol'&&r.reasoning.effort==='xhigh'));
  }finally{globalThis.fetch=original;await rm(workdir,{recursive:true,force:true});}
 });
 
@@ -103,7 +103,7 @@ test('invalid delivery directions receive bounded Sol corrections before synthes
  assert.deepEqual(records.map(r=>r.valid),[false,true]);assert.match(records[0].error,/Too small/);
  let calls=0;
  await assert.rejects(reviewNarrationDelivery(async()=>{calls++;return JSON.stringify({...valid,text:'Changed words.'});},text),/preserve every spoken word/);
- assert.equal(calls,6,'Initial Sol direction plus at most five corrections');
+ assert.equal(calls,4,'Initial Sol direction plus at most three corrections');
  const selected=await reviewNarrationDelivery(async()=>JSON.stringify({...valid,text:'Changed words.'}),text,undefined,'best');
  assert.equal(selected.text,text);assert.deepEqual(selected.pauses,[]);assert.match(selected.notes,/original reviewed narration/);
 });
@@ -124,7 +124,7 @@ test('transport retries reserve every repair call and switch to Sol before a thi
   assert.equal(await ask('script-repair','Test',0),'Sol result');
   assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5','claude-opus-5-5','gpt-6.1-sol']);
   await assert.rejects(ask('voice-delivery-review-repair','Fail Sol',0),{code:'sol_stage_repair_limit'});
-  assert.equal(requests.length,8,'Exactly five Sol repair transports, with no sixth paid attempt');
+  assert.equal(requests.length,6,'Exactly three Sol repair transports, with no fourth paid attempt');
   await assert.rejects((await opusRepairBudget(workdir))('script-repair'),{code:'opus_stage_repair_limit'});
   await assert.rejects((await solRepairBudget(workdir))('voice-delivery-review-repair'),{code:'sol_stage_repair_limit'});
  }finally{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;await rm(workdir,{recursive:true,force:true});}
