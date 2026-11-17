@@ -106,7 +106,7 @@ async function run(root,variant){
   const priorAudio=await readFile(join(workdir,'audio-usage.jsonl'),'utf8').catch(()=>'');
   if(!state.audioBefore||!priorAudio.trim())state.audioBefore=await subscription();await save();
   const gen=await import('../../worker/quriozity-generation.ts');
-  const sol=gen.solClient(process.env.OPENAI_API_KEY,usage,undefined,'medium');
+  const sol=gen.solClient(process.env.OPENAI_API_KEY,usage);
   const anthropic=new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY,maxRetries:0,timeout:60*60*1000});
   const opus=async(step,input,_max,format,images=[],context)=>{
    const structured=opusFormat(format);

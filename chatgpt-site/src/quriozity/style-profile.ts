@@ -14,15 +14,23 @@ export const RECORDING_LIGHT:NonNullable<Scene['light']>={
  contrast:.8,exposure:.68,blackPoint:.025,whitePoint:.9,inkLo:.16,gamma:.8,softness:.95,
 };
 export const RECORDING_PITCH=3.72/1164;
+export const QURIOZITY_STYLE='paper-ink' as const;
+export const PAPER_LOOK={...RECORDING_LOOK,backgroundColor:'#ffffff',textColor:'#000000',palette:{blue:'#000000',azure:'#000000',white:'#000000',cyan:'#000000',violet:'#000000',orange:'#000000',pink:'#000000',red:'#ad2328',amber:'#875400',green:'#21643e'}} as const;
+
+/** Pure-black output ink must not turn the lighting/density source black too. */
+export function densityColor<T extends {r:number;g:number;b:number;setRGB:(r:number,g:number,b:number)=>unknown}>(color:T,namedInk=true):T{
+ if(namedInk&&Math.max(color.r,color.g,color.b)<1e-4)color.setRGB(1,1,1);
+ return color;
+}
 
 /** Opt-in for existing specs; the account author selects this for newly generated work.
  * Preserve composition, source geometry, motion and aspect. Scale dot pitch/edge optics with output width.
  * Reels cannot accidentally replace the calibration with arbitrary per-scene contrast/exposure settings.
  */
 export function applyStyleProfile(spec:QuriozitySpec):QuriozitySpec{
- if(spec.style!=='reference-recording')return spec;
+ if(spec.style!=='reference-recording'&&spec.style!=='paper-ink')return spec;
  const width=Math.round(Math.min(3840,Math.max(160,Number(spec.format?.width)||1080))),scale=width/1164,cell=Math.max(1,width*RECORDING_PITCH);
- const look={...spec.look,...structuredClone(RECORDING_LOOK),dotSoftness:.5*scale};delete look.noiseReference;
+ const look={...spec.look,...structuredClone(spec.style==='paper-ink'?PAPER_LOOK:RECORDING_LOOK),dotSoftness:.5*scale};delete look.noiseReference;
  return {...spec,format:{...spec.format,width,cell},look,
   scenes:spec.scenes.map(scene=>({...scene,
    raster:{activity:.06,activityRate:12,...scene.raster,cell,dotRoundness:1,dotSoftness:.5*scale},

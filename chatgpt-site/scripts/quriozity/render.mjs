@@ -39,7 +39,7 @@ export async function buildRenderBundle(){
 export async function openQuriozity(spec){
  const bundle=await buildRenderBundle();
  const assets=await assetsForSpec(spec);
- const browser=await chromium.launch({headless:true,executablePath:CHROME,args:['--use-angle=metal','--enable-gpu','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
+ const browser=await chromium.launch({headless:true,executablePath:CHROME,args:[...(process.platform==='darwin'?['--use-angle=metal']:[]),'--enable-gpu','--ignore-gpu-blocklist','--enable-unsafe-swiftshader']});
  const page=await browser.newPage();
  const errors=[];
  page.on('pageerror',e=>{errors.push(e.message);console.error(`Page error: ${e.message}`);});

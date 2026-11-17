@@ -2,24 +2,28 @@
 
 Separate account from Hedgy. Reels explain things people are curious about (why we dream, why the blue LED
 was so hard). Real subjects come from licensed photos, moving footage, scans or editable 3D and pass through
-the shared pixel renderer on pure black (see `chatgpt-site/src/quriozity/engine.ts`, post shader). Use
+the shared pixel renderer on white paper with black ink (see `chatgpt-site/src/quriozity/engine.ts`, post shader). Use
 `look.inkMode:"fixed"`: occupied dots have the same ink RGB in light and shadow; **contrast is a density
-difference**. Preserve sparse details, dense highlights and dark openings without dimming individual dots.
+difference**. Preserve sparse details, dense lit coverage and white paper openings without dimming individual dots. Legacy reference-recording studies keep their original blue-on-black polarity.
 Silhouette, local shading and real motion make the subject recognisable. Every subject must read instantly
 to a stranger with the sound off.
 
 ## Required review workflow
 
-Normal production starts with `claude-opus-5-5` at `medium` for planning,
-authoring, asset selection, sound design and repairs. Every review uses `gpt-6.1-sol` at `medium`; fallback
-authoring/repairs retain Sol at `xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
-`ELEVENLABS_API_KEY` (kept in private runtime configuration). For a future local run,
-load the private `.env.quriozity` file; configuring defaults does not start generation.
+Normal Quriozity production uses `gpt-6.1-sol` at `medium` for the story, script,
+storyboard plan, subject choices, composition, text, sound design and every review.
+`claude-opus-5-5` at `medium` is used ONLY for actual visual realization and rendered
+visual repairs. Opus executes Sol's selected subjects/layout/narration as physical
+geometry, materials and motion. There is no Sol visual repair fallback. Normal production uses style `paper-ink`: white background, black fixed
+ink and black text; other colors are very rare and require an essential role.
+Hedgy is unaffected. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+and `ELEVENLABS_API_KEY` in private runtime configuration. Loading defaults does
+not start generation. The CLI and account worker call the same `produce` function.
 The sequence is:
 
 1. Plan → script → factual accuracy and story coherence/clarity reviews.
-2. Opus storyboard → Sol director findings → targeted Opus corrections and a new
-   director review when needed, within the persistent per-stage repair allowances.
+2. Sol storyboard, subject/composition/text plan → Sol director findings and
+   corrections → Opus visual realization, preserving narration, timing and text.
 3. Rendered subject review: recognition, anatomy, physical contact, source fidelity.
 4. Rendered composition review: framing, clutter, contrast, readable text/captions.
 5. Rendered continuity review: visual explanation, recurring anchor, movement and cuts.
@@ -28,22 +32,21 @@ The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-There are at most **five Opus repair API calls total per reel**, shared across all
-stages, and **two Opus repair calls per stage**. Once either Opus limit is reached,
-that stage uses Sol for **up to three additional repair calls**. Once the reel-wide
-Opus limit is reached, all remaining model work uses Sol, including new authoring.
-Reviews always use Sol. Invalid proposals, transport retries and interrupted
-repair requests consume the relevant provider's allowance. Private reservations
-are saved before sending; restarting the worker cannot reset them. Earlier caches
-retain their recorded usage and reservations. Initial authoring is separate from
-the repair count, but cannot use Opus after the reel cap is reached.
+Each visual stage gets **one initial version and at most one Opus repair API
+call**. There is **no reel-wide Opus cap** and no Sol visual repair fallback.
+Initial visual realization has one Opus authoring call plus at most one repair;
+the five rendered review stages each permit one Opus repair. This gives at most
+**seven Opus API requests** on a normal fresh reel. Sol-only planning stages
+receive an initial authoring attempt and at most three Sol repairs.
+Reviews always use Sol at medium. Invalid proposals, transport retries and
+interrupted repair requests consume the stage's allowance. Private reservations
+are saved before sending; restarting cannot reset them or buy another free
+initial Opus realization. Earlier usage and reservations are retained.
 
-Each visual stage returns explicit findings and a verdict, with up to six rendered
-review attempts (initial version plus at most two Opus and three Sol revisions),
-subject to those durable API-call budgets. Every accepted repair receives fresh rendered evidence and a new
-review. A stage starting after the reel-wide Opus cap has at most four reviewed
-candidates: its initial version and three Sol revisions. After six candidates or
-exhaustion of that stage's Sol repair budget, select the best actually reviewed candidate and
+Each rendered visual stage returns explicit findings and a verdict, with at most
+two reviewed candidates (initial plus one valid revision). Every accepted repair
+receives fresh rendered evidence and a new review. After that stage's allowance,
+select the best actually rendered and reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. Normal production publishes the best reviewed selection after its limits,
@@ -79,13 +82,20 @@ word timings and verdicts. Usage and stage durations remain in `usage.jsonl` and
 inputs/output fingerprints; an old `spec.reviewed.json` alone cannot skip checks.
 Sound cue caches are invalidated when final visual timing or accepted voice changes.
 
+New production specs set `captionStyle:"word-highlight"`: each small mono caption
+phrase is fully visible when its group begins; the word currently being spoken
+uses white text inside a black rectangle. The highlight follows actual word start
+and end times, with no active highlight during a pause. Grouping, font, placement
+and phrase length retain the existing style. Saved specs without `captionStyle`
+keep their original typed captions, including the November 17 maple-leaf run.
+
 Text `size` uses pixels at 1080-pixel output width: use values such as `54` or
 `84`, not normalized fractions such as `0.04`. Fractional font sizes below one
 are rejected during authoring validation. Use separate positioned text items
 when a label needs a deliberate line break; whitespace in one item is reflowed.
 
 The raw onion reel was an isolated experiment and does not change this workflow.
-Visual authoring and primary visual repairs stay on Opus; Luna is not part of the
+Visual realization and primary rendered visual repairs stay on Opus; Luna is not part of the
 normal production routing. The spending orientation is about $3 for Opus and $3
 for OpenAI models per reel, without a hard monetary cutoff or skipped reviews.
 
@@ -107,36 +117,38 @@ Actual provider cache-read/write token counts remain in `usage.jsonl`.
 
 ### Model and repair map
 
-Opus means `claude-opus-5-5` at `medium`. Review Sol means `gpt-6.1-sol` at
-`medium`; fallback authoring/repair Sol retains `xhigh`. Luna is not used.
-The standard repair allowance below is **up to two Opus calls, then three Sol
-calls per stage**, with **only five Opus repair calls shared by the entire reel**.
-These are maxima, not a requirement to spend every round. Invalid proposals,
-transport retries and interrupted repairs consume reservations before requests.
-Once the fifth Opus repair is reserved, all remaining authoring also uses Sol.
+Sol planning and reviews use `gpt-6.1-sol` at `medium`. Opus visual work uses
+`claude-opus-5-5` at `medium`. Luna is not used. Sol-only stages have at most
+three repair API calls. Each visual stage has at most one Opus repair, with no
+shared reel cap and no Sol visual fallback. Reservations persist across restarts;
+these are maxima, not required rounds.
 
-| Stage | Author / executor | Review model | Repair or retry behavior |
+| Stage | Author / executor | Review model | Repair behavior |
 | --- | --- | --- | --- |
-| Plan and topic novelty | Opus | Sol novelty check when history requires it | Standard plan repair allowance; deterministic duplicate check first. |
-| Narration script | Opus | Separate Sol factual and coherence reviews | Standard script allowance; both reviews rerun on each valid revised script. |
-| Asset needs and selection | Opus; local source search/ingest | Sol on rendered asset previews | Up to three shortlisted candidates per missing subject; accepted assets are reused. |
-| Initial storyboard and schema checks | Opus; local validation/planners | Local technical checks here | Standard storyboard allowance for authoring corrections; content review follows. |
-| Storyboard direction | Opus authors corrections | Sol returns findings only | Separate standard director-stage allowance; each valid patch gets another director verdict. All selected drafts enter rendered review next. |
-| Rendered subject/source fidelity | Opus authors patches | Sol | Standard allowance; every accepted patch is rendered and reviewed again. |
-| Rendered composition/text | Opus authors patches | Sol | Same, independently. |
-| Rendered continuity/motion | Opus authors patches | Sol | Same, independently. |
-| Owner-reference style | Opus authors patches | Sol, with actual reference evidence | Same, independently; sampled frames and motion strips. |
-| Spoken-delivery direction | Sol punctuation guidance | Sol | Initial direction plus up to three corrections of invalid directions; words and speed stay fixed. |
-| Narration and generated-word pacing | ElevenLabs Adam, Multilingual v2 | Sol on text and generated word timings | Up to three generated takes total, reviewed individually; select best measured timing after exhaustion. No audio listening claim. |
-| Final visuals on actual narration timing | Opus authors patches | Sol repeats every visual specialty and the owner-reference comparison | Standard allowance; render/review each accepted patch with real word timing. |
-| Music, effects and sound | ElevenLabs audio; Opus cue design | One Sol cue-sheet/mix-statistics review | Cached audio; local calibration, not an extra LLM review loop. |
-| Export and publication | Local renderer/FFmpeg; account worker | Technical output checks | No model call per rendered frame. Normal reels publish the best reviewed selection with unresolved findings retained. |
+| Plan and topic novelty | Sol | Sol novelty when history requires it | Initial plan + up to 3 Sol repairs; deterministic duplicate check first. |
+| Narration script | Sol | Separate Sol facts and coherence reviews | Initial script + up to 3 Sol repairs; both reviews rerun on valid revisions. |
+| Subject choice and asset sourcing | Sol; local search/ingest | Sol on rendered asset previews | Up to 3 shortlisted candidates per missing subject; reuse accepted assets. |
+| Storyboard, composition and text | Sol | Sol director findings | Initial version + up to 3 Sol corrections per authoring/director stage. |
+| Actual visual realization | Opus | Local validation, then the required rendered reviewers | Initial Opus realization + at most 1 Opus repair; preserve Sol's narration, timing, hues and text. |
+| Rendered subject/source fidelity | Opus patches | Sol | Initial render + at most 1 valid Opus revision; select the best reviewed candidate. |
+| Rendered composition/text readability | Opus executes visual patches | Sol | Same; Sol's planned words remain fixed. |
+| Rendered continuity/motion | Opus patches | Sol | Same, independently. |
+| Owner-reference style | Opus patches | Sol with actual pinned evidence | Same; compare normalized dot coverage and motion while honoring white-paper polarity. |
+| Spoken-delivery direction | Sol punctuation guidance | Sol | Initial direction + up to 3 invalid-output corrections; words/speed fixed. |
+| Narration and generated pacing | ElevenLabs Adam, Multilingual v2 | Sol on text + generated word timings | Up to 3 voice takes, individually reviewed; no audio-listening claim. |
+| Final timed visuals | Opus patches | Sol repeats every visual specialty and the owner comparison | Same visual repair budget; fresh render/review on real word timing. |
+| Music, effects and sound | ElevenLabs audio; Sol cue design | Sol cue sheet + measured mix statistics | One sound review; cached audio and local calibration. |
+| Export | Local renderer / FFmpeg | Technical output checks | No model call per frame. Normal account publishing retains unresolved findings. |
 
-A visual stage can review its initial candidate plus at most five valid revisions
-(six candidates), subject to the API-call allowances. If it begins after the Opus
-reel allowance is spent, it has only the initial candidate plus three Sol revisions
-(four candidates). Best-version selection never turns an unresolved verdict into
-approval. Monetary spending targets do not replace these existing repair rules.
+Each of the five rendered visual stages can review at most two candidates,
+for at most ten Sol rendered-visual reviews. Best-version selection never turns
+an unresolved verdict into approval. At 100k input and 16k output tokens per Opus
+request, all seven calls would cost about $5.04 before cache adjustments. A
+repair-heavy whole-pipeline scenario is about $9.80 at published Standard rates
+(see `scripts/quriozity/costs.mjs` for explicit assumptions); neither figure is a
+guaranteed dollar maximum. Actual recorded usage is reported in
+`cost-summary.json`, separately identifying estimated ElevenLabs charges and
+unmetered requests. No dollar cutoff is enforced.
 
 The producer requires the review provider even when a spec is already saved, and
 refuses caches marked as unreviewed experiments. Encoding and asset-load checks
@@ -483,7 +495,7 @@ Optical materials set `material.userData.screenAO=false`: their first-interface 
 - **Library:** realistic scanned / engineering models live in `src/quriozity/assets/catalog.json` (`file: real/...`), at real-world size (`scale`) with orientation fixes (`rot`). Sources: NASA 3D Resources, Smithsonian Open Access 3D (CC0), Khronos samples, three.js examples, Objaverse/Sketchfab (CC-BY 4.0 / CC0 only; author + page kept in `license`/`page` for attribution).
 - **Curated lists:** `scripts/quriozity/realistic-assets.mjs`, `objaverse-picks.json`, `sourced-assets.json`. Rebuild everything with `node scripts/quriozity/ingest-assets.mjs` (or pass ids).
 - **External index:** `node scripts/quriozity/source-search.mjs build` (one-time, ≈600 MB Objaverse metadata into `.quriozity-cache/sources/`); `node scripts/quriozity/source-search.mjs "fire truck"` to search.
-- **Auto-sourcing in `produce.mjs`:** after the script, Opus lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Opus picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
+- **Auto-sourcing in `produce.mjs`:** after the script, Sol lists things the reel needs that the library lacks; any unknown model id in the storyboard is treated the same way. For each, `asset-sourcing.mjs` searches the index → Sol picks realistic candidates from thumbnails → the model is ingested → a dithered preview in four orientations is rendered → Sol accepts an orientation or rejects. Accepted models stay in the library (`sourced-assets.json`); `compose` is only the last resort.
 - **Review sheets:** `node scripts/quriozity/gallery.mjs <out.png> <ids...>`.
 
 ## No repeated topics

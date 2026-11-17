@@ -11,7 +11,7 @@ import {sampleObjectTrack,sampleLightTrack,interpolate} from './keyframes.ts';
 import {SceneTransmissionCapture} from './scene-transmission.ts';
 import {sampleMotionTime} from './motion-clock.ts';
 import {referenceProblems,referenceKind} from './reference-media.ts';
-import {applyStyleProfile} from './style-profile.ts';
+import {applyStyleProfile,densityColor} from './style-profile.ts';
 import {densify,fxUniforms,patchMaterial,fxPose,fxSurface,fxReveal,resetReveal,morphPose,morphSurface,FX_DUR,REVEAL_DUR,DENSE_FX,type FxTrack,type FxUniforms} from './effects.ts';
 
 THREE.ColorManagement.enabled=false;
@@ -33,7 +33,7 @@ const POST_FRAG=(aoMethod:'plane'|'legacy')=>`
 precision highp float;
 uniform sampler2D tA;uniform sampler2D tB;uniform sampler2D tDepth;uniform float cNear;uniform float cFar;uniform float tanHalf;uniform float aoR;uniform float aoStr;uniform float mixP;uniform int mode;uniform vec2 res;uniform float cell;uniform float time;uniform float haloTime;uniform float glowActive;uniform float boost;uniform float gam;uniform float noiseAmt;uniform float gap;uniform float ink;uniform float fuzz;uniform float inkLo;uniform float contrast;uniform float expo;
 varying vec2 vUv;
-uniform int fixedInk;uniform vec3 inkColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;uniform float activityPhase;
+uniform int fixedInk;uniform vec3 inkColor;uniform vec3 backgroundColor;uniform int maskMode;uniform float maskK;uniform float dotRoundness;uniform float dotSoftness;uniform float blackPoint;uniform float whitePoint;uniform float noiseReference;uniform float activity;uniform float activityEpoch;uniform float activityPhase;
 float bayer8(vec2 p){ivec2 i=ivec2(mod(p,8.));int x=i.x,y=i.y,xy=x^y;int v=((xy&1)<<5)|((x&1)<<4)|((xy&2)<<2)|((x&2)<<1)|((xy&4)>>1)|((x&4)>>2);return (float(v)+0.5)/64.;}
 float hash(vec2 p){return fract(sin(dot(p,vec2(12.9898,78.233)))*43758.5453);}
 ${ditherThresholdGLSL}
@@ -89,7 +89,7 @@ bool masked(vec2 c,vec2 cuv){
 }
 void main(){
  vec2 px=vec2(vUv.x,1.-vUv.y)*res;vec2 c=floor(px/cell);vec2 cuv=vec2((c.x+0.5)*cell/res.x,1.-(c.y+0.5)*cell/res.y);vec2 local=px-c*cell;
- if(masked(c,cuv)){gl_FragColor=vec4(0.,0.,0.,1.);return;}
+ if(masked(c,cuv)){gl_FragColor=vec4(backgroundColor,1.);return;}
  bool useB=false;vec2 sa=cuv,sb=cuv;
  if(mode>0){float n=hash(c*0.731+3.1);float p=1.-mixP;
   if(mode==1)useB=n<mixP;
@@ -100,7 +100,7 @@ void main(){
  }
  vec4 o=useB?dotColor(tB,c,sb,local,false):dotColor(tA,c,sa,local,true);
  if(maskMode==1)o.a*=step(bayer8(c+3.),maskK*1.001)*1.;
- gl_FragColor=vec4(o.rgb*o.a,1.);
+ gl_FragColor=vec4(mix(backgroundColor,o.rgb,o.a),1.);
 }`;
 
 // ---------------------------------------------------------------- runtime types
@@ -126,7 +126,7 @@ interface Obj {
 
 function ctxFor(def:ModelDef,o:SceneObject,hue:THREE.Color,palette:Partial<Record<Hue,string>>):ModelCtx{
  const params=(o.params&&typeof o.params==='object'?o.params:{}) as Record<string,unknown>;
- const color=(c?:string)=>c?hueColor(c,palette):hue.clone();
+ const color=(c?:string)=>densityColor(c?hueColor(c,palette):hue.clone(),!c||Object.hasOwn(palette,c));
  const mat=(opts:MatOpts={})=>{
   const base=opts.color instanceof THREE.Color?opts.color.clone():color(opts.color as string|undefined);
   // density comes from light x tone only: normalise the hue to full brightness (the ink colour is restored in the dither pass)
@@ -180,7 +180,7 @@ class SceneRuntime {
    if(box.isEmpty())box.set(new THREE.Vector3(-1,-1,-1),new THREE.Vector3(1,1,1));box.getCenter(this.center);this.radius=Math.max(0.2,box.getSize(new THREE.Vector3()).length()*0.6);
    const sc=this.key.shadow.camera;sc.left=-this.radius;sc.right=this.radius;sc.top=this.radius;sc.bottom=-this.radius;sc.near=0.01;sc.far=this.radius*8;sc.updateProjectionMatrix();this.key.shadow.normalBias=this.radius*0.012;
    for(const o of this.objs)for(const m of o.meshes)if(!(m.material as THREE.Material).transparent){m.castShadow=o.spec.castShadow??true;m.receiveShadow=o.spec.receiveShadow??true;}}
-  if(spec.ground){const g=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:this.hue.clone().multiplyScalar(0.22),roughness:1}));g.rotation.x=-Math.PI/2;g.position.y=-0.001;this.scene.add(g);}
+  if(spec.ground){const g=new THREE.Mesh(new THREE.PlaneGeometry(400,400),new THREE.MeshStandardMaterial({color:densityColor(this.hue.clone()).multiplyScalar(0.22),roughness:1}));g.rotation.x=-Math.PI/2;g.position.y=-0.001;this.scene.add(g);}
  }
 
  private build(){
@@ -406,7 +406,7 @@ class SceneRuntime {
    for(const m of o.mats)if(m.userData.glow){m.emissiveIntensity=m.userData.glow*(ctrl[m.userData.glowControl as string]??1);}
    // hue
    if(o.hues.length){let c:THREE.Color|null=this.fixedInk?this.hueAt(o,t):null;for(const h of o.hues){if(t<h.t0)break;c=t>=h.t1?h.to.clone():h.from.clone().lerp(h.to,ease.inOut((t-h.t0)/(h.t1-h.t0)));}
-    if(c&&this.fixedInk)c.multiplyScalar(1/Math.max(c.r,c.g,c.b,1e-4));
+    if(c&&this.fixedInk){densityColor(c);c.multiplyScalar(1/Math.max(c.r,c.g,c.b,1e-4));}
     if(c)o.mats.forEach(m=>{if(m.userData.explicit)return;m.color.copy(c!).multiplyScalar(m.userData.tone);if(m.userData.glow)m.emissive.copy(c!);});}
    // transform
    const rot=o.baseRot.clone();
@@ -663,7 +663,7 @@ export class Engine {
   this.renderer.outputColorSpace=THREE.LinearSRGBColorSpace;this.renderer.toneMapping=THREE.NoToneMapping;this.renderer.setPixelRatio(1);this.renderer.localClippingEnabled=true;this.renderer.shadowMap.enabled=true;this.renderer.shadowMap.type=THREE.PCFShadowMap;this.renderer.setSize(W,H,false);
   const mk=()=>{const rt=new THREE.WebGLRenderTarget(COLS*SS,ROWS*SS,{type:THREE.HalfFloatType,samples:4,generateMipmaps:true,minFilter:THREE.LinearMipmapLinearFilter,magFilter:THREE.LinearFilter,depthBuffer:true,depthTexture:new THREE.DepthTexture(COLS*SS,ROWS*SS,THREE.FloatType)});return rt;};
   this.rtA=mk();this.rtB=mk();
-  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},activityPhase:{value:0},time:{value:0},haloTime:{value:0},glowActive:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
+  this.post=new THREE.ShaderMaterial({vertexShader:POST_VERT,fragmentShader:POST_FRAG(this.aoMethod=spec.look?.aoMethod??'plane'),uniforms:{backgroundColor:{value:new THREE.Color(spec.look?.backgroundColor??'#000000')},fixedInk:{value:spec.look?.inkMode==='fixed'?1:0},inkColor:{value:new THREE.Vector3(1,1,1)},tA:{value:this.rtA.texture},tB:{value:this.rtB.texture},tDepth:{value:this.rtA.depthTexture},cNear:{value:0.1},cFar:{value:100},tanHalf:{value:0.32},aoR:{value:0.1},aoStr:{value:1.0},mixP:{value:0},mode:{value:0},res:{value:new THREE.Vector2(W,H)},cell:{value:CELL},activity:{value:0},activityEpoch:{value:0},activityPhase:{value:0},time:{value:0},haloTime:{value:0},glowActive:{value:0},boost:{value:1},gam:{value:LOOK.gamma},noiseAmt:{value:LOOK.noise},noiseReference:{value:spec.look?.noiseReference??-1},gap:{value:LOOK.gap},ink:{value:LOOK.ink},fuzz:{value:LOOK.fuzz},dotRoundness:{value:LOOK.dotRoundness},dotSoftness:{value:LOOK.dotSoftness},inkLo:{value:LOOK.inkLo},contrast:{value:1},blackPoint:{value:LOOK.blackPoint},whitePoint:{value:LOOK.whitePoint},expo:{value:1},maskMode:{value:0},maskK:{value:1}}});
   this.postScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2,2),this.post));
   this.out=document.createElement('canvas');this.out.width=W;this.out.height=H;this.ctx2d=this.out.getContext('2d')!;
   let t=0;for(const s of spec.scenes){this.starts.push(t);t+=sceneDuration(s);}this.total=t;
@@ -726,9 +726,9 @@ export class Engine {
   if(this.post.uniforms.glowActive)this.post.uniforms.glowActive.value=hasEmission?1:0;
   this.post.uniforms.mode!.value=mode;this.post.uniforms.mixP!.value=mixP;this.post.uniforms.time!.value=motionGlobal;
   this.renderer.setRenderTarget(null);this.renderer.setClearColor(0x000000,1);this.renderer.clear();this.renderer.render(this.postScene,this.postCam);
-  const c=this.ctx2d;c.globalAlpha=1;c.fillStyle='#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';
+  const c=this.ctx2d;c.globalAlpha=1;c.fillStyle=this.spec.look?.backgroundColor??'#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';
   const rt=this.runtime(i);
-  const tctx:TextCtx={ctx:c,t:local,dur:rt.dur,scene:sc,palette:this.spec.look?.palette,textColor:this.spec.look?.textColor,hue:this.spec.look?.palette?.[sc.hue??'blue']??HUES[(sc.hue??'blue') as Hue]??HUES.blue,project:(id)=>rt.project(id)};
+  const tctx:TextCtx={ctx:c,t:local,dur:rt.dur,scene:sc,palette:this.spec.look?.palette,textColor:this.spec.look?.textColor,backgroundColor:this.spec.look?.backgroundColor,captionStyle:this.spec.captionStyle,hue:this.spec.look?.palette?.[sc.hue??'blue']??HUES[(sc.hue??'blue') as Hue]??HUES.blue,project:(id)=>rt.project(id)};
   for(let previous=0;previous<i;previous++){
    const prior=this.spec.scenes[previous]!,priorTime=t-this.starts[previous]!,priorDuration=sceneDuration(prior);
    const carried=(prior.text??[]).filter(item=>item.carry&&priorTime<=textEnd(prior,item.until,priorDuration));
