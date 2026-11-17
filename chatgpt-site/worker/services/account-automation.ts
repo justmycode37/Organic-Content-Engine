@@ -8,6 +8,16 @@ const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
 export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
 export const runtime=(env:Env)=>Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
+/** Queue one extra Quriozity run without changing its recurring schedule. */
+export async function scheduleQuriozityRun(c:Container,env:Env,scheduledAt:string){
+ if(!Number.isFinite(Date.parse(scheduledAt))||Date.parse(scheduledAt)<=Date.now())throw new AppError(400,'schedule_invalid','Choose a future generation start');
+ const row=await c.db.prepare("SELECT value FROM accounts WHERE id='quriozity'").first<{value:string}>();
+ const account=row?JSON.parse(row.value):null;
+ if(!account?.enabled||!account.postizIntegrationId)throw new AppError(409,'account_not_ready','Start Quriozity with a connected publishing account first');
+ const target=await new Postiz(env).target(account.postizIntegrationId),at=new Date(scheduledAt).toISOString();
+ await c.db.prepare("INSERT OR IGNORE INTO account_automation_jobs(id,account_id,scheduled_at,status,provenance,created_at,updated_at) VALUES(?,'quriozity',?,'pending',?,?,?)").bind(crypto.randomUUID(),at,JSON.stringify({delivery:target,oneOff:true}),now(),now()).run();
+ return {job:await c.db.prepare("SELECT id,account_id,scheduled_at,status FROM account_automation_jobs WHERE account_id='quriozity' AND scheduled_at=?").bind(at).first()};
+}
 export async function tickAccounts(c:Container,env:Env){
  const at=new Date(),tickAt=at.toISOString(),accounts=await listAccounts(c.db),postiz=new Postiz(env);let queued=0;
  const enabled=accounts.filter(a=>a.enabled&&a.platform==='instagram'&&['hedgy','quriozity'].includes(a.id)&&a.postizIntegrationId);
@@ -42,7 +52,8 @@ export async function completeAccountJob(c:Container,id:string,lease:string,inpu
  const m=await c.materials.get(input.materialId);if(!m.uploaded||m.kind!=='finished'||m.mime!=='video/mp4')throw new AppError(409,'output_invalid','Upload a finished MP4 first');
  if(row.account_id==='quriozity'){
   const p=input.provenance as any,stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];
-  if(!p||p.reviewsDisabled||!hasDefaultQuriozityProfile(p)||stages.some(s=>p[s]?.passed!==true)||p.voiceReview?.passed!==true||!p.styleReference?.hash||!p.mixStatsFinal||!['fact-check+coherence','storyboard-review','sound-review'].every(s=>p.steps?.includes(s)))throw new AppError(409,'reviews_required','Quriozity requires the full approved review pipeline before completion');
+  const reviewed=(r:any)=>r?.passed===true||p?.publicationPolicy==='best-reviewed-after-limits'&&r?.selectedBest===true&&r.attempts?.length>0&&typeof r.selectionReason==='string';
+  if(!p||p.reviewsDisabled||p.modelRouting?.variant||!hasDefaultQuriozityProfile(p)||stages.some(s=>!reviewed(p[s]))||!reviewed(p.voiceReview)||!p.styleReference?.hash||!p.mixStatsFinal||!['fact-check+coherence','storyboard-review','sound-review'].every(s=>p.steps?.includes(s)))throw new AppError(409,'reviews_required','Quriozity requires every review stage or a documented best-reviewed selection after its limits');
  }
  const provenance={...(input.provenance as object),delivery:parse(row.provenance).delivery};
  await c.db.prepare("UPDATE account_automation_jobs SET status='completed',spec=?,provenance=?,error=NULL,updated_at=? WHERE id=? AND lease_id=? AND status='leased'").bind(JSON.stringify(input.spec),JSON.stringify(provenance),now(),id,lease).run();

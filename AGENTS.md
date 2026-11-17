@@ -34,7 +34,9 @@ select the best version that was actually rendered and reviewed and continue
 finishing the reel. Never discard a good earlier version merely because a later
 repair is worse. Save the selection and its reason, retain
 all findings and versions, and label unresolved results as unapproved rather than
-claiming that they passed. This does not authorize posting unapproved reels.
+claiming that they passed. After review/repair limits, normal Quriozity reels
+finish and automatically publish the best actually reviewed selection, retaining
+all unresolved findings. Private experiments remain excluded from publication.
 Voice should feel calm, natural and unhurried, with pauses at thought boundaries.
 Let the reel run longer instead of compressing speech to a duration target.
 Use ElevenLabs' unchanged default voice speed. Do not send a speed override,

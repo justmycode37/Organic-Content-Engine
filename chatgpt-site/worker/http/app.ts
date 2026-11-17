@@ -1,4 +1,4 @@
-import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime} from '../services/account-automation.ts';
+import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
 import {SocialAccounts,platformOf as scopedPlatformOf} from '../services/social.ts';
@@ -208,6 +208,7 @@ export function createApp(): Hono<AppEnv> {
   app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
   app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
   app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
+  app.post('/api/jobs/accounts/quriozity/schedule',async c=>{const input=await readBody(c,validator.object({scheduledAt:validator.string().datetime()}).strict());return c.json(await scheduleQuriozityRun(c.get('container'),c.env,input.scheduledAt));});
   app.post('/api/jobs/accounts/:id/:lease/heartbeat',async c=>c.json(await heartbeatAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'))));
   app.put('/api/jobs/accounts/:id/:lease/output',async c=>{
    const x=c.get('container'),id=c.req.param('id'),lease=c.req.param('lease'),job=await accountLease(x,id,lease),size=Number(c.req.header('content-length'));

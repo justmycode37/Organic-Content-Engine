@@ -996,7 +996,7 @@ test('an uncertain Postiz create request stops with needs_attention and never cr
  }finally{await s.stop();}
 });
 
-test('Quriozity completion rejects an unreviewed reel and preserves the failed quality gate',async()=>{
+test('Quriozity completion requires every stage and can publish a documented best reviewed selection',async()=>{
  const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'quriozity-completion-gate'});
  try{
   await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='quriozity'").run();
@@ -1009,8 +1009,27 @@ test('Quriozity completion rejects an unreviewed reel and preserves the failed q
   const provenance={model:'claude-opus-5-5',effort:'medium',reviewModel:'gpt-6.1-sol',reviewEffort:'xhigh',styleReference:{hash:'pinned-owner-reference'},voiceReview:{passed:true},mixStatsFinal:'Measured mix',steps:['fact-check+coherence','storyboard-review','sound-review'],...Object.fromEntries(stages.map(stage=>[stage,{passed:true}]))};
   const warning=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Retained test'},provenance:{...provenance,'visual-final-review':{passed:false,selectedBest:true}}}});
   assert.equal(warning.status,409,'Retaining a useful candidate does not approve it for publication');
-  const approved=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Reviewed Opus/Sol reel'},provenance}});
-  assert.equal(approved.status,200,JSON.stringify(approved.body));
+  const best={...provenance,publicationPolicy:'best-reviewed-after-limits','visual-final-review':{passed:false,selectedBest:true,attempts:[{attempt:1,verdict:{passed:false}}],selectionReason:'Fewest remaining must-fix findings after the stage repair limit'}};
+  const selected=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers:accountHeaders,json:{materialId,spec:{title:'Best reviewed reel'},provenance:best}});
+  assert.equal(selected.status,200,JSON.stringify(selected.body));
+  const saved=await s.db.prepare('SELECT status,provenance FROM account_automation_jobs WHERE id=?').bind(id).first();
+  assert.equal(saved.status,'completed');assert.equal(JSON.parse(saved.provenance)['visual-final-review'].passed,false,'Publication must not rewrite a failed verdict as a pass');
+ }finally{await s.stop();}
+});
+
+test('one-off Quriozity scheduling is authenticated, idempotent and leaves the weekly schedule unchanged',async()=>{
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'quriozity-oneoff',outboundService:async()=>Response.json([postizTarget])});
+ try{
+  await s.call('GET','/api/accounts');
+  await s.call('PATCH','/api/accounts/quriozity',{json:{postizIntegrationId:postizTarget.id,enabled:true}});
+  const before=(await s.db.prepare("SELECT value FROM accounts WHERE id='quriozity'").first()).value;
+  const scheduledAt=new Date(Date.now()+3600000).toISOString(),path='/api/jobs/accounts/quriozity/schedule';
+  assert.equal((await s.call('POST',path,{headers:{},json:{scheduledAt}})).status,401);
+  const first=await s.call('POST',path,{headers:accountHeaders,json:{scheduledAt}});
+  assert.equal(first.status,200,JSON.stringify(first.body));assert.equal(first.body.job.status,'pending');
+  const again=await s.call('POST',path,{headers:accountHeaders,json:{scheduledAt}});assert.equal(again.body.job.id,first.body.job.id);
+  assert.equal((await s.db.prepare("SELECT value FROM accounts WHERE id='quriozity'").first()).value,before);
+  assert.equal((await s.call('POST',path,{headers:accountHeaders,json:{scheduledAt:past(1)}})).status,400);
  }finally{await s.stop();}
 });
 

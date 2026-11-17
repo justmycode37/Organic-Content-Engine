@@ -232,6 +232,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const provenance=await readJson(join(workdir,'provenance.json')).catch(()=>({}));
  if(provenance.unapprovedTest&&provenance.modelRouting?.variant&&!allowUnapproved)throw new Error('Unapproved test cache requires the explicit private experiment override');
  if(provenance.reviewsDisabled===true||provenance.reviewMode==='raw-first-draft')throw new Error('Unreviewed experiment cache cannot be used for normal Quriozity production; use a fresh workdir with the full review pipeline');
+ if(!clients)provenance.publicationPolicy='best-reviewed-after-limits';
  let cat=await measure('catalogue preparation',()=>loadCatalog());
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
@@ -368,11 +369,12 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log('render video');
  const silent=join(workdir,'video.mp4');
  await measure('final video rendering',()=>renderVideo(spec,silent));
- const finished=join(workdir,provenance.unapprovedTest?'unapproved-test.mp4':'finished.mp4');
- const picture=['-c:v','copy',...(provenance.unapprovedTest?['-metadata','title=UNAPPROVED PRIVATE TEST','-metadata',`comment=Failed reviews: ${(provenance.failedReviews??[]).join(', ')}. Private experiment only; never approved for publication.`]:[])];
+ const privateTest=!!clients&&provenance.unapprovedTest;
+ const finished=join(workdir,privateTest?'unapproved-test.mp4':'finished.mp4');
+ const picture=['-c:v','copy',...(privateTest?['-metadata','title=UNAPPROVED PRIVATE TEST','-metadata',`comment=Failed reviews: ${(provenance.failedReviews??[]).join(', ')}. Private experiment only; never approved for publication.`]:provenance.failedReviews?.length?['-metadata',`comment=Best reviewed selection after limits. Unresolved reviews: ${provenance.failedReviews.join(', ')}.`]:[])];
  await measure('final audio video mux',()=>run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',audio,'-map','0:v','-map','1:a',...picture,'-c:a','copy','-t',total.toFixed(3),'-movflags','+faststart',finished]));
  for(const i of [0,1,2])await rm(`${audio}.stem${i}.wav`,{force:true});
- if(recordHistory&&!provenance.unapprovedTest){const {topicKey}=await import('../../worker/quriozity-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
+ if(recordHistory&&!privateTest){const {topicKey}=await import('../../worker/quriozity-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
   await recordReel({at:new Date().toISOString(),title:spec.title,topic:idea.topic??spec.title,topicKey:idea.topicKey||topicKey(idea.topic??spec.title??''),summary:spec.scenes.map(s=>s.say).join(' ').slice(0,200),workdir});}
  log(`done: ${finished} (${total.toFixed(1)} s)`);
  return {finished,spec,provenance};
