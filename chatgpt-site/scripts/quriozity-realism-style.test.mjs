@@ -4,7 +4,7 @@ import {readFile} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/examples/jsm/loaders/GLTFLoader.js';
-import {applyStyleProfile,RECORDING_LOOK,RECORDING_PITCH} from '../src/quriozity/style-profile.ts';
+import {applyStyleProfile,RECORDING_LOOK,RECORDING_PITCH,PAPER_LOOK,densityColor} from '../src/quriozity/style-profile.ts';
 import {preloadAssets,gltf,plainMaterial,importedMesh} from '../src/quriozity/assets.ts';
 import {riggedHand} from '../src/quriozity/models/rigged-hand.ts';
 import {portrait} from '../src/quriozity/models/portrait.ts';
@@ -13,6 +13,7 @@ import {rigidSkin} from '../src/quriozity/models/rigid-skin.ts';
 import {headSource,HEAD_SCAN} from '../src/quriozity/head-source.ts';
 import {assetsForSpec,ASSET_DIR} from './quriozity/assets.mjs';
 import {legacyDiffusePlugin} from '../src/quriozity/legacy-gltf.ts';
+import {openQuriozity} from './quriozity/render.mjs';
 
 function ctx(params={}){
  const mat=(o={})=>new THREE.MeshStandardMaterial({color:new THREE.Color().setScalar(o.tone??1),roughness:o.rough??.62});
@@ -21,6 +22,31 @@ function ctx(params={}){
   str:(k,f,allowed)=>typeof params[k]==='string'&&(!allowed||allowed.includes(params[k]))?params[k]:f,
   bool:(k,f)=>typeof params[k]==='boolean'?params[k]:f};
 }
+
+test('paper profile changes output polarity while retaining calibrated coverage and source lighting',()=>{
+ const s={version:1,series:'QURIOZITY',style:'paper-ink',title:'Paper',scenes:[{say:'A subject',objects:[{id:'hero',model:'led'}]}]};
+ const before=structuredClone(s),paper=applyStyleProfile(s);
+ assert.deepEqual(s,before);assert.deepEqual(applyStyleProfile(paper),paper);
+ assert.equal(paper.look.backgroundColor,'#ffffff');assert.equal(paper.look.palette.blue,'#000000');assert.equal(paper.look.palette.white,'#000000');assert.equal(paper.look.textColor,'#000000');
+ assert.equal(paper.format.cell,1080*RECORDING_PITCH);assert.equal(paper.look.contrast,RECORDING_LOOK.contrast);
+ assert.equal(paper.scenes[0].raster.activity,.06);assert.equal(paper.look.palette.red,PAPER_LOOK.palette.red);
+ assert.deepEqual(densityColor(new THREE.Color(0,0,0)).toArray(),[1,1,1],'Output black still has a lit density source');
+ assert.deepEqual(densityColor(new THREE.Color(0,0,0),false).toArray(),[0,0,0],'Literal source darkness remains dark');
+});
+
+test('actual paper GPU output has white negative space and visible monochrome ink',async()=>{
+ const spec={version:1,series:'QURIOZITY',style:'paper-ink',title:'Paper GPU',captions:false,format:{width:270,height:480},scenes:[{say:'An ordinary light.',duration:3,hue:'blue',camera:{fill:.7},objects:[{id:'hero',model:'led',enter:'none',idle:'none'}]}]};
+ const {browser,page}=await openQuriozity(spec);
+ try{
+  const result=await page.evaluate(async()=>{
+   const img=new Image();img.src='data:image/png;base64,'+window.quriozity.frame(1);await img.decode();
+   const canvas=document.createElement('canvas');canvas.width=img.width;canvas.height=img.height;const ctx=canvas.getContext('2d');ctx.drawImage(img,0,0);const pixels=ctx.getImageData(0,0,img.width,img.height).data;
+   let ink=0,colored=0;for(let i=0;i<pixels.length;i+=4){if(Math.max(pixels[i],pixels[i+1],pixels[i+2])<100)ink++;if(Math.max(pixels[i],pixels[i+1],pixels[i+2])-Math.min(pixels[i],pixels[i+1],pixels[i+2])>2)colored++;}
+   return {corner:[...pixels.slice(0,3)],ink,colored,pixels:pixels.length/4};
+  });
+  assert.deepEqual(result.corner,[255,255,255]);assert.ok(result.ink>result.pixels*.005,JSON.stringify(result));assert.equal(result.colored,0);
+ }finally{await browser.close();}
+});
 function positions(root){
  root.updateMatrixWorld(true);const out=[];
  root.traverse(o=>{if(!o.isMesh)return;for(let i=0;i<o.geometry.attributes.position.count;i++)out.push(...o.getVertexPosition(i,new THREE.Vector3()).applyMatrix4(o.matrixWorld).toArray());});return out;

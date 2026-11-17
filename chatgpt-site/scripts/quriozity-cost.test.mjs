@@ -9,8 +9,17 @@ import {reviewVisuals,VISUAL_REVIEW_STAGES} from '../worker/quriozity-quality.ts
 import {visualPatchSchema} from '../worker/quriozity-visual-patches.ts';
 import {opusOutputFormat} from '../worker/quriozity-model-client.ts';
 import {loadCatalog} from './quriozity/catalog.mjs';
+import {modelCost,audioCost,summarizeCosts} from './quriozity/costs.mjs';
 
 const entry=(id,summary,aliases=[])=>({id,summary,aliases,details:`${id}: ${summary}\ncontrols: VERIFIED-${id}`,kind:'model'});
+
+test('Quriozity cost reports include one-hour Opus writes, Sol reasoning and separate audio estimates without a cutoff',()=>{
+ assert.equal(modelCost({model:'claude-opus-5-5',usage:{input_tokens:10000,output_tokens:10000,cache_creation_input_tokens:20000,cache_creation:{ephemeral_1h_input_tokens:15000},cache_read_input_tokens:10000}}),.387);
+ assert.equal(modelCost({model:'gpt-6.1-sol',usage:{input_tokens:100000,output_tokens:50000,input_tokens_details:{cached_tokens:20000}}}),.662);
+ assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/text-to-speech/voice/with-timestamps',characters:1000}),.08);
+ assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/music',generatedSeconds:60}),.15);
+ assert.equal(summarizeCosts([]).orientation.hardCutoff,false);
+});
 
 test('catalogue retrieval keeps used assets and aliases while omitting unrelated full documentation',()=>{
  const entries=[entry('onion','A normal onion',['bulb']),entry('face','Neutral face'),entry('rocket','A rocket')];
@@ -83,7 +92,7 @@ test('provider requests preserve cache prefixes, image evidence and native patch
   assert.equal(requests[0].body.messages[0].content[1].source.data,'evidence');
   assert.equal(requests[2].body.reasoning.effort,'medium');assert.equal(requests[2].body.input[0].content[0].text,prefix);
   assert.equal(requests[2].body.input[1].content[1].image_url,'data:image/png;base64,evidence');
-  await ask('storyboard','Different draft',0,{name:'open',schema:z.object({controls:z.record(z.string(),z.number())})},[],{prefix});
+  await ask('visual-realization','Different draft',0,{name:'open',schema:z.object({controls:z.record(z.string(),z.number())})},[],{prefix});
   assert.match(requests[3].body.system[0].text,/matching this schema/);
   assert.equal(requests[3].body.messages[0].content[0].text,'Different draft','Unstructured schema is cached once, not repeated in the dynamic suffix');
   assert.equal(usage.length,4,'Even invalid structured proposals retain usage');
@@ -103,6 +112,7 @@ test('storyboard director returns findings and a separate author patches and rec
   if(step==='fact-check')return JSON.stringify({ok:true,problems:[]});
   if(step==='coherence')return JSON.stringify({heardQuestion:'Why?',heardAnswer:'An explanation',retell:'One chain',links:[],scores:{thread:9,flow:9,simplicity:9,payoff:9,explains:9},problems:[]});
   if(step==='storyboard')return JSON.stringify(spec);
+  if(step==='visual-realization')return input.split('Sol plan to realize: ')[1].split('\nValidation feedback')[0];
   if(step==='storyboard-review'){
    assert.equal(format.name,'quriozity_storyboard_verdict');assert.match(input,/findings only/);
    return JSON.stringify(++reviews===1?{passed:false,summary:'Hero too large',findings:[{scene:1,severity:'must-fix',problem:'Hero too large',evidence:'Scale is 1',change:'Scale .8'}]}:{passed:true,summary:'Corrected',findings:[]});
@@ -111,7 +121,7 @@ test('storyboard director returns findings and a separate author patches and rec
   throw new Error(`Unexpected ${step}`);
  };
  const r=await generateQuriozityReel({OPENAI_API_KEY:'test-only'},'Light',{text:'led',assets:'',entries:[entry('led','A light')],has:id=>id==='led'},undefined,[],undefined,ask);
- assert.deepEqual(calls.slice(-3),['storyboard-review','storyboard-review-repair','storyboard-review']);
+ assert.deepEqual(calls.slice(-4),['storyboard-review','storyboard-review-repair','storyboard-review','visual-realization']);
  assert.equal(r.spec.scenes[0].objects[0].scale,.8);
  assert.deepEqual(r.spec.scenes.slice(1),spec.scenes.slice(1));
  assert.equal(r.provenance.storyboardReviews.length,2);assert.equal(r.provenance.storyboardGate.passed,true);

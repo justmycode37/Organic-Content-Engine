@@ -1,14 +1,24 @@
 
 ## User model preference
 
-For Quriozity, start with `claude-opus-5-5` at `medium` effort for generation,
-creative specialists and repairs. Use `gpt-6.1-sol` at `medium` for every review
-and at `xhigh` for fallback authoring/repairs. Allow at most two Opus repair API calls per stage and
-five total per reel, then up to three additional Sol repair API calls per stage.
-After the reel's fifth Opus repair reservation, all remaining model work uses Sol.
-Keep visual authoring and primary visual repairs on Opus; do not assign them to Luna.
-Aim for about $3 in Opus and $3 in OpenAI model costs per reel. This is spending
-guidance, not a hard cost cutoff, and does not authorize skipping reviews.
+For Quriozity, use `gpt-6.1-sol` at `medium` for story, script, storyboard,
+subject selection, composition, text, sound design and every review. Use
+`claude-opus-5-5` at `medium` ONLY for visual realization and rendered visual
+repairs: Opus executes Sol's plan as the actual geometry, materials and motion.
+Preserve Sol's narration and text. Allow one initial Opus visual realization
+and at most one Opus repair API call per visual stage, including realization.
+There is no reel-wide Opus call cap and no Sol fallback for visual repairs.
+Sol-only authoring stages get an initial attempt plus at most three Sol repairs.
+Do not assign visual realization to Luna. Aim for about $3 in Opus and $3 in
+OpenAI model costs per reel. This is guidance, not a hard cost cutoff, and never
+authorizes skipped reviews. These changes apply ONLY to Quriozity, never Hedgy.
+
+Quriozity's normal output is white paper with black fixed ink and black text.
+Other colors are very rare and must be essential to the explanation. The original
+blue-on-black recording still defines dot structure, density, typography and
+motion; compare its normalized ink coverage while respecting the new polarity.
+Source mattes may stay black/transparent internally. Legacy reference-recording
+studies retain their original colors; normal production uses style `paper-ink`.
 Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
 
@@ -24,17 +34,18 @@ replacement for content reviews. The November 14 raw onion reel was a one-off
 experiment; its no-review producer and unreviewed cache are not the normal workflow.
 
 Every visual repair must be rendered and reviewed again. Save review findings and
-before/after versions. Allow at most 5 Opus repair API calls TOTAL per reel,
-shared across script, storyboard and all visual stages, including invalid
-proposals, transport retries and interrupted requests. Persist reservations before
-requests; restarts must not reset either provider's budget. Each stage gets at
-most 2 Opus repairs followed by up to 3 additional Sol repairs; the five-call
-Opus reel cap is shared across all stages. Reviews always use Sol. Each visual
-stage may review the initial version plus at most 5 revisions (6 candidates),
-subject to those API-call budgets, including invalid proposals and retries.
-Allow up to 3 generated voice takes. When a stage's Sol repair budget is spent,
-select the best version that was actually rendered and reviewed and continue
-finishing the reel. Never discard a good earlier version merely because a later
+before/after versions. Each visual stage gets at most one Opus repair API call,
+including invalid proposals, transport retries and interrupted requests. There is
+no shared total limit across the reel. Persist reservations before requests;
+restarts must not reset either provider's budget or repeat a free initial Opus
+realization. Sol-only planning stages receive at most three Sol repairs. Reviews
+always use Sol at medium. Each rendered visual stage may review its initial
+version and at most one valid revision (two candidates). There are five rendered
+visual stages plus initial visual realization, for at most seven Opus requests
+per normal fresh reel if every repair is used. No Sol visual fallback follows.
+Allow up to three generated voice takes. When a visual stage's repair allowance
+is spent, select the best version that was actually rendered and reviewed and
+continue finishing the reel. Never discard a good earlier version merely because a later
 repair is worse. Save the selection and its reason, retain
 all findings and versions, and label unresolved results as unapproved rather than
 claiming that they passed. After review/repair limits, normal Quriozity reels
@@ -61,7 +72,7 @@ Show the invisible gas as numerous very small glimmering pixels distributed
 broadly throughout the surrounding air, on both sides of the face. Never align
 them into a straight eye-targeted route, solid stream, arrow or opaque smoke.
 Keep independent gentle drift and asynchronous glimmer within the fixed-ink style.
-Fade the lower end of the neutral bust smoothly into black, keep the approved
+Fade the lower end of the neutral bust smoothly into the current paper background, keep the approved
 onion. Show only clearly visible, fully filled pixel teardrops on the cheeks.
 Do not add water inside the eyes, wet-film layers, menisci, bright wet eyelid
 margins, hollow outlines or long tear tracks. The filled drops are the owner’s

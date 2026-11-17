@@ -226,7 +226,7 @@ export interface QuriozitySpec {
  version:1;
  series:'QURIOZITY';
  /** Shared recording calibration; custom/legacy specs omit it. Geometry and motion remain independent. */
- style?:'reference-recording';
+ style?:'reference-recording'|'paper-ink';
  title:string;
  musicBrief?:string;
  captions?:boolean;
@@ -236,7 +236,7 @@ export interface QuriozitySpec {
  /** Output size and dot pitch; default 1080x1920 portrait, 4 px dots. */
  format?:{width?:number;height?:number;cell?:number;textScale?:number};
  /** Renderer calibration: dither gamma/noise/gap(px)/ink brightness/silhouette fuzz and light levels. */
- look?:{inkMode?:'fixed'|'shaded';textColor?:string;palette?:Partial<Record<Hue,string>>;contrast?:number;blackPoint?:number;whitePoint?:number;inkLo?:number;shadows?:number;ao?:number;aoMethod?:'plane'|'legacy';gamma?:number;noise?:number;noiseReference?:number;gap?:number;ink?:number;fuzz?:number;dotRoundness?:number;dotSoftness?:number;key?:number;fill?:number;rim?:number;ambient?:number;dir?:number[]};
+ look?:{inkMode?:'fixed'|'shaded';backgroundColor?:string;textColor?:string;palette?:Partial<Record<Hue,string>>;contrast?:number;blackPoint?:number;whitePoint?:number;inkLo?:number;shadows?:number;ao?:number;aoMethod?:'plane'|'legacy';gamma?:number;noise?:number;noiseReference?:number;gap?:number;ink?:number;fuzz?:number;dotRoundness?:number;dotSoftness?:number;key?:number;fill?:number;rim?:number;ambient?:number;dir?:number[]};
 }
 
 export const HUES:Record<Hue,string>={

@@ -6,7 +6,7 @@ import {sampleTextReveal,sampleTextLayout} from './keyframes.ts';
 const X=(x:number)=>x/1080*W,Y=(y:number)=>y/1920*H;
 
 export const COND='AcxCond',MONO='AcxMono',ROBOTO_MONO='AcxRobotoMono',OSWALD='AcxOswald',ROBOTO_CONDENSED='AcxRobotoCondensed';
-export interface TextCtx {ctx:CanvasRenderingContext2D;t:number;dur:number;scene:Scene;hue:string;textColor?:string;palette?:Partial<Record<Hue,string>>;project:(id:string)=>{x:number;y:number}|null}
+export interface TextCtx {ctx:CanvasRenderingContext2D;t:number;dur:number;scene:Scene;hue:string;textColor?:string;backgroundColor?:string;palette?:Partial<Record<Hue,string>>;project:(id:string)=>{x:number;y:number}|null}
 
 const hash=(n:number)=>{const x=Math.sin(n*91.7+12.3)*43758.5453;return x-Math.floor(x);};
 
@@ -41,14 +41,14 @@ function visibleChars(total:number,t:number,start:number,end:number,cps:number,d
 }
 
 /** Dither glitch over a rectangle: letters break into scattered dots for a few frames (reference: EVOLVED / CHANGED / GO DEEPER). */
-function glitchRect(ctx:CanvasRenderingContext2D,x0:number,y0:number,w:number,h:number,t:number,hue:string,size:number,grey='#cfcfcf',cellPixels?:number){
+function glitchRect(ctx:CanvasRenderingContext2D,x0:number,y0:number,w:number,h:number,t:number,hue:string,size:number,grey='#cfcfcf',cellPixels?:number,background='#000'){
  const cell=cellPixels===undefined?Math.max(3,Math.round(size/16)):Math.max(1,Math.round(cellPixels));const frame=Math.floor(t*30);
  const transform=cellPixels===undefined?null:ctx.getTransform();
  const cellX=transform?cell/Math.max(1e-8,Math.hypot(transform.a,transform.b)):cell;
  const cellY=transform?cell/Math.max(1e-8,Math.hypot(transform.c,transform.d)):cell;
  for(let gy=-cellY*2;gy<h+cellY*2;gy+=cellY)for(let gx=-cellX*3;gx<w+cellX*3;gx+=cellX){
   const inside=gx>=0&&gx<w&&gy>=0&&gy<h;const r=hash(gx*0.37+gy*1.91+frame*7.7);
-  if(inside&&r<0.42){ctx.fillStyle='#000';ctx.fillRect(x0+gx,y0+gy,cellX,cellY);}
+  if(inside&&r<0.42){ctx.fillStyle=background;ctx.fillRect(x0+gx,y0+gy,cellX,cellY);}
   else if(!inside&&r>0.93){ctx.fillStyle=r>0.975?hue:grey;ctx.fillRect(x0+gx,y0+gy,cellX*0.6,cellY*0.6);}
  }
 }
@@ -56,6 +56,7 @@ function glitchRect(ctx:CanvasRenderingContext2D,x0:number,y0:number,w:number,h:
 export function drawText(tc:TextCtx,item:TextItem){
  if(!item||typeof item.text!=='string'||!item.text.trim())return;
  const {ctx,t,dur,scene}=tc;
+ const paper=tc.backgroundColor==='#ffffff',knockout=paper?'#ffffff':'#0a0a0a';
  const style=item.style??'headline';
  const textAt=(value:TextItem['at'],fallback:number)=>item.carry&&value!==undefined?textEnd(scene,value,dur):resolveAt(scene,value,dur,fallback);
  const start=textAt(item.at,0.1);
@@ -104,13 +105,13 @@ export function drawText(tc:TextCtx,item:TextItem){
  let count=0;
  const capH=item.font==='oswald'||item.font==='roboto-condensed'?ctx.measureText('H').actualBoundingBoxAscent:size*(mono?0.72:0.74);
  let cursorX=0,cursorY=0;
- const textCol=style==='tag'||style==='prefix'?'#0a0a0a':item.tint?hue:mono?'#cfcfcf':tc.textColor??TEXT_GREY;
+ const textCol=style==='tag'||style==='prefix'?knockout:item.tint?hue:mono?(paper?'#000000':'#cfcfcf'):tc.textColor??TEXT_GREY;
  const fullW=Math.max(...lines.map(l=>l.reduce((a,b)=>a+b.w,0)+space*Math.max(0,l.length-1)));
  const lx=(width:number)=>align==='center'?x-width/2:align==='right'?x-width:x;
  const centreLines=align==='center'&&(item.pos==='center'||item.pos==='upper');
  const baseY=(li:number)=>y+li*lineH-(lines.length-1)*lineH*(centreLines?0.5:0);
  // black plate behind the whole line (reference: GO DEEPER over the tunnel)
- if(item.plate&&shown>0){ctx.fillStyle='rgba(0,0,0,0.92)';const px=size*.18,py=size*.06,metrics=ctx.measureText(raw);ctx.fillRect(lx(fullW)-px,baseY(0)-metrics.actualBoundingBoxAscent-py,fullW+px*2,(lines.length-1)*lineH+metrics.actualBoundingBoxAscent+metrics.actualBoundingBoxDescent+py*2);}
+ if(item.plate&&shown>0){ctx.fillStyle=paper?'rgba(255,255,255,0.94)':'rgba(0,0,0,0.92)';const px=size*.18,py=size*.06,metrics=ctx.measureText(raw);ctx.fillRect(lx(fullW)-px,baseY(0)-metrics.actualBoundingBoxAscent-py,fullW+px*2,(lines.length-1)*lineH+metrics.actualBoundingBoxAscent+metrics.actualBoundingBoxDescent+py*2);}
  lines.forEach((line,li)=>{
   const width=line.reduce((a,b)=>a+b.w,0)+space*Math.max(0,line.length-1);
   let cx=lx(width);const by=baseY(li);
@@ -124,7 +125,7 @@ export function drawText(tc:TextCtx,item:TextItem){
     const pn=Math.min(n,tk.pre);const pw=ctx.measureText(tk.text.slice(0,pn)).width;
     if(item.prefixUntil===undefined||t<textAt(item.prefixUntil,dur)){
      ctx.fillStyle=hue;ctx.fillRect(cx-padX*0.5+boxX,by-capH-padY+boxY,pw+padX,capH+padY*2);
-     ctx.fillStyle='#0a0a0a';ctx.fillText(tk.text.slice(0,pn),cx,by);
+     ctx.fillStyle=knockout;ctx.fillText(tk.text.slice(0,pn),cx,by);
     }
     const pfull=ctx.measureText(tk.text.slice(0,tk.pre)).width;
     if(n>tk.pre){ctx.fillStyle=textCol;ctx.fillText(tk.text.slice(tk.pre,n),cx+pfull+prefixGap,by);}
@@ -136,7 +137,7 @@ export function drawText(tc:TextCtx,item:TextItem){
     ctx.fillStyle=style==='tag'?(tc.textColor??'#d0d0d0'):hue;
     ctx.fillRect(cx-padX+boxX,by-capH-padY+boxY,bw,capH+padY*2);
    }
-   if(n>0){ctx.fillStyle=style==='number'?'#e8e8e8':textCol;if(tk.hl&&style!=='tag')ctx.fillStyle='#0a0a0a';ctx.fillText(tk.text.slice(0,n),cx,by);}
+   if(n>0){ctx.fillStyle=style==='number'?(paper?'#000000':'#e8e8e8'):textCol;if(tk.hl&&style!=='tag')ctx.fillStyle=knockout;ctx.fillText(tk.text.slice(0,n),cx,by);}
    if(n>0||count-tk.text.length<=shown){cursorX=cx+ctx.measureText(tk.text.slice(0,n)).width+(n?size*0.06:0);cursorY=by;}
    cx+=tk.w;
   });
@@ -147,9 +148,9 @@ export function drawText(tc:TextCtx,item:TextItem){
   const landGlitch=item.glitchOnLand??(style==='highlight'||style==='tag'||style==='plate'||!!item.highlight);
   const g=(landGlitch&&t>landed&&t<landed+0.1)||(!mono&&item.erase!==false&&item.until!==undefined&&t>delStart-0.1&&t<delStart)||extra.some(g0=>t>=g0&&t<g0+0.1);
   if(g&&style!=='number'&&total>1){const gw=item.glitchWord?(()=>{const tk=toks.find(k=>k.text.toUpperCase()===item.glitchWord!.toUpperCase());return tk?tk:null;})():null;
-   if(gw){let cx2=lx(fullW);for(const tk of toks){if(tk===gw)break;cx2+=tk.w+space;}glitchRect(ctx,cx2-padX+(item.glitchBox?boxX:0),baseY(0)-capH-padY+(item.glitchBox?boxY:0),gw.w+padX*2,capH+padY*2,t,hue,size,tc.textColor,item.glitchCell);}
-   else if(item.glitchBox)glitchRect(ctx,lx(fullW)-padX+boxX,baseY(0)-capH-padY+boxY,fullW+padX*2,(lines.length-1)*lineH+capH+padY*2,t,hue,size,tc.textColor,item.glitchCell);
-   else glitchRect(ctx,lx(fullW),baseY(0)-capH-padY,fullW,lines.length*lineH,t,hue,size,tc.textColor,item.glitchCell);}}
+   if(gw){let cx2=lx(fullW);for(const tk of toks){if(tk===gw)break;cx2+=tk.w+space;}glitchRect(ctx,cx2-padX+(item.glitchBox?boxX:0),baseY(0)-capH-padY+(item.glitchBox?boxY:0),gw.w+padX*2,capH+padY*2,t,hue,size,tc.textColor,item.glitchCell,tc.backgroundColor);}
+   else if(item.glitchBox)glitchRect(ctx,lx(fullW)-padX+boxX,baseY(0)-capH-padY+boxY,fullW+padX*2,(lines.length-1)*lineH+capH+padY*2,t,hue,size,tc.textColor,item.glitchCell,tc.backgroundColor);
+   else glitchRect(ctx,lx(fullW),baseY(0)-capH-padY,fullW,lines.length*lineH,t,hue,size,tc.textColor,item.glitchCell,tc.backgroundColor);}}
  // typing cursor (hue bar): visible while typing/deleting and blinking briefly after
  const typingDone=reveal?.typingDone??start+total/cps;const deleting=reveal?.deleting??(item.until!==undefined&&t>end-deleteLength(total,item.eraseDur));
  const blink=Math.floor((t-(item.cursorPhase??0))/(Math.max(.1,item.cursorPeriod??1/3)*.5))%2===0;
@@ -173,7 +174,7 @@ export function drawCaptions(tc:TextCtx){
  ctx.save();ctx.font=`${40*TS}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='alphabetic';
  // Keep the running line above the bottom interface region of a portrait reel.
  const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.8;
- ctx.fillStyle='#d2d2d2';ctx.fillText(text,x,y);
+ ctx.fillStyle=tc.backgroundColor==='#ffffff'?'#000000':'#d2d2d2';ctx.fillText(text,x,y);
  const cw=ctx.measureText(text).width;
  if(Math.floor(t*5)%2===0||text.length<full.length){ctx.fillStyle=tc.hue;ctx.fillRect(x+cw+6*TS,y-30*TS,4*TS,38*TS);}
  ctx.restore();

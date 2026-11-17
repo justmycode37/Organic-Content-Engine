@@ -6,14 +6,16 @@ import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {opusRepairBudget,solRepairBudget} from './quriozity/repair-budget.mjs';
 import {quriozityClient} from '../worker/quriozity-generation.ts';
-import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,quriozityStepRole,hasDefaultQuriozityProfile} from '../worker/quriozity-model-policy.ts';
+import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,quriozityStepRole,usesOpusVisuals,hasDefaultQuriozityProfile} from '../worker/quriozity-model-policy.ts';
 import {narrationRequest} from './quriozity/produce.mjs';
 import {reviewNarrationDelivery,reviewVoicePacing,voicePacingMetrics} from '../worker/quriozity-quality.ts';
 
 test('default routing separates all authoring/repairs from every review specialty',()=>{
+ for(const step of ['plan','script','asset-needs','asset-pick','storyboard','storyboard-review-repair','sound-design','fact-check','visual-subject-review'])assert.equal(usesOpusVisuals(step),false,step);
+ for(const step of ['visual-realization','visual-realization-repair','visual-subject-review-repair','visual-composition-review-repair','visual-continuity-review-repair','visual-style-reference-review-repair','visual-final-review-repair'])assert.equal(usesOpusVisuals(step),true,step);
  for(const step of ['plan','script','asset-needs','asset-pick','storyboard','storyboard-review-repair','sound-design','visual-final-review-repair'])assert.equal(quriozityStepRole(step),'generation',step);
  for(const step of ['fact-check','coherence','novelty','asset-verify','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review','voice-delivery-review','voice-pacing-review','sound-review'])assert.equal(quriozityStepRole(step),'review',step);
- assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}});
+ assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'gpt-6.1-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}});
  assert.ok(hasDefaultQuriozityProfile({modelRouting:QURIOZITY_CLIENT_CONTEXT}));
  assert.ok(!hasDefaultQuriozityProfile({model:'gpt-6.1-sol',effort:'xhigh'}));
  assert.ok(!hasDefaultQuriozityProfile({modelRouting:{...QURIOZITY_CLIENT_CONTEXT,reviewEffort:'xhigh'}}));
@@ -29,7 +31,7 @@ const anthropicStream=text=>[
  ['message_stop',{type:'message_stop'}],
 ].map(([event,data])=>`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
 
-test('actual default clients send Opus medium authoring and Sol medium reviews, without live API calls',async()=>{
+test('actual clients send Sol planning/reviews and Opus visual realization/repairs, without live API calls',async()=>{
  const original=globalThis.fetch,requests=[],usage=[];
  globalThis.fetch=async(url,init)=>{
   requests.push({url:String(url),body:JSON.parse(init.body)});
@@ -38,11 +40,12 @@ test('actual default clients send Opus medium authoring and Sol medium reviews, 
  };
  try{
   const ask=quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},entry=>usage.push(entry));
-  for(const step of ['plan','fact-check','visual-composition-review-repair'])assert.equal(await ask(step,'Test',0,{name:'result',schema:z.object({ok:z.boolean()})}),'{"ok":true}');
-  assert.equal(requests[0].body.model,'claude-opus-5-5');assert.equal(requests[0].body.output_config.effort,'medium');
-  assert.equal(requests[1].body.model,'gpt-6.1-sol');assert.equal(requests[1].body.reasoning.effort,'medium');
-  assert.equal(requests[2].body.model,'claude-opus-5-5');
-  assert.deepEqual(usage.map(u=>u.effort),['medium','medium','medium']);
+  for(const step of ['plan','visual-realization','fact-check','visual-composition-review-repair'])assert.equal(await ask(step,'Test',0,{name:'result',schema:z.object({ok:z.boolean()})}),'{"ok":true}');
+  assert.equal(requests[0].body.model,'gpt-6.1-sol');assert.equal(requests[0].body.reasoning.effort,'medium');
+  assert.equal(requests[1].body.model,'claude-opus-5-5');assert.equal(requests[1].body.output_config.effort,'medium');
+  assert.equal(requests[2].body.model,'gpt-6.1-sol');assert.equal(requests[2].body.reasoning.effort,'medium');
+  assert.equal(requests[3].body.model,'claude-opus-5-5');
+  assert.deepEqual(usage.map(u=>u.effort),['medium','medium','medium','medium']);
  }finally{globalThis.fetch=original;}
 });
 
@@ -67,7 +70,7 @@ test('delivery/timing reviews cannot control speed or reject native word rate al
  assert.equal(verdict.passed,true);assert.match(verdict.evidence,/no audio listening/);
 });
 
-test('real client routing switches each stage to Sol and forbids all Opus work after the reel cap',async()=>{
+test('real routing gives each visual stage one Opus repair with no global cap or Sol fallback',async()=>{
  const workdir=await mkdtemp(join(tmpdir(),'quriozity-routing-'));
  const original=globalThis.fetch,requests=[];
  globalThis.fetch=async(url,init)=>{
@@ -78,17 +81,15 @@ test('real client routing switches each stage to Sol and forbids all Opus work a
  const client=async()=>quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},undefined,await opusRepairBudget(workdir),await solRepairBudget(workdir));
  try{
   let ask=await client();
-  for(let i=0;i<5;i++)await ask('script-repair','Test',0);
-  assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5','claude-opus-5-5',...Array(3).fill('gpt-6.1-sol')]);
-  ask=await client(); // Neither provider's count resets on a worker restart.
-  await assert.rejects(ask('script-repair','Test',0),{code:'sol_stage_repair_limit'});
-  assert.equal(requests.length,5);
-  await ask('storyboard-repair','Test',0);await ask('storyboard-repair','Test',0);
-  await ask('visual-subject-review-repair','Test',0);
-  for(const step of ['asset-pick','sound-design','visual-subject-review-repair','fact-check','voice-delivery-review-repair'])await ask(step,'Test',0);
-  assert.equal(requests.filter(r=>r.model==='claude-opus-5-5').length,5);
-  assert.ok(requests.slice(8).every(r=>r.model==='gpt-6.1-sol'));
-  assert.deepEqual(requests.slice(8).map(r=>r.reasoning.effort),['xhigh','xhigh','xhigh','medium','medium']);
+  await ask('visual-realization','Test',0);await ask('visual-realization-repair','Test',0);
+  for(const stage of ['subject','composition','continuity','style-reference','final'])await ask(`visual-${stage}-review-repair`,'Test',0);
+  assert.equal(requests.length,7);assert.ok(requests.every(r=>r.model==='claude-opus-5-5'));
+  ask=await client();
+  await assert.rejects(ask('visual-subject-review-repair','Test',0),{code:'opus_stage_repair_limit'});
+  await assert.rejects(ask('visual-realization','Test',0),{code:'opus_stage_repair_limit'});
+  assert.equal(requests.length,7,'No fallback or repeated initial request is purchased');
+  for(const step of ['plan','script','asset-pick','sound-design','fact-check','voice-delivery-review-repair'])await ask(step,'Test',0);
+  assert.ok(requests.slice(7).every(r=>r.model==='gpt-6.1-sol'&&r.reasoning.effort==='medium'));
  }finally{globalThis.fetch=original;await rm(workdir,{recursive:true,force:true});}
 });
 
@@ -109,7 +110,7 @@ test('invalid delivery directions receive bounded Sol corrections before synthes
  assert.equal(selected.text,text);assert.deepEqual(selected.pauses,[]);assert.match(selected.notes,/original reviewed narration/);
 });
 
-test('transport retries reserve every repair call and switch to Sol before a third Opus attempt',async()=>{
+test('transport failures consume the single visual repair allowance without a Sol fallback',async()=>{
  const workdir=await mkdtemp(join(tmpdir(),'quriozity-retry-budget-'));
  const originalFetch=globalThis.fetch,originalTimeout=globalThis.setTimeout,requests=[];
  // Skip only this client's retry backoff; keep SDK deadline timers intact.
@@ -122,11 +123,11 @@ test('transport retries reserve every repair call and switch to Sol before a thi
  };
  try{
   const ask=quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},undefined,await opusRepairBudget(workdir),await solRepairBudget(workdir));
-  assert.equal(await ask('script-repair','Test',0),'Sol result');
-  assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5','claude-opus-5-5','gpt-6.1-sol']);
+  await assert.rejects(ask('visual-subject-review-repair','Test',0),{code:'opus_stage_repair_limit'});
+  assert.deepEqual(requests.map(r=>r.model),['claude-opus-5-5']);
   await assert.rejects(ask('voice-delivery-review-repair','Fail Sol',0),{code:'sol_stage_repair_limit'});
-  assert.equal(requests.length,6,'Exactly three Sol repair transports, with no fourth paid attempt');
-  await assert.rejects((await opusRepairBudget(workdir))('script-repair'),{code:'opus_stage_repair_limit'});
+  assert.equal(requests.length,4,'One Opus repair transport and exactly three Sol delivery correction transports');
+  await assert.rejects((await opusRepairBudget(workdir))('visual-subject-review-repair'),{code:'opus_stage_repair_limit'});
   await assert.rejects((await solRepairBudget(workdir))('voice-delivery-review-repair'),{code:'sol_stage_repair_limit'});
  }finally{globalThis.fetch=originalFetch;globalThis.setTimeout=originalTimeout;await rm(workdir,{recursive:true,force:true});}
 });

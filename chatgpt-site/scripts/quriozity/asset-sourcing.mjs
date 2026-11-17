@@ -14,6 +14,7 @@ import {prepareRows,upsertCatalog,removeFromCatalog,readCatalog,norm} from './as
 import {resetAssetCatalog} from './assets.mjs';
 import {stills} from './render.mjs';
 import {createRequire} from 'node:module';
+import {QURIOZITY_STYLE} from '../../src/quriozity/style-profile.ts';
 // long xhigh reasoning calls: no client-side header/body timeouts (same as produce.mjs)
 {const {Agent,setGlobalDispatcher}=createRequire(import.meta.url)('undici');setGlobalDispatcher(new Agent({headersTimeout:0,bodyTimeout:0}));}
 
@@ -51,7 +52,7 @@ export async function sourceOne(ask,{thing,query,as},{taken,log=()=>{},workdir})
   for(const [v,rot] of ROTS.entries())for(const angle of ['three-quarter','side']){scenes.push({say:id,hue:'blue',duration:1,camera:{angle,fill:0.8,move:'static'},objects:[{id:'m',model:id,enter:'none',idle:'none',rot}]});labels.push(`variant ${v} ${angle}`);}
   const dir=workdir??join(ROOT,'.quriozity-cache','sourcing');await mkdir(dir,{recursive:true});
   const sheet=join(dir,`preview-${id}.png`);
-  try{await stills({version:1,series:'QURIOZITY',title:'sourcing',captions:false,scenes},sheet,scenes.map((_,i)=>i+0.5),0.22,labels,4);}
+  try{await stills({version:1,series:'QURIOZITY',style:QURIOZITY_STYLE,title:'sourcing',captions:false,scenes},sheet,scenes.map((_,i)=>i+0.5),0.22,labels,4);}
   catch(err){log(`sourcing "${thing}": preview failed (${err.message})`);await removeFromCatalog([id]);resetAssetCatalog();continue;}
   const vraw=await ask('asset-verify',`${QURIOZITY_POLICY.subjectSelection}\nThis is our dithered QURIOZITY render of a candidate 3D model for "${thing}" in four orientation variants (rows: variant 0..3; columns: three-quarter view, side view). Accept only if a stranger would instantly recognise "${thing}" and it looks like the REAL thing (realistic proportions and detail, not a toy/cartoon), it is a single clean object (no ground slab, scene, broken or missing geometry), and one variant stands the way the real thing normally stands (upright, wheels/feet/base down). Return ok, the best variant number, and why. JSON only.`,1500,{name:'verify',schema:verifySchema},[{mime:'image/png',base64:(await readFile(sheet)).toString('base64')}]);
   let verdict;try{verdict=verifySchema.parse(JSON.parse(vraw));}catch{verdict={ok:false,variant:0,why:'invalid verify output'};}

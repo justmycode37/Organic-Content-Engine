@@ -1,9 +1,9 @@
-// QURIOZITY producer: Opus 5.5 medium authors; Sol 6.1 medium reviews.
+// QURIOZITY producer: Sol medium plans/reviews; Opus medium realizes/repairs visuals.
 //   node --env-file=.env.motion scripts/quriozity/produce.mjs <workdir> [--topic "Why we dream"] [--spec spec.json] [--history history.json]
 // Layers: explainer plan (golden thread) → script → fact check + coherence review → storyboard → storyboard review (worker/quriozity-generation.ts)
 //         → subject / composition / continuity / reference-style reviews → voice delivery + actual pacing review
 //         → final visual review on real word timings → sound design + mix review → video
-//         → SOUND DESIGN (Opus cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
+//         → SOUND DESIGN (Sol cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
 //         → final mix, auto-calibrated so the narrator clears music/effects on every word → video.
 // Every step is cached in <workdir>, so a rerun resumes instead of paying twice.
 import {createHash} from 'node:crypto';
@@ -43,7 +43,7 @@ const log=(...a)=>console.log(`[quriozity ${new Date().toISOString().slice(11,19
 
 async function eleven(path,body,key,usage,attempt=0){
  const r=await fetch(`https://api.elevenlabs.io${path}`,{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify(body)});
- await usage({provider:'elevenlabs',endpoint:path.split('?')[0],status:r.status});
+ await usage({provider:'elevenlabs',endpoint:path.split('?')[0],status:r.status,characters:body.text?.length,generatedSeconds:body.music_length_ms?body.music_length_ms/1000:body.duration_seconds,characterCost:r.headers.get('character-cost'),requestId:r.headers.get('request-id')});
  if(r.status===429&&attempt<4){await new Promise(res=>setTimeout(res,15000*(attempt+1)));return eleven(path,body,key,usage,attempt+1);}
  if(!r.ok)throw new Error(`ElevenLabs ${path.split('?')[0]} failed (${r.status})`);return r;
 }
@@ -256,7 +256,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  }
  let spec=await readJson(draft);
  // Preserve the actual author of a saved draft; new repair routing cannot relabel its origin.
- provenance.modelRouting={...clientContext,generationModel:provenance.model??'provided-spec',generationEffort:provenance.effort??'unknown',repairModel:clientContext.generationModel,repairEffort:clientContext.generationEffort??clientContext.effort};
+ provenance.modelRouting={...clientContext,generationModel:provenance.model??'provided-spec',generationEffort:provenance.effort??'unknown',repairModel:clientContext.visualModel??clientContext.generationModel,repairEffort:clientContext.visualEffort??clientContext.generationEffort??clientContext.effort};
  provenance.reviewModel=clientContext.reviewModel;provenance.reviewEffort=clientContext.reviewEffort??clientContext.effort;await save();
  if(provenance.storyboardGate?.passed===false){
   provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'storyboard-review'])];await save();
@@ -368,6 +368,9 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const cal=await measure('mix calibration and effects preparation',()=>calibrateMix({voice,lead:timed.lead,cues,sfx,bed,total,out:audio},log));
  provenance.mixLevels=cal.levels;provenance.mixCalibration=cal.history;provenance.sfxRejectedAsMusical=sfx.rejected;
  provenance.mixStatsFinal=await mixStats(audio,cues,total,!!bed,cal.clarity);await save();
+ // Cost reporting is informational and never stops a fully reviewed export.
+ try{const {writeCostSummary}=await import('./costs.mjs');provenance.costEstimate=await writeCostSummary(workdir);await save();}
+ catch(error){log(`cost report unavailable (${error.message}); recorded usage remains in usage.jsonl`);}
  // 9. picture
  log('render video');
  const silent=join(workdir,'video.mp4');
