@@ -104,6 +104,8 @@ test('invalid delivery directions receive bounded Sol corrections before synthes
  let calls=0;
  await assert.rejects(reviewNarrationDelivery(async()=>{calls++;return JSON.stringify({...valid,text:'Changed words.'});},text),/preserve every spoken word/);
  assert.equal(calls,6,'Initial Sol direction plus at most five corrections');
+ const selected=await reviewNarrationDelivery(async()=>JSON.stringify({...valid,text:'Changed words.'}),text,undefined,'best');
+ assert.equal(selected.text,text);assert.deepEqual(selected.pauses,[]);assert.match(selected.notes,/original reviewed narration/);
 });
 
 test('transport retries reserve every repair call and switch to Sol before a third Opus attempt',async()=>{

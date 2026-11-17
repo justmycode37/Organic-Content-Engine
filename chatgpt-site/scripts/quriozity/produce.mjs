@@ -319,7 +319,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log(`${reviewLabel}: delivery and timing reviews; ElevenLabs Adam at unchanged provider-default speed`);
  let voice;try{voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{...clientContext,narrationSpeed:'elevenlabs-default'},measure,
   narrate:(delivery,take)=>narrate(delivery,take,key,usage),
-  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600})),
+  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600}),clients?'stop':'best'),
   reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
   onResult:async r=>{provenance.voiceReview=r;if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];}await save();}});
  }catch(e){

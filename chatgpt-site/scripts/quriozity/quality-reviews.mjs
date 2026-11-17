@@ -126,7 +126,12 @@ export async function runVoiceReviews({text,workdir,context={},narrate,reviewDel
    const synthesis={model:voice.model,voiceId:voice.voiceId,settings:voice.settings,seed:voice.seed};
    await save(join(runDir,`take-${take}.generated.json`),{take,delivery,synthesis,words:voice.words,total:voice.total,audio:audioFile});
    const metrics=voicePacingMetrics(voice.words,voice.total,delivery);
-   const verdict=await measure(`voice pacing review ${take}`,()=>reviewPacing(text,delivery,metrics));
+   let verdict;
+   try{verdict=await measure(`voice pacing review ${take}`,()=>reviewPacing(text,delivery,metrics));}
+   catch(error){
+    if(onExhaustion!=='best')throw error;
+    verdict={passed:false,summary:'Generated take retained with an unresolved timing-review error.',issues:[error.message],nextDelivery:delivery,evidence:'text-and-generated-word-timings; no audio listening'};
+   }
    const record={take,delivery,synthesis,metrics,verdict,audio:audioFile,words:voice.words,total:voice.total};attempts.push(record);await save(join(runDir,`take-${take}.json`),record);
    if(verdict.passed&&verdict.issues.length===0&&!metrics.problems.length){
     const audioHash=reviewFingerprint((await readFile(voice.audio)).toString('base64'));
