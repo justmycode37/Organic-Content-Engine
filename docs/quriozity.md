@@ -10,9 +10,9 @@ to a stranger with the sound off.
 
 ## Required review workflow
 
-Normal production uses `claude-opus-5-5` at `medium` for planning, authoring,
-asset selection, sound design and repairs. Every review uses `gpt-6.1-sol` at
-`xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+Normal production starts with `claude-opus-5-5` at `medium` for planning,
+authoring, asset selection, sound design and repairs. Every review and fallback
+repair uses `gpt-6.1-sol` at `xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
 `ELEVENLABS_API_KEY` (kept in private runtime configuration). For a future local run,
 load the private `.env.quriozity` file; configuring defaults does not start generation.
 The sequence is:
@@ -27,16 +27,20 @@ The sequence is:
 8. Final combined visual and reference-style review using the actual narration timings.
 9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
 
-There are at most **five Opus repair API calls total per reel**, shared across script,
-storyboard and every visual stage. Invalid proposals, transport retries and
-interrupted calls consume this allowance. Private reservations are saved before
-sending; restarting the worker cannot reset them. Earlier caches are counted from
-recorded usage. Initial plan/script/storyboard/sound authoring is separate.
+There are at most **five Opus repair API calls total per reel**, shared across all
+stages, and **two Opus repair calls per stage**. Once either Opus limit is reached,
+that stage uses Sol for **up to five additional repair calls**. Once the reel-wide
+Opus limit is reached, all remaining model work uses Sol, including new authoring.
+Reviews always use Sol. Invalid proposals, transport retries and interrupted
+repair requests consume the relevant provider's allowance. Private reservations
+are saved before sending; restarting the worker cannot reset them. Earlier caches
+retain their recorded usage and reservations. Initial authoring is separate from
+the repair count, but cannot use Opus after the reel cap is reached.
 
-Each visual stage returns explicit findings and a verdict, with up to six rendered
-review attempts (initial version plus at most five revisions) and five authoring proposals per
-repair round, subject to the shared five-call budget. Every accepted repair receives fresh rendered evidence and a new
-review. After six candidates or exhaustion of the shared repair budget, select the best actually reviewed candidate and
+Each visual stage returns explicit findings and a verdict, with up to eight rendered
+review attempts (initial version plus at most two Opus and five Sol revisions),
+subject to those durable API-call budgets. Every accepted repair receives fresh rendered evidence and a new
+review. After eight candidates or exhaustion of that stage's Sol repair budget, select the best actually reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
 findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late

@@ -17,7 +17,7 @@ import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
 import {runVisualReviewStage,runVoiceReviews,reviewFingerprint,bestReviewedVisual,REVIEW_LIMITS} from './quality-reviews.mjs';
-import {opusRepairBudget} from './repair-budget.mjs';
+import {opusRepairBudget,solRepairBudget} from './repair-budget.mjs';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/quriozity-quality.ts';
 import {sceneDuration,resolveAt} from '../../src/quriozity/spec.ts';
 import {createRequire} from 'node:module';
@@ -237,7 +237,8 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
  provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
  const reserveRepair=await opusRepairBudget(workdir);
- const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair);
+ const reserveSolRepair=await solRepairBudget(workdir);
+ const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair,reserveSolRepair);
  // 1-5 story + storyboard
  const draft=join(workdir,'spec.draft.json');
  if(specFile&&!await exists(draft))await writeFile(draft,await readFile(specFile));
@@ -317,7 +318,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log(`${reviewLabel}: delivery and timing reviews; ElevenLabs Adam at unchanged provider-default speed`);
  let voice;try{voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{...clientContext,narrationSpeed:'elevenlabs-default'},measure,
   narrate:(delivery,take)=>narrate(delivery,take,key,usage),
-  reviewDelivery:text=>reviewNarrationDelivery(ask,text),
+  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600})),
   reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
   onResult:async r=>{provenance.voiceReview=r;if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];}await save();}});
  }catch(e){

@@ -6,6 +6,7 @@ import {specSchema,specProblems} from '../src/quriozity/schema.ts';
 import {applyStyleProfile} from '../src/quriozity/style-profile.ts';
 import {CAMERA_DIRECTION_RULES,cameraProblems,planCameras} from '../src/quriozity/camera-direction.ts';
 import {SHOT_TRANSITION_RULES,transitionProblems,planTransitions} from '../src/quriozity/shot-transitions.ts';
+import {SOL_STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
 
 export const QUALITY_REVIEW_VERSION=4;
 export const VISUAL_REVIEW_STAGES=[
@@ -69,9 +70,22 @@ export function validateDelivery(value:unknown,original:string){
  if(d.pauses.some(p=>p.afterWord>=count))throw new Error('Voice pause must precede another word');
  return d;
 }
-export async function reviewNarrationDelivery(ask:Ask,text:string){
- const raw=await ask('voice-delivery-review',`Review this narration for natural connected speech to one curious person. ElevenLabs must use its unchanged DEFAULT SPEED. Do not propose a speed setting, slowing, speeding up or time stretching. Mark natural thought boundaries with punctuation; allow a sentence to flow across visual scene cuts. Keep EVERY word, spelling, order and whitespace word boundary; only punctuation may change. Preserve contractions and hyphens within words. Select at most eight meaningful thought boundaries using 1-based whitespace word indices, with brief pause hints. Never pause just because a scene ends, never inside a connected phrase, and never add long pauses to hit a word-rate target. Pause hints are guidance, not mandatory silence lengths. This is text direction, not an audio listening review.\nNarration: ${text}`,0,{name:'quriozity_delivery',schema:deliverySchema});
- return validateDelivery(parse(raw),text);
+export async function reviewNarrationDelivery(ask:Ask,text:string,onAttempt?:(record:{attempt:number;raw:string;valid:boolean;error?:string})=>Promise<unknown>){
+ const prompt=`Review this narration for natural connected speech to one curious person. ElevenLabs must use its unchanged DEFAULT SPEED. Do not propose a speed setting, slowing, speeding up or time stretching. Mark natural thought boundaries with punctuation; allow a sentence to flow across visual scene cuts. Keep EVERY word, spelling, order and whitespace word boundary; only punctuation may change. Preserve contractions and hyphens within words. Select at most eight meaningful thought boundaries using 1-based whitespace word indices, with brief pause hints between 0.18 and 1.5 seconds. Never pause just because a scene ends, never inside a connected phrase, and never add long pauses to hit a word-rate target. Pause hints are guidance, not mandatory silence lengths. This is text direction, not an audio listening review.\nNarration: ${text}`;
+ let feedback='';
+ for(let attempt=0;attempt<=SOL_STAGE_REPAIR_LIMIT;attempt++){
+  const raw=await ask(attempt?'voice-delivery-review-repair':'voice-delivery-review',`${prompt}${feedback}`,0,{name:'quriozity_delivery',schema:deliverySchema});
+  let delivery:Delivery;
+  try{delivery=validateDelivery(parse(raw),text);}
+  catch(error){
+   await onAttempt?.({attempt,raw,valid:false,error:(error as Error).message});
+   if(attempt===SOL_STAGE_REPAIR_LIMIT)throw error;
+   feedback=`\nCorrect the invalid direction using the original narration and the schema. Validation: ${(error as Error).message}. Previous response: ${raw}`;
+   continue;
+  }
+  await onAttempt?.({attempt,raw,valid:true});return delivery;
+ }
+ throw new Error('Voice delivery repair limit reached');
 }
 type Word={text:string;start:number;end:number};
 export function voicePacingMetrics(words:Word[],total:number,delivery:Delivery){
