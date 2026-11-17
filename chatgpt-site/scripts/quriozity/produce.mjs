@@ -233,10 +233,10 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  if(provenance.unapprovedTest&&provenance.modelRouting?.variant&&!allowUnapproved)throw new Error('Unapproved test cache requires the explicit private experiment override');
  if(provenance.reviewsDisabled===true||provenance.reviewMode==='raw-first-draft')throw new Error('Unreviewed experiment cache cannot be used for normal Quriozity production; use a fresh workdir with the full review pipeline');
  if(!clients)provenance.publicationPolicy='best-reviewed-after-limits';
- let cat=await measure('catalogue preparation',()=>loadCatalog());
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
  provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
+ let cat=await measure('catalogue preparation',()=>loadCatalog());
  const reserveRepair=await opusRepairBudget(workdir);
  const reserveSolRepair=await solRepairBudget(workdir);
  const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair,reserveSolRepair);
