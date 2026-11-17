@@ -106,9 +106,9 @@ async function run(root,variant){
   const priorAudio=await readFile(join(workdir,'audio-usage.jsonl'),'utf8').catch(()=>'');
   if(!state.audioBefore||!priorAudio.trim())state.audioBefore=await subscription();await save();
   const gen=await import('../../worker/quriozity-generation.ts');
-  const sol=gen.solClient(process.env.OPENAI_API_KEY,usage);
+  const sol=gen.solClient(process.env.OPENAI_API_KEY,usage,undefined,'medium');
   const anthropic=new Anthropic({apiKey:process.env.ANTHROPIC_API_KEY,maxRetries:0,timeout:60*60*1000});
-  const opus=async(step,input,_max,format,images=[])=>{
+  const opus=async(step,input,_max,format,images=[],context)=>{
    const structured=opusFormat(format);
    const prompt=format&&!structured?`${input}\nReturn ONLY a valid JSON object matching this schema, with no Markdown or commentary: ${JSON.stringify(z.toJSONSchema(format.schema))}`:input;
    const content=[{type:'text',text:prompt},...images.map(i=>({type:'image',source:{type:'base64',media_type:i.mime,data:i.base64}}))];
@@ -117,7 +117,7 @@ async function run(root,variant){
     try{
      const stream=anthropic.messages.stream({model:'claude-opus-5-5',max_tokens:128000,
       output_config:{effort:'medium',...(structured?{format:structured}:{})},
-      messages:[{role:'user',content}]});
+      ...(context?.prefix?{system:context.prefix}:{}),messages:[{role:'user',content}]});
      let lastProgress=performance.now();
      stream.on('text',(_delta,snapshot)=>{if(performance.now()-lastProgress>30000){console.log(`[experiment ${variant}] ${step}: streaming ${snapshot.length} text characters`);lastProgress=performance.now();}});
      const response=await stream.finalMessage();
@@ -141,8 +141,8 @@ async function run(root,variant){
   const ask=async(step,...args)=>{
    const role=stepRole(step),model=role==='review'?models.reviewModel:models.generationModel;
    const imageHashes=(args[3]??[]).map(i=>createHash('sha256').update(i.base64).digest('hex'));
-   const request={step,role,model,effort:'medium',input:args[0],format:args[2]?.name,imageCount:imageHashes.length,imageHashes};
-   const cached=previous.find(({request:r})=>r.step===step&&r.model===model&&r.effort==='medium'&&r.input===request.input&&r.format===request.format&&r.imageCount===request.imageCount&&
+   const request={step,role,model,effort:'medium',input:args[0],prefix:args[4]?.prefix,format:args[2]?.name,imageCount:imageHashes.length,imageHashes};
+   const cached=previous.find(({request:r})=>r.step===step&&r.model===model&&r.effort==='medium'&&r.input===request.input&&r.prefix===request.prefix&&r.format===request.format&&r.imageCount===request.imageCount&&
     (imageHashes.length===0||JSON.stringify(r.imageHashes)===JSON.stringify(imageHashes)));
    if(cached){console.log(`[experiment ${variant}] saved response: ${step} ${model}`);return cached.output;}
    const dir=join(workdir,'calls',`${String(++callNumber).padStart(3,'0')}-${step}`);await mkdir(dir,{recursive:true});

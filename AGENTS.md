@@ -2,10 +2,13 @@
 ## User model preference
 
 For Quriozity, start with `claude-opus-5-5` at `medium` effort for generation,
-creative specialists and repairs. Use `gpt-6.1-sol` at `xhigh` for every review
-and for fallback repairs. Allow at most two Opus repair API calls per stage and
+creative specialists and repairs. Use `gpt-6.1-sol` at `medium` for every review
+and at `xhigh` for fallback authoring/repairs. Allow at most two Opus repair API calls per stage and
 five total per reel, then up to three additional Sol repair API calls per stage.
 After the reel's fifth Opus repair reservation, all remaining model work uses Sol.
+Keep visual authoring and primary visual repairs on Opus; do not assign them to Luna.
+Aim for about $3 in Opus and $3 in OpenAI model costs per reel. This is spending
+guidance, not a hard cost cutoff, and does not authorize skipping reviews.
 Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
 

@@ -11,6 +11,6 @@ export async function loadCatalog({fresh=false}={}){
  await build({entryPoints:[join(ROOT,'src/quriozity/models/index.ts')],bundle:true,outfile:out,format:'esm',platform:'node',target:'node22',logLevel:'error',loader:{'.ttf':'dataurl'}});
  const m=await import(pathToFileURL(out).href+`?t=${Date.now()}`);
  const ids=m.MODELS.map(x=>x.id);
- cached={text:m.describeModels(),assets:m.describeAssets(),has:id=>!!m.findModel(String(id)),ids,models:m.MODELS};
+ cached={text:m.describeModels(),assets:m.describeAssets(),entries:m.describeCatalogEntries(),has:id=>!!m.findModel(String(id)),canonicalId:id=>m.findModel(String(id))?.id??id,ids,models:m.MODELS};
  return cached;
 }

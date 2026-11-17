@@ -13,6 +13,10 @@ import {verifyStyleReference} from './quriozity/style-reference.mjs';
 import {createHash} from 'node:crypto';
 import {drawText,drawCaptions} from '../src/quriozity/text.ts';
 import {onionDensityResponse} from '../src/quriozity/models/onion.ts';
+import {applyStyleProfile} from '../src/quriozity/style-profile.ts';
+import {planCameras} from '../src/quriozity/camera-direction.ts';
+import {planTransitions} from '../src/quriozity/shot-transitions.ts';
+import {applyVisualPatches} from '../worker/quriozity-visual-patches.ts';
 
 test('onion material opens dark recesses while keeping coherent dense illuminated planes',()=>{
  assert.equal(onionDensityResponse(.20),0);
@@ -63,8 +67,8 @@ test('source plane cuts crossing triangles cleanly and preserves interpolated UV
 const good={passed:true,summary:'No evidenced defects remain.',findings:[]};
 const bad={passed:false,summary:'The hero is cropped.',findings:[{scene:1,severity:'must-fix',problem:'Hero cropped',evidence:'S1 middle frame cuts off the anchor',change:'Widen framing'}]};
 const catalogue={text:'led',assets:'',has:id=>id==='led'};
-const reel=()=>({version:1,series:'QURIOZITY',title:'Light',beat:{period:0.6,phase:0},scenes:Array.from({length:8},(_,i)=>({say:`One two three four five six seven eight nine ten eleven twelve ${i}.`,duration:5,hue:'blue',objects:[{id:'hero',model:'led',scale:1}],words:[{text:'One',start:0.3,end:0.6}]}))});
-const author=spec=>{const {beat,...base}=structuredClone(spec);base.scenes.forEach(s=>delete s.words);return base;};
+const reel=()=>planTransitions(planCameras(applyStyleProfile({version:1,series:'QURIOZITY',style:'reference-recording',title:'Light',beat:{period:0.6,phase:0},scenes:Array.from({length:8},(_,i)=>({say:`One two three four five six seven eight nine ten eleven twelve ${i}.`,duration:5,hue:'blue',objects:[{id:'hero',model:'led',scale:1}],words:[{text:'One',start:0.3,end:0.6}]}))})).spec).spec;
+const patch=(path,value,scene=1)=>({patches:[{scene,path,op:'set',valueJson:JSON.stringify(value)}]});
 const temporary=async fn=>{const dir=await mkdtemp(join(tmpdir(),'quriozity-quality-'));try{return await fn(dir);}finally{await rm(dir,{recursive:true,force:true});}};
 
 test('pixel teardrops contain a filled interior rather than a hollow outline',()=>{
@@ -95,29 +99,55 @@ test('visual specialist verdict cannot pass while a must-fix finding remains',as
  assert.equal(called[4][0].base64,'frame');
 });
 
-test('visual repairs retain per-scene narration and actual runtime timing',async()=>{
- const spec=reel(),proposal=author(spec);proposal.scenes[0].objects[0].scale=0.8;
- const result=await repairVisuals(async(_step,prompt)=>{assert.ok(!prompt.includes('"words":'));return JSON.stringify(proposal);},spec,bad,catalogue,VISUAL_REVIEW_STAGES.at(-1),[]);
+test('targeted visual repairs retain untouched scenes, narration and actual runtime timing',async()=>{
+ const spec=reel();
+ const result=await repairVisuals(async(_step,prompt,_max,format,_images,context)=>{
+  assert.ok(!prompt.includes('"words":'));assert.ok(!prompt.includes('"scene":8,"duration":'));
+  assert.equal(format.name,'quriozity_visual_patch');assert.match(context.prefix,/never rewrite a whole reel/);
+  return JSON.stringify(patch('/objects/0/scale',.8));
+ },spec,bad,catalogue,VISUAL_REVIEW_STAGES.at(-1),[]);
  assert.equal(result.valid,true,JSON.stringify(result.problems));
  assert.deepEqual(result.spec.beat,spec.beat);
  assert.deepEqual(result.spec.scenes.map(s=>[s.say,s.duration,s.words]),spec.scenes.map(s=>[s.say,s.duration,s.words]));
- const changed=author(spec);changed.scenes[0].say+=' Extra.';
- const rejected=await repairVisuals(async()=>JSON.stringify(changed),spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
- assert.equal(rejected.valid,false);assert.ok(rejected.problems.some(p=>p.includes('Narration')));
+ assert.deepEqual(result.spec.scenes.slice(1),spec.scenes.slice(1));assert.equal(spec.scenes[0].objects[0].scale,1);
+ assert.equal(result.spec.scenes[0].objects[0].scale,.8);
+ const rejected=await repairVisuals(async()=>JSON.stringify(patch('/say','Extra.')),spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
+ assert.equal(rejected.valid,false);assert.ok(rejected.problems.some(p=>p.includes('Protected')));
 });
 
 test('planned 40ms camera cuts can pass through an authoring repair without invalid input',async()=>{
  const spec=reel();spec.scenes[0].camera={angle:'front',fill:.8};
- spec.scenes[0].events=[{at:2,camera:{angle:'side',fill:.8},easing:'hold',dur:.04}];
+ spec.scenes[0].events=[{at:2,camera:{angle:'side',fill:1.05},easing:'hold',dur:.04}];
  const result=await repairVisuals(async(_step,prompt)=>{
-  const input=JSON.parse(prompt.split('Input spec: ')[1].split('\nSchema: ')[0]);
-  assert.equal(input.scenes[0].events[0].dur,.05);
-  assert.ok(sceneSchema.safeParse(input.scenes[0]).success);
-  return JSON.stringify(input);
+  const [{scene,...input}]=JSON.parse(prompt.split('Editable scenes: ')[1]);
+  assert.equal(scene,1);assert.equal(input.events[0].dur,.05);
+  assert.ok(sceneSchema.safeParse(input).success);
+  return JSON.stringify(patch('/objects/0/scale',.9));
  },spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
  assert.equal(result.valid,true,JSON.stringify(result.problems));
  assert.equal(result.spec.scenes[0].events[0].easing,'hold');
  assert.equal(spec.scenes[0].events[0].dur,.04,'Runtime input remains immutable');
+});
+
+test('visual patch boundaries reject protected fields, unsafe paths, missing parents and unrelated scenes',()=>{
+ const spec=reel(),before=structuredClone(spec),allowed=new Set([1]);
+ for(const path of ['/say','/duration','/words','/look','/raster/cell','/light/exposure','/objects/0/__proto__/polluted','/objects/0/constructor/prototype'])assert.throws(()=>applyVisualPatches(spec,patch(path,1),allowed));
+ assert.throws(()=>applyVisualPatches(spec,patch('/objects/99/scale',1),allowed),/parent does not exist/);
+ assert.throws(()=>applyVisualPatches(spec,patch('/objects/0/scale',1,2),allowed),/outside/);
+ assert.throws(()=>applyVisualPatches(spec,{patches:[{scene:1,path:'/camera',op:'set',valueJson:'invalid JSON'}]},allowed));
+ assert.deepEqual(spec,before);assert.equal({}.polluted,undefined);
+});
+
+test('patches can append/remove visual items and invalid resulting scenes cannot bypass validation',async()=>{
+ const spec=reel(),allowed=new Set([1]);
+ const appended=applyVisualPatches(spec,patch('/objects/-',{id:'second',model:'led'}),allowed).spec;
+ assert.equal(appended.scenes[0].objects.length,2);
+ const removed=applyVisualPatches(appended,{patches:[{scene:1,path:'/objects/1',op:'remove',valueJson:''}]},allowed).spec;
+ assert.deepEqual(removed,spec);
+ for(const proposal of [patch('/objects/0/model','missing-model'),patch('/text',[{text:'Too small',size:.04}]),patch('/objects',[])]){
+  const result=await repairVisuals(async()=>JSON.stringify(proposal),spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
+  assert.equal(result.valid,false,JSON.stringify(proposal));
+ }
 });
 
 test('invalid visual repair is retried, and accepted edits are rendered and reviewed again',()=>temporary(async workdir=>{
