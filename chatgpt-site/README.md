@@ -127,8 +127,12 @@ while another reel renders. Starts go into an exclusive queue; overlapping reels
 wait for the producer. It never creates a future job early. A start missed by
 more than 15 minutes after an outage is reported as failed instead of launching a
 surprise paid generation. Editing a plan cancels unstarted jobs. Normal Quriozity
-production uses the complete Sol/xhigh review pipeline and fails closed when
-required evidence or approvals are missing. Voice review evaluates delivery and
+production uses Sol medium for planning and every review, with Opus medium only
+for visual realization/repairs. Each visual stage permits one Opus repair and
+keeps the best reviewed candidate after that allowance, retaining unresolved
+findings. White paper, black ink and full-phrase captions with inverse word
+highlights are the normal format. Music uses a fixed background level without
+speech ducking or adaptive music gain. Voice review evaluates delivery and
 timing, not listened-to audio quality. Generation uses the worker's existing
 OpenAI and ElevenLabs API credentials and their billing, independently of the
 Site's ChatGPT-plan text handoff.
@@ -149,3 +153,9 @@ production is stopped. A linked ChatGPT task can check these events; notificatio
 permission/delivery is controlled in ChatGPT. No arbitrary immediate ChatGPT push
 API is assumed. The Site and its renderer must be deployed, and the existing Mac
 account worker must remain awake and online; an open browser is unnecessary.
+
+The account LaunchAgent runs a separate copy in `~/Library/Application Support/Organic Content Engine/account-worker`.
+Merging source changes alone does not refresh that copy. Update the installed
+Quriozity sources and source-search index, retain its private configuration,
+history, assets and repair budgets, then restart the idle service. Deploy the
+matching Site code too: its completion gate validates the model/review profile.

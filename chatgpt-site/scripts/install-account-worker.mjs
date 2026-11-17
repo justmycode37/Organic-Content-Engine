@@ -11,6 +11,9 @@ await mkdir(target,{recursive:true,mode:0o700});await chmod(target,0o700);
 // APFS clones avoid duplicating large licensed asset caches when supported.
 for(const p of ['scripts','src','worker','package.json','package-lock.json','node_modules']){await mkdir(join(target,p).slice(0,join(target,p).lastIndexOf('/')),{recursive:true});await cp(join(source,p),join(target,p),{recursive:true,force:true,mode:constants.COPYFILE_FICLONE});}
 for(const p of ['.motion-cache','.quriozity-assets'])await cp(join(source,p),join(target,p),{recursive:true,force:true,mode:constants.COPYFILE_FICLONE}).catch(e=>{if(e.code!=='ENOENT')throw e;});
+// Source search needs its prepared index in this separate installed checkout.
+await mkdir(join(target,'.quriozity-cache','sources'),{recursive:true});
+await cp(join(source,'.quriozity-cache','sources','index.json.gz'),join(target,'.quriozity-cache','sources','index.json.gz'),{force:true,mode:constants.COPYFILE_FICLONE}).catch(e=>{if(e.code!=='ENOENT')throw e;});
 await writeFile(join(target,'account-worker.env'),Object.entries(setup).map(([k,v])=>`${k}=${JSON.stringify(v)}`).join('\n')+'\n',{mode:0o600});await chmod(join(target,'account-worker.env'),0o600);
 const label='com.organiccontentengine.account-worker',plist=join(homedir(),'Library/LaunchAgents',label+'.plist'),node=process.execPath;
 await mkdir(join(homedir(),'Library/LaunchAgents'),{recursive:true});const xml=s=>String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;');

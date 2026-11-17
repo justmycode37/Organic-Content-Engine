@@ -61,6 +61,12 @@ Use ElevenLabs' unchanged default voice speed. Do not send a speed override,
 change speed during reviews/retakes, or time-stretch narration afterwards.
 Word-rate measurements are descriptive; a brief fast phrase must not trigger
 global slowing. Review punctuation and natural thought boundaries at native speed.
+Music keeps a fixed background level throughout each reel and uses the same
+-30 LUFS target across future reels. No speech ducking, automatic music gain
+calibration, fades or master gain riding. Normalize each score once with a fixed
+whole-track gain; reserve headroom before summing music. Only effects are
+automatically calibrated. Keep measured music/voice clarity in the sound review.
+
 Sol supports text/images, not audio input: label voice checks as delivery/timing
 reviews and never claim they listened to or certified the sound of the voice.
 

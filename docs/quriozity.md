@@ -30,7 +30,7 @@ The sequence is:
 6. Reference-style review: direct comparison with the owner's perfect animation reference.
 7. Voice delivery review → Adam narration → generated-word pacing/pauses review.
 8. Final combined visual and reference-style review using the actual narration timings.
-9. Sound design → mix statistics and cue-sheet review → calibrated mix → export.
+9. Sound design → mix statistics and cue-sheet review → steady music / calibrated effects → export.
 
 Each visual stage gets **one initial version and at most one Opus repair API
 call**. There is **no reel-wide Opus cap** and no Sol visual repair fallback.
@@ -81,6 +81,16 @@ word timings and verdicts. Usage and stage durations remain in `usage.jsonl` and
 `timings.jsonl`. Cache reuse requires the current review version and matching
 inputs/output fingerprints; an old `spec.reviewed.json` alone cannot skip checks.
 Sound cue caches are invalidated when final visual timing or accepted voice changes.
+
+Music uses one fixed gain for each complete score, targeting -30 LUFS after the
+speech-friendly EQ, with a -16 dBTP peak ceiling. The gain does not follow speech,
+fade at either end or change during effects calibration. Sources with unusually
+high peaks may be quieter than the target to preserve headroom; the exact level
+and gain are saved in `provenance.musicLevel`. Music retains its authored musical
+dynamics. The speech/effects bus is limited before adding music, so a master
+compressor or loudness normalizer cannot pump the backing. Sound review retains
+measured voice/music clarity; effects alone are calibrated. Future score prompts
+also request steady energy without quiet intros, breakdowns or swells.
 
 New production specs set `captionStyle:"word-highlight"`: each small mono caption
 phrase is fully visible when its group begins; the word currently being spoken
@@ -137,7 +147,7 @@ these are maxima, not required rounds.
 | Spoken-delivery direction | Sol punctuation guidance | Sol | Initial direction + up to 3 invalid-output corrections; words/speed fixed. |
 | Narration and generated pacing | ElevenLabs Adam, Multilingual v2 | Sol on text + generated word timings | Up to 3 voice takes, individually reviewed; no audio-listening claim. |
 | Final timed visuals | Opus patches | Sol repeats every visual specialty and the owner comparison | Same visual repair budget; fresh render/review on real word timing. |
-| Music, effects and sound | ElevenLabs audio; Sol cue design | Sol cue sheet + measured mix statistics | One sound review; cached audio and local calibration. |
+| Music, effects and sound | ElevenLabs audio; Sol cue design | Sol cue sheet + measured mix statistics | One sound review; cached audio, fixed music level and local effects calibration. |
 | Export | Local renderer / FFmpeg | Technical output checks | No model call per frame. Normal account publishing retains unresolved findings. |
 
 Each of the five rendered visual stages can review at most two candidates,
