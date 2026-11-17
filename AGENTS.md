@@ -4,7 +4,7 @@
 For Quriozity, start with `claude-opus-5-5` at `medium` effort for generation,
 creative specialists and repairs. Use `gpt-6.1-sol` at `xhigh` for every review
 and for fallback repairs. Allow at most two Opus repair API calls per stage and
-five total per reel, then up to five additional Sol repair API calls per stage.
+five total per reel, then up to three additional Sol repair API calls per stage.
 After the reel's fifth Opus repair reservation, all remaining model work uses Sol.
 Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
@@ -25,9 +25,9 @@ before/after versions. Allow at most 5 Opus repair API calls TOTAL per reel,
 shared across script, storyboard and all visual stages, including invalid
 proposals, transport retries and interrupted requests. Persist reservations before
 requests; restarts must not reset either provider's budget. Each stage gets at
-most 2 Opus repairs followed by up to 5 additional Sol repairs; the five-call
+most 2 Opus repairs followed by up to 3 additional Sol repairs; the five-call
 Opus reel cap is shared across all stages. Reviews always use Sol. Each visual
-stage may review the initial version plus at most 7 revisions (8 candidates),
+stage may review the initial version plus at most 5 revisions (6 candidates),
 subject to those API-call budgets, including invalid proposals and retries.
 Allow up to 3 generated voice takes. When a stage's Sol repair budget is spent,
 select the best version that was actually rendered and reviewed and continue

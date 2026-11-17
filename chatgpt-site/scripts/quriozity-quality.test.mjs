@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtemp,readFile,writeFile,readdir,rm} from 'node:fs/promises';
+import {mkdtemp,readFile,writeFile,readdir,rm,mkdir} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {reviewNarrationDelivery,VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,validateDelivery,voicePacingMetrics,reviewVoicePacing} from '../worker/quriozity-quality.ts';
@@ -139,30 +139,30 @@ test('invalid visual repair is retried, and accepted edits are rendered and revi
  assert.equal(checks,4,'A changed review brief must not inherit an old verdict');
 }));
 
-test('initial version and seven revisions select the best reviewed version and resume without another render or repair',()=>temporary(async workdir=>{
+test('initial version and five revisions select the best reviewed version and resume without another render or repair',()=>temporary(async workdir=>{
  let checks=0,renders=0,repairs=0,result;
  const options={spec:{revision:0},stage:VISUAL_REVIEW_STAGES[1],workdir,
   renderEvidence:async s=>{renders++;return {files:[`frame-${s.revision}.png`]};},review:async s=>{checks++;return {...bad,findings:Array.from({length:s.revision===1?1:3},()=>({...bad.findings[0]}))};},
   repair:async s=>{repairs++;return {valid:true,spec:{revision:s.revision+1}};},onResult:async r=>{result=r;}};
  const selected=await runVisualReviewStage(options);
- assert.equal(checks,8);assert.equal(renders,8);assert.equal(repairs,7);assert.equal(result.attempts.length,8);
+ assert.equal(checks,6);assert.equal(renders,6);assert.equal(repairs,5);assert.equal(result.attempts.length,6);
  assert.deepEqual(selected,{revision:1});assert.equal(result.selectedAttempt,2);assert.equal(result.passed,false);
  assert.deepEqual(result.attempts[1].evidence,['frame-1.png']);
  const root=join(workdir,'reviews',VISUAL_REVIEW_STAGES[1].id),[hash]=await readdir(root);
  const files=await readdir(join(root,hash));assert.ok(files.includes('failure.json'));assert.ok(files.includes('selected-best.json'));assert.ok(!files.includes('accepted.json'));
  assert.deepEqual(await runVisualReviewStage(options),selected);
- assert.equal(checks,8);assert.equal(renders,8);assert.equal(repairs,7);
+ assert.equal(checks,6);assert.equal(renders,6);assert.equal(repairs,5);
 }));
 
-test('seven invalid repair proposals retain the reviewed candidate and continue with unresolved findings',()=>temporary(async workdir=>{
+test('five invalid repair proposals retain the reviewed candidate and continue with unresolved findings',()=>temporary(async workdir=>{
  let proposals=0,result;
  const selected=await runVisualReviewStage({spec:{revision:0},stage:VISUAL_REVIEW_STAGES[0],workdir,
   renderEvidence:async()=>({files:['frame.png']}),review:async()=>bad,
   repair:async()=>{proposals++;return {valid:false,problems:['Invalid scene authoring']};},onResult:async r=>{result=r;}});
- assert.equal(proposals,7);assert.deepEqual(selected,{revision:0});assert.equal(result.passed,false);assert.equal(result.selectedBest,true);
+ assert.equal(proposals,5);assert.deepEqual(selected,{revision:0});assert.equal(result.passed,false);assert.equal(result.selectedBest,true);
  assert.equal(result.attempts.length,1);assert.match(result.error,/no valid repair/);
  const files=await readdir(result.attempts[0].directory);
- assert.equal(files.filter(name=>/^repair-\d+\.json$/.test(name)).length,7);
+ assert.equal(files.filter(name=>/^repair-\d+\.json$/.test(name)).length,5);
  assert.deepEqual(result.attempts[0].verdict,bad);
 }));
 
@@ -320,7 +320,7 @@ test('legacy usage and reservations from the old two-call limit retain their spe
  assert.equal((await readdir(join(old,'repair-budget'))).filter(f=>f.startsWith('call-')).length,5);
 }));
 
-test('visual stages use two Opus repairs plus five Sol repairs, sharing five Opus across the reel',()=>temporary(async workdir=>{
+test('visual stages use two Opus repairs plus three Sol repairs, sharing five Opus across the reel',()=>temporary(async workdir=>{
  const {opusRepairBudget,solRepairBudget}=await import('./quriozity/repair-budget.mjs');
  const {routeQuriozityClients}=await import('../worker/quriozity-model-client.ts');
  const opus=await opusRepairBudget(workdir),sol=await solRepairBudget(workdir);
@@ -331,13 +331,13 @@ test('visual stages use two Opus repairs plus five Sol repairs, sharing five Opu
   repair:async(s,_verdict,stage)=>({valid:true,spec:JSON.parse(await ask(`${stage.id}-repair`,JSON.stringify({revision:s.revision+1}),0))}),
   onResult:async r=>results.push(r)};
  for(const stage of VISUAL_REVIEW_STAGES.slice(0,4))assert.deepEqual(await runVisualReviewStage({...options,stage}),{revision:1});
- assert.deepEqual(requests,{opus:5,sol:20});
- assert.deepEqual(results.map(r=>r.attempts.length),[8,8,7,6]);
+ assert.deepEqual(requests,{opus:5,sol:12});
+ assert.deepEqual(results.map(r=>r.attempts.length),[6,6,5,4]);
  assert.ok(results.every(r=>r.passed===false&&r.selectedBest===true&&r.selectedAttempt===2));
- assert.match(results.at(-1).error,/5 Sol repair calls/);
+ assert.match(results.at(-1).error,/3 Sol repair calls/);
  // Revisiting exhausted stages cannot obtain more paid requests.
  await runVisualReviewStage({...options,stage:VISUAL_REVIEW_STAGES[3]});
- assert.deepEqual(requests,{opus:5,sol:20});
+ assert.deepEqual(requests,{opus:5,sol:12});
 }));
 
  test('per-stage provider limits survive invalid calls, concurrent reservations and restarts',()=>temporary(async workdir=>{
@@ -348,7 +348,7 @@ test('visual stages use two Opus repairs plus five Sol repairs, sharing five Opu
  assert.ok(op.filter(r=>r.status==='rejected').every(r=>r.reason.code==='opus_stage_repair_limit'));
  await assert.rejects((await opusRepairBudget(workdir))('storyboard-repair'),{code:'opus_stage_repair_limit'});
  const fixed=await Promise.allSettled(Array.from({length:8},()=>sol('storyboard-repair')));
- assert.equal(fixed.filter(r=>r.status==='fulfilled').length,5);
+ assert.equal(fixed.filter(r=>r.status==='fulfilled').length,3);
  await assert.rejects((await solRepairBudget(workdir))('storyboard-repair'),{code:'sol_stage_repair_limit'});
  // Another stage still has its independent allowance.
  await (await opusRepairBudget(workdir))('script-repair');
@@ -357,9 +357,25 @@ test('visual stages use two Opus repairs plus five Sol repairs, sharing five Opu
 
  test('Sol usage from before the new policy is retained without counting new reservations twice',()=>temporary(async workdir=>{
  const {solRepairBudget}=await import('./quriozity/repair-budget.mjs');
- await writeFile(join(workdir,'usage.jsonl'),Array.from({length:3},()=>JSON.stringify({model:'gpt-6.1-sol',step:'storyboard-repair'})).join('\n')+'\n');
+ await writeFile(join(workdir,'usage.jsonl'),JSON.stringify({model:'gpt-6.1-sol',step:'storyboard-repair'})+'\n');
  await (await solRepairBudget(workdir))('storyboard-repair');
  await writeFile(join(workdir,'usage.jsonl'),JSON.stringify({model:'gpt-6.1-sol',step:'storyboard-repair'})+'\n',{flag:'a'});
  await (await solRepairBudget(workdir))('storyboard-repair');
  await assert.rejects((await solRepairBudget(workdir))('storyboard-repair'),{code:'sol_stage_repair_limit'});
+}));
+
+test('lowering the Sol cap preserves all older reservations and forbids another request',()=>temporary(async workdir=>{
+ const {solRepairBudget}=await import('./quriozity/repair-budget.mjs');
+ const folder=join(workdir,'repair-budget','stages','visual-subject-review');
+ await mkdir(folder,{recursive:true});
+ const records=Array.from({length:5},(_,i)=>JSON.stringify({provider:'sol',stage:'visual-subject-review',step:'visual-subject-review-repair',slot:i+1}));
+ for(const [i,record] of records.entries())await writeFile(join(folder,`sol-${i+1}.json`),record);
+ const reserve=await solRepairBudget(workdir);
+ await assert.rejects(reserve('visual-subject-review-repair'),{code:'sol_stage_repair_limit'});
+ await assert.rejects((await solRepairBudget(workdir))('visual-subject-review-repair'),{code:'sol_stage_repair_limit'});
+ assert.deepEqual((await readdir(folder)).sort(),records.map((_,i)=>`sol-${i+1}.json`));
+ for(const [i,record] of records.entries())assert.equal(await readFile(join(folder,`sol-${i+1}.json`),'utf8'),record);
+ // A fresh stage gets only its own three calls, even when older stages exceeded the new cap.
+ for(let i=0;i<3;i++)await reserve('visual-final-review-repair');
+ await assert.rejects(reserve('visual-final-review-repair'),{code:'sol_stage_repair_limit'});
 }));

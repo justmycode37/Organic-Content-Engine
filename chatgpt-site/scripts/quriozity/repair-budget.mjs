@@ -60,7 +60,7 @@ export async function opusRepairBudget(workdir){
  };
 }
 
-/** Sol receives five additional durable repair slots for each stage. */
+/** Sol receives three additional durable repair slots for each stage. */
 export async function solRepairBudget(workdir){
  const dir=join(workdir,'repair-budget');await mkdir(dir,{recursive:true});
  const rows=(await usageRows(workdir)).filter(r=>r.model==='gpt-6.1-sol'&&r.step?.endsWith('-repair'));
