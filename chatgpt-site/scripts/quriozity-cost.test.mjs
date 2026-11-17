@@ -15,7 +15,11 @@ const entry=(id,summary,aliases=[])=>({id,summary,aliases,details:`${id}: ${summ
 
 test('Quriozity cost reports include one-hour Opus writes, Sol reasoning and separate audio estimates without a cutoff',()=>{
  assert.equal(modelCost({model:'claude-opus-5-5',usage:{input_tokens:10000,output_tokens:10000,cache_creation_input_tokens:20000,cache_creation:{ephemeral_1h_input_tokens:15000},cache_read_input_tokens:10000}}),.387);
- assert.equal(modelCost({model:'gpt-6.1-sol',usage:{input_tokens:100000,output_tokens:50000,input_tokens_details:{cached_tokens:20000}}}),.662);
+ for(const model of ['gpt-6.1-sol','gpt-6.2-sol']){
+  assert.equal(modelCost({model,usage:{input_tokens:100000,output_tokens:50000,input_tokens_details:{cached_tokens:20000}}}),.662);
+  assert.equal(modelCost({model,usage:{input_tokens:300000,output_tokens:50000,input_tokens_details:{cached_tokens:20000}}}),1.874);
+  assert.equal(summarizeCosts([{model,step:'fact-check',usage:{input_tokens:100000,output_tokens:50000,input_tokens_details:{cached_tokens:20000}}}]).modelUsd,.662);
+ }
  assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/text-to-speech/voice/with-timestamps',characters:1000}),.08);
  assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/music',generatedSeconds:60}),.15);
  assert.equal(summarizeCosts([]).orientation.hardCutoff,false);

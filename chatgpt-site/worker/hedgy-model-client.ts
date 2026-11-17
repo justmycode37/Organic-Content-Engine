@@ -3,7 +3,7 @@ import {AppError} from './errors.ts';
 
 type ResponseData={id?:string;status?:string;usage?:unknown;incomplete_details?:{reason?:string};error?:unknown;output?:{content?:{type:string;text?:string}[]}[]};
 type Usage=(entry:unknown)=>void|Promise<void>;
-const MODEL='gpt-6.1-sol',EFFORT='xhigh';
+export const HEDGY_MODEL='gpt-6.2-sol',HEDGY_EFFORT='xhigh';
 
 /** Read a terminal Responses event, including events split across chunks or CRLF lines. */
 async function readResponse(response:Response):Promise<ResponseData>{
@@ -49,12 +49,12 @@ async function readResponse(response:Response):Promise<ResponseData>{
  */
 export function hedgyClient(key:string,onUsage?:Usage){
  return async(step:string,input:string,format?:{name:string;schema:z.ZodType})=>{
-  const started=performance.now(),base={step,model:MODEL,effort:EFFORT};
+  const started=performance.now(),base={step,model:HEDGY_MODEL,effort:HEDGY_EFFORT};
   await onUsage?.({...base,status:'started'});
   let requestId:string|null=null,responseDetails:Record<string,unknown>={};
   try{
    const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-    body:JSON.stringify({model:MODEL,reasoning:{effort:EFFORT},input,store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
+    body:JSON.stringify({model:HEDGY_MODEL,reasoning:{effort:HEDGY_EFFORT},input,store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
    requestId=response.headers.get('x-request-id');
    if(!response.ok){
     // Keep structured provider diagnostics in private evidence, never in the public message.

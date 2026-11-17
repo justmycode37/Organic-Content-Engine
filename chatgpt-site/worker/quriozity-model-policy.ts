@@ -4,7 +4,7 @@ export const OPUS_STAGE_REPAIR_LIMIT=1;
 export const SOL_STAGE_REPAIR_LIMIT=3;
 export const STAGE_REPAIR_LIMIT=OPUS_STAGE_REPAIR_LIMIT;
 export const repairStage=(step:string)=>step.replace(/-repair$/,'');
-export const QURIOZITY_MODELS={generation:{model:'gpt-6.1-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}} as const;
+export const QURIOZITY_MODELS={generation:{model:'gpt-6.2-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.2-sol',effort:'medium'}} as const;
 export function quriozityStepRole(step:string):'generation'|'review'{
  if(step.startsWith('voice-'))return 'review';
  if(step==='visual-realization')return 'generation';

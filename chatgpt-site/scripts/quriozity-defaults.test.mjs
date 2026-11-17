@@ -15,8 +15,9 @@ test('default routing separates all authoring/repairs from every review specialt
  for(const step of ['visual-realization','visual-realization-repair','visual-subject-review-repair','visual-composition-review-repair','visual-continuity-review-repair','visual-style-reference-review-repair','visual-final-review-repair'])assert.equal(usesOpusVisuals(step),true,step);
  for(const step of ['plan','script','asset-needs','asset-pick','storyboard','storyboard-review-repair','sound-design','visual-final-review-repair'])assert.equal(quriozityStepRole(step),'generation',step);
  for(const step of ['fact-check','coherence','novelty','asset-verify','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review','voice-delivery-review','voice-pacing-review','sound-review'])assert.equal(quriozityStepRole(step),'review',step);
- assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'gpt-6.1-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}});
+ assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'gpt-6.2-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.2-sol',effort:'medium'}});
  assert.ok(hasDefaultQuriozityProfile({modelRouting:QURIOZITY_CLIENT_CONTEXT}));
+ assert.ok(!hasDefaultQuriozityProfile({modelRouting:{...QURIOZITY_CLIENT_CONTEXT,generationModel:'gpt-6.1-sol',reviewModel:'gpt-6.1-sol'}}),'Historical Sol runs must not be relabeled as the current model');
  assert.ok(!hasDefaultQuriozityProfile({model:'gpt-6.1-sol',effort:'xhigh'}));
  assert.ok(!hasDefaultQuriozityProfile({modelRouting:{...QURIOZITY_CLIENT_CONTEXT,reviewEffort:'xhigh'}}));
  assert.ok(!hasDefaultQuriozityProfile({model:'gpt-6.1-sol',effort:'xhigh',modelRouting:QURIOZITY_CLIENT_CONTEXT}),'New repair settings cannot relabel an older draft as Opus-authored');
@@ -41,9 +42,9 @@ test('actual clients send Sol planning/reviews and Opus visual realization/repai
  try{
   const ask=quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},entry=>usage.push(entry));
   for(const step of ['plan','visual-realization','fact-check','visual-composition-review-repair'])assert.equal(await ask(step,'Test',0,{name:'result',schema:z.object({ok:z.boolean()})}),'{"ok":true}');
-  assert.equal(requests[0].body.model,'gpt-6.1-sol');assert.equal(requests[0].body.reasoning.effort,'medium');
+  assert.equal(requests[0].body.model,'gpt-6.2-sol');assert.equal(requests[0].body.reasoning.effort,'medium');
   assert.equal(requests[1].body.model,'claude-opus-5-5');assert.equal(requests[1].body.output_config.effort,'medium');
-  assert.equal(requests[2].body.model,'gpt-6.1-sol');assert.equal(requests[2].body.reasoning.effort,'medium');
+  assert.equal(requests[2].body.model,'gpt-6.2-sol');assert.equal(requests[2].body.reasoning.effort,'medium');
   assert.equal(requests[3].body.model,'claude-opus-5-5');
   assert.deepEqual(usage.map(u=>u.effort),['medium','medium','medium','medium']);
  }finally{globalThis.fetch=original;}
@@ -89,7 +90,7 @@ test('real routing gives each visual stage one Opus repair with no global cap or
   await assert.rejects(ask('visual-realization','Test',0),{code:'opus_stage_repair_limit'});
   assert.equal(requests.length,7,'No fallback or repeated initial request is purchased');
   for(const step of ['plan','script','asset-pick','sound-design','fact-check','voice-delivery-review-repair'])await ask(step,'Test',0);
-  assert.ok(requests.slice(7).every(r=>r.model==='gpt-6.1-sol'&&r.reasoning.effort==='medium'));
+  assert.ok(requests.slice(7).every(r=>r.model==='gpt-6.2-sol'&&r.reasoning.effort==='medium'));
  }finally{globalThis.fetch=original;await rm(workdir,{recursive:true,force:true});}
 });
 

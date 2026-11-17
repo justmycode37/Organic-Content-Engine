@@ -6,7 +6,7 @@ import {fileURLToPath} from 'node:url';
 export const PRICE_SOURCES={verified:'2026-11-17',openai:'https://developers.openai.com/api/docs/pricing',opus:'https://platform.claude.com/docs/en/models/opus-5-5/overview',audio:'https://elevenlabs.io/pricing/api'};
 export function modelCost(entry){
  const u=entry.usage;if(!u)return null;
- if(entry.model?.startsWith('gpt-6.1-sol')){
+ if(['gpt-6.1-sol','gpt-6.2-sol'].some(model=>entry.model?.startsWith(model))){
   const i=u.input_tokens??0,d=u.input_tokens_details??{},cached=d.cached_tokens??0,write=d.cache_write_tokens??d.cache_creation_tokens??0,longWrite=d.cache_write_tokens_details?.ttl_12h_tokens??0,m=i>272000?2:1;
   return ((i-cached-write)*2*m+cached*.1*m+(write-longWrite)*2.5*m+longWrite*5*m+(u.output_tokens??0)*10*(m===2?1.5:1))/1e6;
  }
@@ -36,7 +36,7 @@ export function summarizeCosts(rows){
  return {priceSources:PRICE_SOURCES,modelUsd,audioEstimateUsd,estimatedTotalUsd:modelUsd+audioEstimateUsd,byProvider,byStage,unmetered,
   basis:'Recorded token usage at published Standard rates, including reasoning output and provider cache writes/reads. Audio uses published character/minute rates. Not an invoice: excludes tax, account discounts, unknown interrupted usage and amortized cached audio.',
   orientation:{opusUsd:3,openaiUsd:3,hardCutoff:false},
-  repairHeavyScenario:{estimatedUsd:7*modelCost({model:'claude-opus-5-5',usage:{input_tokens:100000,output_tokens:16000}})+10*modelCost({model:'gpt-6.1-sol',usage:{input_tokens:80000,output_tokens:4000}})+30*modelCost({model:'gpt-6.1-sol',usage:{input_tokens:8000,output_tokens:6000}})+.5,notAHardMaximum:true,assumptions:'7 Opus calls at 100k input/16k output; 10 Sol visual reviews at 80k input/4k output; 30 Sol planning/review/correction calls at 8k input/6k output; $0.50 audio. No cache hits; excludes asset search fan-out and large-output outliers.'}};
+  repairHeavyScenario:{estimatedUsd:7*modelCost({model:'claude-opus-5-5',usage:{input_tokens:100000,output_tokens:16000}})+10*modelCost({model:'gpt-6.2-sol',usage:{input_tokens:80000,output_tokens:4000}})+30*modelCost({model:'gpt-6.2-sol',usage:{input_tokens:8000,output_tokens:6000}})+.5,notAHardMaximum:true,assumptions:'7 Opus calls at 100k input/16k output; 10 Sol visual reviews at 80k input/4k output; 30 Sol planning/review/correction calls at 8k input/6k output; $0.50 audio. No cache hits; excludes asset search fan-out and large-output outliers.'}};
 }
 export async function writeCostSummary(workdir){
  const rows=(await readFile(join(workdir,'usage.jsonl'),'utf8')).split('\n').filter(Boolean).map(line=>JSON.parse(line));
