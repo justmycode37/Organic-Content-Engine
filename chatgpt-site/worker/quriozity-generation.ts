@@ -5,7 +5,7 @@ import {specSchema,specProblems} from '../src/quriozity/schema.ts';
 import type {QuriozitySpec} from '../src/quriozity/spec.ts';
 import {CAMERA_DIRECTION_RULES,cameraProblems,planCameras} from '../src/quriozity/camera-direction.ts';
 import {SHOT_TRANSITION_RULES,planTransitions,transitionList,transitionProblems} from '../src/quriozity/shot-transitions.ts';
-import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,OPUS_REPAIR_LIMIT} from './quriozity-model-policy.ts';
+import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
 import {opusClient,routeQuriozityClients} from './quriozity-model-client.ts';
 
 /** Opus medium authors; Sol reviews retain the standing xhigh preference. */
@@ -37,11 +37,12 @@ async function readStream(body:ReadableStream<Uint8Array>):Promise<Resp|undefine
 }
 
 /** No client-side output-token ceiling or request deadline: Sol decides how long it thinks. `max` is kept for call-site documentation only. */
-export function solClient(key:string,onUsage?:Usage){
+export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<unknown>){
  return async function ask(step:string,input:string,_max:number,format?:{name:string;schema:z.ZodType},images:Img[]=[]){
   const content:unknown[]=[{type:'input_text',text:input},...images.map(i=>({type:'input_image',image_url:`data:${i.mime};base64,${i.base64}`}))];
   let last='';
   for(let attempt=0;attempt<6;attempt++){
+   await beforeRequest?.(step);
    let r:Resp|undefined;const started=performance.now();
    try{
     const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
@@ -61,9 +62,9 @@ export function solClient(key:string,onUsage?:Usage){
  };
 }
 export type Ask=ReturnType<typeof solClient>;
-export function quriozityClient(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},onUsage?:Usage,beforeOpusRequest?:(step:string)=>Promise<void>):Ask{
+export function quriozityClient(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},onUsage?:Usage,beforeOpusRequest?:(step:string)=>Promise<void>,beforeSolRequest?:(step:string)=>Promise<unknown>):Ask{
  if(!env.OPENAI_API_KEY?.trim())throw new Error('Configure OPENAI_API_KEY for Quriozity reviews');
- return routeQuriozityClients(opusClient(env.ANTHROPIC_API_KEY??'',onUsage,beforeOpusRequest),solClient(env.OPENAI_API_KEY.trim(),onUsage));
+ return routeQuriozityClients(opusClient(env.ANTHROPIC_API_KEY??'',onUsage,beforeOpusRequest),solClient(env.OPENAI_API_KEY.trim(),onUsage,beforeSolRequest));
 }
 const json=(t:string)=>{try{return JSON.parse(t)}catch{const m=/\{[\s\S]*\}/.exec(t);if(m)try{return JSON.parse(m[0])}catch{}return undefined}};
 
@@ -149,7 +150,7 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  // 1. Plan the explanation (the golden thread) before writing a single line
  // never a subject an earlier reel covered: local topic-key check + Sol novelty check against the full ledger
  let plan:QuriozityPlan|undefined;const rejected:string[]=[];
- for(let i=0;i<=OPUS_REPAIR_LIMIT&&!plan;i++){
+ for(let i=0;i<=STAGE_REPAIR_LIMIT&&!plan;i++){
   const raw=await ask(i?'plan-repair':'plan',`${JSON.stringify(QURIOZITY_POLICY)}\n${STORY_RULES}\nYou are the editor of QURIOZITY, a reel channel that EXPLAINS things people are curious about but never thought about.${topicHint?` Requested topic: ${topicHint}.`:` Choose a topic that is NOT one of the earlier reels below — not the same subject under a new title or angle either. Unused seed ideas: ${seeds.join('; ')||'none left; invent a fresh one'}.`}\nEVERY earlier QURIOZITY reel (never repeat any of these subjects):\n${past}${rejected.length?`\nAlready rejected as repeats this run (pick something else): ${rejected.join('; ')}`:''}\nPlan the explainer before any narration exists. First find the ONE question a curious child would ask about this topic that has a satisfying answer explainable in about 40 seconds. Then design the shortest chain of 3-7 steps that leads from that question to its answer, where each step follows from the previous one (because / so / but). Pick ONE anchor: a real, filmable object, place or person the viewer follows from the first scene to the last (prefer one in the catalogue). Pick at most ONE everyday analogy for the hardest step, or "none". Write the hook (question as an everyday picture with the anchor) and the payoff (answers the hook, calls back to its picture). List the verified facts the chain needs (only facts you are certain of), the hero objects (recognisable real subjects suited to the catalogue), and the true facts you are deliberately leaving out because they are not on the path.\nAvailable visual catalogue (choose an anchor that can be shown well):\n${catalogText(cat).slice(0,12000)}`,0,{name:'quriozity_plan',schema:planSchema});
   const p=planSchema.safeParse(json(raw));if(!p.success)continue;
   const cand={topic:p.data.topic,topicKey:topicKey(p.data.topic)};
@@ -166,8 +167,8 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  // 2. Script → 3. fact check + coherence review (independent reviewers, in parallel), until both pass
  type Script=z.infer<typeof scriptSchema>;
  let script:Script|undefined,best:{script:Script;score:number;factsOk:boolean}|undefined;let feedback='';
- for(let round=0;round<=OPUS_REPAIR_LIMIT;round++){
-  let raw:string;try{raw=await ask(round?'script-repair':'script',`${STORY_RULES}\nWrite the narration for this QURIOZITY explainer, following the plan's chain step by step.\nPlan: ${JSON.stringify(plan)}\n${script?`Previous draft: ${JSON.stringify(script)}\nReviewer feedback to fix (rewrite as much as needed; keep the golden thread): ${feedback}`:''}\nFor each line give say (the spoken words), step (0 = hook, 1..${plan.steps.length} = plan step, ${plan.steps.length+1} = payoff) and link (why it follows from the previous line). Also write musicBrief: a 1-2 sentence note for the 100 BPM melodic electronic score (mood, lead sound, melody character, where the click/payoff moment is; no vocals) and factNotes (each claim with how certain it is).`,0,{name:'quriozity_script',schema:scriptSchema});}catch(error){if((error as {code?:string}).code==='opus_repair_limit'&&best)break;throw error;}
+ for(let round=0;round<=STAGE_REPAIR_LIMIT;round++){
+  let raw:string;try{raw=await ask(round?'script-repair':'script',`${STORY_RULES}\nWrite the narration for this QURIOZITY explainer, following the plan's chain step by step.\nPlan: ${JSON.stringify(plan)}\n${script?`Previous draft: ${JSON.stringify(script)}\nReviewer feedback to fix (rewrite as much as needed; keep the golden thread): ${feedback}`:''}\nFor each line give say (the spoken words), step (0 = hook, 1..${plan.steps.length} = plan step, ${plan.steps.length+1} = payoff) and link (why it follows from the previous line). Also write musicBrief: a 1-2 sentence note for the 100 BPM melodic electronic score (mood, lead sound, melody character, where the click/payoff moment is; no vocals) and factNotes (each claim with how certain it is).`,0,{name:'quriozity_script',schema:scriptSchema});}catch(error){if(['opus_repair_limit','opus_stage_repair_limit','sol_stage_repair_limit'].includes((error as {code?:string}).code??'')&&best)break;throw error;}
   const p=scriptSchema.safeParse(json(raw));if(!p.success){feedback=p.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; ');continue;}
   script=p.data;const lines=script.lines.map(l=>l.say);
   const [fact,coh]=await Promise.all([
@@ -194,7 +195,7 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  const catalog=catalogText(cat);
  const base=`${VISUAL_RULES}\nASSET / MODEL CATALOGUE (use these ids and documented params; prefer licensed media for complex natural subjects; "compose" is only for suitable editable shapes):\n${catalog}\n\nSPEC JSON SCHEMA: ${schemaText()}\nSpec notes: version 1, series "QURIOZITY", one scene per narration line with say = that line EXACTLY (same words, same order). Objects: id (short), model, params, optional pos [x,y,z] in metres (bottom centre) or near+side relative to another object, rot [deg], scale (relative size; models use real metres, so scale small things like an LED up when next to a person), enter/exit, idle (none by default; explicitly motivated turns only), controls (initial), pose (supported rigged people only). Media source/license/mask records belong in production provenance; never add unsupported spec keys. Event "at" = a word from the say line (preferred) or seconds.`;
  let spec:QuriozitySpec|undefined;let problems:string[]=[];let raw='';
- for(let attempt=0;attempt<=OPUS_REPAIR_LIMIT;attempt++){
+ for(let attempt=0;attempt<=STAGE_REPAIR_LIMIT;attempt++){
   raw=await ask(attempt?'storyboard-repair':'storyboard',attempt===0?`${base}\nTitle: ${script.title}\nmusicBrief: ${script.musicBrief}\nEXPLAINER PLAN (the golden thread every scene serves): ${JSON.stringify(plan)}\nNarration lines (one scene each; step = which plan step it belongs to; link = how it follows the previous line):\n${script.lines.map((l,i)=>`${i+1}. [step ${l.step}] ${l.say}  (link: ${l.link})`).join('\n')}\nFirst decide the visual journey: how the anchor appears in the hook, how each scene hands over to the next, where the anchor returns, and what the final frame shows. Then build the full reel spec JSON.`:`${base}\nFix this reel spec. Problems: ${problems.join(' | ')}\nSpec: ${raw}`,24000,{name:'quriozity_spec',schema:specSchema});
   const p=specSchema.safeParse(json(raw));
   if(!p.success){problems=p.error.issues.slice(0,12).map(i=>`${i.path.join('.')}: ${i.message}`);continue;}
