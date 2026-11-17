@@ -32,6 +32,21 @@ test('running captions remain above the bottom interface region of a portrait re
  assert.equal(glyphs.length,1);assert.ok(glyphs[0].y<=1920*.82,'Caption baseline must clear the bottom18%');assert.ok(glyphs[0].y>=1920*.72,'The running line remains in its lower caption band');
 });
 
+test('future captions show the whole phrase and invert only the spoken word, preserving saved typed captions',()=>{
+ const glyphs=[],boxes=[],ctx={fillStyle:'',save(){},restore(){},measureText:text=>({width:text.length*20}),fillText(text,x,y){glyphs.push({text,x,y,color:this.fillStyle});},fillRect(x,y,width,height){boxes.push({x,y,width,height,color:this.fillStyle});}};
+ const words=[{text:'These',start:0,end:.2},{text:'ingredients',start:.3,end:.6},{text:'mix.',start:.7,end:.9}];
+ const tc={ctx,t:.04,dur:5,scene:{say:'These ingredients mix.',objects:[],words},hue:'#000000',backgroundColor:'#ffffff',captionStyle:'word-highlight',project:()=>null};
+ for(const [t,word] of [[.04,'These'],[.3,'ingredients'],[.8,'mix.']]){
+  glyphs.length=0;boxes.length=0;drawCaptions({...tc,t});
+  assert.deepEqual(glyphs.map(g=>[g.text,g.color]),[['These ingredients mix.','#000000'],[word,'#ffffff']]);
+  assert.equal(boxes.length,1);assert.equal(boxes[0].color,'#000000');
+  assert.ok(boxes[0].x<glyphs[1].x&&boxes[0].x+boxes[0].width>glyphs[1].x+ctx.measureText(word).width,'The rectangle contains the complete spoken word');
+ }
+ glyphs.length=0;boxes.length=0;drawCaptions({...tc,t:.25});
+ assert.equal(glyphs.length,1);assert.equal(glyphs[0].text,'These ingredients mix.');assert.equal(boxes.length,0,'No word is highlighted during a pause');
+ glyphs.length=0;drawCaptions({...tc,captionStyle:undefined});assert.notEqual(glyphs[0].text,'These ingredients mix.','Existing saved reels retain progressive typing');
+});
+
 test('highlight boxes use dark knockout glyphs while adjacent headline text stays gray',()=>{
  const glyphs=[];
  const ctx={fillStyle:'',save(){},restore(){},translate(){},scale(){},fillRect(){},measureText:text=>({width:text.length*40,actualBoundingBoxAscent:70,actualBoundingBoxDescent:0}),fillText(text){glyphs.push({text,color:this.fillStyle});}};

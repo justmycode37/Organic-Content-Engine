@@ -230,6 +230,8 @@ export interface QuriozitySpec {
  title:string;
  musicBrief?:string;
  captions?:boolean;
+ /** Omitted in saved reels: retain their original typed captions. */
+ captionStyle?:'typed'|'word-highlight';
  /** Music beat grid (seconds), for edit/audio timing only. Never pulses geometry, camera or brightness. */
  beat?:{period:number;phase:number;from?:number};
  scenes:Scene[];

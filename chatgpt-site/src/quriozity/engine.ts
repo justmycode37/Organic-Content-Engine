@@ -728,7 +728,7 @@ export class Engine {
   this.renderer.setRenderTarget(null);this.renderer.setClearColor(0x000000,1);this.renderer.clear();this.renderer.render(this.postScene,this.postCam);
   const c=this.ctx2d;c.globalAlpha=1;c.fillStyle=this.spec.look?.backgroundColor??'#000';c.fillRect(0,0,W,H);c.filter=light.softness>0?`blur(${light.softness}px)`:'none';c.drawImage(this.gl,0,0);c.filter='none';
   const rt=this.runtime(i);
-  const tctx:TextCtx={ctx:c,t:local,dur:rt.dur,scene:sc,palette:this.spec.look?.palette,textColor:this.spec.look?.textColor,backgroundColor:this.spec.look?.backgroundColor,hue:this.spec.look?.palette?.[sc.hue??'blue']??HUES[(sc.hue??'blue') as Hue]??HUES.blue,project:(id)=>rt.project(id)};
+  const tctx:TextCtx={ctx:c,t:local,dur:rt.dur,scene:sc,palette:this.spec.look?.palette,textColor:this.spec.look?.textColor,backgroundColor:this.spec.look?.backgroundColor,captionStyle:this.spec.captionStyle,hue:this.spec.look?.palette?.[sc.hue??'blue']??HUES[(sc.hue??'blue') as Hue]??HUES.blue,project:(id)=>rt.project(id)};
   for(let previous=0;previous<i;previous++){
    const prior=this.spec.scenes[previous]!,priorTime=t-this.starts[previous]!,priorDuration=sceneDuration(prior);
    const carried=(prior.text??[]).filter(item=>item.carry&&priorTime<=textEnd(prior,item.until,priorDuration));

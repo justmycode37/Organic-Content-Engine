@@ -236,7 +236,7 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  }
  spec=boardBest!.spec;
  log.storyboardReviews=boardReviews;log.storyboardGate={passed:boardBest!.verdict.passed,selectedBest:!boardBest!.verdict.passed,selectionReason:'Passing director verdict first, then fewer must-fix findings and fewer total findings; all candidates remain in provenance.'};
- spec={...spec,version:1,series:'QURIOZITY',title:script.title,musicBrief:script.musicBrief};
+ spec={...spec,version:1,series:'QURIOZITY',captionStyle:'word-highlight',title:script.title,musicBrief:script.musicBrief};
  spec=await realizeVisuals(ask,spec,cat,log);
  log.thread=threadText(plan);
  return {spec,provenance:{model:MODEL,effort:EFFORT,reviewModel:REVIEW_MODEL,reviewEffort:REVIEW_EFFORT,visualModel:QURIOZITY_MODELS.visual.model,visualEffort:QURIOZITY_MODELS.visual.effort,steps:['plan','script','fact-check+coherence','storyboard','storyboard-review','visual-realization','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','voice-delivery-review','voice-pacing-review','visual-final-review','sound-design','sound-review'],...log}};
@@ -254,7 +254,7 @@ export async function realizeVisuals(ask:Ask,spec:QuriozitySpec,cat:Catalog,log:
   const problems=[...specProblems(proposed,cat.has),...cameraProblems(proposed),...transitionProblems(proposed)];
   if(proposed.scenes.length!==spec.scenes.length||proposed.scenes.some((s,i)=>s.say!==spec.scenes[i]?.say||s.duration!==spec.scenes[i]?.duration||s.hue!==spec.scenes[i]?.hue||JSON.stringify(s.text)!==JSON.stringify(spec.scenes[i]?.text)))problems.push('Sol narration, scene order/count, durations, hues or text changed');
   records.push({attempt,raw,valid:!problems.length,problems});log.visualRealization=records;
-  if(!problems.length)return {...proposed,title:spec.title,musicBrief:spec.musicBrief};
+  if(!problems.length)return {...proposed,captionStyle:spec.captionStyle,title:spec.title,musicBrief:spec.musicBrief};
   feedback=problems.join('; ');
  }
  throw new Error(`Visual realization invalid after its repair allowance: ${feedback}`);

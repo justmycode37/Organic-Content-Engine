@@ -6,7 +6,7 @@ import {sampleTextReveal,sampleTextLayout} from './keyframes.ts';
 const X=(x:number)=>x/1080*W,Y=(y:number)=>y/1920*H;
 
 export const COND='AcxCond',MONO='AcxMono',ROBOTO_MONO='AcxRobotoMono',OSWALD='AcxOswald',ROBOTO_CONDENSED='AcxRobotoCondensed';
-export interface TextCtx {ctx:CanvasRenderingContext2D;t:number;dur:number;scene:Scene;hue:string;textColor?:string;backgroundColor?:string;palette?:Partial<Record<Hue,string>>;project:(id:string)=>{x:number;y:number}|null}
+export interface TextCtx {ctx:CanvasRenderingContext2D;t:number;dur:number;scene:Scene;hue:string;textColor?:string;backgroundColor?:string;captionStyle?:'typed'|'word-highlight';palette?:Partial<Record<Hue,string>>;project:(id:string)=>{x:number;y:number}|null}
 
 const hash=(n:number)=>{const x=Math.sin(n*91.7+12.3)*43758.5453;return x-Math.floor(x);};
 
@@ -158,7 +158,7 @@ export function drawText(tc:TextCtx,item:TextItem){
  ctx.restore();
 }
 
-/** Narration typed in small mono, synced to the spoken words (the reference's running line). */
+/** Small mono narration: legacy typing or a full phrase with the active word inverted. */
 export function drawCaptions(tc:TextCtx){
  const {ctx,t,dur,scene}=tc;
  const words=scene.words??estimateWords(scene.say,dur);if(!words.length)return;
@@ -174,7 +174,19 @@ export function drawCaptions(tc:TextCtx){
  ctx.save();ctx.font=`${40*TS}px ${MONO}`;ctx.textAlign='left';ctx.textBaseline='alphabetic';
  // Keep the running line above the bottom interface region of a portrait reel.
  const full=g.map(w=>w.text).join(' ');const fw=ctx.measureText(full).width;const x=W/2-fw/2,y=H*0.8;
- ctx.fillStyle=tc.backgroundColor==='#ffffff'?'#000000':'#d2d2d2';ctx.fillText(text,x,y);
+ const foreground=tc.backgroundColor==='#ffffff'?'#000000':'#d2d2d2';
+ if(tc.captionStyle==='word-highlight'){
+  ctx.fillStyle=foreground;ctx.fillText(full,x,y);
+  const active=g.findIndex(w=>t>=w.start&&t<w.end);
+  if(active>=0){
+   const word=g[active]!,prefix=g.slice(0,active).map(w=>w.text).join(' ');
+   const left=x+ctx.measureText(prefix+(active?' ':'')).width,width=ctx.measureText(word.text).width;
+   ctx.fillStyle=foreground;ctx.fillRect(left-6*TS,y-33*TS,width+12*TS,42*TS);
+   ctx.fillStyle=tc.backgroundColor??'#000000';ctx.fillText(word.text,left,y);
+  }
+  ctx.restore();return;
+ }
+ ctx.fillStyle=foreground;ctx.fillText(text,x,y);
  const cw=ctx.measureText(text).width;
  if(Math.floor(t*5)%2===0||text.length<full.length){ctx.fillStyle=tc.hue;ctx.fillRect(x+cw+6*TS,y-30*TS,4*TS,38*TS);}
  ctx.restore();

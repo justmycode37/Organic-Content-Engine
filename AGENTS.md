@@ -14,7 +14,11 @@ OpenAI model costs per reel. This is guidance, not a hard cost cutoff, and never
 authorizes skipped reviews. These changes apply ONLY to Quriozity, never Hedgy.
 
 Quriozity's normal output is white paper with black fixed ink and black text.
-Other colors are very rare and must be essential to the explanation. The original
+Other colors are very rare and must be essential to the explanation. Future reels
+show each narration caption phrase in full immediately in the same small mono
+style, with the currently spoken word in white on a black rectangle. Saved reels
+without the new captionStyle retain typed captions; do not retrofit the current
+November 17 maple-leaf autopilot run. The original
 blue-on-black recording still defines dot structure, density, typography and
 motion; compare its normalized ink coverage while respecting the new polarity.
 Source mattes may stay black/transparent internally. Legacy reference-recording

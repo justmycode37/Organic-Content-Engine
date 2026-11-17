@@ -82,6 +82,13 @@ word timings and verdicts. Usage and stage durations remain in `usage.jsonl` and
 inputs/output fingerprints; an old `spec.reviewed.json` alone cannot skip checks.
 Sound cue caches are invalidated when final visual timing or accepted voice changes.
 
+New production specs set `captionStyle:"word-highlight"`: each small mono caption
+phrase is fully visible when its group begins; the word currently being spoken
+uses white text inside a black rectangle. The highlight follows actual word start
+and end times, with no active highlight during a pause. Grouping, font, placement
+and phrase length retain the existing style. Saved specs without `captionStyle`
+keep their original typed captions, including the November 17 maple-leaf run.
+
 Text `size` uses pixels at 1080-pixel output width: use values such as `54` or
 `84`, not normalized fractions such as `0.04`. Fractional font sizes below one
 are rejected during authoring validation. Use separate positioned text items
