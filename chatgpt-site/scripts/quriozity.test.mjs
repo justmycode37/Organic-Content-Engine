@@ -111,7 +111,7 @@ test('spec schema and content checks',async()=>{const {specSchema,specProblems}=
  clocked.scenes[0].motionFPS=25;clocked.scenes[0].motionPhase=Infinity;assert.ok(!specSchema.safeParse(clocked).success);
  const bad=structuredClone(spec);bad.scenes[0].objects[0].model='nope';bad.scenes[1].events[0].at='zebra';const p=specProblems(bad,c.has);assert.ok(p.some(x=>x.includes('unknown model')));assert.ok(p.some(x=>x.includes('zebra')));});
 test('automatic sound cues follow the picture',async()=>{const {autoCues}=await import('../src/quriozity/cues.ts');const cues=autoCues(spec);assert.ok(cues.some(c=>c.kind==='assemble'));assert.ok(cues.some(c=>c.kind==='power-on'));assert.ok(cues.every((c,i)=>i===0||c.at>=cues[i-1].at));});
-test('quriozity plans with Sol and realizes visuals with Opus',async()=>{const {QURIOZITY_POLICY}=await import('../worker/quriozity-policy.ts');assert.deepEqual(QURIOZITY_POLICY.models,{generation:{model:'gpt-6.1-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}});});
+test('quriozity plans with Sol and realizes visuals with Opus',async()=>{const {QURIOZITY_POLICY}=await import('../worker/quriozity-policy.ts');assert.deepEqual(QURIOZITY_POLICY.models,{generation:{model:'gpt-6.2-sol',effort:'medium'},visual:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.2-sol',effort:'medium'}});});
 test('fractional dots preserve video dimensions and aspect ratio',async()=>{
  const f=await import('../src/quriozity/format.ts');f.setFormat({width:1164,height:670,cell:3.72});
  assert.equal(f.W,1164);assert.equal(f.H,670);assert.equal(f.CELL,3.72);

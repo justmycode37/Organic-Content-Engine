@@ -378,6 +378,15 @@ test('every visual stage gets one Opus repair and never falls back to Sol',()=>t
  await assert.rejects((await solRepairBudget(workdir))('storyboard-repair'),{code:'sol_stage_repair_limit'});
 }));
 
+test('upgrading Sol retains repair usage from both model versions in the same stage budget',()=>temporary(async workdir=>{
+ const {solRepairBudget}=await import('./quriozity/repair-budget.mjs');
+ const rows=['gpt-6.1-sol','gpt-6.2-sol'].map(model=>({model,step:'storyboard-repair'}));
+ await writeFile(join(workdir,'usage.jsonl'),rows.map(row=>JSON.stringify(row)+'\n').join(''));
+ await (await solRepairBudget(workdir))('storyboard-repair');
+ await assert.rejects((await solRepairBudget(workdir))('storyboard-repair'),{code:'sol_stage_repair_limit'});
+ await (await solRepairBudget(workdir))('script-repair');
+}));
+
 test('disabling Sol visual repair fallback preserves older reservations without new requests',()=>temporary(async workdir=>{
  const {solRepairBudget}=await import('./quriozity/repair-budget.mjs');
  const folder=join(workdir,'repair-budget','stages','visual-subject-review');

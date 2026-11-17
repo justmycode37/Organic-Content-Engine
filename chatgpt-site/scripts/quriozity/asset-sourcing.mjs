@@ -1,6 +1,6 @@
 // Auto-sourcing: when a reel needs an object the library does not have, find a REAL model in the external
 // libraries (Objaverse CC-BY/CC0, Smithsonian CC0, NASA) before anything is hand-modelled, verify it, and add it
-// to the library for good. Every judgement is made by Sol (gpt-6.1-sol, xhigh) looking at pictures:
+// to the library for good. Every judgement uses the configured Sol reviewer looking at pictures:
 //   1. search the index → 2. Sol picks realistic candidates from thumbnails → 3. ingest at real size →
 //   4. render a dithered QURIOZITY preview in four orientations → 5. Sol accepts one orientation or rejects →
 //   6. accepted models stay in the catalogue and are recorded in sourced-assets.json (re-ingestable).

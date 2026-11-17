@@ -12,7 +12,7 @@ const reelSpecSchema=z.object({version:z.literal(1),title:z.string().max(90),pos
 
 import type {Env} from './container.ts';
 import {AppError} from './errors.ts';
-import {hedgyClient} from './hedgy-model-client.ts';
+import {hedgyClient,HEDGY_MODEL,HEDGY_EFFORT} from './hedgy-model-client.ts';
 import {HEDGY_MUSIC_STYLE,HEDGY_CONCEPTS,conceptCandidates,recentlyUsed,ideaSchema,ideaProblems,type HedgyHistoryEntry,type HedgyIdea} from './hedgy-ideas.ts';
 const ROLES=['hook','finance accuracy','narration','scene 1 animation','scene 2 animation','scene 3 animation','scene 4 animation','scene 5 animation','scene 6 animation','sound effects','music and pacing','captions and accessibility'];
 /** Story-level checks that keep the reel on its chosen idea instead of drifting back to library defaults. */
@@ -63,5 +63,5 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  let result=check(output);
  for(let repair=0;repair<2&&!result.spec;repair++){output=await ask(`repair-${repair+1}`,`Repair this reel JSON. Keep its story, hero item (${idea.heroItem}) and numerically correct hypothetical intact. Keep postCaption aligned with the final story: aim for 80–140 words (at least 60 excluding hashtags), short paragraphs separated by blank lines, and 3–5 distinct relevant hashtags on their own final line; at most 2,200 characters. Problems: ${JSON.stringify(result.issues)}\nJSON: ${output}\nSchema: ${schema}`,{name:'hedgy_reel',schema:reelSpecSchema});result=check(output);}
  if(!result.spec)throw new AppError(502,'invalid_reel',`Producer returned an invalid reel specification: ${result.issues?.slice(0,3).join('; ')}`);
- return {spec:result.spec,provenance:{orchestrator:'gpt-6.1-sol',effort:'xhigh',specialist:'gpt-6.1-sol',specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:result.spec.title},plan,contributions}};
+ return {spec:result.spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:result.spec.title},plan,contributions}};
 }

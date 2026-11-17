@@ -65,7 +65,8 @@ export async function opusRepairBudget(workdir){
 /** Sol-only planning/delivery stages retain three durable correction slots. */
 export async function solRepairBudget(workdir){
  const dir=join(workdir,'repair-budget');await mkdir(dir,{recursive:true});
- const rows=(await usageRows(workdir)).filter(r=>r.model==='gpt-6.1-sol'&&r.step?.endsWith('-repair'));
+ // Model upgrades must retain repair spend from either Sol version.
+ const rows=(await usageRows(workdir)).filter(r=>['gpt-6.1-sol','gpt-6.2-sol'].includes(r.model)&&r.step?.endsWith('-repair'));
  const baseline=await persisted(join(dir,'sol-baseline.json'),{historicalByStage:countStages(rows)});
  const counts=baseline.historicalByStage;
  if(!counts||Object.values(counts).some(n=>!Number.isInteger(n)||n<0))throw new Error('Invalid persisted Sol repair budget');

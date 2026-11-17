@@ -33,7 +33,7 @@ test('Hedgy streams xhigh without truncating reasoning or automatically repeatin
  try{
   const result=await hedgyClient('test',entry=>events.push(entry))('idea-1','brief');
   assert.equal(result,'A café story.');assert.equal(calls.length,1);
-  const body=JSON.parse(calls[0].body);assert.equal(body.model,'gpt-6.1-sol');assert.equal(body.reasoning.effort,'xhigh');
+  const body=JSON.parse(calls[0].body);assert.equal(body.model,'gpt-6.2-sol');assert.equal(body.reasoning.effort,'xhigh');
   assert.equal(body.stream,true);assert.equal(body.store,false);assert.equal('max_output_tokens' in body,false);assert.equal('signal' in calls[0],false);
   assert.equal(events[0].status,'started');assert.equal(events.at(-1).responseId,'resp-test');assert.equal(events.at(-1).requestId,'req-test');
  }finally{globalThis.fetch=original;}

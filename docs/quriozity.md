@@ -10,7 +10,7 @@ to a stranger with the sound off.
 
 ## Required review workflow
 
-Normal Quriozity production uses `gpt-6.1-sol` at `medium` for the story, script,
+Normal Quriozity production uses `gpt-6.2-sol` at `medium` for the story, script,
 storyboard plan, subject choices, composition, text, sound design and every review.
 `claude-opus-5-5` at `medium` is used ONLY for actual visual realization and rendered
 visual repairs. Opus executes Sol's selected subjects/layout/narration as physical
@@ -67,7 +67,7 @@ findings retained.
 
 Voice reviews assess text and actual generated word timings. **They do not listen
 to the audio or certify pronunciation, vocal emotion, timbre or audible artifacts.**
-[Official OpenAI documentation](https://developers.openai.com/api/docs/models/gpt-6.1-sol)
+[Official OpenAI documentation](https://developers.openai.com/api/docs/models/gpt-6.2-sol)
 lists Sol input as text/images. A true listening reviewer needs a separately
 authorized audio-capable model. The existing sound review also uses cue sheets and
 measured mix statistics. ElevenLabs supports per-request
@@ -127,7 +127,7 @@ Actual provider cache-read/write token counts remain in `usage.jsonl`.
 
 ### Model and repair map
 
-Sol planning and reviews use `gpt-6.1-sol` at `medium`. Opus visual work uses
+Sol planning and reviews use `gpt-6.2-sol` at `medium`. Opus visual work uses
 `claude-opus-5-5` at `medium`. Luna is not used. Sol-only stages have at most
 three repair API calls. Each visual stage has at most one Opus repair, with no
 shared reel cap and no Sol visual fallback. Reservations persist across restarts;
