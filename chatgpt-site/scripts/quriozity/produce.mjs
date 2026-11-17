@@ -4,7 +4,7 @@
 //         → subject / composition / continuity / reference-style reviews → voice delivery + actual pacing review
 //         → final visual review on real word timings → sound design + mix review → video
 //         → SOUND DESIGN (Sol cue sheet, note-free ElevenLabs SFX) → mix → SOUND REVIEW (Sol + measured stats)
-//         → final mix, auto-calibrated so the narrator clears music/effects on every word → video.
+//         → final mix with steady music and calibrated effects → video.
 // Every step is cached in <workdir>, so a rerun resumes instead of paying twice.
 import {createHash} from 'node:crypto';
 import {access,mkdir,readFile,writeFile,rm,appendFile,rename,copyFile} from 'node:fs/promises';
@@ -18,6 +18,7 @@ import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
 import {runVisualReviewStage,runVoiceReviews,reviewFingerprint,bestReviewedVisual,REVIEW_LIMITS} from './quality-reviews.mjs';
 import {opusRepairBudget,solRepairBudget} from './repair-budget.mjs';
+import {prepareMusicBed,MUSIC_LEVEL} from './music-level.mjs';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/quriozity-quality.ts';
 import {sceneDuration,resolveAt} from '../../src/quriozity/spec.ts';
 import {createRequire} from 'node:module';
@@ -111,7 +112,7 @@ function governCues(cues,total){
 }
 
 async function music(brief,seconds,key,usage){
- const prompt=`Instrumental only, no vocals. A real piece of MUSIC with melody and chords, not just a drum beat. Exactly 100 BPM, 4/4, minor key. Electronic synthwave / electro style: a catchy memorable lead synth melody (bright analog saw lead, call-and-response phrases), a pulsing arpeggiated synth sequence in sixteenth notes, warm evolving pad chords (i - VI - III - VII progression), a driving electric bass line that follows the chords, and a punchy electronic drum kit underneath. Structure: 4 seconds of filtered arpeggio intro with pads, then drums and bass enter and the lead melody states the main hook; a short breakdown around two thirds where only pads and arpeggio remain with a riser, then the full arrangement returns with the hook an octave higher for the finale and ends on one clean chord hit. Inspiring, cinematic, modern tech feel. ${brief||''} Keep the lead melody in the gaps and the mid range open so a narrator stays clear on top.`;
+ const prompt=`Instrumental only, no vocals. A real piece of MUSIC with melody and chords, not just a drum beat. Exactly 100 BPM, 4/4, minor key. Electronic synthwave / electro style: a catchy memorable lead synth melody (bright analog saw lead, call-and-response phrases), a pulsing arpeggiated synth sequence in sixteenth notes, warm evolving pad chords (i - VI - III - VII progression), a driving electric bass line that follows the chords, and a punchy electronic drum kit underneath. Keep the backing at a steady perceived volume and similar energy from beginning to end. No quiet intro, breakdown, crescendo, riser, volume swell, fade, or louder finale. Vary the melody and harmony without changing the overall loudness; finish cleanly at the same backing level. Inspiring, cinematic, modern tech feel. ${brief||''} Keep the lead melody in the gaps and the mid range open so a narrator stays clear on top.`;
  const length=Math.min(150,Math.max(15,Math.ceil((seconds+2)/5)*5));
  const file=join(AUDIO_CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!await exists(file)){const r=await eleven('/v1/music?output_format=mp3_44100_128',{prompt,music_length_ms:length*1000,force_instrumental:true},key,usage);await writeFile(file,Buffer.from(await r.arrayBuffer()));}
@@ -133,8 +134,8 @@ function detectBeats(file,bpmHint=100){
 }
 const snap=(t,beat,div=2)=>{if(!beat)return t;const g=beat.period/div;return beat.phase+Math.round((t-beat.phase)/g)*g;};
 
-/** Mix levels (dB). Calibrated per reel by calibrateMix so the narrator is always clearly on top. */
-export const MIX_DEFAULTS={musicDb:-8,sfxDb:-6};
+/** Music has a fixed prepared level; only effects gain is calibrated per reel. */
+export const MIX_DEFAULTS={sfxDb:-6};
 /** Intelligibility targets, measured per spoken word: narrator level minus music / effects level. */
 export const VOICE_TARGETS={music:{overall:16,worst:10},sfx:{overall:16,worst:8}};
 
@@ -149,14 +150,16 @@ async function mix({voice,lead,cues,sfx,bed,total,out,stems,levels=MIX_DEFAULTS}
  }
  filters.push(fx.length?`${fx.join('')}amix=inputs=${fx.length}:normalize=0:dropout_transition=0,apad=whole_dur=${total.toFixed(3)},atrim=0:${total.toFixed(3)}[fxdry]`:`anullsrc=channel_layout=stereo:sample_rate=48000,atrim=0:${total.toFixed(3)}[fxdry]`);
  filters.push('[fxdry]asplit=2[fxa][fxb]','[fxb]aecho=0.8:0.35:60|110|170:0.25|0.16|0.1,lowpass=f=6000,volume=0.5[fxwet]','[fxa][fxwet]amix=inputs=2:normalize=0,equalizer=f=2800:t=q:w=1:g=-4[fxsum]');
- filters.push('[voice]asplit=3[say][key1][key2]','[fxsum][key1]sidechaincompress=threshold=0.03:ratio=4:attack=4:release=220[fx]');
+ filters.push('[voice]asplit=2[say][key1]','[fxsum][key1]sidechaincompress=threshold=0.03:ratio=4:attack=4:release=220[fx]');
  const buses=['[say]','[fx]'];
  if(bed){const m=inputs.length/2;inputs.push('-i',bed);
-  // music sits under the voice: fixed loudness, a carved 1-4 kHz pocket for speech, and ducking while words are spoken
-  filters.push(`[${m}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total.toFixed(3)},loudnorm=I=-17:TP=-2:LRA=9,equalizer=f=1200:t=q:w=1:g=-3,equalizer=f=2800:t=q:w=0.9:g=-6,volume=${levels.musicDb.toFixed(2)}dB,afade=t=in:st=0:d=0.8,afade=t=out:st=${Math.max(0,total-1.6).toFixed(3)}:d=1.6,apad=whole_dur=${total.toFixed(3)}[bedraw]`,'[bedraw][key2]sidechaincompress=threshold=0.015:ratio=5:attack=25:release=400[bed]');buses.push('[bed]');}
- else filters.push('[key2]anullsink');
+  // Already prepared at a fixed level: no speech ducking, fades or gain riding.
+  filters.push(`[${m}:a]anull[bed]`);buses.push('[bed]');}
  const labels=stems?buses.map((b,i)=>{filters.push(`${b}asplit=2[m${i}][s${i}]`);return `[m${i}]`;}):buses;
- filters.push(`${labels.join('')}amix=inputs=${labels.length}:normalize=0:dropout_transition=0,alimiter=limit=0.89:attack=4:release=80:level=disabled,loudnorm=I=-14:TP=-1.5:LRA=9[out]`);
+ // Reserve music headroom before summing it. A master compressor/normalizer
+ // would modulate the music again, even without a music sidechain.
+ filters.push(`${labels.slice(0,2).join('')}amix=inputs=2:normalize=0:dropout_transition=0,volume=2dB,alimiter=limit=0.68:attack=4:release=80:level=disabled:latency=1[speechfx]`);
+ filters.push(bed?`[speechfx]${labels[2]}amix=inputs=2:normalize=0:dropout_transition=0[out]`:'[speechfx]anull[out]');
  const graph=`${out}.filter`;await writeFile(graph,filters.join(';\n'));
  const args=['-hide_banner','-loglevel','error','-y',...inputs,'-filter_complex_script',graph,'-map','[out]','-c:a','aac','-b:a','320k','-ar','48000',out];
  if(stems)buses.forEach((_,i)=>args.push('-map',`[s${i}]`,'-c:a','pcm_s16le',`${out}.stem${i}.wav`));
@@ -178,31 +181,31 @@ export function voiceClarity(out,words,lead,hasBed){
  return {music:{overall:r(hasBed?db(V,M):99),worst:r(hasBed?worst(per.music):99)},sfx:{overall:r(db(V,F)),worst:r(worst(per.sfx))}};
 }
 
-/** Mix, measure, and move music/effects until the narrator clears the targets on (almost) every word
- *  with about 1-3 dB to spare: masked buses come down, buses with lots of headroom go back up (to a cap)
- *  so the score and effects stay as punchy as intelligibility allows. */
+/** Keep music fixed; calibrate only effects. Music clarity stays measured and
+ *  available to sound review, but never drives music gain automation. */
 export async function calibrateMix(args,log){
- const CAP={musicDb:-3,sfxDb:2};
+ const musicLevel=args.bed?await prepareMusicBed(args.bed,args.total,`${args.out}.music.wav`):null;
+ args={...args,bed:musicLevel?.file??null};
+ const CAP={sfxDb:2};
  let levels={...MIX_DEFAULTS};const history=[];let best=null;
  for(let round=0;;round++){
   await mix({...args,stems:true,levels});
   const c=voiceClarity(args.out,args.voice.words,args.lead,!!args.bed);history.push({levels:{...levels},clarity:c});
   const slack=k=>Math.min(c[k].overall-VOICE_TARGETS[k].overall,c[k].worst-VOICE_TARGETS[k].worst)-1;
-  log(`mix calibration ${round+1}: music ${levels.musicDb.toFixed(1)} dB → voice +${c.music.overall}/${c.music.worst} dB; sfx ${levels.sfxDb.toFixed(1)} dB → voice +${c.sfx.overall}/${c.sfx.worst} dB`);
-  const ok=(!args.bed||slack('music')>=0)&&slack('sfx')>=0;
+  log(`mix calibration ${round+1}: music fixed ${musicLevel?.integratedLufs.toFixed(1)??'off'} LUFS → voice +${c.music.overall}/${c.music.worst} dB; sfx ${levels.sfxDb.toFixed(1)} dB → voice +${c.sfx.overall}/${c.sfx.worst} dB`);
+  const ok=slack('sfx')>=0;
   if(ok)best={levels:{...levels},clarity:c};
   const next={...levels};
-  for(const [k,bus] of [['music','musicDb'],['sfx','sfxDb']]){
-   if(k==='music'&&!args.bed)continue;
+  for(const [k,bus] of [['sfx','sfxDb']]){
    const sl=slack(k);
    if(sl<0)next[bus]=levels[bus]+sl-0.5;
    else if(sl>2&&levels[bus]<CAP[bus])next[bus]=Math.min(CAP[bus],levels[bus]+sl-1);
   }
-  const moved=next.musicDb!==levels.musicDb||next.sfxDb!==levels.sfxDb;
-  if(ok&&!moved)return {...best,history};
+  const moved=next.sfxDb!==levels.sfxDb;
+  if(ok&&!moved)return {...best,history,musicLevel};
   if(round>=12){
    if(!best)throw new Error(`Narrator still masked after ${round+1} calibration rounds: ${JSON.stringify(c)}`);
-   await mix({...args,stems:true,levels:best.levels});return {...best,history};
+   await mix({...args,stems:true,levels:best.levels});return {...best,history,musicLevel};
   }
   levels=next;
  }
@@ -215,7 +218,7 @@ async function mixStats(out,cues,total,hasBed,clarity){
  const names=['voice','sfx','music'];
  const parts=s.map((t,i)=>`${names[i]} mean ${pick(t,'mean_volume')} dB max ${pick(t,'max_volume')} dB`);
  const kinds={};for(const c of cues)kinds[c.kind??'custom']=(kinds[c.kind??'custom']??0)+1;
- return `${parts.join('; ')}; narrator clarity per word (voice minus bed, overall/worst 5%): music +${clarity?.music.overall}/${clarity?.music.worst} dB, sfx +${clarity?.sfx.overall}/${clarity?.sfx.worst} dB (levels are auto-calibrated afterwards, do not try to fix loudness via gain); ${cues.length} cues over ${total.toFixed(1)} s (${(cues.length/total).toFixed(2)}/s); by kind ${JSON.stringify(kinds)}`;
+ return `${parts.join('; ')}; narrator clarity per word (voice minus bed, overall/worst 5%): music +${clarity?.music.overall}/${clarity?.music.worst} dB, sfx +${clarity?.sfx.overall}/${clarity?.sfx.worst} dB. Music uses a fixed ${MUSIC_LEVEL.lufs} LUFS target with no speech ducking, fades or adaptive gain; effects alone are auto-calibrated. These are measured stems/cues, not an audio listening review. ${cues.length} cues over ${total.toFixed(1)} s (${(cues.length/total).toFixed(2)}/s); by kind ${JSON.stringify(kinds)}`;
 }
 
 export async function produce(workdir,{topic='',specFile=null,history=[],clients=null,recordHistory=true,allowUnapproved=false}={}){
@@ -337,7 +340,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  spec=await visualStage(spec,VISUAL_REVIEW_STAGES.at(-1));
  await writeFile(join(workdir,'spec.timed.json'),JSON.stringify(spec,null,1));
  // 8. Rebuild sound when visual timing or voice changes; an old cue cache is not review evidence.
- const soundInput=reviewFingerprint({spec,voice:provenance.voiceReview.outputHash});
+ const soundInput=reviewFingerprint({spec,voice:provenance.voiceReview.outputHash,musicLevel:MUSIC_LEVEL});
  if((await readJson(join(workdir,'sound-input.json')).catch(()=>null))?.hash!==soundInput){
   for(const file of ['cues.designed.json','cues.final.json'])await rm(join(workdir,file),{force:true});
   await writeFile(join(workdir,'sound-input.json'),JSON.stringify({hash:soundInput}));
@@ -366,7 +369,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  cues=await readJson(finalCues);
  log(`final mix (${cues.length} cues)`);
  const cal=await measure('mix calibration and effects preparation',()=>calibrateMix({voice,lead:timed.lead,cues,sfx,bed,total,out:audio},log));
- provenance.mixLevels=cal.levels;provenance.mixCalibration=cal.history;provenance.sfxRejectedAsMusical=sfx.rejected;
+ provenance.mixLevels=cal.levels;provenance.mixCalibration=cal.history;provenance.musicLevel=cal.musicLevel;provenance.sfxRejectedAsMusical=sfx.rejected;
  provenance.mixStatsFinal=await mixStats(audio,cues,total,!!bed,cal.clarity);await save();
  // Cost reporting is informational and never stops a fully reviewed export.
  try{const {writeCostSummary}=await import('./costs.mjs');provenance.costEstimate=await writeCostSummary(workdir);await save();}

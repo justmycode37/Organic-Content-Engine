@@ -5,7 +5,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {safeId as safe,jobEvidence,publicFailure,runAccountCommand} from './account-worker-evidence.mjs';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
-/** Quriozity: Opus medium authors, Sol reviews, then the dithered 3D renderer. */
+/** Quriozity: Sol medium plans/reviews; Opus medium realizes/repairs visuals. */
 async function makeQuriozity(job,evidence){
  const cache=evidence.cache;
  const done=join(cache,'finished.mp4');
