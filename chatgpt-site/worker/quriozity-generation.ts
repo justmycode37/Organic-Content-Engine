@@ -5,10 +5,14 @@ import {specSchema,specProblems} from '../src/quriozity/schema.ts';
 import type {QuriozitySpec} from '../src/quriozity/spec.ts';
 import {CAMERA_DIRECTION_RULES,cameraProblems,planCameras} from '../src/quriozity/camera-direction.ts';
 import {SHOT_TRANSITION_RULES,planTransitions,transitionList,transitionProblems} from '../src/quriozity/shot-transitions.ts';
-import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
+import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,STAGE_REPAIR_LIMIT,SOL_FALLBACK_EFFORT,quriozityStepRole} from './quriozity-model-policy.ts';
 import {opusClient,routeQuriozityClients} from './quriozity-model-client.ts';
+import {solPrompt,type PromptContext} from './quriozity-prompt.ts';
+import {catalogContext,catalogIndex,specCatalogIds,type Catalog} from './quriozity-catalog-context.ts';
+import {repairVisuals,verdictSchema,type VisualVerdict} from './quriozity-quality.ts';
+export type {Catalog} from './quriozity-catalog-context.ts';
 
-/** Opus medium authors; Sol reviews retain the standing xhigh preference. */
+/** Opus medium authors; Sol medium reviews and xhigh fallback authoring. */
 export const MODEL=QURIOZITY_MODELS.generation.model,EFFORT=QURIOZITY_MODELS.generation.effort,REVIEW_MODEL=QURIOZITY_MODELS.review.model;
 export const REVIEW_EFFORT=(globalThis as {process?:{env?:Record<string,string|undefined>}}).process?.env?.QURIOZITY_REASONING_EFFORT||QURIOZITY_MODELS.review.effort;
 export {QURIOZITY_CLIENT_CONTEXT};
@@ -37,24 +41,24 @@ async function readStream(body:ReadableStream<Uint8Array>):Promise<Resp|undefine
 }
 
 /** No client-side output-token ceiling or request deadline: Sol decides how long it thinks. `max` is kept for call-site documentation only. */
-export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<unknown>){
- return async function ask(step:string,input:string,_max:number,format?:{name:string;schema:z.ZodType},images:Img[]=[]){
-  const content:unknown[]=[{type:'input_text',text:input},...images.map(i=>({type:'input_image',image_url:`data:${i.mime};base64,${i.base64}`}))];
+export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<unknown>,fallbackEffort:string=SOL_FALLBACK_EFFORT){
+ return async function ask(step:string,input:string,_max:number,format?:{name:string;schema:z.ZodType},images:Img[]=[],context?:PromptContext){
+  const effort=quriozityStepRole(step)==='review'?REVIEW_EFFORT:fallbackEffort;
   let last='';
   for(let attempt=0;attempt<6;attempt++){
    await beforeRequest?.(step);
    let r:Resp|undefined;const started=performance.now();
    try{
     const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
-     body:JSON.stringify({model:REVIEW_MODEL,reasoning:{effort:REVIEW_EFFORT},input:[{role:'user',content}],store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
+     body:JSON.stringify({model:REVIEW_MODEL,reasoning:{effort},...solPrompt(input,images,context),store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
     if(!response.ok||!response.body){last=`${response.status}`;if(response.status>=500||response.status===429){await new Promise(res=>setTimeout(res,5000*(attempt+1)));continue;}throw new Error(`Sol request failed (${response.status}) at step ${step}: ${(await response.text()).slice(0,300)}`);}
     r=await readStream(response.body);
    }catch(e){
     if(e instanceof Error&&e.message.startsWith('Sol request failed'))throw e;
-    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:REVIEW_MODEL,effort:REVIEW_EFFORT,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
+    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:REVIEW_MODEL,effort,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
     await new Promise(res=>setTimeout(res,5000*(attempt+1)));continue;
    }
-   onUsage?.({step,model:REVIEW_MODEL,effort:REVIEW_EFFORT,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
+   onUsage?.({step,model:REVIEW_MODEL,effort,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
    if(r?.status!=='completed'){last=String(r?.status);continue;}
    return (r.output??[]).flatMap(v=>v.content??[]).filter(v=>v.type==='output_text').map(v=>v.text??'').join('');
   }
@@ -134,15 +138,11 @@ VISUAL GOLDEN THREAD (as important as recognisability): the pictures tell the SA
 TEXT: at most one text item per scene (two only for a prefix+word combo), 1-4 words that add meaning (a year, a number, a name, the key idea) — never the whole sentence (the narration is already shown as a small mono line). Styles: headline (condensed caps; set highlight to the key word -> hue box), number (huge digits for years/quantities), tag (grey box label), prefix (hue box word part). Positions: top (default), upper, lower, bottom, top-left, top-right, or [x,y] fractions of the frame. Time text with at = the spoken word. Reference moves you can use: highlight a word PREFIX (text "REVISIT", highlight "RE" -> RE in a hue box), tint:true (letters in the scene hue), plate:true + zoom:[[at,1.4],[at,1.9]] (headline on a black plate that grows on the beat), glitch:[at...] (dither glitch hits), cps (typing speed, default 13). About half the scenes should have no text.\nCAMERA EXTRAS: camera.follow:"<id>" makes a tracking shot that travels with a walking rigged 3D person; camera.pos/look (metres) + fov place the camera explicitly (e.g. inside a tunnel); scene.light {dir:[x,y,z] camera space, key 0.4-1} sets the light (key from the side = strong face contrast). Objects take origin:"model" to keep model coordinates. Editable environment models (tunnel, concrete-stairs, skyline with build/solid controls, maze with build/scatter, block-cluster with burst) fill the frame on their own. A natural breaking wave defaults to licensed moving footage; use a procedural fluid only when its editable geometry/motion is the actual requirement and the result is visually convincing.
 TRANSITIONS: mostly cut on the beat, preferably match cuts on the anchor; dissolve for time jumps; wipe rarely.\n${CAMERA_DIRECTION_RULES}\n${SHOT_TRANSITION_RULES}`;
 
-function schemaText(){return JSON.stringify(z.toJSONSchema(specSchema));}
-
-/** Ideation → script → fact/story reviews → storyboard → director review. Opus medium authors; Sol xhigh reviews. */
-export interface Catalog {text:string;assets:string;has:(id:string)=>boolean}
+/** Ideation → script → fact/story reviews → storyboard → director review. */
 /** Optional real-model sourcing (node producer only): finds, verifies and adds realistic models from external libraries. */
 export interface Sourcing {find:(needs:{thing:string;query:string;as?:string}[])=>Promise<{cat:Catalog;added:string[]}>}
 const noveltySchema=z.object({repeat:z.boolean(),of:z.string().max(200)}).strict();
 const needsSchema=z.object({missing:z.array(z.object({thing:z.string(),query:z.string(),why:z.string()})).max(8)});
-const catalogText=(c:Catalog)=>`${c.text}\nREAL SCANNED OBJECTS (photoscans; use the id as model for editable 3D; complex subjects default to licensed media where available, not "compose"): ${c.assets}`;
 export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},topicHint:string,cat:Catalog,onUsage?:Usage,history:QuriozityHistoryEntry[]=[],sourcing?:Sourcing,client?:Ask){
  const key=env.OPENAI_API_KEY?.trim();if(!key)throw new Error('Configure OPENAI_API_KEY');
  const ask=client??quriozityClient(env,onUsage);const log:Record<string,unknown>={};
@@ -151,7 +151,7 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  // never a subject an earlier reel covered: local topic-key check + Sol novelty check against the full ledger
  let plan:QuriozityPlan|undefined;const rejected:string[]=[];
  for(let i=0;i<=STAGE_REPAIR_LIMIT&&!plan;i++){
-  const raw=await ask(i?'plan-repair':'plan',`${JSON.stringify(QURIOZITY_POLICY)}\n${STORY_RULES}\nYou are the editor of QURIOZITY, a reel channel that EXPLAINS things people are curious about but never thought about.${topicHint?` Requested topic: ${topicHint}.`:` Choose a topic that is NOT one of the earlier reels below — not the same subject under a new title or angle either. Unused seed ideas: ${seeds.join('; ')||'none left; invent a fresh one'}.`}\nEVERY earlier QURIOZITY reel (never repeat any of these subjects):\n${past}${rejected.length?`\nAlready rejected as repeats this run (pick something else): ${rejected.join('; ')}`:''}\nPlan the explainer before any narration exists. First find the ONE question a curious child would ask about this topic that has a satisfying answer explainable in about 40 seconds. Then design the shortest chain of 3-7 steps that leads from that question to its answer, where each step follows from the previous one (because / so / but). Pick ONE anchor: a real, filmable object, place or person the viewer follows from the first scene to the last (prefer one in the catalogue). Pick at most ONE everyday analogy for the hardest step, or "none". Write the hook (question as an everyday picture with the anchor) and the payoff (answers the hook, calls back to its picture). List the verified facts the chain needs (only facts you are certain of), the hero objects (recognisable real subjects suited to the catalogue), and the true facts you are deliberately leaving out because they are not on the path.\nAvailable visual catalogue (choose an anchor that can be shown well):\n${catalogText(cat).slice(0,12000)}`,0,{name:'quriozity_plan',schema:planSchema});
+  const raw=await ask(i?'plan-repair':'plan',`You are the editor of QURIOZITY, a reel channel that EXPLAINS things people are curious about but never thought about.${topicHint?` Requested topic: ${topicHint}.`:` Choose a topic that is NOT one of the earlier reels below — not the same subject under a new title or angle either. Unused seed ideas: ${seeds.join('; ')||'none left; invent a fresh one'}.`}\nEVERY earlier QURIOZITY reel (never repeat any of these subjects):\n${past}${rejected.length?`\nAlready rejected as repeats this run (pick something else): ${rejected.join('; ')}`:''}\nPlan the explainer before any narration exists. First find the ONE question a curious child would ask about this topic that has a satisfying answer explainable in about 40 seconds. Then design the shortest chain of 3-7 steps that leads from that question to its answer, where each step follows from the previous one (because / so / but). Pick ONE anchor: a real, filmable object, place or person the viewer follows from the first scene to the last (prefer one in the catalogue). Pick at most ONE everyday analogy for the hardest step, or "none". Write the hook (question as an everyday picture with the anchor) and the payoff (answers the hook, calls back to its picture). List the verified facts the chain needs (only facts you are certain of), the hero objects (recognisable real subjects suited to the catalogue), and the true facts you are deliberately leaving out because they are not on the path.\nAvailable visual catalogue (choose an anchor that can be shown well):\n${catalogIndex(cat)}`,0,{name:'quriozity_plan',schema:planSchema},[],{prefix:`${JSON.stringify(QURIOZITY_POLICY)}\n${STORY_RULES}`});
   const p=planSchema.safeParse(json(raw));if(!p.success)continue;
   const cand={topic:p.data.topic,topicKey:topicKey(p.data.topic)};
   const hit=findRepeat(cand,history);let dup=hit?(hit.topic??hit.title??'an earlier reel'):null;
@@ -168,7 +168,7 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  type Script=z.infer<typeof scriptSchema>;
  let script:Script|undefined,best:{script:Script;score:number;factsOk:boolean}|undefined;let feedback='';
  for(let round=0;round<=STAGE_REPAIR_LIMIT;round++){
-  let raw:string;try{raw=await ask(round?'script-repair':'script',`${STORY_RULES}\nWrite the narration for this QURIOZITY explainer, following the plan's chain step by step.\nPlan: ${JSON.stringify(plan)}\n${script?`Previous draft: ${JSON.stringify(script)}\nReviewer feedback to fix (rewrite as much as needed; keep the golden thread): ${feedback}`:''}\nFor each line give say (the spoken words), step (0 = hook, 1..${plan.steps.length} = plan step, ${plan.steps.length+1} = payoff) and link (why it follows from the previous line). Also write musicBrief: a 1-2 sentence note for the 100 BPM melodic electronic score (mood, lead sound, melody character, where the click/payoff moment is; no vocals) and factNotes (each claim with how certain it is).`,0,{name:'quriozity_script',schema:scriptSchema});}catch(error){if(['opus_repair_limit','opus_stage_repair_limit','sol_stage_repair_limit'].includes((error as {code?:string}).code??'')&&best)break;throw error;}
+  let raw:string;try{raw=await ask(round?'script-repair':'script',`Write the narration for this QURIOZITY explainer, following the plan's chain step by step.\nPlan: ${JSON.stringify(plan)}\n${script?`Previous draft: ${JSON.stringify(script)}\nReviewer feedback to fix (rewrite as much as needed; keep the golden thread): ${feedback}`:''}\nFor each line give say (the spoken words), step (0 = hook, 1..${plan.steps.length} = plan step, ${plan.steps.length+1} = payoff) and link (why it follows from the previous line). Also write musicBrief: a 1-2 sentence note for the 100 BPM melodic electronic score (mood, lead sound, melody character, where the click/payoff moment is; no vocals) and factNotes (each claim with how certain it is).`,0,{name:'quriozity_script',schema:scriptSchema},[],{prefix:STORY_RULES});}catch(error){if(['opus_repair_limit','opus_stage_repair_limit','sol_stage_repair_limit'].includes((error as {code?:string}).code??'')&&best)break;throw error;}
   const p=scriptSchema.safeParse(json(raw));if(!p.success){feedback=p.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`).join('; ');continue;}
   script=p.data;const lines=script.lines.map(l=>l.say);
   const [fact,coh]=await Promise.all([
@@ -185,18 +185,19 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
  }
  if(!best)throw new Error('Script failed');script=best.script;log.script=script;log.scriptGate={factsOk:best.factsOk,coherenceScore:best.score};
  const sayLines=script.lines.map(l=>l.say);
+ const catalogQuery=[plan.topic,plan.anchor.thing,...plan.heroObjects,...plan.steps.map(s=>s.show),...sayLines].join(' ');
  // 3b. Real-model sourcing: things the reel must show that the library lacks are found in external libraries first
  if(sourcing){
-  const raw=await ask('asset-needs',`${QURIOZITY_POLICY.subjectSelection}\nYou prepare the 3D library for an QURIOZITY explainer reel. Every scene must show REAL, recognisable things (a real object, animal, person, place, machine), rendered from realistic 3D models.\nLIBRARY:\n${catalogText(cat)}\nPLAN: ${JSON.stringify(plan)}\nNARRATION:\n${script.lines.map((l,i)=>`${i+1}. ${l.say}`).join('\n')}\nList the concrete physical things this reel will need on screen that have NO good realistic match in the library above (check procedural models AND real scanned objects; a procedural primitive look-alike does not count as a good match for a complex real thing). For each: thing (what it is, e.g. "honey bee"), query (2-4 plain search words), why. At most 8, most important first. Empty list if the library covers everything. JSON only.`,4000,{name:'needs',schema:needsSchema});
+  const raw=await ask('asset-needs',`${QURIOZITY_POLICY.subjectSelection}\nYou prepare the 3D library for an QURIOZITY explainer reel. Every scene must show REAL, recognisable things (a real object, animal, person, place, machine), rendered from realistic 3D models.\nLIBRARY:\n${catalogContext(cat,{query:catalogQuery,includeIndex:true})}\nPLAN: ${JSON.stringify(plan)}\nNARRATION:\n${script.lines.map((l,i)=>`${i+1}. ${l.say}`).join('\n')}\nList the concrete physical things this reel will need on screen that have NO good realistic match in the library above (check procedural models AND real scanned objects; a procedural primitive look-alike does not count as a good match for a complex real thing). For each: thing (what it is, e.g. "honey bee"), query (2-4 plain search words), why. At most 8, most important first. Empty list if the library covers everything. JSON only.`,4000,{name:'needs',schema:needsSchema});
   const p=needsSchema.safeParse(json(raw));
   if(p.success){log.assetNeeds=p.data.missing;if(p.data.missing.length){const r=await sourcing.find(p.data.missing.map(m=>({thing:m.thing,query:m.query})));cat=r.cat;log.sourced=r.added;}}
  }
  // 4. Storyboard
- const catalog=catalogText(cat);
- const base=`${VISUAL_RULES}\nASSET / MODEL CATALOGUE (use these ids and documented params; prefer licensed media for complex natural subjects; "compose" is only for suitable editable shapes):\n${catalog}\n\nSPEC JSON SCHEMA: ${schemaText()}\nSpec notes: version 1, series "QURIOZITY", one scene per narration line with say = that line EXACTLY (same words, same order). Objects: id (short), model, params, optional pos [x,y,z] in metres (bottom centre) or near+side relative to another object, rot [deg], scale (relative size; models use real metres, so scale small things like an LED up when next to a person), enter/exit, idle (none by default; explicitly motivated turns only), controls (initial), pose (supported rigged people only). Media source/license/mask records belong in production provenance; never add unsupported spec keys. Event "at" = a word from the say line (preferred) or seconds.`;
+ const catalog=()=>catalogContext(cat,{query:catalogQuery,required:[plan!.anchor.thing,...plan!.heroObjects,...(spec?specCatalogIds(spec):['mesh','footage','reference-image','reference-video','compose'])]});
+ const base=()=>`${VISUAL_RULES}\nASSET / MODEL CATALOGUE (use these ids and documented params; prefer licensed media for complex natural subjects; "compose" is only for suitable editable shapes):\n${catalog()}\n\nSpec notes: version 1, series "QURIOZITY", one scene per narration line with say = that line EXACTLY (same words, same order). Objects: id (short), model, params, optional pos [x,y,z] in metres (bottom centre) or near+side relative to another object, rot [deg], scale (relative size; models use real metres, so scale small things like an LED up when next to a person), enter/exit, idle (none by default; explicitly motivated turns only), controls (initial), pose (supported rigged people only). Media source/license/mask records belong in production provenance; never add unsupported spec keys. Event "at" = a word from the say line (preferred) or seconds.`;
  let spec:QuriozitySpec|undefined;let problems:string[]=[];let raw='';
  for(let attempt=0;attempt<=STAGE_REPAIR_LIMIT;attempt++){
-  raw=await ask(attempt?'storyboard-repair':'storyboard',attempt===0?`${base}\nTitle: ${script.title}\nmusicBrief: ${script.musicBrief}\nEXPLAINER PLAN (the golden thread every scene serves): ${JSON.stringify(plan)}\nNarration lines (one scene each; step = which plan step it belongs to; link = how it follows the previous line):\n${script.lines.map((l,i)=>`${i+1}. [step ${l.step}] ${l.say}  (link: ${l.link})`).join('\n')}\nFirst decide the visual journey: how the anchor appears in the hook, how each scene hands over to the next, where the anchor returns, and what the final frame shows. Then build the full reel spec JSON.`:`${base}\nFix this reel spec. Problems: ${problems.join(' | ')}\nSpec: ${raw}`,24000,{name:'quriozity_spec',schema:specSchema});
+  raw=await ask(attempt?'storyboard-repair':'storyboard',attempt===0?`Title: ${script.title}\nmusicBrief: ${script.musicBrief}\nEXPLAINER PLAN (the golden thread every scene serves): ${JSON.stringify(plan)}\nNarration lines (one scene each; step = which plan step it belongs to; link = how it follows the previous line):\n${script.lines.map((l,i)=>`${i+1}. [step ${l.step}] ${l.say}  (link: ${l.link})`).join('\n')}\nFirst decide the visual journey: how the anchor appears in the hook, how each scene hands over to the next, where the anchor returns, and what the final frame shows. Then build the full reel spec JSON.`:`Fix this reel spec. Problems: ${problems.join(' | ')}\nSpec: ${raw}`,24000,{name:'quriozity_spec',schema:specSchema},[],{prefix:base()});
   const p=specSchema.safeParse(json(raw));
   if(!p.success){problems=p.error.issues.slice(0,12).map(i=>`${i.path.join('.')}: ${i.message}`);continue;}
   const directed=directCameras(applyStyleProfile({...p.data,style:'reference-recording'} as QuriozitySpec),log,'storyboard');
@@ -206,11 +207,35 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
   problems=[...specProblems(directed,cat.has),...cameraProblems(directed),...transitionProblems(directed)];if(directed.scenes.map(x=>x.say.trim()).join('|')!==sayLines.map(l=>l.trim()).join('|'))problems.push(`scenes must be exactly one per narration line with say equal to the line: ${JSON.stringify(sayLines)}`);spec=directed;if(!problems.length)break;
  }
  if(!spec||problems.length)throw new Error(`Storyboard invalid: ${problems.slice(0,3).join('; ')}`);
- // 5. Storyboard review (director pass, text only)
- const review=await ask('storyboard-review',`${VISUAL_RULES}\nMODEL CATALOGUE:\n${catalog}\nYou are the visual director. EXPLAINER PLAN: ${JSON.stringify(plan)}\nFirst check the whole reel as one explainer: watched in order with the sound off, does it show ONE continuous explanation along the plan's chain; is the anchor in the hook, the middle and the final scene with the same model and hue; does every scene hand over to the next (match cut, same object, follow the motion) instead of jumping to an unrelated subject; does the last frame show the answer? Fix every break in the visual thread. Then review scene by scene against the rules: is every hero the best licensed asset/model for what is said and instantly recognisable; does each scene visibly ACT OUT its sentence through real footage action or supported events on the right words; are complex subjects asset-backed, static photos used only for static views, editable people rigged scans, backgrounds/sky black or transparent, ink fixed with density contrast, source records verified, and footage framing kept fixed; is there a clear hero and at most 3 things; are hues meaningful and consistent; is there continuity and variety of source shots or supported 3D angles (CAMERA DIRECTION: does each cut change perspective or shot size for a story reason, do contact/material lines get a macro-contact and liquid lines a waterline view, do flat sources stay at their captured view and vary only by genuine alternate sources or push/pull/insert/reveal framing, and is nothing orbiting or pumping on the beat; current shot list: ${shotList(spec)}); is the text minimal and meaningful; are scales sensible when objects of different sizes share a scene. Then return the IMPROVED full spec JSON (same narration lines exactly).\nSpec: ${JSON.stringify(spec)}\nSchema: ${schemaText()}`,24000,{name:'quriozity_spec',schema:specSchema});
- const rp=specSchema.safeParse(json(review));const reviewed=rp.success?directCameras(applyStyleProfile({...rp.data,style:'reference-recording'} as QuriozitySpec),log,'storyboardReview'):undefined;
- const reviewProblems=reviewed?[...specProblems(reviewed,cat.has),...cameraProblems(reviewed),...transitionProblems(reviewed)]:[];
- if(reviewed&&!reviewProblems.length&&sameLines(spec,reviewed))spec=reviewed;else log.storyboardReviewRejected=reviewed?reviewProblems:'invalid';
+ // 5. Sol directs through findings; Opus authors targeted edits, with the same
+ // durable provider allowances. All selected storyboards then enter rendered review.
+ const boardReviews:{attempt:number;spec:QuriozitySpec;verdict:VisualVerdict;repairs:unknown[]}[]=[];
+ let boardBest:{spec:QuriozitySpec;verdict:VisualVerdict;rank:number}|undefined;
+ for(let attempt=0;attempt<=STAGE_REPAIR_LIMIT;attempt++){
+  const raw=await ask('storyboard-review',`You are the visual director. Return findings only; do not write or rewrite visual scenes. EXPLAINER PLAN: ${JSON.stringify(plan)}\nReview the whole reel as one continuous explanation: a recurring anchor, coherent hue meanings, causal actions on the right words, purposeful camera variety, supported asset controls, source fidelity and readable minimal text. Check every scene, handovers, cuts and the final answer frame. Each must-fix finding must name the affected scene, specific spec evidence and a feasible change. Keep suggestions separate. passed=true only with no must-fix findings. Current shot list: ${shotList(spec)}\nSpec: ${JSON.stringify(spec)}`,0,{name:'quriozity_storyboard_verdict',schema:verdictSchema},[],{prefix:base()});
+  const verdict=verdictSchema.parse(json(raw));
+  if(verdict.findings.some(f=>f.scene>spec!.scenes.length))throw new Error('Storyboard review references a missing scene');
+  verdict.passed=verdict.passed&&!verdict.findings.some(f=>f.severity==='must-fix');
+  const rank=(verdict.passed?0:10000)+verdict.findings.filter(f=>f.severity==='must-fix').length*100+verdict.findings.length;
+  if(!boardBest||rank<boardBest.rank)boardBest={spec,verdict,rank};
+  const record={attempt:attempt+1,spec,verdict,repairs:[] as unknown[]};boardReviews.push(record);
+  if(verdict.passed||attempt===STAGE_REPAIR_LIMIT)break;
+  let feedback='',repaired=false;
+  for(let proposal=0;proposal<STAGE_REPAIR_LIMIT;proposal++){
+   try{
+    const change=await repairVisuals(ask,spec,verdict,cat,{id:'storyboard-review'},[],feedback);
+    record.repairs.push(change);
+    if(change.valid&&JSON.stringify(change.spec)!==JSON.stringify(spec)){spec=change.spec;repaired=true;break;}
+    feedback=change.valid?'The failed storyboard was returned unchanged.':change.problems.join('; ');
+   }catch(error){
+    if(!['opus_repair_limit','opus_stage_repair_limit','sol_stage_repair_limit'].includes((error as {code?:string}).code??''))throw error;
+    record.repairs.push({error:(error as Error).message});break;
+   }
+  }
+  if(!repaired)break;
+ }
+ spec=boardBest!.spec;
+ log.storyboardReviews=boardReviews;log.storyboardGate={passed:boardBest!.verdict.passed,selectedBest:!boardBest!.verdict.passed,selectionReason:'Passing director verdict first, then fewer must-fix findings and fewer total findings; all candidates remain in provenance.'};
  spec={...spec,version:1,series:'QURIOZITY',title:script.title,musicBrief:script.musicBrief};
  log.thread=threadText(plan);
  return {spec,provenance:{model:MODEL,effort:EFFORT,reviewModel:REVIEW_MODEL,reviewEffort:REVIEW_EFFORT,steps:['plan','script','fact-check+coherence','storyboard','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','voice-delivery-review','voice-pacing-review','visual-final-review','sound-design','sound-review'],...log}};
@@ -219,7 +244,6 @@ export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPI
 export function directCameras(spec:QuriozitySpec,log:Record<string,unknown>,step:string){const {spec:planned,changes}=planCameras(spec);const {spec:out,changes:cuts}=planTransitions(planned);const all=[...changes,...cuts];if(all.length)log[`${step}CameraPlan`]=all;return out;}
 /** Compact per-scene camera summary for review prompts. */
 export const shotList=(spec:QuriozitySpec)=>spec.scenes.map((sc,i)=>{const c=sc.camera??{};return `${i+1}:${c.pos?'explicit':c.follow?`follow ${c.follow}`:`${c.angle??'three-quarter'} ${c.fill??0.86}${c.focus?` focus ${[c.focus].flat().join('+')}`:''}${c.move&&c.move!=='static'?` ${c.move}`:''}`}${(sc.events??[]).filter(e=>e.camera).length?` +${(sc.events??[]).filter(e=>e.camera).length} cam events`:''}${i&&sc.transition&&sc.transition!=='cut'?` in:${sc.transition}`:''}`;}).join(' | ')+(spec.scenes.length>1?` || cuts: ${transitionList(spec)}`:'');
-const sameLines=(a:QuriozitySpec,b:QuriozitySpec)=>a.scenes.map(s=>s.say).join(' ')===b.scenes.map(s=>s.say).join(' ');
 
 /** The golden thread in one paragraph, handed to every later review layer. */
 export const threadText=(p:QuriozityPlan)=>`Question: ${p.question} Answer: ${p.answer} Golden thread: ${p.goldenThread} Anchor: ${p.anchor.thing}. Analogy: ${p.analogy}. Steps: ${p.steps.map((s,i)=>`${i+1}) ${s.idea}`).join(' ')}`;

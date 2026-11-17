@@ -11,12 +11,12 @@ import {narrationRequest} from './quriozity/produce.mjs';
 import {reviewNarrationDelivery,reviewVoicePacing,voicePacingMetrics} from '../worker/quriozity-quality.ts';
 
 test('default routing separates all authoring/repairs from every review specialty',()=>{
- for(const step of ['plan','script','asset-needs','asset-pick','storyboard','sound-design','visual-final-review-repair'])assert.equal(quriozityStepRole(step),'generation',step);
+ for(const step of ['plan','script','asset-needs','asset-pick','storyboard','storyboard-review-repair','sound-design','visual-final-review-repair'])assert.equal(quriozityStepRole(step),'generation',step);
  for(const step of ['fact-check','coherence','novelty','asset-verify','storyboard-review','visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review','voice-delivery-review','voice-pacing-review','sound-review'])assert.equal(quriozityStepRole(step),'review',step);
- assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'xhigh'}});
+ assert.deepEqual(QURIOZITY_MODELS,{generation:{model:'claude-opus-5-5',effort:'medium'},review:{model:'gpt-6.1-sol',effort:'medium'}});
  assert.ok(hasDefaultQuriozityProfile({modelRouting:QURIOZITY_CLIENT_CONTEXT}));
  assert.ok(!hasDefaultQuriozityProfile({model:'gpt-6.1-sol',effort:'xhigh'}));
- assert.ok(!hasDefaultQuriozityProfile({modelRouting:{...QURIOZITY_CLIENT_CONTEXT,reviewEffort:'medium'}}));
+ assert.ok(!hasDefaultQuriozityProfile({modelRouting:{...QURIOZITY_CLIENT_CONTEXT,reviewEffort:'xhigh'}}));
  assert.ok(!hasDefaultQuriozityProfile({model:'gpt-6.1-sol',effort:'xhigh',modelRouting:QURIOZITY_CLIENT_CONTEXT}),'New repair settings cannot relabel an older draft as Opus-authored');
 });
 
@@ -29,7 +29,7 @@ const anthropicStream=text=>[
  ['message_stop',{type:'message_stop'}],
 ].map(([event,data])=>`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`).join('');
 
-test('actual default clients send Opus medium authoring and Sol xhigh reviews, without live API calls',async()=>{
+test('actual default clients send Opus medium authoring and Sol medium reviews, without live API calls',async()=>{
  const original=globalThis.fetch,requests=[],usage=[];
  globalThis.fetch=async(url,init)=>{
   requests.push({url:String(url),body:JSON.parse(init.body)});
@@ -40,9 +40,9 @@ test('actual default clients send Opus medium authoring and Sol xhigh reviews, w
   const ask=quriozityClient({ANTHROPIC_API_KEY:'test-only',OPENAI_API_KEY:'test-only'},entry=>usage.push(entry));
   for(const step of ['plan','fact-check','visual-composition-review-repair'])assert.equal(await ask(step,'Test',0,{name:'result',schema:z.object({ok:z.boolean()})}),'{"ok":true}');
   assert.equal(requests[0].body.model,'claude-opus-5-5');assert.equal(requests[0].body.output_config.effort,'medium');
-  assert.equal(requests[1].body.model,'gpt-6.1-sol');assert.equal(requests[1].body.reasoning.effort,'xhigh');
+  assert.equal(requests[1].body.model,'gpt-6.1-sol');assert.equal(requests[1].body.reasoning.effort,'medium');
   assert.equal(requests[2].body.model,'claude-opus-5-5');
-  assert.deepEqual(usage.map(u=>u.effort),['medium','xhigh','medium']);
+  assert.deepEqual(usage.map(u=>u.effort),['medium','medium','medium']);
  }finally{globalThis.fetch=original;}
 });
 
@@ -87,7 +87,8 @@ test('real client routing switches each stage to Sol and forbids all Opus work a
   await ask('visual-subject-review-repair','Test',0);
   for(const step of ['asset-pick','sound-design','visual-subject-review-repair','fact-check','voice-delivery-review-repair'])await ask(step,'Test',0);
   assert.equal(requests.filter(r=>r.model==='claude-opus-5-5').length,5);
-  assert.ok(requests.slice(8).every(r=>r.model==='gpt-6.1-sol'&&r.reasoning.effort==='xhigh'));
+  assert.ok(requests.slice(8).every(r=>r.model==='gpt-6.1-sol'));
+  assert.deepEqual(requests.slice(8).map(r=>r.reasoning.effort),['xhigh','xhigh','xhigh','medium','medium']);
  }finally{globalThis.fetch=original;await rm(workdir,{recursive:true,force:true});}
 });
 

@@ -47,14 +47,24 @@ export function findModel(id:string):ModelDef|undefined{
 }
 
 /** Catalogue text for the generator. */
-export function describeModels(){
- return MODELS.map(m=>{
+function describeModel(m:ModelDef){
   const bits=[`- ${m.id}${m.aliases?.length?` (also: ${m.aliases.slice(0,6).join(', ')})`:''}: ${m.describe}`];
   if(m.params&&Object.keys(m.params).length)bits.push(`  params: ${Object.entries(m.params).map(([k,v])=>`${k}=${v}`).join('; ')}`);
   if(m.controls&&Object.keys(m.controls).length)bits.push(`  controls: ${Object.entries(m.controls).map(([k,v])=>`${k} (${v})`).join('; ')}`);
   if(m.poses?.length)bits.push(`  poses: ${m.poses.join(', ')}`);
   return bits.join('\n');
- }).join('\n')+'\nREFERENCE SUBJECTS (use reference-image or reference-video with params.asset; retain the captured viewpoint and stated limitations):\n'+Object.entries(MEDIA_LIBRARY).map(([id,entry])=>`- ${id}: ${entry.name}. ${entry.capture} Limits: ${entry.limitations}`).join('\n');
+}
+export function describeModels(){
+ return MODELS.map(describeModel).join('\n')+'\nREFERENCE SUBJECTS (use reference-image or reference-video with params.asset; retain the captured viewpoint and stated limitations):\n'+Object.entries(MEDIA_LIBRARY).map(([id,entry])=>`- ${id}: ${entry.name}. ${entry.capture} Limits: ${entry.limitations}`).join('\n');
+}
+
+/** Structured discovery index and exact documentation for local relevance selection. */
+export function describeCatalogEntries(){
+ const models=MODELS.filter((m,i)=>MODELS.findIndex(def=>def.id===m.id)===i).map(m=>({id:m.id,aliases:m.aliases,summary:m.describe,details:describeModel(m),kind:'model' as const}));
+ const known=new Set(MODELS.flatMap(m=>[m.id,...(m.aliases??[])].map(norm)));
+ const assets=ASSETS.filter(a=>!a.id.startsWith('human-')&&!known.has(norm(a.id))).map(a=>({id:a.id,summary:a.name,details:describeModel(assetModel(a)),kind:'asset' as const}));
+ const media=Object.entries(MEDIA_LIBRARY).map(([id,e])=>({id,summary:e.name,details:`- ${id}: ${e.name}. Use reference-image/reference-video with params.asset. ${e.capture} Limits: ${e.limitations}`,kind:'media' as const}));
+ return [...new Map([...models,...assets,...media].map(e=>[`${e.kind}:${e.id}`,e])).values()];
 }
 
 /** Compact list of the real photoscanned / animated assets (ids usable as model ids). */

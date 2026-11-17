@@ -1,4 +1,4 @@
-// QURIOZITY producer: Opus 5.5 medium authors; Sol 6.1 xhigh reviews.
+// QURIOZITY producer: Opus 5.5 medium authors; Sol 6.1 medium reviews.
 //   node --env-file=.env.motion scripts/quriozity/produce.mjs <workdir> [--topic "Why we dream"] [--spec spec.json] [--history history.json]
 // Layers: explainer plan (golden thread) → script → fact check + coherence review → storyboard → storyboard review (worker/quriozity-generation.ts)
 //         → subject / composition / continuity / reference-style reviews → voice delivery + actual pacing review
@@ -258,6 +258,9 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  // Preserve the actual author of a saved draft; new repair routing cannot relabel its origin.
  provenance.modelRouting={...clientContext,generationModel:provenance.model??'provided-spec',generationEffort:provenance.effort??'unknown',repairModel:clientContext.generationModel,repairEffort:clientContext.generationEffort??clientContext.effort};
  provenance.reviewModel=clientContext.reviewModel;provenance.reviewEffort=clientContext.reviewEffort??clientContext.effort;await save();
+ if(provenance.storyboardGate?.passed===false){
+  provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'storyboard-review'])];await save();
+ }
  const reviewContext={styleReference:styleReference.hash,...clientContext,thread:provenance.thread??'',catalogue:reviewFingerprint({text:cat.text,assets:cat.assets}),modelCode:hash(await readFile(join(CACHE,'catalog.bundle.mjs'),'utf8')),rendererCode:hash(await buildRenderBundle())};
  // 6. Distinct, required visual specialists; legacy reviewed filenames do not bypass them.
  const renderEvidence=async(current,dir,stage)=>{

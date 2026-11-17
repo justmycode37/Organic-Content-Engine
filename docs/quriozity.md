@@ -11,14 +11,15 @@ to a stranger with the sound off.
 ## Required review workflow
 
 Normal production starts with `claude-opus-5-5` at `medium` for planning,
-authoring, asset selection, sound design and repairs. Every review and fallback
-repair uses `gpt-6.1-sol` at `xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
+authoring, asset selection, sound design and repairs. Every review uses `gpt-6.1-sol` at `medium`; fallback
+authoring/repairs retain Sol at `xhigh`. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY` and
 `ELEVENLABS_API_KEY` (kept in private runtime configuration). For a future local run,
 load the private `.env.quriozity` file; configuring defaults does not start generation.
 The sequence is:
 
 1. Plan → script → factual accuracy and story coherence/clarity reviews.
-2. Storyboard → director review.
+2. Opus storyboard → Sol director findings → targeted Opus corrections and a new
+   director review when needed, within the persistent per-stage repair allowances.
 3. Rendered subject review: recognition, anatomy, physical contact, source fidelity.
 4. Rendered composition review: framing, clutter, contrast, readable text/captions.
 5. Rendered continuity review: visual explanation, recurring anchor, movement and cuts.
@@ -84,6 +85,59 @@ are rejected during authoring validation. Use separate positioned text items
 when a label needs a deliberate line break; whitespace in one item is reflowed.
 
 The raw onion reel was an isolated experiment and does not change this workflow.
+Visual authoring and primary visual repairs stay on Opus; Luna is not part of the
+normal production routing. The spending orientation is about $3 for Opus and $3
+for OpenAI models per reel, without a hard monetary cutoff or skipped reviews.
+
+To reduce repeated token costs, planning uses a compact index of every catalogue
+id and alias. Storyboards and repairs receive full capability documentation only
+for relevant candidates and explicitly used assets, including media presets.
+Newly sourced assets are included when the catalogue refreshes. Visual repairs
+return scene-local JSON Pointer patches rather than a rewritten reel. Local
+validation protects narration, timing, scene order, global calibration and
+unrelated fields; every accepted patch still gets fresh rendered review evidence.
+Before/after specs and raw patch proposals remain in the existing review records.
+
+Reusable policy, capability and schema material precedes changing inputs in a
+separate request prefix. Sol uses explicit 30-minute cache breakpoints, leaving
+changing findings, specs and frame sheets outside cache writes. Opus uses a
+one-hour prefix cache so reuse can span rendering/review delays. Cache hits depend
+on matching provider context and lifetime; no specific dollar saving is assumed.
+Actual provider cache-read/write token counts remain in `usage.jsonl`.
+
+### Model and repair map
+
+Opus means `claude-opus-5-5` at `medium`. Review Sol means `gpt-6.1-sol` at
+`medium`; fallback authoring/repair Sol retains `xhigh`. Luna is not used.
+The standard repair allowance below is **up to two Opus calls, then three Sol
+calls per stage**, with **only five Opus repair calls shared by the entire reel**.
+These are maxima, not a requirement to spend every round. Invalid proposals,
+transport retries and interrupted repairs consume reservations before requests.
+Once the fifth Opus repair is reserved, all remaining authoring also uses Sol.
+
+| Stage | Author / executor | Review model | Repair or retry behavior |
+| --- | --- | --- | --- |
+| Plan and topic novelty | Opus | Sol novelty check when history requires it | Standard plan repair allowance; deterministic duplicate check first. |
+| Narration script | Opus | Separate Sol factual and coherence reviews | Standard script allowance; both reviews rerun on each valid revised script. |
+| Asset needs and selection | Opus; local source search/ingest | Sol on rendered asset previews | Up to three shortlisted candidates per missing subject; accepted assets are reused. |
+| Initial storyboard and schema checks | Opus; local validation/planners | Local technical checks here | Standard storyboard allowance for authoring corrections; content review follows. |
+| Storyboard direction | Opus authors corrections | Sol returns findings only | Separate standard director-stage allowance; each valid patch gets another director verdict. All selected drafts enter rendered review next. |
+| Rendered subject/source fidelity | Opus authors patches | Sol | Standard allowance; every accepted patch is rendered and reviewed again. |
+| Rendered composition/text | Opus authors patches | Sol | Same, independently. |
+| Rendered continuity/motion | Opus authors patches | Sol | Same, independently. |
+| Owner-reference style | Opus authors patches | Sol, with actual reference evidence | Same, independently; sampled frames and motion strips. |
+| Spoken-delivery direction | Sol punctuation guidance | Sol | Initial direction plus up to three corrections of invalid directions; words and speed stay fixed. |
+| Narration and generated-word pacing | ElevenLabs Adam, Multilingual v2 | Sol on text and generated word timings | Up to three generated takes total, reviewed individually; select best measured timing after exhaustion. No audio listening claim. |
+| Final visuals on actual narration timing | Opus authors patches | Sol repeats every visual specialty and the owner-reference comparison | Standard allowance; render/review each accepted patch with real word timing. |
+| Music, effects and sound | ElevenLabs audio; Opus cue design | One Sol cue-sheet/mix-statistics review | Cached audio; local calibration, not an extra LLM review loop. |
+| Export and publication | Local renderer/FFmpeg; account worker | Technical output checks | No model call per rendered frame. Normal reels publish the best reviewed selection with unresolved findings retained. |
+
+A visual stage can review its initial candidate plus at most five valid revisions
+(six candidates), subject to the API-call allowances. If it begins after the Opus
+reel allowance is spent, it has only the initial candidate plus three Sol revisions
+(four candidates). Best-version selection never turns an unresolved verdict into
+approval. Monetary spending targets do not replace these existing repair rules.
+
 The producer requires the review provider even when a spec is already saved, and
 refuses caches marked as unreviewed experiments. Encoding and asset-load checks
 are technical validation; they do not replace the content reviews.

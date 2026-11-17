@@ -105,7 +105,7 @@ test('generation wiring: planner runs transitions, both review gates reject jump
  assert.match(SHOT_TRANSITION_RULES,new RegExp(`${MIN_ANGLE}°`));
  const src=readFileSync(new URL('../worker/quriozity-generation.ts',import.meta.url),'utf8');
  const quality=readFileSync(new URL('../worker/quriozity-quality.ts',import.meta.url),'utf8');
- assert.equal((src+quality).match(/\.\.\.transitionProblems\(/g)?.length,3,'storyboard, storyboard-review and visual-repair gates');
+ assert.equal((src+quality).match(/\.\.\.transitionProblems\(/g)?.length,2,'initial storyboard gate and the shared director/visual patch gate');
  assert.match(src,/\$\{SHOT_TRANSITION_RULES\}/);
  assert.match(quality,/\$\{SHOT_TRANSITION_RULES\}/);
 });
