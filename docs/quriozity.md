@@ -43,7 +43,9 @@ subject to those durable API-call budgets. Every accepted repair receives fresh 
 review. After eight candidates or exhaustion of that stage's Sol repair budget, select the best actually reviewed candidate and
 continue finishing the reel, retaining all versions and unresolved findings. The selection favors a
 passing verdict, fewer must-fix findings, fewer affected scenes and fewer total
-findings. A candidate with remaining issues stays unapproved. Samples cover early/middle/late
+findings. Normal production publishes the best reviewed selection after its limits,
+retaining failed verdicts and the selection reason without claiming approval.
+Private experiments remain unpublishable. Samples cover early/middle/late
 frames, both sides of cuts, action boundaries, text reveals and text holds. This is
 sampled-frame motion review, not full-video playback. The final stage rechecks all
 visual specialties to catch regressions from later changes.

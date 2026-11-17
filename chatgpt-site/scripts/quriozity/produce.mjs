@@ -232,10 +232,11 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const provenance=await readJson(join(workdir,'provenance.json')).catch(()=>({}));
  if(provenance.unapprovedTest&&provenance.modelRouting?.variant&&!allowUnapproved)throw new Error('Unapproved test cache requires the explicit private experiment override');
  if(provenance.reviewsDisabled===true||provenance.reviewMode==='raw-first-draft')throw new Error('Unreviewed experiment cache cannot be used for normal Quriozity production; use a fresh workdir with the full review pipeline');
- let cat=await measure('catalogue preparation',()=>loadCatalog());
+ if(!clients)provenance.publicationPolicy='best-reviewed-after-limits';
  const save=()=>writeFile(join(workdir,'provenance.json'),JSON.stringify(provenance,null,1));
  const styleReference=await measure('style reference preparation',()=>prepareStyleReference(workdir));
  provenance.styleReference={hash:styleReference.hash,sourceHash:styleReference.sourceHash,files:styleReference.files,standard:'Owner-approved perfect reference; required direct style comparison.'};await save();
+ let cat=await measure('catalogue preparation',()=>loadCatalog());
  const reserveRepair=await opusRepairBudget(workdir);
  const reserveSolRepair=await solRepairBudget(workdir);
  const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair,reserveSolRepair);
@@ -318,7 +319,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log(`${reviewLabel}: delivery and timing reviews; ElevenLabs Adam at unchanged provider-default speed`);
  let voice;try{voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{...clientContext,narrationSpeed:'elevenlabs-default'},measure,
   narrate:(delivery,take)=>narrate(delivery,take,key,usage),
-  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600})),
+  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600}),clients?'stop':'best'),
   reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
   onResult:async r=>{provenance.voiceReview=r;if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];}await save();}});
  }catch(e){
@@ -368,11 +369,12 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log('render video');
  const silent=join(workdir,'video.mp4');
  await measure('final video rendering',()=>renderVideo(spec,silent));
- const finished=join(workdir,provenance.unapprovedTest?'unapproved-test.mp4':'finished.mp4');
- const picture=['-c:v','copy',...(provenance.unapprovedTest?['-metadata','title=UNAPPROVED PRIVATE TEST','-metadata',`comment=Failed reviews: ${(provenance.failedReviews??[]).join(', ')}. Private experiment only; never approved for publication.`]:[])];
+ const privateTest=!!clients&&provenance.unapprovedTest;
+ const finished=join(workdir,privateTest?'unapproved-test.mp4':'finished.mp4');
+ const picture=['-c:v','copy',...(privateTest?['-metadata','title=UNAPPROVED PRIVATE TEST','-metadata',`comment=Failed reviews: ${(provenance.failedReviews??[]).join(', ')}. Private experiment only; never approved for publication.`]:provenance.failedReviews?.length?['-metadata',`comment=Best reviewed selection after limits. Unresolved reviews: ${provenance.failedReviews.join(', ')}.`]:[])];
  await measure('final audio video mux',()=>run('ffmpeg',['-hide_banner','-loglevel','error','-y','-i',silent,'-i',audio,'-map','0:v','-map','1:a',...picture,'-c:a','copy','-t',total.toFixed(3),'-movflags','+faststart',finished]));
  for(const i of [0,1,2])await rm(`${audio}.stem${i}.wav`,{force:true});
- if(recordHistory&&!provenance.unapprovedTest){const {topicKey}=await import('../../worker/quriozity-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
+ if(recordHistory&&!privateTest){const {topicKey}=await import('../../worker/quriozity-history.ts');const idea=provenance.idea??(provenance.plan?{topic:provenance.plan.topic,topicKey:provenance.topicKey}:{});
   await recordReel({at:new Date().toISOString(),title:spec.title,topic:idea.topic??spec.title,topicKey:idea.topicKey||topicKey(idea.topic??spec.title??''),summary:spec.scenes.map(s=>s.say).join(' ').slice(0,200),workdir});}
  log(`done: ${finished} (${total.toFixed(1)} s)`);
  return {finished,spec,provenance};

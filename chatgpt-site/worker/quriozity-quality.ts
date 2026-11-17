@@ -70,7 +70,7 @@ export function validateDelivery(value:unknown,original:string){
  if(d.pauses.some(p=>p.afterWord>=count))throw new Error('Voice pause must precede another word');
  return d;
 }
-export async function reviewNarrationDelivery(ask:Ask,text:string,onAttempt?:(record:{attempt:number;raw:string;valid:boolean;error?:string})=>Promise<unknown>){
+export async function reviewNarrationDelivery(ask:Ask,text:string,onAttempt?:(record:{attempt:number;raw:string;valid:boolean;error?:string})=>Promise<unknown>,onExhaustion:'stop'|'best'='stop'){
  const prompt=`Review this narration for natural connected speech to one curious person. ElevenLabs must use its unchanged DEFAULT SPEED. Do not propose a speed setting, slowing, speeding up or time stretching. Mark natural thought boundaries with punctuation; allow a sentence to flow across visual scene cuts. Keep EVERY word, spelling, order and whitespace word boundary; only punctuation may change. Preserve contractions and hyphens within words. Select at most eight meaningful thought boundaries using 1-based whitespace word indices, with brief pause hints between 0.18 and 1.5 seconds. Never pause just because a scene ends, never inside a connected phrase, and never add long pauses to hit a word-rate target. Pause hints are guidance, not mandatory silence lengths. This is text direction, not an audio listening review.\nNarration: ${text}`;
  let feedback='';
  for(let attempt=0;attempt<=SOL_STAGE_REPAIR_LIMIT;attempt++){
@@ -79,7 +79,12 @@ export async function reviewNarrationDelivery(ask:Ask,text:string,onAttempt?:(re
   try{delivery=validateDelivery(parse(raw),text);}
   catch(error){
    await onAttempt?.({attempt,raw,valid:false,error:(error as Error).message});
-   if(attempt===SOL_STAGE_REPAIR_LIMIT)throw error;
+   if(attempt===SOL_STAGE_REPAIR_LIMIT){
+    if(onExhaustion!=='best')throw error;
+    const original={text,notes:'Retained original reviewed narration after all delivery corrections were invalid; provider-default speed.',pauses:[]};
+    await onAttempt?.({attempt:attempt+1,raw:JSON.stringify(original),valid:true,error:'Delivery corrections exhausted; original reviewed words retained.'});
+    return validateDelivery(original,text);
+   }
    feedback=`\nCorrect the invalid direction using the original narration and the schema. Validation: ${(error as Error).message}. Previous response: ${raw}`;
    continue;
   }
