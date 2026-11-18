@@ -3,6 +3,7 @@ import {readFile,writeFile,stat} from 'node:fs/promises';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {safeId as safe,jobEvidence,publicFailure,runAccountCommand} from './account-worker-evidence.mjs';
+import {createReelSubscription} from './reel-subscription.mjs';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
 /** Quriozity: Sol medium plans/reviews; Opus medium realizes/repairs visuals. */
@@ -11,7 +12,7 @@ async function makeQuriozity(job,evidence){
  const done=join(cache,'finished.mp4');
  const {produce}=await import('./quriozity/produce.mjs');
  const history=(Array.isArray(job.history)?job.history:[]).map(h=>({title:h.title,topic:h.topic,topicKey:h.topicKey,summary:h.summary}));
- const r=await produce(cache,{history});
+ const r=await produce(cache,{history,subscription:evidence.subscription});
  return {done:r.finished??done,spec:r.spec,provenance:r.provenance};
 }
 async function make(job,evidence){
@@ -20,11 +21,11 @@ async function make(job,evidence){
  let spec,provenance;
  try{spec=JSON.parse(await readFile(specFile));provenance=JSON.parse(await readFile(provFile));}catch{
   const guard=join(cache,'paid-generation-started');
-  if(await stat(guard).catch(()=>null))throw Object.assign(Error('Generation was interrupted; inspect cache before repeating a paid request.'),{code:'generation_interrupted'});
+  if(await stat(guard).catch(()=>null))throw Object.assign(Error('Generation was interrupted; inspect cache before repeating a request.'),{code:'generation_interrupted'});
   await writeFile(guard,new Date().toISOString());
   const {generateHedgyReel}=await import('../worker/hedgy-generation.ts');
   evidence.stage='generation';
-  const result=await generateHedgyReel({OPENAI_API_KEY:evidence.env.OPENAI_API_KEY},job.account.topic,entry=>evidence.usage(entry),Array.isArray(job.history)?job.history:[]);
+  const result=await generateHedgyReel({OPENAI_API_KEY:evidence.env.OPENAI_API_KEY},job.account.topic,entry=>evidence.usage(entry),Array.isArray(job.history)?job.history:[],evidence.subscription);
   spec=result.spec;provenance=result.provenance;
   await writeFile(specFile,JSON.stringify(spec));await writeFile(provFile,JSON.stringify(provenance));
  }
@@ -36,9 +37,10 @@ async function make(job,evidence){
  }
  return {done,spec,provenance};
 }
-export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console}={}){
+export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env})}={}){
  const {job}=await (await fetchSite(config,'/api/jobs/accounts/claim',{method:'POST'})).json();if(!job)return false;
  const evidence=jobEvidence(cacheRoot,job,env,config),heartbeat=setInterval(()=>fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/heartbeat`,{method:'POST'}).catch(()=>{}),30000);
+ evidence.subscription=subscription;
  try{
   await evidence.prepare();
   const result=await makeReel(job,evidence);evidence.stage='read-output';const bytes=await readFile(result.done);
@@ -56,4 +58,4 @@ export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeR
  }finally{clearInterval(heartbeat);}return true;
 }
 export async function tick(config=workerConfig()){await siteRequest(config,'/api/jobs/accounts/tick',{method:'POST'});}
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){let stopping=false,ticking=false;const ticker=setInterval(async()=>{if(ticking)return;ticking=true;try{await tick();}catch{console.error('Account scheduling tick unavailable');}finally{ticking=false;}},30000);process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);do{try{if(!await runOnce())await new Promise(r=>setTimeout(r,10000));}catch{console.error('Account queue unavailable; check worker setup.');await new Promise(r=>setTimeout(r,10000));}}while(!stopping);clearInterval(ticker);}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const subscription=createReelSubscription();let stopping=false,ticking=false;const ticker=setInterval(async()=>{if(ticking)return;ticking=true;try{await tick();}catch{console.error('Account scheduling tick unavailable');}finally{ticking=false;}},30000);process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);do{try{if(!await runOnce(workerConfig(),{subscription}))await new Promise(r=>setTimeout(r,10000));}catch{console.error('Account queue unavailable; check worker setup.');await new Promise(r=>setTimeout(r,10000));}}while(!stopping);clearInterval(ticker);}

@@ -59,6 +59,43 @@ test('ElevenLabs receives no speed override, including for legacy slowed directi
  assert.notEqual(narrationRequest({text:'A clear sentence.'},1).seed,narrationRequest({text:'A clear sentence.'},2).seed);
 });
 
+test('subscription exhaustion shares the reserved request with its API fallback and keeps Sol reviews',async()=>{
+ const workdir=await mkdtemp(join(tmpdir(),'quriozity-subscription-'));
+ const original=globalThis.fetch,requests=[],subscriptionCalls=[],usage=[];
+ globalThis.fetch=async(url,init)=>{
+  requests.push({url:String(url),body:JSON.parse(init.body)});
+  return new Response(anthropicStream('API visual'),{headers:{'content-type':'text/event-stream'}});
+ };
+ const subscription=async request=>{
+  subscriptionCalls.push(request);
+  if(request.step==='visual-realization-repair')return {status:'subscription_exhausted'};
+  if(request.step==='visual-final-review-repair')throw new Error('Interrupted Opus session');
+  return {status:'completed',text:'Subscription result'};
+ };
+ const client=async()=>quriozityClient({ANTHROPIC_API_KEY:'test-only'},entry=>usage.push(entry),await opusRepairBudget(workdir),await solRepairBudget(workdir),subscription);
+ try{
+  const ask=await client();
+  const frame={mime:'image/png',base64:'aW1hZ2U='};
+  assert.equal(await ask('visual-realization','Initial visual',0),'Subscription result');
+  assert.equal(await ask('visual-realization-repair','Repair',0,undefined,[frame]),'API visual');
+  assert.equal(await ask('visual-final-review','Review',0,undefined,[frame]),'Subscription result');
+  await assert.rejects(ask('visual-final-review-repair','Repair',0),{code:'subscription_failed'});
+  const restarted=await client();
+  await assert.rejects(restarted('visual-realization','Attempt to repeat',0),{code:'opus_stage_repair_limit'});
+  await assert.rejects(restarted('visual-final-review-repair','Attempt to repeat',0),{code:'opus_stage_repair_limit'});
+  assert.equal(requests.length,1);
+  assert.match(requests[0].url,/api\.anthropic\.com/);
+  assert.equal(requests[0].body.model,'claude-opus-5-5');
+  assert.deepEqual(subscriptionCalls.map(c=>[c.model,c.effort]),[
+   ['claude-opus-5-5','medium'],['claude-opus-5-5','medium'],['gpt-6.2-sol','medium'],['claude-opus-5-5','medium'],
+  ]);
+  assert.deepEqual(subscriptionCalls[2].images,[frame]);
+  assert.deepEqual(usage.filter(e=>e.step==='visual-realization-repair').map(e=>[e.billing,e.status]),[
+   ['subscription','started'],['subscription','subscription_exhausted'],['api','started'],['api','end_turn'],
+  ]);
+ }finally{globalThis.fetch=original;await rm(workdir,{recursive:true,force:true});}
+});
+
 test('delivery/timing reviews cannot control speed or reject native word rate alone',async()=>{
  const text='One two three four five six seven eight nine ten eleven twelve.';
  const delivery={text,notes:'Connected phrasing at provider defaults.',pauses:[]};

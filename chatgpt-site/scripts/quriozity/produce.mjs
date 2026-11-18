@@ -221,10 +221,10 @@ async function mixStats(out,cues,total,hasBed,clarity){
  return `${parts.join('; ')}; narrator clarity per word (voice minus bed, overall/worst 5%): music +${clarity?.music.overall}/${clarity?.music.worst} dB, sfx +${clarity?.sfx.overall}/${clarity?.sfx.worst} dB. Music uses a fixed ${MUSIC_LEVEL.lufs} LUFS target with no speech ducking, fades or adaptive gain; effects alone are auto-calibrated. These are measured stems/cues, not an audio listening review. ${cues.length} cues over ${total.toFixed(1)} s (${(cues.length/total).toFixed(2)}/s); by kind ${JSON.stringify(kinds)}`;
 }
 
-export async function produce(workdir,{topic='',specFile=null,history=[],clients=null,recordHistory=true,allowUnapproved=false}={}){
+export async function produce(workdir,{topic='',specFile=null,history=[],clients=null,subscription,recordHistory=true,allowUnapproved=false}={}){
  if(allowUnapproved&&(!clients||recordHistory))throw new Error('Unapproved previews require explicit private experiment clients and disabled history');
  const openai=process.env.OPENAI_API_KEY?.trim(),key=process.env.ELEVENLABS_API_KEY?.trim();
- if(!openai)throw new Error('Set OPENAI_API_KEY: Quriozity content reviews are required, including for saved specs');
+ if(!openai&&!subscription)throw new Error('Set OPENAI_API_KEY: Quriozity content reviews are required, including for saved specs');
  if(!key)throw new Error('Set ELEVENLABS_API_KEY');
  await mkdir(workdir,{recursive:true});await mkdir(CACHE,{recursive:true});await mkdir(AUDIO_CACHE,{recursive:true});
  const usageFile=join(workdir,'usage.jsonl');const usage=e=>appendFile(usageFile,JSON.stringify({at:new Date().toISOString(),...e})+'\n');
@@ -242,7 +242,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  let cat=await measure('catalogue preparation',()=>loadCatalog());
  const reserveRepair=await opusRepairBudget(workdir);
  const reserveSolRepair=await solRepairBudget(workdir);
- const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair,reserveSolRepair);
+ const ask=clients?.ask??gen.quriozityClient({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},usage,reserveRepair,reserveSolRepair,subscription);
  // 1-5 story + storyboard
  const draft=join(workdir,'spec.draft.json');
  if(specFile&&!await exists(draft))await writeFile(draft,await readFile(specFile));
@@ -393,5 +393,6 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
  const args=process.argv.slice(2);const workdir=args[0];if(!workdir)throw new Error('Usage: produce.mjs <workdir> [--topic "..."] [--spec file] [--history file]');
  const opt=k=>{const i=args.indexOf(k);return i>0?args[i+1]:undefined;};
  const history=opt('--history')?await readJson(opt('--history')):[];
- await produce(resolve(workdir),{topic:opt('--topic')??'',specFile:opt('--spec')?resolve(opt('--spec')):null,history});
+ const {createReelSubscription}=await import('../reel-subscription.mjs');
+ await produce(resolve(workdir),{topic:opt('--topic')??'',specFile:opt('--spec')?resolve(opt('--spec')):null,history,subscription:createReelSubscription()});
 }

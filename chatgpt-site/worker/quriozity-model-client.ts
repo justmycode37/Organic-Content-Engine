@@ -4,6 +4,7 @@ import {z} from 'zod';
 import type {Ask} from './quriozity-generation.ts';
 import {QURIOZITY_MODELS,quriozityStepRole,usesOpusVisuals} from './quriozity-model-policy.ts';
 import type {PromptContext} from './quriozity-prompt.ts';
+import {tryReelSubscription,type ReelSubscription} from './reel-subscription.ts';
 type Usage=(entry:unknown)=>void;
 /** Freeform renderer controls and tuples retain the original local Zod gates. */
 export function opusOutputFormat(format?:{name:string;schema:z.ZodType}){
@@ -18,9 +19,10 @@ export function opusOutputFormat(format?:{name:string;schema:z.ZodType}){
   return {type:native.type,schema:native.schema};
  }catch{return null;}
 }
-export function opusClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<void|string>):Ask{
- if(!key.trim())throw new Error('Configure ANTHROPIC_API_KEY for Quriozity generation');
- const client=new Anthropic({apiKey:key.trim(),maxRetries:0,timeout:60*60*1000});
+export function opusClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<void|string>,subscription?:ReelSubscription):Ask{
+ const apiKey=key.trim();
+ if(!apiKey&&!subscription)throw new Error('Configure ANTHROPIC_API_KEY for Quriozity generation');
+ const client=apiKey?new Anthropic({apiKey,maxRetries:0,timeout:60*60*1000}):undefined;
  return async(step,input,_max,format,images=[],context?:PromptContext)=>{
   const structured=opusOutputFormat(format);
   const schemaPrompt=format&&!structured?`\nReturn ONLY a valid JSON object matching this schema, with no Markdown or commentary: ${JSON.stringify(z.toJSONSchema(format.schema))}`:'';
@@ -30,17 +32,26 @@ export function opusClient(key:string,onUsage?:Usage,beforeRequest?:(step:string
   for(let attempt=0;attempt<6;attempt++){
    let requestStep=attempt&&!step.endsWith('-repair')?`${step}-repair`:step;
    requestStep=await beforeRequest?.(requestStep)||requestStep;
+   const {model,effort}=QURIOZITY_MODELS.visual;
+   const role=quriozityStepRole(requestStep);
+   if(subscription){
+    const text=await tryReelSubscription(subscription,{provider:'anthropic',step:requestStep,model,effort,input,format,images,prefix,role},onUsage);
+    if(text!==undefined)return text;
+   }
+   if(!client)throw new Error('Claude usage is exhausted. Configure ANTHROPIC_API_KEY for fallback.');
+   const billing=subscription?{billing:'api'}:{};
    const started=performance.now();
+   if(subscription)await onUsage?.({provider:'anthropic',step:requestStep,role,model,effort,...billing,status:'started'});
    try{
-    const response=await client.messages.stream({model:QURIOZITY_MODELS.visual.model,max_tokens:128000,output_config:{effort:QURIOZITY_MODELS.visual.effort,...(structured?{format:structured}:{})},
+    const response=await client.messages.stream({model,max_tokens:128000,output_config:{effort,...(structured?{format:structured}:{})},
      ...(prefix?{system:[{type:'text' as const,text:prefix+schemaPrompt,cache_control:{type:'ephemeral' as const,ttl:'1h' as const}}]}:{}),messages:[{role:'user',content}]}).finalMessage();
-    onUsage?.({provider:'anthropic',step:requestStep,role:quriozityStepRole(requestStep),model:response.model,effort:QURIOZITY_MODELS.visual.effort,status:response.stop_reason,usage:response.usage,seconds:(performance.now()-started)/1000});
+    onUsage?.({provider:'anthropic',step:requestStep,role,model:response.model,effort,...billing,status:response.stop_reason,usage:response.usage,seconds:(performance.now()-started)/1000});
     if(response.stop_reason!=='end_turn')throw new Error(`Opus step ${step} stopped: ${response.stop_reason}`);
     return response.content.filter(b=>b.type==='text').map(b=>b.text).join('');
    }catch(error){
     const status=error instanceof Anthropic.APIError?error.status:undefined;
     if(!status||![429,500,502,503,504,529].includes(status)||attempt===5)throw error;
-    onUsage?.({provider:'anthropic',step:requestStep,role:quriozityStepRole(requestStep),model:QURIOZITY_MODELS.visual.model,effort:QURIOZITY_MODELS.visual.effort,status:`http-${status}`,seconds:(performance.now()-started)/1000});
+    onUsage?.({provider:'anthropic',step:requestStep,role,model,effort,...billing,status:`http-${status}`,seconds:(performance.now()-started)/1000});
     await new Promise(r=>setTimeout(r,5000*(attempt+1)));
    }
   }

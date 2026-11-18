@@ -7,6 +7,7 @@ import {CAMERA_DIRECTION_RULES,cameraProblems,planCameras} from '../src/quriozit
 import {SHOT_TRANSITION_RULES,planTransitions,transitionList,transitionProblems} from '../src/quriozity/shot-transitions.ts';
 import {QURIOZITY_MODELS,QURIOZITY_CLIENT_CONTEXT,STAGE_REPAIR_LIMIT,SOL_STAGE_REPAIR_LIMIT,quriozityStepRole} from './quriozity-model-policy.ts';
 import {opusClient,routeQuriozityClients} from './quriozity-model-client.ts';
+import {tryReelSubscription,type ReelSubscription} from './reel-subscription.ts';
 import {solPrompt,type PromptContext} from './quriozity-prompt.ts';
 import {catalogContext,catalogIndex,specCatalogIds,type Catalog} from './quriozity-catalog-context.ts';
 import {repairVisuals,verdictSchema,authorSpec,type VisualVerdict} from './quriozity-quality.ts';
@@ -41,13 +42,20 @@ async function readStream(body:ReadableStream<Uint8Array>):Promise<Resp|undefine
 }
 
 /** No client-side output-token ceiling or request deadline: Sol decides how long it thinks. `max` is kept for call-site documentation only. */
-export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<unknown>){
+export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)=>Promise<unknown>,subscription?:ReelSubscription){
  return async function ask(step:string,input:string,_max:number,format?:{name:string;schema:z.ZodType},images:Img[]=[],context?:PromptContext){
   const effort=quriozityStepRole(step)==='review'?REVIEW_EFFORT:QURIOZITY_MODELS.generation.effort;
   let last='';
   for(let attempt=0;attempt<6;attempt++){
    await beforeRequest?.(step);
+   if(subscription){
+    const text=await tryReelSubscription(subscription,{provider:'openai',step,model:REVIEW_MODEL,effort,input,format,images,prefix:context?.prefix,role:quriozityStepRole(step)},onUsage);
+    if(text!==undefined)return text;
+    if(!key)throw new Error('Codex usage is exhausted. Configure OPENAI_API_KEY for fallback.');
+   }
+   const billing=subscription?{billing:'api'}:{};
    let r:Resp|undefined;const started=performance.now();
+   if(subscription)await onUsage?.({provider:'openai',step,model:REVIEW_MODEL,effort,...billing,status:'started'});
    try{
     const response=await fetch('https://api.openai.com/v1/responses',{method:'POST',headers:{Authorization:`Bearer ${key}`,'Content-Type':'application/json'},
      body:JSON.stringify({model:REVIEW_MODEL,reasoning:{effort},...solPrompt(input,images,context),store:false,stream:true,...(format?{text:{format:{type:'json_schema',name:format.name,schema:z.toJSONSchema(format.schema),strict:false}}}:{})})});
@@ -55,10 +63,10 @@ export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)
     r=await readStream(response.body);
    }catch(e){
     if(e instanceof Error&&e.message.startsWith('Sol request failed'))throw e;
-    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:REVIEW_MODEL,effort,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
+    last=e instanceof Error?e.message:String(e);onUsage?.({step,model:REVIEW_MODEL,effort,...billing,status:'connection-failed',seconds:(performance.now()-started)/1000,error:last});
     await new Promise(res=>setTimeout(res,5000*(attempt+1)));continue;
    }
-   onUsage?.({step,model:REVIEW_MODEL,effort,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
+   onUsage?.({step,model:REVIEW_MODEL,effort,...billing,usage:r?.usage,status:r?.status,seconds:(performance.now()-started)/1000});
    if(r?.status!=='completed'){last=String(r?.status);continue;}
    return (r.output??[]).flatMap(v=>v.content??[]).filter(v=>v.type==='output_text').map(v=>v.text??'').join('');
   }
@@ -66,9 +74,10 @@ export function solClient(key:string,onUsage?:Usage,beforeRequest?:(step:string)
  };
 }
 export type Ask=ReturnType<typeof solClient>;
-export function quriozityClient(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},onUsage?:Usage,beforeOpusRequest?:(step:string)=>Promise<void|string>,beforeSolRequest?:(step:string)=>Promise<unknown>):Ask{
- if(!env.OPENAI_API_KEY?.trim())throw new Error('Configure OPENAI_API_KEY for Quriozity reviews');
- return routeQuriozityClients(opusClient(env.ANTHROPIC_API_KEY??'',onUsage,beforeOpusRequest),solClient(env.OPENAI_API_KEY.trim(),onUsage,beforeSolRequest));
+export function quriozityClient(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},onUsage?:Usage,beforeOpusRequest?:(step:string)=>Promise<void|string>,beforeSolRequest?:(step:string)=>Promise<unknown>,subscription?:ReelSubscription):Ask{
+ const key=env.OPENAI_API_KEY?.trim()??'';
+ if(!key&&!subscription)throw new Error('Configure OPENAI_API_KEY for Quriozity reviews');
+ return routeQuriozityClients(opusClient(env.ANTHROPIC_API_KEY??'',onUsage,beforeOpusRequest,subscription),solClient(key,onUsage,beforeSolRequest,subscription));
 }
 const json=(t:string)=>{try{return JSON.parse(t)}catch{const m=/\{[\s\S]*\}/.exec(t);if(m)try{return JSON.parse(m[0])}catch{}return undefined}};
 
@@ -144,7 +153,6 @@ export interface Sourcing {find:(needs:{thing:string;query:string;as?:string}[])
 const noveltySchema=z.object({repeat:z.boolean(),of:z.string().max(200)}).strict();
 const needsSchema=z.object({missing:z.array(z.object({thing:z.string(),query:z.string(),why:z.string()})).max(8)});
 export async function generateQuriozityReel(env:{OPENAI_API_KEY?:string;ANTHROPIC_API_KEY?:string},topicHint:string,cat:Catalog,onUsage?:Usage,history:QuriozityHistoryEntry[]=[],sourcing?:Sourcing,client?:Ask){
- const key=env.OPENAI_API_KEY?.trim();if(!key)throw new Error('Configure OPENAI_API_KEY');
  const ask=client??quriozityClient(env,onUsage);const log:Record<string,unknown>={};
  const past=historyLines(history),seeds=freshSeeds(QURIOZITY_TOPIC_SEEDS,history);
  // 1. Plan the explanation (the golden thread) before writing a single line
