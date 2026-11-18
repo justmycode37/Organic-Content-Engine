@@ -72,16 +72,25 @@ def cmd_still(a: argparse.Namespace) -> int:
 def cmd_qa(a: argparse.Namespace) -> int:
     from .qa import qa
 
-    res = qa(a.video)
+    res = qa(a.video, a.format)
     emit(res)
     return 0 if res["ok"] else 3
+
+
+def cmd_thumbnail(a: argparse.Namespace) -> int:
+    from .thumbnail import thumbnail
+
+    emit(thumbnail(a.output, a.text, image=a.image, highlight=a.highlight, tag=a.tag, side=a.side,
+                   position=a.position, theme=a.theme, mark=not a.no_mark))
+    return 0
 
 
 def cmd_templates(a: argparse.Namespace) -> int:
     from .templates import list_templates
 
     emit({"ok": True, "templates": [t.to_json() for t in list_templates()],
-          "notes": ["scene keys: template, narration, props, media, min_duration, cover, cover_time, source, lead, hold",
+          "notes": ["scene keys: template, narration, props, media, min_duration, cover, cover_time, source, lead, hold, chapter",
+                    "spec key format: reel (1080x1920, default) or longform (1920x1080); each template lists its formats",
                     "media: path (relative to the spec) or URL, or {src, start, fit, position, kind}",
                     "add a template by creating templates/<name>.html with a studio:meta header (see README)"]})
     return 0
@@ -148,7 +157,21 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("qa", help="technical QA of an MP4")
     s.add_argument("video")
+    s.add_argument("--format", choices=["reel", "longform"], default=None,
+                   help="target format (default: detected from the resolution)")
     s.set_defaults(fn=cmd_qa)
+
+    s = sub.add_parser("thumbnail", help="render a 1280x720 YouTube thumbnail (+ a 320x180 small preview)")
+    s.add_argument("-o", "--output", required=True, help="output .jpg")
+    s.add_argument("--text", required=True, help="1-6 huge words")
+    s.add_argument("--image", default=None, help="background image")
+    s.add_argument("--highlight", default=None, help="word(s) of --text to color in the accent")
+    s.add_argument("--tag", default=None, help="optional small accent badge, e.g. 'LEAKED'")
+    s.add_argument("--side", choices=["left", "right"], default="left", help="text column side")
+    s.add_argument("--position", default="center", help="CSS background-position of the image")
+    s.add_argument("--theme", default="default")
+    s.add_argument("--no-mark", action="store_true", help="hide the brand mark")
+    s.set_defaults(fn=cmd_thumbnail)
 
     sub.add_parser("templates", help="list templates").set_defaults(fn=cmd_templates)
     sub.add_parser("voices", help="list recommended voices").set_defaults(fn=cmd_voices)

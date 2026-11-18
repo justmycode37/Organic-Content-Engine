@@ -1,0 +1,55 @@
+<!-- studio:meta
+{
+  "description": "Longform key number: one big value that counts up, with a short label. Optional footage stays visible, dimmed, on the right half. Use sparingly: only when the number is the point.",
+  "formats": ["longform"],
+  "media": "optional",
+  "props": {
+    "value": {"type": "string", "required": true, "max": 14, "description": "e.g. '$500B', '87%', '2.5x'"},
+    "label": {"type": "string", "required": true, "max": 80, "description": "what the number means, 3-10 words"},
+    "highlight": {"type": "any", "description": "word(s) of the label to color in the accent"},
+    "count": {"type": "boolean", "default": true, "description": "count up from 0"},
+    "count_duration": {"type": "number", "default": 1.2, "description": "seconds"}
+  }
+}
+-->
+<style>
+  .tpl-lf-stat .media { position: absolute; top: 0; right: 0; bottom: 0; width: 52%; }
+  .tpl-lf-stat .media-fade { position: absolute; top: 0; bottom: 0; right: 0; width: 52%;
+    background: linear-gradient(90deg, var(--bg) 0%, rgba(16,24,32,.35) 35%, rgba(16,24,32,.15) 100%); }
+  .tpl-lf-stat .content { justify-content: center; }
+  .tpl-lf-stat .num { font-family: var(--font-display); font-weight: 900; letter-spacing: -0.05em; line-height: .9;
+    color: var(--accent); font-variant-numeric: tabular-nums; white-space: nowrap; width: 900px; height: 300px;
+    display: flex; align-items: center; }
+  .tpl-lf-stat .bar { height: 8px; background: var(--fg); width: 760px; margin: 26px 0 34px; }
+  .tpl-lf-stat .label { font-size: 64px; font-weight: 800; line-height: 1.05; letter-spacing: -0.025em; width: 820px; }
+  .tpl-lf-stat:not(.has-media) .num, .tpl-lf-stat:not(.has-media) .label { width: 1400px; }
+</style>
+{% if has_media %}<div class="media kb-in" data-studio-media></div><div class="media-fade"></div>{% endif %}
+<div class="content">
+  <div class="num" data-fit="300,120"><span class="a-rise" style="animation-delay:.02s" id="stat-val">{{ p.value }}</span></div>
+  <div class="bar a-wipe" style="animation-delay:.1s"></div>
+  <div class="label a-rise" style="animation-delay:.22s" data-fit="64,40" data-fit-h="240"><div>{{ p.label | hl(p.highlight) }}</div></div>
+</div>
+<script>
+(() => {
+  const raw = {{ p.value | tojson }};
+  const el = document.getElementById("stat-val");
+  const m = raw.match(/^(.*?)(\d[\d,]*(?:\.\d+)?)(.*)$/);
+  if (!m || !{{ p.count | tojson }}) return;
+  const [, pre, numStr, post] = m;
+  const target = parseFloat(numStr.replace(/,/g, ""));
+  const decimals = (numStr.split(".")[1] || "").length;
+  const grouped = numStr.includes(",");
+  const dur = {{ p.count_duration | tojson }};
+  const fmt = (v) => {
+    let s = v.toFixed(decimals);
+    if (grouped) { const [i, d] = s.split("."); s = i.replace(/\B(?=(\d{3})+(?!\d))/g, ",") + (d ? "." + d : ""); }
+    return pre + s + post;
+  };
+  studio.onInit(() => { el.style.display = "inline-block"; el.style.minWidth = el.offsetWidth + "px"; });
+  studio.onFrame((t) => {
+    const k = studio.ease.outExpo(studio.progress(t, 0.05, dur));
+    el.textContent = fmt(k >= 1 ? target : target * k);
+  });
+})();
+</script>

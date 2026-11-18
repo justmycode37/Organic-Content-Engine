@@ -127,7 +127,7 @@ def _prepare_video(src: Path, start: float, duration: float, fps: int, max_side:
     return out_dir, count
 
 
-def prepare(media: Media, duration: float, fps: int, preview: bool) -> PreparedMedia:
+def prepare(media: Media, duration: float, fps: int, preview: bool, long_side: int | None = None) -> PreparedMedia:
     if media.is_url:
         path, kind = download(media.src)
         kind = media.kind or kind
@@ -137,5 +137,5 @@ def prepare(media: Media, duration: float, fps: int, preview: bool) -> PreparedM
         raise StudioError(f"cannot tell whether {media.src} is an image or a video; set media.kind")
     if kind == "image":
         return PreparedMedia("image", _prepare_image(path), fit=media.fit, position=media.position)
-    frames, count = _prepare_video(path, media.start, duration, fps, 1080 if preview else 1920)
+    frames, count = _prepare_video(path, media.start, duration, fps, long_side or (1080 if preview else 1920))
     return PreparedMedia("video", frames, frame_count=count, fps=fps, fit=media.fit, position=media.position)

@@ -1,0 +1,23 @@
+<!-- studio:meta
+{
+  "description": "Longform end screen (last scene, 10-20 s): one closing line on the left, the right side kept clear for YouTube's end-screen elements (subscribe + next video). Set min_duration to at least 10.",
+  "formats": ["longform"],
+  "media": "optional",
+  "props": {
+    "line": {"type": "string", "required": true, "max": 70, "description": "the takeaway or the next video's tease, 4-10 words"},
+    "highlight": {"type": "any", "description": "word(s) to color in the accent"}
+  }
+}
+-->
+<style>
+  .tpl-lf-end [data-studio-media] { position: absolute; inset: 0; filter: saturate(.6) brightness(.35) blur(6px); transform: scale(1.04); }
+  .tpl-lf-end .content { justify-content: center; }
+  .tpl-lf-end .mark { width: 120px; margin-bottom: 30px; }
+  .tpl-lf-end .line { font-weight: 900; font-size: 92px; line-height: .98; letter-spacing: -0.03em; width: 760px; }
+</style>
+{% if has_media %}<div data-studio-media></div>{% endif %}
+<div class="content">
+  <svg class="mark a-pop" viewBox="240 285 520 430" aria-hidden="true"><path fill="var(--fg)" d="M246 608h508v52H246z"/><path fill="var(--accent)" d="M557 291h128L592 709H464z"/></svg>
+  <div class="line display a-rise" style="animation-delay:.08s" data-fit="92,52" data-fit-h="520"><div>{{ p.line | hl(p.highlight) }}</div></div>
+</div>
+<!-- the right ~860 px stay empty for YouTube end-screen elements -->

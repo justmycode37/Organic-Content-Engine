@@ -7,7 +7,8 @@
     "highlight": {"type": "any", "description": "word or list of words from the headline to color in the accent"},
     "kicker": {"type": "string", "max": 28, "description": "small label above, e.g. 'BREAKING' or 'JUST IN'"},
     "uppercase": {"type": "boolean", "default": true, "description": "set the headline in caps"},
-    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "none"], "default": "in", "description": "Ken Burns direction for image media"}
+    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "push", "pan", "none"], "default": "in", "description": "Ken Burns direction for image media"},
+    "align": {"type": "string", "enum": ["bottom", "top"], "default": "bottom", "description": "bottom (default) anchors the headline low; top puts kicker + headline at the top of the safe area and keeps the lower-middle of the media clear (use when the subject of a 16:9 clip sits in the lower half)"}
   }
 }
 -->
@@ -27,6 +28,17 @@
   .tpl-hook .upper { text-transform: uppercase; letter-spacing: -0.03em; }
   .tpl-hook .edge { position: absolute; left: 0; top: 0; bottom: 0; width: 14px; background: var(--accent); }
 </style>
+{% if p.align == 'top' %}
+<style>
+  .tpl-hook .content { justify-content: flex-start; padding-top: 0; }
+  .tpl-hook .headline { height: auto; align-items: flex-start; }
+  .tpl-hook .rule { margin: 26px 0 30px; }
+  .tpl-hook .shade {
+    background:
+      linear-gradient(180deg, rgba(11,11,12,.86) 0%, rgba(11,11,12,.78) 34%, rgba(11,11,12,.22) 50%, rgba(11,11,12,.06) 60%, rgba(11,11,12,.10) 72%, rgba(11,11,12,.80) 100%);
+  }
+</style>
+{% endif %}
 {% if has_media %}
 <div class="kb-{{ p.motion }}" data-studio-media></div>
 <div class="shade"></div>
@@ -36,7 +48,7 @@
 <div class="content">
   {% if p.kicker %}<div><span class="kicker pill">{{ p.kicker }}</span></div>{% endif %}
   <div class="rule a-wipe" style="animation-delay:.05s"></div>
-  <div class="headline display" data-fit="200,96">
+  <div class="headline display" data-fit="{{ '160,90' if p.align == 'top' else '200,96' }}">
     <span class="a-settle{% if p.uppercase %} upper{% endif %}">{{ p.headline | hl(p.highlight) }}</span>
   </div>
 </div>

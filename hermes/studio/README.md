@@ -52,7 +52,9 @@ bin/studio render SPEC.json -o out/reel.mp4          # full render
 bin/studio render SPEC.json -o out/draft.mp4 --preview   # 540x960 @ 15 fps draft, much faster
 bin/studio render SPEC.json -o out/reel.mp4 --qa     # render and include `qa` results in the JSON
 bin/studio still SPEC.json --scene 2 --t 1.0 -o out/s2.jpg  # one frame of one scene (design loop)
-bin/studio qa out/reel.mp4                           # technical checks
+bin/studio qa out/reel.mp4                           # technical checks (format detected from the resolution)
+bin/studio thumbnail -o out/thumb.jpg --text "No steering wheel" --highlight wheel --image bg.jpg
+                                                     # 1280x720 YouTube thumbnail + 320x180 small preview
 bin/studio templates                                 # templates + props contracts
 bin/studio voices                                    # recommended voices
 ```
@@ -64,12 +66,13 @@ bin/studio voices                                    # recommended voices
 | `OUT.cover.jpg` | cover frame (scene with `"cover": true`, captions hidden) |
 | `OUT.contact.jpg` | 12 evenly spaced frames with timestamps and scene names, for vision QA |
 | `OUT.captions.srt` | caption chunks with global timings |
-| `OUT.report.json` | duration, per-scene timings, loudness, voice, warnings, render time |
+| `OUT.chapters.txt` | YouTube chapter list (`0:00 Intro` …), only when scenes have a `chapter` |
+| `OUT.report.json` | format, duration, chapters, per-scene timings, loudness, voice, warnings, render time |
 
 `render --keep-build` keeps `OUT.build/` (scene HTML pages and segments) for
 debugging; open a scene page in a browser to inspect it.
 
-`qa` checks: 1080x1920, 30 fps, H.264 (High) yuv420p, AAC 48 kHz, duration
+`qa` checks (reel; long-form: 1920x1080, 24/25/30/60 fps, 120-1800 s): 1080x1920, 30 fps, H.264 (High) yuv420p, AAC 48 kHz, duration
 15-90 s, integrated loudness -14 LUFS ±1.5, true peak, no silence > 1.5 s,
 no black segment > 0.5 s, first frame not black, `+faststart`.
 
@@ -108,6 +111,7 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | Key | Type | Default | Notes |
 | --- | --- | --- | --- |
 | `title` | string | required | used in metadata and reports |
+| `format` | `reel` \| `longform` | `reel` | `reel` = 1080x1920, 15-90 s, ≤ 40 scenes; `longform` = 1920x1080 YouTube, 120-1800 s, ≤ 240 scenes, `lf-*` templates, chapters |
 | `voice.provider` | `edge` \| `elevenlabs` \| `none` | `edge` | `none` = silent, captions use estimated timings |
 | `voice.voice` | string | `en-US-AndrewMultilingualNeural` | Edge voice name or ElevenLabs `voice_id` |
 | `voice.rate` | `"+10%"` | `+10%` | speaking rate (ElevenLabs: mapped to `speed` 0.7-1.2) |
@@ -121,6 +125,7 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `captions.position` | `lower` \| `middle` | `lower` | lower = just above Instagram's bottom UI |
 | `captions.uppercase` | bool | `false` | |
 | `brand` | `{wordmark, handle, bug}` | `FRONTIER FEED`, `""` (hidden), `true` | corner bug and outro text |
+| `text` | `minimal` \| `full` | `minimal` | `minimal` hides secondary labels (kickers, deks, media labels, stat context, compare notes, quote roles) and shows headline media full-bleed; `full` restores the old card layouts |
 | `fps` | 24/25/30/60 | 30 | keep 30 for Instagram |
 | `lead` | seconds | 0.12 | default silence before each scene's narration |
 
@@ -137,7 +142,7 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `lead` | seconds | override the global lead for this scene |
 | `cover` | bool | use this scene for `OUT.cover.jpg` (default: first scene) |
 | `cover_time` | seconds | frame time for the cover (default 0.9 s for hooks, 1.4 s otherwise) |
-| `source` | string | shown as "SOURCE  OpenAI blog" in the source slot above the captions |
+| `source` | string | shown as a small, low-contrast "Source: OpenAI blog" line at the bottom edge; keep it short, full credits go in the caption |
 
 Durations come from the narration audio, so the reel length is decided by the
 script. `validate` estimates it (≈2.8 words/s at +10%); the render fails if the
@@ -147,9 +152,9 @@ real length exceeds 90 s and warns below 15 s. Target 25-45 s for news.
 
 | Name | Use | Key props |
 | --- | --- | --- |
-| `hook` | opener; headline fully visible on frame 1 | `headline` (2-6 words), `highlight`, `kicker`, `uppercase`, `motion`; optional media full-bleed |
+| `hook` | opener; headline fully visible on frame 1 | `headline` (2-6 words), `highlight`, `kicker`, `uppercase`, `motion`, `align` (`bottom` default / `top`: text at the top, media's lower-middle stays clear — for 16:9 clips whose subject sits low in the 9:16 crop); optional media full-bleed |
 | `headline` | the news itself | `headline`, `kicker`, `dek`, `highlight`; optional media as an image card |
-| `media` | screenshot / photo / clip | media required; `caption`, `label`, `motion` (in/out/left/right/none), `frame` (full/card) |
+| `media` | screenshot / photo / clip | media required; `caption`, `label`, `motion` (in/out/left/right/push/pan/none; `push`/`pan` are strong camera moves that make a still feel like footage), `frame` (full/card) |
 | `stat` | one big number, counts up | `value` ("$2.5B", "87%"), `label`, `kicker`, `context` |
 | `quote` | quote + attribution | `quote`, `name`, `role`, `highlight`; optional media as round portrait |
 | `list` | 2-4 items revealing | `items`, `title`, `kicker`, `item_times`; items appear when the narration mentions them |
@@ -157,17 +162,35 @@ real length exceeds 90 s and warns below 15 s. Target 25-45 s for news.
 | `outro` | CTA + handle | `cta`, `handle`, `sub` |
 | `custom` | anything else | `html`, `css`, `js` (raw, see below) |
 
+Long-form templates (`"format": "longform"`; `media` and `custom` work in both formats):
+
+| Name | Use | Key props |
+| --- | --- | --- |
+| `lf-open` | cold open, the peak moment on frame 1 | `headline` (2-7 words), `highlight`, `motion`; optional full-bleed media |
+| `lf-chapter` | chapter card (2-4 s); pair with the scene key `chapter` | `number`, `title`, `highlight`; optional dimmed media |
+| `lf-stat` | one key number, counts up; footage on the right half | `value`, `label`, `highlight`, `count` |
+| `lf-quote` | key clause of a sourced quote | `quote`, `name`, `highlight`; optional media on the right half |
+| `lf-points` | 2-5 points revealing with the narration | `items`, `title`, `item_times`; optional media on the right half |
+| `lf-end` | end screen, 10-20 s, right side free for YouTube end-screen elements | `line`, `highlight` |
+
+Scene key `chapter` (long-form): a chapter starts at this scene; the first scene
+must have one, and YouTube shows chapters only when there are at least 3.
+
 `highlight` accepts a word/phrase or a list of them; matches are colored in the
 accent. Long text auto-shrinks to fit (`data-fit`), and a warning is reported if
 it cannot fit at the minimum size: shorten the text in that case.
 
 ### Layout and safe zones
 
+Long-form (1920x1080): content area x 120..1800, y 96..830; captions centred on
+y = 930 at 50 px; wordmark bug top-left; credit line at the bottom-left above
+YouTube's player controls. The rest of this section describes the reel canvas.
+
 Canvas 1080x1920. Instagram covers roughly the top 230 px (header), the bottom
 20 % (caption/UI) and the right 12 % (action rail). The theme defines:
 
 - content area: `.content` = x 72..940, y 250..1190 (`--safe-*`, `--content-bottom`)
-- source label: just below the content area
+- source label: bottom edge (y ≈ 1860), 19 px, 50 % opacity
 - captions: centered on y = 1395 (`--caption-center`), above the bottom UI
 - wordmark bug: top-left at y = 168
 

@@ -1,0 +1,58 @@
+<!-- studio:meta
+{
+  "description": "Longform list: 2-5 short points that reveal as the narration mentions them (or at item_times). Optional footage keeps playing on the right half.",
+  "formats": ["longform"],
+  "media": "optional",
+  "props": {
+    "items": {"type": "array", "items": {"type": "string", "max": 50}, "required": true, "min": 2, "max": 5, "description": "2-6 words each, unique lead words"},
+    "title": {"type": "string", "max": 50, "description": "optional heading"},
+    "item_times": {"type": "array", "items": "number", "description": "optional reveal time per item (seconds into the scene)"}
+  }
+}
+-->
+<style>
+  .tpl-lf-points .media { position: absolute; top: 0; right: 0; bottom: 0; width: 46%; }
+  .tpl-lf-points .media-fade { position: absolute; top: 0; bottom: 0; right: 0; width: 46%;
+    background: linear-gradient(90deg, var(--bg) 0%, rgba(16,24,32,.15) 30%, rgba(16,24,32,0) 100%); }
+  .tpl-lf-points .content { justify-content: center; }
+  .tpl-lf-points .title { font-size: 64px; font-weight: 800; margin-bottom: 26px; width: 900px; }
+  .tpl-lf-points ol { list-style: none; border-top: 2px solid var(--line); width: 900px; }
+  .tpl-lf-points:not(.has-media) ol, .tpl-lf-points:not(.has-media) .title { width: 1400px; }
+  .tpl-lf-points li { display: flex; align-items: baseline; gap: 26px; padding: 22px 0; border-bottom: 2px solid var(--line); }
+  .tpl-lf-points .n { font-family: var(--font-mono); font-weight: 700; font-size: 30px; color: var(--fg-3); width: 52px; flex: none; }
+  .tpl-lf-points .txt { font-size: 50px; font-weight: 700; line-height: 1.08; letter-spacing: -0.02em; color: var(--fg-2); }
+  .tpl-lf-points li.active .n { color: var(--accent); }
+  .tpl-lf-points li.active .txt { color: var(--fg); }
+</style>
+{% if has_media %}<div class="media kb-in" data-studio-media></div><div class="media-fade"></div>{% endif %}
+<div class="content">
+  {% if p.title %}<div class="title display a-rise" style="animation-delay:.02s" data-fit="64,40" data-fit-h="150"><div>{{ p.title }}</div></div>{% endif %}
+  <ol id="list">
+    {% for item in p["items"] %}
+    <li class="a-rise" data-text="{{ item }}"><span class="n">{{ "%02d" % loop.index }}</span><span class="txt">{{ item }}</span></li>
+    {% endfor %}
+  </ol>
+</div>
+<script>
+(() => {
+  const items = Array.from(document.querySelectorAll("#list li"));
+  const given = {{ (p.item_times or []) | tojson }};
+  const n = items.length;
+  const first = {{ 0.45 if p.title else 0.2 }};
+  const span = Math.max(0.4, studio.duration * 0.72 - first);
+  const times = [];
+  items.forEach((li, i) => {
+    const even = first + (n > 1 ? (i * span) / (n - 1) : 0);
+    const prev = i ? times[i - 1] + 0.25 : 0;
+    let t = typeof given[i] === "number" ? given[i] : studio.cue(li.dataset.text, even, prev);
+    t = Math.max(t, prev, i === 0 ? 0.1 : 0);
+    times.push(t);
+    li.style.animationDelay = t.toFixed(3) + "s";
+  });
+  studio.onFrame((t) => {
+    let active = -1;
+    times.forEach((s, i) => { if (t >= s) active = i; });
+    items.forEach((li, i) => li.classList.toggle("active", i === active));
+  });
+})();
+</script>

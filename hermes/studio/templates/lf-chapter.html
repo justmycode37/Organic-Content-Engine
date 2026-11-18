@@ -1,0 +1,28 @@
+<!-- studio:meta
+{
+  "description": "Longform chapter card: chapter number and a 2-6 word title over darkened footage. Keep it short (2-4 s); give the scene a `chapter` key so it lands in the YouTube chapter list.",
+  "formats": ["longform"],
+  "media": "optional",
+  "props": {
+    "number": {"type": "integer", "description": "chapter number shown as 01, 02 ..."},
+    "title": {"type": "string", "required": true, "max": 60, "description": "2-6 words; may differ from the scene's `chapter` text"},
+    "highlight": {"type": "any", "description": "word(s) to color in the accent"}
+  }
+}
+-->
+<style>
+  .tpl-lf-chapter [data-studio-media] { position: absolute; inset: 0; filter: saturate(.7) brightness(.55); }
+  .tpl-lf-chapter .content { justify-content: center; }
+  .tpl-lf-chapter .num { font-family: var(--font-mono); font-weight: 700; font-size: 44px; color: var(--accent);
+    letter-spacing: .08em; margin-bottom: 18px; }
+  .tpl-lf-chapter .title { font-weight: 900; font-size: 128px; line-height: .95; letter-spacing: -0.035em; width: 1300px; }
+  .tpl-lf-chapter .rule { height: 6px; width: 100%; background: var(--line); margin-top: 40px; overflow: hidden; }
+  .tpl-lf-chapter .rule i { display: block; height: 100%; width: 100%; background: var(--accent); transform-origin: left;
+    animation: a-wipe var(--scene-dur) linear both; }
+</style>
+{% if has_media %}<div class="kb-in" data-studio-media></div>{% endif %}
+<div class="content">
+  {% if p.number %}<div class="num a-slide" style="animation-delay:0s">{{ "%02d" % p.number }}</div>{% endif %}
+  <div class="title display a-rise" style="animation-delay:.06s" data-fit="128,64" data-fit-h="380"><div>{{ p.title | hl(p.highlight) }}</div></div>
+  <div class="rule"><i></i></div>
+</div>

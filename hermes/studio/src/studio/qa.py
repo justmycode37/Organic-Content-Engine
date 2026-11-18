@@ -1,4 +1,8 @@
-"""Technical QA of a finished Reel (ffprobe + ffmpeg analysis filters)."""
+"""Technical QA of a finished video (ffprobe + ffmpeg analysis filters).
+
+The format (reel 1080x1920 or longform 1920x1080) is detected from the
+resolution unless given explicitly.
+"""
 
 from __future__ import annotations
 
@@ -8,6 +12,7 @@ from typing import Any
 
 from .env import StudioError
 from .ffmpeg import ffprobe_json, run_ffmpeg
+from .formats import FORMATS, format_for_size
 
 LUFS_TARGET = -14.0
 LUFS_TOLERANCE = 1.5
@@ -15,7 +20,7 @@ MAX_SILENCE = 1.5  # seconds of continuous silence allowed
 MAX_BLACK = 0.5  # seconds of continuous black allowed
 
 
-def qa(path: str | Path) -> dict[str, Any]:
+def qa(path: str | Path, fmt_name: str | None = None) -> dict[str, Any]:
     path = Path(path).expanduser().resolve()
     if not path.is_file():
         raise StudioError(f"file not found: {path}")
@@ -30,15 +35,21 @@ def qa(path: str | Path) -> dict[str, Any]:
     a = next((s for s in info["streams"] if s.get("codec_type") == "audio"), None)
     fmt = info.get("format", {})
     duration = float(fmt.get("duration", 0))
+    target = FORMATS[fmt_name] if fmt_name else (format_for_size(v.get("width", 0), v.get("height", 0)) if v else None)
+    target = target or FORMATS["reel"]
 
     check("container", "mp4" in fmt.get("format_name", ""), fmt.get("format_name"), "mp4")
     if v is None:
         check("video_stream", False, None, "present")
     else:
-        check("resolution", (v.get("width"), v.get("height")) == (1080, 1920), f"{v.get('width')}x{v.get('height')}", "1080x1920")
+        check("resolution", (v.get("width"), v.get("height")) == (target.width, target.height),
+              f"{v.get('width')}x{v.get('height')}", f"{target.width}x{target.height} ({target.name})")
         num, den = (v.get("avg_frame_rate") or "0/1").split("/")
         fps = float(num) / float(den or 1) if float(den or 1) else 0.0
-        check("fps", abs(fps - 30) < 0.05, round(fps, 3), 30)
+        if target.name == "reel":
+            check("fps", abs(fps - 30) < 0.05, round(fps, 3), 30)
+        else:
+            check("fps", any(abs(fps - f) < 0.05 for f in (24, 25, 30, 60)), round(fps, 3), "24/25/30/60")
         check("video_codec", v.get("codec_name") == "h264", v.get("codec_name"), "h264")
         check("h264_profile", v.get("profile") in ("High", "Main"), v.get("profile"), "High", severity="warning")
         check("pix_fmt", v.get("pix_fmt") == "yuv420p", v.get("pix_fmt"), "yuv420p")
@@ -47,7 +58,8 @@ def qa(path: str | Path) -> dict[str, Any]:
     else:
         check("audio_codec", a.get("codec_name") == "aac", a.get("codec_name"), "aac")
         check("audio_rate", int(a.get("sample_rate", 0)) == 48000, int(a.get("sample_rate", 0)), 48000, severity="warning")
-    check("duration", 15 <= duration <= 90, round(duration, 2), "15..90 s")
+    check("duration", target.min_duration <= duration <= target.max_duration, round(duration, 2),
+          f"{target.min_duration:.0f}..{target.max_duration:.0f} s ({target.name})")
 
     # faststart: moov before mdat
     with open(path, "rb") as f:
@@ -98,6 +110,7 @@ def qa(path: str | Path) -> dict[str, Any]:
     return {
         "ok": not errors,
         "file": str(path),
+        "format": target.name,
         "duration": round(duration, 3),
         "size_mb": round(path.stat().st_size / 1e6, 2),
         "loudness": loud,

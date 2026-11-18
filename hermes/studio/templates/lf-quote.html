@@ -1,0 +1,31 @@
+<!-- studio:meta
+{
+  "description": "Longform quote: the key clause of a real, sourced quote (cut with '...') and who said it. Optional media: footage of the speaker or the context, shown on the right half.",
+  "formats": ["longform"],
+  "media": "optional",
+  "props": {
+    "quote": {"type": "string", "required": true, "max": 160, "description": "the key clause only, ideally under ~90 characters"},
+    "name": {"type": "string", "required": true, "max": 40},
+    "highlight": {"type": "any", "description": "word(s) to color in the accent"}
+  }
+}
+-->
+<style>
+  .tpl-lf-quote .media { position: absolute; top: 0; right: 0; bottom: 0; width: 48%; }
+  .tpl-lf-quote .media-fade { position: absolute; top: 0; bottom: 0; right: 0; width: 48%;
+    background: linear-gradient(90deg, var(--bg) 0%, rgba(16,24,32,.2) 30%, rgba(16,24,32,0) 100%); }
+  .tpl-lf-quote .content { justify-content: center; }
+  .tpl-lf-quote .qmark { font-family: var(--font-display); font-weight: 900; font-size: 220px; line-height: .7;
+    height: 110px; color: var(--accent); }
+  .tpl-lf-quote .q { font-size: 76px; font-weight: 700; line-height: 1.08; letter-spacing: -0.025em; width: 880px; }
+  .tpl-lf-quote:not(.has-media) .q { width: 1400px; }
+  .tpl-lf-quote .who { display: flex; align-items: center; gap: 22px; margin-top: 44px; }
+  .tpl-lf-quote .dash { width: 50px; height: 7px; background: var(--accent); }
+  .tpl-lf-quote .name { font-size: 40px; font-weight: 800; }
+</style>
+{% if has_media %}<div class="media kb-in" data-studio-media></div><div class="media-fade"></div>{% endif %}
+<div class="content">
+  <div class="qmark a-pop" style="animation-delay:0s">&ldquo;</div>
+  <div class="q display a-rise" style="animation-delay:.06s" data-fit="76,44" data-fit-h="420"><div>{{ p.quote | hl(p.highlight) }}</div></div>
+  <div class="who a-slide" style="animation-delay:.3s"><div class="dash"></div><div class="name">{{ p.name }}</div></div>
+</div>

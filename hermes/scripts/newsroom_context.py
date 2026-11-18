@@ -83,6 +83,21 @@ def main() -> None:
     print("\n## Already scheduled, not yet live")
     print("\n".join(upcoming) if upcoming else "none")
 
+    # Runs from the last 24 h, including ones still in progress, so parallel
+    # runs do not pick the same story.
+    runs_dir = HOME / "newsroom" / "runs"
+    recent_runs = []
+    horizon = dt.datetime.now().timestamp() - 24 * 3600
+    for run in sorted(runs_dir.glob("*-*")):
+        brief = run / "brief.md"
+        if not run.is_dir() or run.stat().st_mtime < horizon or not brief.exists():
+            continue
+        first = next((line.strip("# ").strip() for line in brief.read_text().splitlines() if line.strip()), "")
+        state = "shipped" if (run / "report.md").exists() else "in progress"
+        recent_runs.append(f"- {run.name} ({state}): {first[:140]}")
+    print("\n## Runs in the last 24 h (do not pick the same story)")
+    print("\n".join(recent_runs) if recent_runs else "none")
+
 
 if __name__ == "__main__":
     main()

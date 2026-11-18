@@ -13,7 +13,7 @@ This folder is the working directory of every Frontier Feed cron job. All paths 
 | `data/backlog.md` | Evergreen topic ideas and stories that were good but not used yet. |
 | `runs/<YYYY-MM-DD>-<slot>/` | One folder per Reel run: research, script, spec, renders, caption, report. |
 | `../studio/` | Reel renderer. `../studio/bin/studio --help`, docs in `../studio/README.md`. |
-| `../skills/newsroom/` | The procedures: news radar, reel production, publishing, growth review. |
+| `../skills/newsroom/` | The procedures: news radar, reel production, publishing, growth review, long-form production. |
 
 ## Commands
 
@@ -24,6 +24,9 @@ python3 bin/postiz.py collect --days 14      # per-post metrics for the ledger
 python3 bin/postiz.py analytics-account --days 7
 python3 bin/postiz.py posts --days 3         # what Postiz has scheduled or published
 python3 bin/postiz.py notifications          # publish errors
+python3 bin/postiz.py publish-youtube --video runs/X-LF/video.mp4 --title "..." \
+  --description-file runs/X-LF/description.txt --thumbnail runs/X-LF/thumb.jpg --at 2026-11-19T20:30:00+01:00
+../studio/bin/studio thumbnail -o runs/X-LF/thumb_a.jpg --text "..." --image ...
 
 ../studio/bin/studio templates
 ../studio/bin/studio validate runs/X/spec.json

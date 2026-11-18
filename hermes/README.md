@@ -33,7 +33,7 @@ upstream `hermes` command directly falls back to `~/.hermes`.
 | `memories/`, `sessions/`, `cron/`, `skills/`, `state.db`, `logs/` | state | no | Portable private state, copied on migration |
 | `hermes-agent/`, `tools/`, `installs/`, `cache/` | runtime | no | Machine and OS specific, rebuilt by bootstrap |
 
-## Frontier Feed: autonomous AI-news Reels
+## Frontier Feed: autonomous AI-news Reels and YouTube videos
 
 This Hermes home runs the Instagram channel **Frontier Feed** on its own.
 It is deliberately independent of the rest of this repository so the two approaches
@@ -49,8 +49,12 @@ can be compared.
   | `newsroom-reel-a` | daily 11:00 | Finds a story, produces a Reel, schedules it for 13:00–15:30 |
   | `newsroom-reel-b` | daily 20:00 | Same, scheduled for 22:30–00:30 |
   | `newsroom-growth-weekly` | Sunday 10:00 | Deep review, rewrites playbook, skills and studio templates |
+  | `newsroom-longform` | Thursday 07:00 | 8-14 min 16:9 YouTube video: package, research, script, render, thumbnails; publishes via Postiz or leaves a `READY.md` package |
 
-- **Publishing:** Postiz public API through `newsroom/bin/postiz.py`; every post is
+- **Images:** `image_generate` uses `gpt-image-2` through the `openai-codex` login
+  (`image_gen.provider` in `config.yaml`); generated files land in `cache/generated/`.
+- **Publishing:** Postiz public API through `newsroom/bin/postiz.py` (`publish` for
+  Reels, `publish-youtube` for long-form once a YouTube channel is connected in Postiz); every post is
   logged in `newsroom/data/posts.jsonl`, metrics in `newsroom/data/metrics.jsonl`.
 - **Learning loop:** cron runs do not get Hermes' automatic memory/skill review, so
   the jobs explicitly read and rewrite `newsroom/playbook.md` and use `skill_manage`.

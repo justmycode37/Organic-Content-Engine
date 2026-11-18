@@ -1,11 +1,12 @@
 <!-- studio:meta
 {
   "description": "Full-bleed image (slow Ken Burns) or video, with an optional caption bar. Use for screenshots, product shots, demo footage.",
+  "formats": ["reel", "longform"],
   "media": "required",
   "props": {
     "caption": {"type": "string", "max": 90, "description": "optional text in the caption bar"},
     "label": {"type": "string", "max": 36, "description": "optional small mono label above the caption, e.g. 'DEMO' or 'SCREENSHOT'"},
-    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "none"], "default": "in", "description": "Ken Burns direction for images"},
+    "motion": {"type": "string", "enum": ["in", "out", "left", "right", "push", "pan", "none"], "default": "in", "description": "Ken Burns direction for images"},
     "frame": {"type": "string", "enum": ["full", "card"], "default": "full", "description": "full-bleed, or an inset rounded card on the dark background (good for screenshots)"}
   }
 }
@@ -35,7 +36,7 @@
 <div class="shade"></div>
 {% endif %}
 <div class="content">
-  {% if p.caption or p.label %}
+  {% if p.caption or (p.label and text_mode == 'full') %}
   <div class="bar a-slide" style="animation-delay:.15s">
     {% if p.label %}<div class="label">{{ p.label }}</div>{% endif %}
     {% if p.caption %}<div class="text">{{ p.caption }}</div>{% endif %}

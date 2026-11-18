@@ -63,4 +63,16 @@ EOF
     --name newsroom-growth-weekly --skill newsroom-growth-review --skill newsroom-reel-production \
     "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
 
+"$HERMES" cron create "0 7 * * 4" "Produce this week's Frontier Feed long-form YouTube video (8-14 min, 16:9).
+
+1. Read playbook.md (especially the Long-form (YouTube) section) and the run context above. Create runs/<YYYY-MM-DD>-LF/.
+2. Follow newsroom-longform-production end to end: topic, package (title + thumbnail concepts) before the script, research with subagents in parallel, script, retention critique, assets (footage first, image_generate for concepts), spec, background render, QA, thumbnail variants, metadata, repurpose ideas.
+3. Publish with postiz.py publish-youtube inside the playbook's long-form window; if no YouTube channel is connected, write READY.md instead.
+4. Keep every single terminal command under 10 minutes; renders run in the background and are polled.
+5. Write report.md and update the playbook's long-form section with what you learned.
+
+Work autonomously; nobody will answer questions. End with a 5-line summary: topic, title, length, publish state, thumbnail choice." \
+    --name newsroom-longform --skill newsroom-longform-production \
+    "${MODEL[@]}" "${COMMON[@]}" ${EXTRA[@]+"${EXTRA[@]}"}
+
 "$HERMES" cron list

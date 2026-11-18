@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-WIDTH, HEIGHT = 1080, 1920
+WIDTH, HEIGHT = 1080, 1920  # default (reel) canvas; worker_init takes the format size
 
 CHROMIUM_ARGS = [
     "--allow-file-access-from-files",
@@ -50,15 +50,15 @@ class Task:
     hide_captions: bool = False
 
 
-def worker_init(chromium: str | None) -> None:
+def worker_init(chromium: str | None, width: int = WIDTH, height: int = HEIGHT) -> None:
     from playwright.sync_api import sync_playwright
 
     pw = sync_playwright().start()
     browser = pw.chromium.launch(executable_path=chromium, args=CHROMIUM_ARGS, headless=True)
-    context = browser.new_context(viewport={"width": WIDTH, "height": HEIGHT}, device_scale_factor=1)
+    context = browser.new_context(viewport={"width": width, "height": height}, device_scale_factor=1)
     page = context.new_page()
     cdp = context.new_cdp_session(page)
-    _state.update(pw=pw, browser=browser, page=page, cdp=cdp, console=[])
+    _state.update(pw=pw, browser=browser, page=page, cdp=cdp, console=[], size=(width, height))
     page.on("console", lambda m: _state["console"].append(f"{m.type}: {m.text}") if m.type in ("error", "warning") else None)
     page.on("pageerror", lambda e: _state["console"].append(f"pageerror: {e}"))
     atexit.register(worker_close)
@@ -88,7 +88,8 @@ def _load(task: Task) -> dict:
 def _capture(scale: float) -> bytes:
     params: dict[str, Any] = {"format": "png", "optimizeForSpeed": True}
     if scale != 1.0:
-        params["clip"] = {"x": 0, "y": 0, "width": WIDTH, "height": HEIGHT, "scale": scale}
+        width, height = _state.get("size", (WIDTH, HEIGHT))
+        params["clip"] = {"x": 0, "y": 0, "width": width, "height": height, "scale": scale}
     data = _state["cdp"].send("Page.captureScreenshot", params)["data"]
     return base64.b64decode(data)
 

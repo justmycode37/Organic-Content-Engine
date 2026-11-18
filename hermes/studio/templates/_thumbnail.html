@@ -1,0 +1,46 @@
+<!doctype html>
+<!-- YouTube thumbnail (1280x720). Rendered by studio/thumbnail.py, not a scene template. -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<link rel="stylesheet" href="{{ theme_css }}">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1280px; height: 720px; overflow: hidden; background: var(--bg); }
+  body { font-family: var(--font-display); color: var(--fg); -webkit-font-smoothing: antialiased; }
+  .bg { position: absolute; inset: 0; background-size: cover; background-position: {{ position }}; }
+  .shade { position: absolute; inset: 0; }
+  .side-left .shade { background: linear-gradient(90deg, rgba(11,11,12,.88) 0%, rgba(11,11,12,.55) 38%, rgba(11,11,12,0) 62%); }
+  .side-right .shade { background: linear-gradient(270deg, rgba(11,11,12,.88) 0%, rgba(11,11,12,.55) 38%, rgba(11,11,12,0) 62%); }
+  .text { position: absolute; top: 60px; bottom: 60px; width: 620px; display: flex; flex-direction: column; justify-content: center; }
+  .side-left .text { left: 58px; }
+  .side-right .text { right: 58px; text-align: right; align-items: flex-end; }
+  .headline { font-weight: 900; text-transform: uppercase; line-height: .9; letter-spacing: -0.035em;
+    text-shadow: 0 6px 28px rgba(0,0,0,.55); }
+  .hl { color: var(--accent); }
+  .tag { display: inline-block; margin-bottom: 22px; padding: 10px 18px; border-radius: 10px; background: var(--accent);
+    color: var(--accent-ink); font-weight: 900; font-size: 34px; letter-spacing: .02em; text-transform: uppercase; }
+  .mark { position: absolute; width: 64px; bottom: 34px; }
+  .side-left .mark { right: 40px; }
+  .side-right .mark { left: 40px; }
+</style>
+</head>
+<body class="side-{{ side }}">
+  {% if image %}<div class="bg" style="background-image:url('{{ image }}')"></div>{% endif %}
+  <div class="shade"></div>
+  <div class="text">
+    {% if tag %}<div><span class="tag">{{ tag }}</span></div>{% endif %}
+    <div class="headline" id="hl">{{ text | hl(highlight) }}</div>
+  </div>
+  {% if mark %}<svg class="mark" viewBox="240 285 520 430" aria-hidden="true"><path fill="var(--fg)" d="M246 608h508v52H246z"/><path fill="var(--accent)" d="M557 291h128L592 709H464z"/></svg>{% endif %}
+<script>
+  // largest font size at which the headline fits its column
+  const el = document.getElementById("hl"), box = el.parentElement;
+  let lo = 60, hi = 170;
+  const fits = () => el.scrollWidth <= 620 && box.scrollHeight <= box.clientHeight;
+  while (hi - lo > 1) { const mid = (lo + hi) >> 1; el.style.fontSize = mid + "px"; if (fits()) lo = mid; else hi = mid; }
+  el.style.fontSize = lo + "px";
+  window.FIT = lo;
+</script>
+</body>
+</html>

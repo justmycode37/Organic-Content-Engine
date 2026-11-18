@@ -14,23 +14,25 @@ from pathlib import Path
 from typing import Any
 
 from .env import THEMES_DIR, StudioError
+from .formats import DEFAULT_FORMAT, FORMATS, get_format
 from .templates import check_props, load_template
 
-MAX_DURATION = 90.0
-MIN_DURATION = 15.0
+MAX_DURATION = FORMATS["reel"].max_duration  # reel limits; see formats.py for others
+MIN_DURATION = FORMATS["reel"].min_duration
 WORDS_PER_SECOND = 2.8  # rough speaking rate used for estimates before TTS
 
 VOICE_PROVIDERS = ("edge", "elevenlabs", "none")
 CAPTION_STYLES = ("karaoke", "pop", "plain")
 CAPTION_POSITIONS = ("lower", "middle")
+TEXT_MODES = ("minimal", "full")
 MEDIA_EXT_IMAGE = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif")
 MEDIA_EXT_VIDEO = (".mp4", ".mov", ".m4v", ".webm", ".mkv")
 
 DEFAULT_VOICE = {"provider": "edge", "voice": "en-US-AndrewMultilingualNeural", "rate": "+10%", "pitch": "+0Hz"}
 DEFAULT_BRAND = {"wordmark": "FRONTIER FEED", "handle": "", "bug": True}
 
-TOP_KEYS = {"title", "voice", "theme", "music", "captions", "scenes", "brand", "fps", "lead", "description"}
-SCENE_KEYS = {"template", "narration", "props", "media", "min_duration", "cover", "cover_time", "source", "hold", "lead", "id", "notes"}
+TOP_KEYS = {"title", "voice", "theme", "music", "captions", "scenes", "brand", "fps", "lead", "description", "text", "format"}
+SCENE_KEYS = {"template", "narration", "props", "media", "min_duration", "cover", "cover_time", "source", "hold", "lead", "id", "notes", "chapter"}
 
 
 @dataclass
@@ -56,6 +58,7 @@ class Scene:
     source: str | None
     lead: float
     hold: float
+    chapter: str | None = None  # longform: a chapter starts at this scene
 
 
 @dataclass
@@ -70,6 +73,8 @@ class Spec:
     brand: dict[str, Any]
     scenes: list[Scene] = field(default_factory=list)
     fps: int = 30
+    text: str = "minimal"
+    format: str = DEFAULT_FORMAT
 
     def estimated_duration(self) -> float:
         total = 0.0
@@ -190,16 +195,25 @@ def load_spec(path: str | Path, check_files: bool = True) -> tuple[Spec | None, 
         errors.append("fps: must be 24, 25, 30 or 60 (Instagram target is 30)")
         fps = 30
     default_lead = raw.get("lead", 0.12)
+    fmt_name = raw.get("format", DEFAULT_FORMAT)
+    if fmt_name not in FORMATS:
+        errors.append(f"format: must be one of {list(FORMATS)}")
+        fmt_name = DEFAULT_FORMAT
+    fmt = get_format(fmt_name)
+    text = raw.get("text", "minimal")
+    if text not in TEXT_MODES:
+        errors.append(f"text: must be one of {list(TEXT_MODES)}")
+        text = "minimal"
 
     spec = Spec(path=path, base_dir=base, title=title, voice=voice, theme=theme, music=music,
-                captions=captions, brand=brand, fps=fps)
+                captions=captions, brand=brand, fps=fps, text=text, format=fmt_name)
 
     scenes_raw = raw.get("scenes")
     if not isinstance(scenes_raw, list) or not scenes_raw:
         errors.append("scenes: required non-empty array")
         scenes_raw = []
-    if len(scenes_raw) > 40:
-        errors.append("scenes: at most 40 scenes")
+    if len(scenes_raw) > fmt.max_scenes:
+        errors.append(f"scenes: at most {fmt.max_scenes} scenes for format {fmt_name!r}")
 
     for i, s in enumerate(scenes_raw):
         where = f"scenes[{i}]"
@@ -218,6 +232,9 @@ def load_spec(path: str | Path, check_files: bool = True) -> tuple[Spec | None, 
         except StudioError as e:
             errors.append(f"{where}.template: {e}")
             continue
+        if fmt_name not in tpl.formats:
+            errors.append(f"{where}.template: {tname!r} is not available for format {fmt_name!r} "
+                          f"(formats: {list(tpl.formats)})")
         props = s.get("props", {}) or {}
         if not isinstance(props, dict):
             errors.append(f"{where}.props: must be an object")
@@ -283,24 +300,36 @@ def load_spec(path: str | Path, check_files: bool = True) -> tuple[Spec | None, 
             errors.append(f"{where}.cover_time: must be a number (seconds into the scene)")
             cover_time = None
 
+        chapter = s.get("chapter")
+        if chapter is not None and (not isinstance(chapter, str) or not chapter.strip() or len(chapter) > 60):
+            errors.append(f"{where}.chapter: non-empty string of at most 60 characters")
+            chapter = None
+
         spec.scenes.append(Scene(
             index=i, template=tname, narration=narration, props=props, media=media,
             min_duration=float(min_d), cover=bool(s.get("cover", False)), cover_time=cover_time,
             source=source or None, lead=float(s.get("lead", default_lead)), hold=float(s.get("hold", 0.35)),
+            chapter=chapter.strip() if chapter else None,
         ))
 
     if sum(1 for s in spec.scenes if s.cover) > 1:
         warnings.append("more than one scene has cover=true; the first one is used")
-    if spec.scenes and spec.scenes[0].template != "hook":
-        warnings.append("first scene is not a 'hook'; Reels retain best with an instant hook on frame 1")
+    if spec.scenes and fmt.first_template and spec.scenes[0].template != fmt.first_template:
+        warnings.append(f"first scene is not a {fmt.first_template!r}; open with the strongest moment on frame 1")
+    if fmt_name == "longform" and spec.scenes:
+        chapters = [s for s in spec.scenes if s.chapter]
+        if chapters and spec.scenes[0].chapter is None:
+            errors.append("scenes[0].chapter: YouTube chapters must start at 00:00; give the first scene a chapter")
+        if chapters and len(chapters) < 3:
+            warnings.append("fewer than 3 chapters; YouTube only shows chapters with at least 3")
 
     if spec.scenes and not errors:
         est = spec.estimated_duration()
-        if est > MAX_DURATION:
-            errors.append(f"estimated duration {est:.1f}s exceeds {MAX_DURATION:.0f}s; shorten the narration")
-        elif est > MAX_DURATION - 8:
-            warnings.append(f"estimated duration {est:.1f}s is close to the {MAX_DURATION:.0f}s limit")
-        elif est < MIN_DURATION:
-            warnings.append(f"estimated duration {est:.1f}s is below {MIN_DURATION:.0f}s")
+        if est > fmt.max_duration:
+            errors.append(f"estimated duration {est:.1f}s exceeds {fmt.max_duration:.0f}s; shorten the narration")
+        elif est > fmt.max_duration - 8:
+            warnings.append(f"estimated duration {est:.1f}s is close to the {fmt.max_duration:.0f}s limit")
+        elif est < fmt.min_duration:
+            warnings.append(f"estimated duration {est:.1f}s is below {fmt.min_duration:.0f}s")
 
     return spec, errors, warnings

@@ -32,7 +32,8 @@ from .captions import Chunk, chunk_words, to_srt
 from .env import TEMPLATES_DIR, THEMES_DIR, StudioError, chromium_or_raise, default_workers, find_ffmpeg, log
 from .ffmpeg import measure_loudness, run_ffmpeg
 from .media import PreparedMedia, prepare as prepare_media
-from .spec import MAX_DURATION, MIN_DURATION, Scene, Spec, load_spec
+from .formats import Format, get_format
+from .spec import Scene, Spec, load_spec
 from .templates import load_template
 from .tts import Narration, Word, synthesize
 
@@ -134,14 +135,17 @@ def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) -> lis
         planned.append(ps)
         start += ps.duration
     total = start
-    if total > MAX_DURATION:
-        raise StudioError(f"reel would be {total:.1f}s; the limit is {MAX_DURATION:.0f}s. Shorten narration.")
-    if total < MIN_DURATION:
-        warnings.append(f"reel is {total:.1f}s; Instagram QA expects at least {MIN_DURATION:.0f}s")
+    fmt = get_format(spec.format)
+    if total > fmt.max_duration:
+        raise StudioError(f"video would be {total:.1f}s; the {fmt.name} limit is {fmt.max_duration:.0f}s. "
+                          "Shorten narration.")
+    if total < fmt.min_duration:
+        warnings.append(f"video is {total:.1f}s; {fmt.name} QA expects at least {fmt.min_duration:.0f}s")
 
+    long_side = fmt.long_side * 9 // 16 if preview else fmt.long_side  # 1080 / 1920 like before
     for ps in planned:
         if ps.scene.media is not None:
-            ps.media = prepare_media(ps.scene.media, ps.duration, fps, preview)
+            ps.media = prepare_media(ps.scene.media, ps.duration, fps, preview, long_side)
 
     env = _jinja()
     base = env.get_template("_base.html")
@@ -153,7 +157,7 @@ def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) -> lis
         tpl = load_template(s.template)
         props = dict(s.props)
         ctx = {"p": props, "brand": spec.brand, "has_media": ps.media is not None, "duration": ps.duration,
-               "fps": fps, "index": s.index, "title": spec.title}
+               "fps": fps, "index": s.index, "title": spec.title, "text_mode": spec.text, "format": spec.format}
         try:
             content = env.from_string(tpl.source).render(**ctx)
         except Exception as e:
@@ -170,7 +174,8 @@ def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) -> lis
             title=spec.title, index=s.index, template=s.template, has_media=ps.media is not None,
             theme_css=theme_css, base_css=(TEMPLATES_DIR / "_base.css").as_uri(),
             runtime_js=(TEMPLATES_DIR / "_runtime.js").as_uri(), config=_script_json(config),
-            content=content, brand=spec.brand, source=s.source, caption_position=spec.captions["position"],
+            content=content, brand=spec.brand, source=s.source, caption_position=spec.captions["position"], text_mode=spec.text,
+            format=spec.format, canvas_w=fmt.width, canvas_h=fmt.height,
         )
         ps.html = build_dir / f"scene_{s.index:02d}_{s.template}.html"
         ps.html.write_text(html, encoding="utf-8")
@@ -181,7 +186,7 @@ def cover_scene(planned: list[PlannedScene]) -> tuple[PlannedScene, float]:
     ps = next((p for p in planned if p.scene.cover), planned[0])
     if ps.scene.cover_time is not None:
         t = ps.scene.cover_time
-    elif ps.scene.template == "hook":
+    elif ps.scene.template in ("hook", "lf-open"):
         t = 0.9
     else:
         t = 1.4
@@ -202,13 +207,13 @@ def encoder_args(fps: int, preview: bool) -> list[str]:
     ]
 
 
-def _run_tasks(tasks: list[capture.Task], workers: int, chromium: str | None) -> list[dict]:
+def _run_tasks(tasks: list[capture.Task], workers: int, chromium: str | None, fmt: Format) -> list[dict]:
     results: list[dict] = []
     workers = max(1, min(workers, len(tasks)))
     log(f"capturing {sum(t.count for t in tasks)} frames in {len(tasks)} tasks on {workers} workers")
     ctx = mp.get_context("spawn")
     with ProcessPoolExecutor(max_workers=workers, mp_context=ctx, initializer=capture.worker_init,
-                             initargs=(chromium,)) as pool:
+                             initargs=(chromium, fmt.width, fmt.height)) as pool:
         futs = {pool.submit(capture.run_task_safe, t): t for t in tasks}
         for f in as_completed(futs):
             r = f.result()
@@ -272,13 +277,14 @@ def build_audio(planned: list[PlannedScene], music: dict | None, total: float, o
     return True
 
 
-def contact_sheet(video: Path, out: Path, planned: list[PlannedScene], n: int = 12, cols: int = 4) -> None:
+def contact_sheet(video: Path, out: Path, planned: list[PlannedScene], fmt: Format, cols: int = 4) -> None:
     """Tile ``n`` evenly spaced frames with timestamps (for vision QA)."""
     from PIL import Image, ImageDraw, ImageFont
 
     total = sum(p.duration for p in planned)
+    n = fmt.contact_frames
     rows = math.ceil(n / cols)
-    tw, th = 360, 640
+    tw, th = fmt.contact_tile
     sheet = Image.new("RGB", (cols * tw + (cols + 1) * 8, rows * (th + 44) + (rows + 1) * 8), (24, 24, 26))
     draw = ImageDraw.Draw(sheet)
     font = None
@@ -309,6 +315,13 @@ def contact_sheet(video: Path, out: Path, planned: list[PlannedScene], n: int = 
     sheet.save(out, quality=88)
 
 
+def _stamp(t: float) -> str:
+    """YouTube chapter timestamp: M:SS below an hour, H:MM:SS above."""
+    s = int(t)
+    h, m, sec = s // 3600, (s % 3600) // 60, s % 60
+    return f"{h}:{m:02d}:{sec:02d}" if h else f"{m}:{sec:02d}"
+
+
 # ---------------------------------------------------------------------- main
 
 
@@ -319,6 +332,7 @@ def outputs_for(out: Path) -> dict[str, Path]:
         "cover": Path(f"{stem}.cover.jpg"),
         "contact": Path(f"{stem}.contact.jpg"),
         "srt": Path(f"{stem}.captions.srt"),
+        "chapters": Path(f"{stem}.chapters.txt"),
         "report": Path(f"{stem}.report.json"),
     }
 
@@ -364,7 +378,8 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
                               hide_captions=True))
     order = sorted(tasks, key=lambda t: -t.count)
     t_cap = time.monotonic()
-    results = _run_tasks(order, workers or default_workers(), chromium)
+    fmt = get_format(spec.format)
+    results = _run_tasks(order, workers or default_workers(), chromium, fmt)
     capture_s = time.monotonic() - t_cap
     log(f"capture done in {capture_s:.1f}s")
     scene_secs: dict[int, float] = {}
@@ -416,7 +431,13 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
     from PIL import Image
     with Image.open(cover_png) as im:
         im.convert("RGB").save(paths["cover"], quality=92)
-    contact_sheet(out, paths["contact"], planned)
+    contact_sheet(out, paths["contact"], planned, fmt)
+    chapters = [{"time": round(p.start, 3), "stamp": _stamp(p.start), "title": p.scene.chapter}
+                for p in planned if p.scene.chapter]
+    if chapters:
+        paths["chapters"].write_text("".join(f"{c['stamp']} {c['title']}\n" for c in chapters), encoding="utf-8")
+    else:
+        paths.pop("chapters")
     global_chunks = []
     for ps in planned:
         for c in ps.chunks:
@@ -432,7 +453,9 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
         "preview": preview,
         "duration": round(total, 3),
         "fps": fps,
-        "resolution": [540, 960] if preview else [1080, 1920],
+        "format": fmt.name,
+        "resolution": list(fmt.preview_size) if preview else [fmt.width, fmt.height],
+        "chapters": chapters,
         "frames": total_frames,
         "voice": {"provider": planned[0].narration.provider if planned else None,
                   "voice": next((p.narration.voice for p in planned if p.narration.voice), None)},
@@ -475,7 +498,8 @@ def still(spec_path: str | Path, scene_index: int, t: float | None, out: str | P
     ps = planned[scene_index]
     tt = ps.duration * 0.6 if t is None else max(0.0, min(t, ps.duration - 1 / ps.fps))
     png = build / "still.png"
-    capture.worker_init(chromium_or_raise())
+    fmt = get_format(spec.format)
+    capture.worker_init(chromium_or_raise(), fmt.width, fmt.height)
     try:
         r = capture.run_task(capture.Task(scene=scene_index, html=str(ps.html), first=0, count=0, fps=ps.fps,
                                           scale=1.0, out="", ffmpeg="", encoder=[], still_time=tt,

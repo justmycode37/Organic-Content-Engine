@@ -2182,3 +2182,7 @@ timezone: Europe/Berlin
 approvals:
   cron_mode: approve
   mode: smart
+image_gen:
+  provider: openai-codex
+  openai-codex:
+    model: gpt-image-2-high

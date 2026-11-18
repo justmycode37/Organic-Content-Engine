@@ -1,6 +1,6 @@
 <!-- studio:meta
 {
-  "description": "News headline card: kicker + headline + optional dek. Optional media shown as an image card above the text (article screenshot, product shot).",
+  "description": "News headline: kicker + headline + optional dek (kicker and dek only render with spec text=full). Optional media: an image card above the text in text=full; full-bleed behind a bottom-anchored headline in text=minimal.",
   "media": "optional",
   "props": {
     "headline": {"type": "string", "required": true, "max": 120, "description": "the news in one sentence, ~4-14 words"},
@@ -24,10 +24,21 @@
     max-width: 840px; padding-left: 26px; border-left: 6px solid var(--accent);
   }
   .tpl-headline .lines { position: absolute; left: var(--safe-left); right: var(--safe-right); top: var(--safe-top); height: 2px; background: var(--line); }
+  .tpl-headline .bleed { position: absolute; inset: 0; }
+  .tpl-headline .bleed-shade {
+    position: absolute; inset: 0;
+    background: linear-gradient(180deg, rgba(11,11,12,.45) 0%, rgba(11,11,12,0) 20%, rgba(11,11,12,0) 48%, rgba(11,11,12,.70) 64%, rgba(11,11,12,.85) 100%);
+  }
+  .text-minimal.tpl-headline.has-media .content { justify-content: flex-end; }
+  .text-minimal.tpl-headline.has-media .headline { font-size: 84px; text-shadow: 0 4px 24px rgba(0,0,0,.5); }
 </style>
+{% if has_media and text_mode != 'full' %}
+<div class="bleed kb-in" data-studio-media></div>
+<div class="bleed-shade"></div>
+{% endif %}
 <div class="lines a-wipe" style="animation-delay:0s"></div>
 <div class="content">
-  {% if has_media %}<div class="card a-rise kb-in" style="animation-delay:0s" data-studio-media></div>{% endif %}
+  {% if has_media and text_mode == 'full' %}<div class="card a-rise kb-in" style="animation-delay:0s" data-studio-media></div>{% endif %}
   {% if p.kicker %}<div class="a-slide" style="animation-delay:.02s"><span class="kicker">{{ p.kicker }}</span></div>{% endif %}
   <div class="headline display a-rise" style="animation-delay:.08s" data-fit="{{ 84 if has_media else 108 }},56" data-fit-h="{{ 420 if has_media else 640 }}"><div>{{ p.headline | hl(p.highlight) }}</div></div>
   {% if p.dek %}<div class="dek a-rise" style="animation-delay:.28s">{{ p.dek }}</div>{% endif %}

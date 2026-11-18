@@ -9,6 +9,7 @@ Every template starts with a metadata comment holding JSON:
     {
       "description": "One line about when to use it.",
       "media": "optional" | "required" | "none",
+      "formats": ["reel"] | ["longform"] | ["reel", "longform"],   (default ["reel"])
       "props": {
         "headline": {"type": "string", "required": true, "description": "..."},
         "items":    {"type": "array", "items": "string", "min": 2, "max": 4},
@@ -40,9 +41,11 @@ class TemplateInfo:
     media: str  # "none" | "optional" | "required"
     props: dict[str, dict[str, Any]] = field(default_factory=dict)
     source: str = ""
+    formats: tuple[str, ...] = ("reel",)
 
     def to_json(self) -> dict[str, Any]:
-        return {"name": self.name, "description": self.description, "media": self.media, "props": self.props}
+        return {"name": self.name, "description": self.description, "media": self.media,
+                "formats": list(self.formats), "props": self.props}
 
 
 def load_template(name: str) -> TemplateInfo:
@@ -66,6 +69,7 @@ def load_template(name: str) -> TemplateInfo:
         media=meta.get("media", "none"),
         props=meta.get("props", {}),
         source=body,
+        formats=tuple(meta.get("formats", ["reel"])),
     )
 
 
