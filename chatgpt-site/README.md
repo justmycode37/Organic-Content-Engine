@@ -133,9 +133,14 @@ keeps the best reviewed candidate after that allowance, retaining unresolved
 findings. White paper, black ink and full-phrase captions with inverse word
 highlights are the normal format. Music uses a fixed background level without
 speech ducking or adaptive music gain. Voice review evaluates delivery and
-timing, not listened-to audio quality. Generation uses the worker's existing
-OpenAI and ElevenLabs API credentials and their billing, independently of the
-Site's ChatGPT-plan text handoff.
+timing, not listened-to audio quality. Sign in to Codex with ChatGPT and Claude
+Code with Claude.ai as the macOS user who runs the account worker. Both brands
+use the Codex subscription for Sol, and Quriozity uses the Claude subscription
+for Opus. When a provider confirms its subscription quota is exhausted, the
+worker uses that provider's API key and retries the subscription after any
+reported reset time. Sign-in, model and transport failures surface as job
+errors. ElevenLabs uses its API key. Private job evidence distinguishes
+subscription and API usage.
 
 Finished private MP4s upload to Postiz, then create a `now` Instagram feed/Reel
 post bound to the selected integration. A Postiz ID means processing, not posting

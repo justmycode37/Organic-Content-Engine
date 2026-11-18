@@ -6,6 +6,7 @@ import {tmpdir} from 'node:os';
 import {runOnce} from './account-worker.mjs';
 import {runAccountCommand} from './account-worker-evidence.mjs';
 import {hedgyClient} from '../worker/hedgy-model-client.ts';
+import {createReelSubscription} from './reel-subscription.mjs';
 
 const job={id:'test-job',lease:'private-lease',account:{id:'hedgy',topic:'finance'},scheduledAt:'2026-11-16T11:15:00.000Z'};
 const secret='private-key-with-"quotes"-and-\\slashes';
@@ -14,7 +15,7 @@ const config={headers:{authorization:'Bearer worker-secret-value','OAI-Sites-Aut
 async function fixture(run){
  const cacheRoot=await mkdtemp(join(tmpdir(),'oce-account-test-')),calls=[],logs=[];
  const fetchSite=async(_config,path,init)=>{calls.push({path,init});return Response.json(path.endsWith('/claim')?{job}:{});};
- const options={cacheRoot,env,fetchSite,log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
+ const options={cacheRoot,env,fetchSite,subscription:null,log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
  try{await run({cacheRoot,calls,logs,options});}finally{await rm(cacheRoot,{recursive:true,force:true});}
 }
 const stream=(events,{crlf=false,split=13,finalNewline=true}={})=>{
@@ -36,6 +37,69 @@ test('Hedgy streams xhigh without truncating reasoning or automatically repeatin
   const body=JSON.parse(calls[0].body);assert.equal(body.model,'gpt-6.2-sol');assert.equal(body.reasoning.effort,'xhigh');
   assert.equal(body.stream,true);assert.equal(body.store,false);assert.equal('max_output_tokens' in body,false);assert.equal('signal' in calls[0],false);
   assert.equal(events[0].status,'started');assert.equal(events.at(-1).responseId,'resp-test');assert.equal(events.at(-1).requestId,'req-test');
+ }finally{globalThis.fetch=original;}
+});
+
+const ndjson=(events,exitCode=0)=>({exitCode,stdout:events.map(e=>JSON.stringify(e)).join('\n'),stderr:''});
+const openaiRequest={provider:'openai',step:'plan',model:'gpt-6.2-sol',effort:'xhigh',input:'Plan a reel'};
+const claudeRequest={provider:'anthropic',step:'visual-realization',model:'claude-opus-5-5',effort:'medium',input:'Realize the visuals'};
+
+test('subscription runners isolate credentials and stop using only the exhausted provider until its reset',async()=>{
+ let time=1000;
+ const commands=[];
+ const ask=createReelSubscription({env,now:()=>time,run:async(bin,args,config)=>{
+  commands.push({bin,args,config});
+  assert.equal(config.env.OPENAI_API_KEY,undefined);
+  assert.equal(config.env.ACCOUNT_WORKER_TOKEN,undefined);
+  if(args[0]==='auth')return ndjson([{loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty'}]);
+  if(args[0]==='exec'){
+   assert.ok(args.includes('forced_login_method="chatgpt"'));
+   assert.ok(args.includes('model_reasoning_effort="xhigh"'));
+   if(time<10000)return ndjson([{type:'turn.failed',error:{message:JSON.stringify({error:{type:'usage_limit_reached',resets_at:10}})}}],1);
+   return ndjson([{type:'item.completed',item:{type:'agent_message',text:'Sol result'}},{type:'turn.completed'}]);
+  }
+  assert.equal(config.env.CLAUDE_CODE_MAX_RETRIES,'0');
+  assert.ok(args.includes('--max-turns'));
+  assert.deepEqual(JSON.parse(config.input).message.content[1],{type:'image',source:{type:'base64',media_type:'image/png',data:'aW1hZ2U='}});
+  return ndjson([{type:'assistant',message:{id:'msg',model:claudeRequest.model}},
+   {type:'result',subtype:'success',stop_reason:'end_turn',num_turns:1,result:'Opus result'}]);
+ }});
+ assert.equal((await ask(openaiRequest)).status,'subscription_exhausted');
+ assert.equal((await ask(openaiRequest)).status,'subscription_exhausted');
+ assert.equal(commands.length,1);
+ assert.equal((await ask({...claudeRequest,images:[{mime:'image/png',base64:'aW1hZ2U='}]})).text,'Opus result');
+ time=10000;
+ assert.equal((await ask(openaiRequest)).text,'Sol result');
+});
+
+test('Claude needs an explicit exhausted plan window and no output or retry before API fallback',async()=>{
+ const quota={type:'rate_limit_event',rate_limit_info:{status:'rejected',errorCode:'credits_required',rateLimitType:'five_hour',resetsAt:10}};
+ const failure={type:'result',subtype:'error_during_execution',is_error:true,api_error_status:429,errors:['Usage limit']};
+ const create=(events,authMethod='claude.ai')=>createReelSubscription({run:async(_bin,args)=>args[0]==='auth'?
+  ndjson([{loggedIn:true,authMethod,apiProvider:'firstParty'}]):ndjson(events,1)});
+ assert.equal((await create([quota,failure])(claudeRequest)).status,'subscription_exhausted');
+ await assert.rejects(create([failure])(claudeRequest),/did not complete/);
+ await assert.rejects(create([{type:'system',subtype:'api_retry'},quota,failure])(claudeRequest),/did not complete/);
+ await assert.rejects(create([{type:'assistant',message:{id:'msg',model:claudeRequest.model}},quota,failure])(claudeRequest),/did not complete/);
+ await assert.rejects(create([quota,failure],'console')(claudeRequest),/signed-in Claude subscription/);
+});
+
+test('Hedgy bills the API only on subscription exhaustion and preserves xhigh',async()=>{
+ const original=globalThis.fetch,requests=[],usage=[];
+ globalThis.fetch=async(_url,init)=>{
+  requests.push(JSON.parse(init.body));
+  return Response.json({status:'completed',output:[{content:[{type:'output_text',text:'API result'}]}]});
+ };
+ try{
+  for(const [request,expected] of [[async()=>({status:'completed',text:'Subscription result'}),'Subscription result'],[async()=>({status:'subscription_exhausted'}),'API result']]){
+   assert.equal(await hedgyClient('test',entry=>usage.push(entry),request)('plan','brief'),expected);
+  }
+  await assert.rejects(hedgyClient('test',undefined,async()=>{throw Error('Not signed in');})('plan','brief'),{code:'subscription_failed'});
+  assert.equal(requests.length,1);
+  assert.deepEqual(requests[0].reasoning,{effort:'xhigh'});
+  assert.deepEqual(usage.map(e=>[e.billing,e.status]),[
+   ['subscription','started'],['subscription','completed'],['subscription','started'],['subscription','subscription_exhausted'],['api','started'],['api','completed'],
+  ]);
  }finally{globalThis.fetch=original;}
 });
 
@@ -117,7 +181,7 @@ test('an existing paid-generation guard prevents another provider request',async
   await mkdir(join(cacheRoot,job.id));await writeFile(join(cacheRoot,job.id,'paid-generation-started'),'existing-start');
   const original=globalThis.fetch;globalThis.fetch=()=>{throw Error('A guarded job must not call a provider');};
   try{await runOnce(config,options);}finally{globalThis.fetch=original;}
-  assert.match(JSON.parse(calls.at(-1).init.body).message,/previous paid generation/);
+  assert.match(JSON.parse(calls.at(-1).init.body).message,/previous generation/);
   assert.equal(await readFile(join(cacheRoot,job.id,'paid-generation-started'),'utf8'),'existing-start');
  });
 });

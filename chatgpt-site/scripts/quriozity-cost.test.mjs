@@ -23,6 +23,10 @@ test('Quriozity cost reports include one-hour Opus writes, Sol reasoning and sep
  assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/text-to-speech/voice/with-timestamps',characters:1000}),.08);
  assert.equal(audioCost({provider:'elevenlabs',status:200,endpoint:'/v1/music',generatedSeconds:60}),.15);
  assert.equal(summarizeCosts([]).orientation.hardCutoff,false);
+ const op={model:'claude-opus-5-5',step:'visual-realization',usage:{input_tokens:10000,output_tokens:10000}};
+ const mixed=summarizeCosts([{...op,billing:'subscription',status:'completed'},{...op,billing:'subscription',status:'subscription_exhausted'},{...op,billing:'api'}]);
+ assert.equal(mixed.modelUsd,.24);
+ assert.deepEqual(mixed.subscriptionCalls,{anthropic:1});
 });
 
 test('catalogue retrieval keeps used assets and aliases while omitting unrelated full documentation',()=>{

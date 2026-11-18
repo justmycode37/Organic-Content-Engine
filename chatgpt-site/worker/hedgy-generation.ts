@@ -13,6 +13,7 @@ const reelSpecSchema=z.object({version:z.literal(1),title:z.string().max(90),pos
 import type {Env} from './container.ts';
 import {AppError} from './errors.ts';
 import {hedgyClient,HEDGY_MODEL,HEDGY_EFFORT} from './hedgy-model-client.ts';
+import type {ReelSubscription} from './reel-subscription.ts';
 import {HEDGY_MUSIC_STYLE,HEDGY_CONCEPTS,conceptCandidates,recentlyUsed,ideaSchema,ideaProblems,type HedgyHistoryEntry,type HedgyIdea} from './hedgy-ideas.ts';
 const ROLES=['hook','finance accuracy','narration','scene 1 animation','scene 2 animation','scene 3 animation','scene 4 animation','scene 5 animation','scene 6 animation','sound effects','music and pacing','captions and accessibility'];
 /** Story-level checks that keep the reel on its chosen idea instead of drifting back to library defaults. */
@@ -29,10 +30,10 @@ function contentIssues(spec:z.infer<typeof reelSpecSchema>,idea:HedgyIdea){
  return issues;
 }
 /** Ideation → plan → 12 specialists → assembly (→ one repair). History makes each reel a new concept, item, setting and score. */
-export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unknown)=>void|Promise<void>,history:HedgyHistoryEntry[]=[]){
+export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unknown)=>void|Promise<void>,history:HedgyHistoryEntry[]=[],subscription?:ReelSubscription){
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
- if(!key)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
- const ask=hedgyClient(key,onUsage);
+ if(!key&&!subscription)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
+ const ask=hedgyClient(key,onUsage,subscription);
  const json=(text:string)=>{try{return JSON.parse(text)}catch{return undefined}};
  // 1. Ideation: a concept this account has not covered, told through a new story world and a new score.
  const candidates=conceptCandidates(history),{items:usedItems,moods}=recentlyUsed(history);

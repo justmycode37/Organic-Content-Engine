@@ -25,16 +25,21 @@ export function audioCost(entry){
  return null;
 }
 export function summarizeCosts(rows){
- const byProvider={},byStage={},unmetered=[];
+ const byProvider={},byStage={},subscriptionCalls={},unmetered=[];
  let modelUsd=0,audioEstimateUsd=0;
  for(const row of rows){
-  const cost=row.model?modelCost(row):audioCost(row),provider=row.model?.startsWith('claude-')?'anthropic':row.model?'openai':row.provider??'unknown',stage=row.step??row.endpoint??'unknown';
+  const provider=row.model?.startsWith('claude-')?'anthropic':row.model?'openai':row.provider??'unknown',stage=row.step??row.endpoint??'unknown';
+  if(row.billing==='subscription'){
+   if(row.status==='completed')subscriptionCalls[provider]=(subscriptionCalls[provider]??0)+1;
+   continue;
+  }
+  const cost=row.model?modelCost(row):audioCost(row);
   if(cost===null){unmetered.push({provider,stage,status:row.status});continue;}
   if(row.model)modelUsd+=cost;else audioEstimateUsd+=cost;
   byProvider[provider]=(byProvider[provider]??0)+cost;byStage[stage]=(byStage[stage]??0)+cost;
  }
- return {priceSources:PRICE_SOURCES,modelUsd,audioEstimateUsd,estimatedTotalUsd:modelUsd+audioEstimateUsd,byProvider,byStage,unmetered,
-  basis:'Recorded token usage at published Standard rates, including reasoning output and provider cache writes/reads. Audio uses published character/minute rates. Not an invoice: excludes tax, account discounts, unknown interrupted usage and amortized cached audio.',
+ return {priceSources:PRICE_SOURCES,modelUsd,audioEstimateUsd,estimatedTotalUsd:modelUsd+audioEstimateUsd,byProvider,byStage,subscriptionCalls,unmetered,
+  basis:'API-billed token usage at published Standard rates, including reasoning output and provider cache writes/reads. Subscription calls are counted separately. Audio uses published character/minute rates. Excludes tax, account discounts, unknown interrupted usage and amortized cached audio.',
   orientation:{opusUsd:3,openaiUsd:3,hardCutoff:false},
   repairHeavyScenario:{estimatedUsd:7*modelCost({model:'claude-opus-5-5',usage:{input_tokens:100000,output_tokens:16000}})+10*modelCost({model:'gpt-6.2-sol',usage:{input_tokens:80000,output_tokens:4000}})+30*modelCost({model:'gpt-6.2-sol',usage:{input_tokens:8000,output_tokens:6000}})+.5,notAHardMaximum:true,assumptions:'7 Opus calls at 100k input/16k output; 10 Sol visual reviews at 80k input/4k output; 30 Sol planning/review/correction calls at 8k input/6k output; $0.50 audio. No cache hits; excludes asset search fan-out and large-output outliers.'}};
 }

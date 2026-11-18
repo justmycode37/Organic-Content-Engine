@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {AppError} from './errors.ts';
+import {tryReelSubscription,type ReelSubscription} from './reel-subscription.ts';
 
 type ResponseData={id?:string;status?:string;usage?:unknown;incomplete_details?:{reason?:string};error?:unknown;output?:{content?:{type:string;text?:string}[]}[]};
 type Usage=(entry:unknown)=>void|Promise<void>;
@@ -47,9 +48,15 @@ async function readResponse(response:Response):Promise<ResponseData>{
  * No transport retry: an interrupted paid request must be inspected before repeating it.
  * https://developers.openai.com/api/docs/guides/reasoning#allocating-space-for-reasoning
  */
-export function hedgyClient(key:string,onUsage?:Usage){
+export function hedgyClient(key:string,onUsage?:Usage,subscription?:ReelSubscription){
  return async(step:string,input:string,format?:{name:string;schema:z.ZodType})=>{
-  const started=performance.now(),base={step,model:HEDGY_MODEL,effort:HEDGY_EFFORT};
+  const model=HEDGY_MODEL,effort=HEDGY_EFFORT;
+  if(subscription){
+   const text=await tryReelSubscription(subscription,{provider:'openai',step,model,effort,input,format},onUsage);
+   if(text!==undefined)return text;
+   if(!key)throw new AppError(503,'api_key_missing','Codex usage is exhausted. Configure OPENAI_API_KEY for fallback.',{step});
+  }
+  const started=performance.now(),base={step,model,effort,...(subscription?{billing:'api'}:{})};
   await onUsage?.({...base,status:'started'});
   let requestId:string|null=null,responseDetails:Record<string,unknown>={};
   try{
