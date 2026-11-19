@@ -21,6 +21,8 @@ metadata:
 
 After `newsroom-reel-production` produced `reel.mp4`, `reel.cover.jpg` and `caption.txt` that passed QA.
 
+> **Instagram is suspended (account banned 2026-11-19).** Skip steps 2-3 (Instagram) and publish only the YouTube Short (step 3b) until the playbook's Account status says Instagram is back. Without Instagram, the YouTube Short may be scheduled 09:15-11:30 on the slot's date or, for the evening slot, the next morning.
+
 ## Procedure
 
 1. **Check the calendar.** `python3 bin/postiz.py posts --days 2` and the "Already scheduled" section of the run context. Never schedule two Reels less than 4 hours apart, and never more than 3 in 24 hours.
@@ -63,6 +65,9 @@ After `newsroom-reel-production` produced `reel.mp4`, `reel.cover.jpg` and `capt
 - 429: the script already retries; if it still fails, wait 10 minutes and retry.
 - Upload fails because the file is too large: re-render at a lower bitrate (Instagram limit 300 MB, 25 Mbps); do not use Postiz `--adjust` unless rendering cannot fix it.
 - Errors in `notifications` after publishing: diagnose, fix, republish once, and add the cause to the playbook's learnings log.
+- **"Instagram requires you to log in at instagram.com and follow its instructions before posting can resume. After that, please reconnect this channel."** (paired with "Could not refresh your instagram-standalone channel"): the account has a login challenge and the Postiz token is dead. `publish` still returns `ok: true` and a post id; the post flips to state `ERROR` ~6 s later. Do not retry and do not produce another Reel for the channel: write the recovery steps into `report.md` (owner logs in at instagram.com, reconnects the channel in Postiz → Launches, then republishes the ready files with the same command after checking `posts --days 1` for a duplicate), flag it at the top of the playbook's guidance section, and report it. Seen 2026-11-19-B.
+- **`HTTP 401 Invalid API key` on any call** (seen 2026-11-19 22:30 CET, 15 min after the same key had scheduled a Short; `../.env` unchanged): the key was invalidated on the Postiz side. Probe once with `curl -s -o /dev/null -w '%{http_code}' -H "Authorization: $POSTIZ_API_KEY" "$POSTIZ_API_URL/integrations"`, retry once after ~5 min, then stop: write `READY.md` with the exact publish command, flag it at the top of the playbook guidance, and report. The owner regenerates the key in Postiz → Settings → Public API and updates `POSTIZ_API_KEY` in `../.env`.
+- After `--now`, always wait ~75 s and check BOTH `postiz.py posts --days 1` (state must be PUBLISHED with a releaseURL) and `postiz.py notifications`; `ok: true` from `publish` only means Postiz accepted the job.
 
 ## Verification
 
