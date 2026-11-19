@@ -8,6 +8,7 @@ const repairLimit = 3;
 const storySchema = z.object({
  question: z.string().trim().min(1).max(200),
  answer: z.string().trim().min(1).max(260),
+ anchor: z.string().trim().min(1).max(200),
  beats: z.array(z.object({
   say: z.string().trim().min(1).max(220),
   link: z.string().trim().min(1).max(220),
@@ -19,6 +20,13 @@ const listenerSchema = reviewSchema.extend({
  heardQuestion:z.string().trim().min(1).max(200),
  heardAnswer:z.string().trim().min(1).max(260),
  retell:z.string().trim().min(1).max(500),
+});
+const sceneReviewSchema = reviewSchema.extend({
+ handoffs:z.array(z.object({
+  intoScene:z.number().int().min(2).max(16),
+  connects:z.boolean(),
+  evidence:z.string().trim().min(1).max(400),
+ }).strict()).max(15),
 });
 const copySchema = z.object({title:z.string().trim().min(1).max(90),postCaption:hedgyPostCaptionSchema}).strict();
 
@@ -46,7 +54,7 @@ export async function reviewHedgyStory(ask:Ask, idea:string) {
  let previousDraft = '';
  const brief = `Write one spoken Hedgy finance story for a viewer with no investing background.
 ${idea}
-Decide the single question raised by the opening and its concrete answer. Build 3–7 causal beats: an immediately recognizable situation, what the character wants or risks, the action that changes the outcome, why it changes, and the outcome and tradeoff that resolve the opening. Keep the same people, object and terms throughout. If the everyday situation is an analogy, make the mapping to the financial mechanism explicit and keep its limits clear. Use a detail only if the viewer needs it to follow the next step.
+Decide the single question raised by the opening and its concrete answer. Name one visible anchor (a person, object, or repeated transaction) the viewer can follow from the opening through the outcome. Build 3–7 causal beats. Each beat picks up the person, object, question, or outcome we just saw and makes one change the viewer can follow. Start where the decision or problem happens, and make the last beat answer the opening using that same anchor in its changed state. For a before/after comparison, keep what stays constant explicit so we can see what changed. Use one concrete sequence and consistent words for the same things. Prefer stories where the characters directly experience the mechanism. If you use an analogy, make its mapping explicit. Cut detours and examples that require a second setup.
 Write say as natural spoken sentences with short clauses, clear subjects, everyday verbs and pauses at thought boundaries. Aim for 55–75 spoken words and one takeaway. Explain any essential financial term through its role in the story. Avoid arithmetic, unnecessary precision, generic advice and implied guarantees. Use link to explain how each beat follows the last (or sets up the question for the opener). The say fields alone must tell the complete story, and should be easy to split across multiple quick shots.`;
  for (let round = 0; round <= repairLimit; round++) {
   const raw = await ask(round ? 'story-repair' : 'story-script',
@@ -72,6 +80,26 @@ Write say as natural spoken sentences with short clauses, clear subjects, everyd
   if (!feedback.length) return {story,narration,rounds};
  }
  throw new AppError(502,'hedgy_story_unapproved','Hedgy narration did not pass finance and first-listen review',{rounds});
+}
+
+export async function reviewHedgyScenes(ask:Ask, story:z.infer<typeof storySchema>, scenes:readonly {say:string}[], catalog:string) {
+ const raw = await ask('scene-continuity-review',`Review the actual shot sequence for a first-time viewer. The storyboard is the evidence available to you. Use the documented shot behaviors and parameters to infer what will be visible, and use the narration to check when each new idea is heard.
+Follow the golden thread from the opening question to the changed anchor in the payoff. Judge each cut from the previous shot's last meaningful state into the next shot's first meaningful state. Record one handoff per incoming scene in order, numbering the first scene 1. Name the specific object, actor, action or comparison that the viewer can carry across. A recurring item by itself is insufficient if its role, location, ownership, quantity or state has reset without explanation. Look for avoidable establishing shots, visual actions that restart, repeated explanations, unexplained jumps in time or place, visuals that contradict the current words, and a payoff that abandons the opening example. For a comparison, keep composition and the unchanged quantity easy to compare.
+Set connects=false at a cut that needs a fix, with the exact problem and smallest fix in evidence. Put any additional required changes in findings. Approve only when the sequence can be followed without reconstructing events. Prefer holding or repeating a setup on purpose when it helps the viewer.
+Story: ${JSON.stringify(story)}
+Numbered scenes: ${JSON.stringify(scenes.map((scene,index)=>({number:index+1,...scene})))}
+${catalog}`,{name:'hedgy_scene_review',schema:sceneReviewSchema});
+ const result = sceneReviewSchema.safeParse(parseEditorialJson(raw));
+ if (!result.success) return {review:raw,problems:reviewProblems('Scene continuity',undefined)};
+ const {handoffs} = result.data;
+ const problems = reviewProblems('Scene continuity',result.data);
+ if (handoffs.length !== scenes.length - 1 || handoffs.some((cut,index)=>cut.intoScene !== index+2)) {
+  problems.push('Scene continuity: review must cover every adjacent cut in order.');
+ }
+ for (const cut of handoffs) {
+  if (!cut.connects) problems.push(`Cut into scene ${cut.intoScene}: ${cut.evidence}`);
+ }
+ return {review:result.data,problems};
 }
 
 export async function reviewHedgyCopy(ask:Ask, narration:string, initialCopy:z.infer<typeof copySchema>) {

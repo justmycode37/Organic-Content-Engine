@@ -23,6 +23,7 @@ interface TradePlan {
   place: Place;
   sign: string;
   item: ItemId;
+  quantity?: 1 | 2;
   tag: string;
   first: number;
   second: number;
@@ -71,7 +72,8 @@ function plan(props: ShotProps, dur: number): TradePlan {
     tender: pick(p, 'payment', ['coin', 'banknote'] as const, 'banknote'),
     who: pick(p, 'who', ACTORS, 'hedgy') as ActorId,
     place: pick(p, 'place', ['booth', 'shop'] as const, 'booth'), sign,
-    item, tag: str(p, 'tag', '').trim().replace(/[^A-Za-z0-9]/g, '').slice(0, 8), first, second,
+    item, quantity: p?.quantity === 1 || p?.quantity === 2 ? p.quantity : undefined,
+    tag: str(p, 'tag', '').trim().replace(/[^A-Za-z0-9]/g, '').slice(0, 8), first, second,
     actorX: mode === 'buy' ? 130 : 590,
     placeX: mode === 'buy' ? 470 : 250,
     facing,
@@ -111,7 +113,7 @@ function transferPoint(t: number, start: number, duration: number, from: Point, 
 export const tradeShot: ShotDef = {
   name: 'trade',
   stage: 'clean',
-  describe: 'A customer and shopkeeper exchange payment and an item across a counter; buy sends money to the shop before the item reaches the customer, while sell sends the item in before payment returns. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (up to 8 characters, default MARKET), item (any library item, default ticket), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for low price, default banknote), tag (optional short tag by the item, default none). Events: buy event 1 = payment reaches the counter and event 2 = the item reaches the customer; sell event 1 = the item reaches the counter and event 2 = payment reaches the customer.',
+  describe: 'A customer and shopkeeper exchange payment and an item across a counter; buy sends money to the shop before the item reaches the customer, while sell sends the item in before payment returns. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (up to 8 characters, default MARKET), item (any library item, default ticket), quantity (set 1 or 2 explicitly in both shots for a matched comparison; moves that many whole items at the same per-item scale), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for low price, default banknote), tag (optional short tag by the item, default none). Events: buy event 1 = payment reaches the counter and event 2 = the item reaches the customer; sell event 1 = the item reaches the counter and event 2 = payment reaches the customer.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), place = station(s);
     const payId = paymentId(s), payScale = s.payScale, payDims = itemSize(payId, payScale), itemDims = itemSize(s.item, s.itemScale);
@@ -162,7 +164,13 @@ export const tradeShot: ShotDef = {
       sx: paymentHit.sx, sy: paymentHit.sy,
       ...(s.price === 'high' ? { level: 0.92 } : {}),
     });
-    drawItemAt(ctx, s.item, itemPoint, t, held.scale, { sx: itemHit.sx, sy: itemHit.sy });
+    const offsets = s.quantity === 2 ? [-0.34, 0.34] : [0];
+    const eachScale = s.quantity === undefined ? held.scale : held.scale * 0.65;
+    for (const offset of offsets) {
+      drawItemAt(ctx, s.item, { x: itemPoint.x + offset * itemDims.w, y: itemPoint.y }, t, eachScale, {
+        sx: itemHit.sx, sy: itemHit.sy,
+      });
+    }
 
     if (s.tag) {
       const tag = smallTag(s.tag), active = ease.outCubic(phase(t, itemArrives - 0.06, itemArrives + 0.16));

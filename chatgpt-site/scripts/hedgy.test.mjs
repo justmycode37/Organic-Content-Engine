@@ -12,13 +12,17 @@ const lines = [
 ];
 const story = {
  question:'Why keep extra lemons?', answer:'A buffer prevents missed sales but may go to waste.',
+ anchor:'The lemons at the same stand.',
  beats:[0,2,4].map(i=>({say:lines.slice(i,i+2).join(' '),link:'Continues the lemonade stand example.'})),
 };
 const approved = {approved:true,findings:[]};
+const continuity = {...approved,handoffs:lines.slice(1).map((_,index)=>({
+ intoScene:index+2,connects:true,evidence:'The next shot picks up the lemons at the same stand.',
+}))};
 const listener = {...approved,heardQuestion:story.question,heardAnswer:story.answer,retell:story.answer};
 const spec = {
  version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',
- scenes:lines.map(say=>({type:'hedgy',duration:4,beat:'lesson',action:'upside',headline:'Keep a buffer',say})),
+ scenes:lines.map(say=>({type:'shot',shot:'trade',duration:4,params:{item:'lemonade'},say})),
 };
 
 function mockHedgy(t, respond = () => undefined) {
@@ -34,7 +38,7 @@ function mockHedgy(t, respond = () => undefined) {
   active--;
   const outputs = {
    hedgy_idea:() => idea(body.input),hedgy_story:() => story,hedgy_fact_review:() => approved,
-   hedgy_listener_review:() => listener,hedgy_reel:() => spec,hedgy_copy_review:() => approved,
+   hedgy_listener_review:() => listener,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
   };
   const text = respond(format,body) ?? outputs[format]?.();
   return Response.json({status:'completed',output:[{content:[{type:'output_text',text:text===undefined?'production brief':JSON.stringify(text)}]}]});
@@ -49,7 +53,8 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.provenance.effort,'xhigh');
  assert.equal(result.provenance.editorial.storyRounds.length,1);
  assert.equal(result.provenance.editorial.copyRounds.length,1);
- assert.equal(calls.length,19);
+ assert.equal(result.provenance.editorial.sceneRounds.length,1);
+ assert.equal(calls.length,20);
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
  assert.ok(peak()<=4);
  assert.equal(result.spec.musicBrief,result.provenance.idea.musicBrief);
@@ -62,9 +67,10 @@ test('post captions require useful paragraphs and a small set of distinct hashta
   assert.equal(hedgyPostCaptionSchema.safeParse(invalid).success,false);
  }
 });
-test('editorial repairs are reviewed again and assembly cannot rewrite approved narration',async t=>{
- let drafts=0, finance=0, listens=0, assemblies=0, copyReviews=0;
+test('editorial and continuity repairs are reviewed again and assembly preserves the approved narration',async t=>{
+ let drafts=0, finance=0, listens=0, assemblies=0, sceneReviews=0, copyReviews=0;
  const weakOpening='A buffer is a great deal.';
+ const brokenCut={...spec.scenes[1],transition:'flash'};
  const finalCopy={title:'When the lemons run out',postCaption};
  mockHedgy(t,(format,body)=>{
   switch(format){
@@ -85,7 +91,17 @@ test('editorial repairs are reviewed again and assembly cannot rewrite approved 
     assert.match(body.input,/Ever run out of lemons/);
     if (assemblies===1) return {...spec,postCaption:'A buffer has a cost.'};
     if (assemblies===2) return {...spec,scenes:[{...spec.scenes[0],say:weakOpening},...spec.scenes.slice(1)]};
-    assert.match(body.input,/exact approved narration/);
+    if (assemblies===3) {
+     assert.match(body.input,/exact approved narration/);
+     return {...spec,scenes:[spec.scenes[0],brokenCut,...spec.scenes.slice(2)]};
+    }
+    assert.match(body.input,/Cut into scene 2.*flash breaks the handoff/);
+    break;
+   case 'hedgy_scene_review':
+    if (++sceneReviews===1) {
+     return {...continuity,handoffs:[{intoScene:2,connects:false,evidence:'The flash breaks the handoff.'},...continuity.handoffs.slice(1)]};
+    }
+    assert.doesNotMatch(body.input,/"transition":"flash"/);
     break;
    case 'hedgy_copy_review':
     if (++copyReviews===1) return {approved:false,findings:['The title should describe the scenario.']};
@@ -97,12 +113,22 @@ test('editorial repairs are reviewed again and assembly cannot rewrite approved 
   }
  });
  const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
- assert.deepEqual({drafts,finance,listens,assemblies,copyReviews},{drafts:2,finance:2,listens:2,assemblies:3,copyReviews:2});
+ assert.deepEqual({drafts,finance,listens,assemblies,sceneReviews,copyReviews},{drafts:2,finance:2,listens:2,assemblies:4,sceneReviews:2,copyReviews:2});
  assert.equal(result.spec.title,finalCopy.title);
  assert.equal(result.spec.postCaption,postCaption);
  assert.deepEqual(result.spec.scenes,spec.scenes);
  assert.equal(result.provenance.editorial.storyRounds.length,2);
+ assert.equal(result.provenance.editorial.sceneRounds.length,4);
  assert.equal(result.provenance.editorial.copyRounds.length,2);
+});
+
+test('a continuity verdict that skips a cut cannot approve the reel',async t=>{
+ const {calls}=mockHedgy(t,format=>format==='hedgy_scene_review'
+  ? {...continuity,handoffs:continuity.handoffs.slice(1)}
+  : undefined);
+ await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>
+  error.code==='hedgy_scenes_unapproved'&&error.details.sceneRounds.length===4);
+ assert.ok(calls.every(call=>call.text?.format?.name!=='hedgy_copy_review'));
 });
 
 test('unapproved scripts stop before animation planning after three repairs',async t=>{
