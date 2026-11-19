@@ -30,7 +30,7 @@ from typing import Any
 from jinja2 import Environment, FileSystemLoader, Undefined
 from markupsafe import Markup, escape
 
-from . import capture
+from . import capture, density
 from .captions import Chunk, chunk_words, to_srt
 from .env import TEMPLATES_DIR, THEMES_DIR, StudioError, chromium_or_raise, default_workers, find_ffmpeg, log
 from .ffmpeg import measure_loudness, run_ffmpeg
@@ -535,6 +535,12 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
     paths["srt"].write_text(to_srt(global_chunks), encoding="utf-8")
 
     loud = measure_loudness(out) if has_audio else {}
+    dens, dens_warn = density.analyse(
+        [{"index": p.scene.index, "start": p.start, "duration": p.duration, "narration": p.scene.narration}
+         for p in planned], fmt.name)
+    for w in dens_warn:
+        log("WARNING: " + w)
+    warnings += dens_warn
     elapsed = time.monotonic() - t_start
     report = {
         "ok": True,
@@ -553,6 +559,7 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
                   "clarity": (audio_info or {}).get("clarity")},
         "loudness": {"integrated_lufs": loud.get("input_i"), "true_peak_dbtp": loud.get("input_tp"),
                      "lra": loud.get("input_lra"), "target_lufs": TARGET_LUFS} if loud else None,
+        "density": dens,
         "cover": {"scene": cps.scene.index, "time": round(ct, 3)},
         "scenes": [
             {"index": p.scene.index, "template": p.scene.template, "start": round(p.start, 3),

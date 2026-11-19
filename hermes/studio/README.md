@@ -141,7 +141,7 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `narration` | string | spoken text; synthesized per scene. Write numbers the way they should be spoken if the TTS gets them wrong |
 | `props` | object | template props (validated against the template contract) |
 | `media` | string or object | path (relative to the spec), or URL (downloaded to `cache/`). Object form: `{"src", "start" (video in-point s), "fit": "cover"\|"contain", "position" (CSS object-position), "kind": "image"\|"video"}` |
-| `min_duration` | seconds | default 1.5; the scene lasts `max(min_duration, lead + speech + hold)` |
+| `min_duration` | seconds | default 1.5; scenes without narration last `min_duration`. Scene voice: the scene lasts `max(min_duration, lead + speech + hold)`. Continuous voice: ignored on narrated scenes (the line sets the length; padding would be dead air) |
 | `hold` | seconds | default 0.35; pause after the narration before the cut (continuous voice: only after the last scene; inner cuts sit in the middle of the spoken pause) |
 | `lead` | seconds | override the global lead for this scene |
 | `cover` | bool | use this scene for `OUT.cover.jpg` (default: first scene) |
@@ -277,7 +277,8 @@ Everything brand-related is in `themes/default.css`: palette (`--bg`, `--fg`,
    The Edge endpoint sometimes rejects valid requests; the studio retries with
    inaudible variants (same voice) before giving up.
 2. **Timeline**: scene duration = lead + speech + hold (≥ `min_duration`; continuous
-   voice: from mid-pause to mid-pause, lead/hold only at the ends), rounded
+   voice: from mid-pause to mid-pause, lead/hold only at the ends, `min_duration`
+   ignored on narrated scenes), rounded
    to whole frames. Captions: 2-4 words per chunk, broken at punctuation and pauses.
 3. **Media**: URLs downloaded to `cache/downloads/`; images normalized with Pillow;
    videos trimmed/scaled/exploded to JPEG frames with ffmpeg (deterministic and

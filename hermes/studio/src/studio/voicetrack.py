@@ -49,6 +49,7 @@ TIGHT_SENTENCE_PAUSE = 0.30
 TIGHT_CLAUSE_PAUSE = 0.18
 TIGHT_EDGE = 0.04  # silence kept before the first / after the last word in 'tight'
 UNVOICED_DEFAULT = 1.5
+DEFAULT_MIN_DURATION = 1.5  # spec default; only an explicit value is reported
 CHUNK_CHARS = 2400  # longer narration is synthesized in chunks split at scene boundaries
 CONTEXT_CHARS = 600  # neighbouring text sent with each chunk
 
@@ -283,7 +284,14 @@ def build(scenes: list[Scene], voice: dict[str, Any], fps: int, warnings: list[s
     for k, s in enumerate(scenes):
         if k in vranges:
             v0, v1 = vranges[k]
-            dur = max(v1 - v0, s.min_duration)
+            # The voice sets the pace: min_duration never stretches a narrated scene, because the
+            # padding would be dead air after the line (owner review 2026-11-19).
+            dur = v1 - v0
+            if s.min_duration > dur + 0.05 and s.min_duration != DEFAULT_MIN_DURATION:
+                msg = (f"scene {k}: min_duration {s.min_duration}s ignored on a narrated scene "
+                       f"(continuous voice, {dur:.2f}s spoken); it would add dead air")
+                if msg not in warnings:
+                    warnings.append(msg)
             shift = t_out - v0  # voice time + shift = video time
             shifts[k] = shift
             a, b = ranges[k]  # type: ignore[misc]

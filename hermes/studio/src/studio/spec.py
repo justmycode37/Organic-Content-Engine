@@ -273,6 +273,9 @@ def load_spec(path: str | Path, check_files: bool = True) -> tuple[Spec | None, 
         if not isinstance(min_d, (int, float)) or isinstance(min_d, bool) or not 0.3 <= min_d <= 30:
             errors.append(f"{where}.min_duration: number between 0.3 and 30")
             min_d = 1.5
+        if narration and "min_duration" in s:
+            warnings.append(f"{where}: min_duration is ignored on narrated scenes with the continuous voice "
+                            "(the scene lasts as long as its line; padding would be dead air)")
         if not narration and "min_duration" not in s:
             warnings.append(f"{where}: no narration; scene lasts min_duration ({min_d}s)")
 
