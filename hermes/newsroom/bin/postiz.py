@@ -288,13 +288,18 @@ def date_range(days: int) -> str:
 def cmd_posts(args) -> None:
     data = get_json(f"/posts?{date_range(args.days)}")
     # The Postiz workspace holds other brands' Instagram channels too; show only
-    # ours unless --all is given, so reviews never count another account's post.
+    # ours (Instagram and YouTube) unless --all is given, so reviews never count
+    # another account's post.
     if not args.all and isinstance(data, dict) and isinstance(data.get("posts"), list):
-        ours = instagram_id(args.integration)
+        ours = {instagram_id(args.integration)}
+        try:
+            ours.add(youtube_id())
+        except SystemExit:
+            pass  # no YouTube channel connected
         data = dict(data)
         data["posts"] = [p for p in data["posts"]
-                         if (p.get("integration") or {}).get("id") == ours]
-        data["filtered_to_integration"] = ours
+                         if (p.get("integration") or {}).get("id") in ours]
+        data["filtered_to_integrations"] = sorted(ours)
     print(json.dumps(data, indent=2))
 
 
