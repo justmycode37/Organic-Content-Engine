@@ -96,7 +96,7 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
   },
   {
     "name": "trade",
-    "describe": "A customer and shopkeeper exchange payment and an item across a counter; buy sends money to the shop before the item reaches the customer, while sell sends the item in before payment returns. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (up to 8 characters, default MARKET), item (any library item, default ticket), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for low price, default banknote), tag (optional short tag by the item, default none). Events: buy event 1 = payment reaches the counter and event 2 = the item reaches the customer; sell event 1 = the item reaches the counter and event 2 = payment reaches the customer."
+    "describe": "A customer and shopkeeper exchange payment and an item across a counter; buy sends money to the shop before the item reaches the customer, while sell sends the item in before payment returns. params: who (actor id, default hedgy), place (booth|shop, default booth), sign (up to 8 characters, default MARKET), item (any library item, default ticket), quantity (set 1 or 2 explicitly in both shots for a matched comparison; moves that many whole items at the same per-item scale), mode (buy|sell, default buy), price (low|high, default low), payment (coin|banknote for low price, default banknote), tag (optional short tag by the item, default none). Events: buy event 1 = payment reaches the counter and event 2 = the item reaches the customer; sell event 1 = the item reaches the counter and event 2 = payment reaches the customer."
   },
   {
     "name": "wait",
