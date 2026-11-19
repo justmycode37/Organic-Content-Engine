@@ -66,6 +66,8 @@ Views per Reel at 48 h. Supporting signals, in order: sends per reach, average w
 
 ## Posting windows (Europe/Berlin)
 
+Every Reel is also published as a YouTube Short (owner direction 2026-11-19), scheduled 09:15–11:30 Berlin because the shared Postiz YouTube upload quota runs out in the evening and resets at 09:00 (see `newsroom-publish` step 3b). Long-form uploads follow the same morning rule.
+
 | Slot | Window | Why |
 |---|---|---|
 | A | 13:00–15:30 | `[prior]` US East morning plus EU afternoon. Used once: Sun 2026-11-15 14:35 (cmwhrjng50ljulq0712idshtm, photos-only Reel on a no-avatar profile), 4 reach at 48 h — no signal about the slot. |
@@ -161,7 +163,7 @@ Weekly 8–14 min 16:9 video about AI, produced by `newsroom-longform-production
 - **Script:** cold open with the peak moment or most surprising fact (never "welcome back"), promise in the first 30 s, open loop every 45–60 s, a mid-point turn, payoff of the title's promise at the end. ~1,150 words ≈ 8 min, ~1,650 ≈ 12 min (Brian ≈ 2.35 words/s).
 - **Visuals:** footage first; AI-generated illustrations (`image_generate`, one consistent style per video) only for concepts, history and mood, never to fake real events, products, documents or people. Picture changes every 3–6 s. Chapters via `lf-chapter` + scene `chapter`.
 - **Captions:** `style: plain`, `max_words: 4`, smaller than in Reels.
-- **Publishing window:** Thursday 20:00–22:00 Europe/Berlin (14:00–16:00 New York). Revisit after 6 videos.
+- **Publishing window:** publish time Thursday 20:00–22:00 Europe/Berlin (14:00–16:00 New York) is the target, but Postiz uploads at the scheduled time and the shared YouTube quota is usually gone by the evening: schedule long-form uploads 09:15–11:30 Berlin (first video: Fri 2026-11-20). Revisit after 6 videos.
 - **Risks:** YouTube's "inauthentic content" policy demonetises mass-produced, repetitive AI content; every video needs its own research and angle, and structure and visuals must vary. Realistic AI-generated images must be disclosed in YouTube Studio ("altered or synthetic content"); the owner ticks it at upload when the report says so.
 - **Status:** no YouTube channel is connected in Postiz yet; runs end with a `READY.md` package until the owner connects one. First package: `runs/2026-11-19-LF/READY.md` (2026-11-19).
 
