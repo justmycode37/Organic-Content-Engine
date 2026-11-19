@@ -19,6 +19,7 @@ The weekly long-form job, or when the owner asks for a YouTube video. Output: `r
 ## Principles
 
 - **Packaging before production.** Title and thumbnail decide whether anyone watches. Spend ~40 % of the thinking on them, and decide them *before* the script, so the video delivers exactly what the package promises.
+- **A story with a point, not an encyclopedia.** Every video says one arguable thing (the thesis) and is driven by one felt question the viewer wants answered. Chapters are steps of an argument that build on each other ("but" / "therefore"), never a list of company or topic profiles that could be reordered. A keyword decides the title wording, never the structure.
 - **Retention is engineered.** Cold open with the peak moment, a reason to stay in the first 30 s, an open loop at least every 45-60 s, a visual change every 3-6 s.
 - **Original, not mass-produced.** YouTube demonetises "inauthentic" (mass-produced, repetitive, template-looking) content. Every video needs its own research, an angle nobody else has, varied structure and visuals. Never publish a video that only re-reads news.
 - **Truth over drama.** LLMs do hallucinate; every factual sentence maps to a source URL in `facts.md`. Rumours are labelled on screen and in the voice.
@@ -29,16 +30,25 @@ The weekly long-form job, or when the owner asks for a YouTube video. Output: `r
 
 2. **Package.** Ask 2-3 subagents in parallel for title options (≥ 12 total: curiosity gap, stakes, contrarian, number, "how/why"); each ≤ 60 characters, the main keyword in the first half, no clickbait the video cannot pay off. Pick the best 3. For each, design one thumbnail concept: one subject, ≤ 4 huge words that do *not* repeat the title, high contrast. Write `package.md` (chosen title, 2 backups, 3 thumbnail concepts, the promise the video must keep).
 
+2b. **Story gate** (`story.md`, before research is split into chapters and before any script). Write, in this order:
+   - **Thesis:** one sentence the video argues, specific and arguable (bad: "who is winning the robotaxi race"; good: "the company that promised robotaxis first is losing, and the likely winner builds no cars").
+   - **Central question:** the one question the cold open plants and the ending answers, phrased as a contradiction or mystery a viewer feels ("why can you ride a driverless car in Phoenix and Wuhan, but not from the company that promised it first?").
+   - **Stakes for the viewer:** why a person who is not in the industry should care (their money, time, job, safety, city). Must appear in the first 40 s.
+   - **Spine:** 4-6 beats, each one sentence, joined by "but" or "therefore" (never "and then"); mark the mid-point turn. Chapters follow the spine, not the companies or sub-topics.
+   - **Characters:** at least one person with a want and an obstacle (a founder whose promise keeps slipping, a rider, a driver whose job is at stake).
+   Give `story.md` alone to a no-tool subagent playing a curious viewer with no interest in the topic: "Would you watch 10 minutes of this? What would make you leave?" Rewrite until the answer is yes for a specific reason.
+
 3. **Research.** Split the topic into 4-7 chapters and research them in parallel with subagents (primary sources first: company blogs, papers, filings, official video, interviews; then reputable press). Collect `facts.md`: every fact with its URL and date; mark anything unconfirmed. A separate fact-check subagent re-verifies the 10 most important claims.
 
 4. **Script** (`script.md`), 8-14 min. ElevenLabs Brian speaks ~2.35 words/s, so ~1,150 words ≈ 8 min, ~1,650 words ≈ 12 min.
-   - **Cold open (0-30 s):** start inside the most surprising moment or number of the story; no greeting, no channel intro. Then state the promise ("by the end you will know …") and open the main loop.
-   - **Chapters:** each opens with a question or tension, delivers a payoff, and ends with a hand-off that opens the next loop ("but that was not the strange part"). Re-hook every 45-60 s with a new question, reveal or stake.
+   - **Cold open (0-40 s): show, contradiction, question, stakes.** (1) Open on footage of the most striking *moment* (something happening on screen, not a quote card or a number list); the first spoken line is ≤ 8 words. (2) The contradiction behind the central question. (3) The central question itself, plus at most one teased open loop (the twist, not its answer). (4) The viewer's stakes. No greeting, no channel intro, no checklist promise ("by the end you'll have the scoreboard: A, B, C, D") — promise an *answer*, not a table of contents. Numbers only with a comparison that gives them meaning.
+   - Write 3 different cold opens. Give each alone (first 40 s only) to a fresh no-tool subagent playing a cold viewer who clicked the thumbnail: "Do you keep watching? Why or why not?" Use the winner. Example that passed the owner (2026-11-19-LF, `spec.coldopen-v2.json`): empty driver seat → "Nobody is driving this car." → half a million paid rides a week → the man who promised it first (Musk, 2019) is behind → a Chinese rival is cheaper and already in Dubai → "how did the first promise fall this far behind, and why might the winner build no cars at all?" → your next fare and ten million drivers' jobs.
+   - **Chapters** follow the spine from `story.md`: each opens with a question or tension, delivers a payoff, and ends with a hand-off that opens the next loop ("but that was not the strange part"). Re-hook every 45-60 s with a new question, reveal or stake.
    - **Mid-point turn** around 40-60 % (new information that changes the picture) to stop the mid-video drop.
    - **Ending:** pay off the cold open and the title's promise, one-line takeaway, then a single specific bridge to another of our videos or the channel. No "like and subscribe" lists.
    - Spoken English for a curious non-engineer, short sentences, numbers as they are said, no corporate jargon. Mark where on-screen text is truly needed (a key number, a quote).
 
-5. **Retention critique.** A fresh subagent acts as a harsh YouTube retention editor: marks every place a viewer would leave, every unpaid promise, every unsupported claim, every slow stretch (> 20 s without new information). Apply what is right. If the cold open is not the strongest 30 s of the script, rewrite it.
+5. **Retention critique.** First check the script against `story.md`: does every chapter move the thesis forward, does the ending answer the central question, are the stakes stated in the first 40 s? Then a fresh subagent acts as a harsh YouTube retention editor: marks every place a viewer would leave, every unpaid promise, every unsupported claim, every slow stretch (> 20 s without new information). Apply what is right. If the cold open is not the strongest 30 s of the script, rewrite it.
 
 6. **Visual plan and assets** (`assets/`, provenance in `assets/assets.json`):
    - Footage first: official demo/keynote video, press kits, B-roll from company channels, your own screen recordings of products (browser tool), short credited excerpts with commentary over them.
@@ -78,6 +88,7 @@ The weekly long-form job, or when the owner asks for a YouTube video. Output: `r
 - Captions for long-form are smaller (`style: plain`) and must never cover the subject; check frames.
 - `write_file` with relative paths resolves against the terminal's cwd; use absolute paths.
 - Scene `source` ≤ 34 characters; full credits in the description. `lf-quote.name` ≤ 40 characters, `lf-points` items ≤ 50; always set `item_times` on `lf-points` (the narration-word trigger is unreliable for numbers).
+- Do not set `min_duration` on scenes with narration when the voice is continuous: the studio fills the gap with silence after the line, which sounds like a stalled voice (a 1.6 s opening line with `min_duration: 2.6` left a 1 s dead pause, 2026-11-19). Use it only on scenes without narration (chapter cards, end card).
 - Pace: ElevenLabs Brian runs ≈ 2.5 words/s in long-form (1,674 words → 11:03 incl. holds, chapter cards and the 15 s end card); write ~1,500 words for 10 min, ~1,800 for 12.
 - `studio thumbnail` places the background with CSS cover, so a near-square photo cannot be shifted with `--position`; composite first with ffmpeg (blurred, darkened cover of the same photo behind, full photo overlaid on the side opposite the text), then check the `.small.jpg` previews stacked at 320×180 in one vision call. A tight crop that is "a car body" instead of "a car" fails the nameability test.
 - Build the spec from a small Python script (`build_spec.py` with `S()`/`M()` helpers) so narration edits after the critique are one-line replacements and the final narration can be regenerated into `script.md` from `spec.json`.
