@@ -1,6 +1,6 @@
 <!-- studio:meta
 {
-  "description": "Full-bleed image (slow Ken Burns) or video, with an optional caption bar. Use for screenshots, product shots, demo footage.",
+  "description": "Full-bleed image (slow Ken Burns) or video, with an optional caption bar (text: full only). Use for screenshots, product shots, demo footage.",
   "formats": ["reel", "longform"],
   "media": "required",
   "props": {
@@ -36,7 +36,7 @@
 <div class="shade"></div>
 {% endif %}
 <div class="content">
-  {% if p.caption or (p.label and text_mode == 'full') %}
+  {% if text_mode == "full" and (p.caption or p.label) %}
   <div class="bar a-slide" style="animation-delay:.15s">
     {% if p.label %}<div class="label">{{ p.label }}</div>{% endif %}
     {% if p.caption %}<div class="text">{{ p.caption }}</div>{% endif %}

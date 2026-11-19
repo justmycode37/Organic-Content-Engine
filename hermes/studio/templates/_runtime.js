@@ -187,7 +187,14 @@
   // ------------------------------------------------------------ init / seek
   studio.init = async (opts = {}) => {
     document.documentElement.style.setProperty("--scene-dur", `${studio.duration}s`);
-    try { await document.fonts.ready; } catch (e) { warnings.push("fonts not ready: " + e); }
+    // Request the brand fonts explicitly: document.fonts.ready alone resolves before a
+    // font is fetched when nothing on the page uses it yet (captions are built later),
+    // and under load the first captured frames then show invisible caption text.
+    try {
+      await Promise.all(['800 40px "Inter Tight"', '400 40px "Inter Tight"', '700 20px "JetBrains Mono"']
+        .map((f) => document.fonts.load(f)));
+      await document.fonts.ready;
+    } catch (e) { warnings.push("fonts not ready: " + e); }
     const waits = buildMedia();
     document.querySelectorAll("img:not(.media-el)").forEach((img) => waits.push(img.decode().catch(() => warnings.push(`image failed: ${img.src}`))));
     await Promise.all(waits);

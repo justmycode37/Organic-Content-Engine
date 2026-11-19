@@ -2,12 +2,15 @@
 
 Steps
   1. validate the spec
-  2. synthesize narration per scene (cached) and derive scene durations
+  2. synthesize narration (cached) and derive scene durations: ElevenLabs
+     speaks the whole video as one take that is cut into scenes at its pauses
+     (voicetrack.py); other providers speak each scene separately
   3. prepare media (download, normalize images, explode videos to frames)
   4. write one HTML page per scene (template + theme + runtime + config)
   5. capture frame ranges in parallel worker processes -> H.264 segments
-  6. concatenate segments (stream copy), mix voice + ducked music,
-     two-pass loudnorm to -14 LUFS, mux with +faststart
+  6. concatenate segments (stream copy), mix voice + ducked music, measure
+     voice-over-music clarity per word, two-pass loudnorm to -14 LUFS, mux
+     with +faststart
   7. write cover, contact sheet, SRT and report
 """
 
@@ -36,6 +39,8 @@ from .formats import Format, get_format
 from .spec import Scene, Spec, load_spec
 from .templates import load_template
 from .tts import Narration, Word, synthesize
+from . import voicetrack
+from .voicetrack import VoiceTrack
 
 CHUNK_FRAMES = 90  # frames per capture task (balances work across workers)
 TARGET_LUFS = -14.0
@@ -111,29 +116,53 @@ def _load_valid(spec_path: str | Path) -> tuple[Spec, list[str]]:
     return spec, warnings
 
 
-def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) -> list[PlannedScene]:
+def _continuous(spec: Spec, warnings: list[str]) -> bool:
+    import os
+
+    if spec.voice.get("mode") != "continuous" or spec.voice.get("provider") != "elevenlabs":
+        return False
+    if not os.environ.get("ELEVENLABS_API_KEY"):
+        return False  # synthesize() falls back to edge per scene and warns
+    return any(s.narration.strip() for s in spec.scenes)
+
+
+def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) \
+        -> tuple[list[PlannedScene], VoiceTrack | None]:
     fps = 15 if preview else spec.fps
     t0 = time.monotonic()
-    log(f"narration: {len(spec.scenes)} scenes via {spec.voice['provider']} ({spec.voice.get('voice')})")
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futs = [pool.submit(synthesize, s.narration, spec.voice, warnings) for s in spec.scenes]
-        narrations = [f.result() for f in futs]
-    cached = sum(1 for n in narrations if n.cached)
-    log(f"narration ready in {time.monotonic() - t0:.1f}s ({cached}/{len(narrations)} from cache)")
-
     planned: list[PlannedScene] = []
+    track: VoiceTrack | None = None
     start = 0.0
-    for s, n in zip(spec.scenes, narrations):
-        speech_end = n.words[-1].end if n.words else n.duration
-        if n.audio is not None:
-            speech_end = max(speech_end, min(n.duration, speech_end + 0.05))
-        dur = max(s.min_duration, (s.lead + speech_end + s.hold) if (n.words or n.audio) else 0.0)
-        frames = max(1, math.ceil(dur * fps - 1e-6))
-        words = [Word(w.text, w.start + s.lead, w.end + s.lead) for w in n.words]
-        ps = PlannedScene(scene=s, narration=n, start=start, frames=frames, fps=fps, words=words)
-        ps.chunks = chunk_words(words, spec.captions["max_words"], scene_end=ps.duration)
-        planned.append(ps)
-        start += ps.duration
+    if _continuous(spec, warnings):
+        log(f"narration: one take for {len(spec.scenes)} scenes via elevenlabs ({spec.voice.get('voice')}), "
+            f"pauses {spec.voice.get('pauses', 'natural')}")
+        timings, track = voicetrack.build(spec.scenes, spec.voice, fps, warnings)
+        log(f"narration ready in {time.monotonic() - t0:.1f}s")
+        for s, tm in zip(spec.scenes, timings):
+            speech = (tm.words[-1].end - tm.words[0].start) if tm.words else 0.0
+            n = Narration(None, speech, tm.words, "elevenlabs", spec.voice["voice"], cached=track.take.cached)
+            ps = PlannedScene(scene=s, narration=n, start=start, frames=tm.frames, fps=fps, words=tm.words)
+            ps.chunks = chunk_words(tm.words, spec.captions["max_words"], scene_end=ps.duration)
+            planned.append(ps)
+            start += ps.duration
+    else:
+        log(f"narration: {len(spec.scenes)} scenes via {spec.voice['provider']} ({spec.voice.get('voice')})")
+        with ThreadPoolExecutor(max_workers=3) as pool:
+            futs = [pool.submit(synthesize, s.narration, spec.voice, warnings) for s in spec.scenes]
+            narrations = [f.result() for f in futs]
+        cached = sum(1 for n in narrations if n.cached)
+        log(f"narration ready in {time.monotonic() - t0:.1f}s ({cached}/{len(narrations)} from cache)")
+        for s, n in zip(spec.scenes, narrations):
+            speech_end = n.words[-1].end if n.words else n.duration
+            if n.audio is not None:
+                speech_end = max(speech_end, min(n.duration, speech_end + 0.05))
+            dur = max(s.min_duration, (s.lead + speech_end + s.hold) if (n.words or n.audio) else 0.0)
+            frames = max(1, math.ceil(dur * fps - 1e-6))
+            words = [Word(w.text, w.start + s.lead, w.end + s.lead) for w in n.words]
+            ps = PlannedScene(scene=s, narration=n, start=start, frames=frames, fps=fps, words=words)
+            ps.chunks = chunk_words(words, spec.captions["max_words"], scene_end=ps.duration)
+            planned.append(ps)
+            start += ps.duration
     total = start
     fmt = get_format(spec.format)
     if total > fmt.max_duration:
@@ -179,7 +208,7 @@ def plan(spec: Spec, preview: bool, warnings: list[str], build_dir: Path) -> lis
         )
         ps.html = build_dir / f"scene_{s.index:02d}_{s.template}.html"
         ps.html.write_text(html, encoding="utf-8")
-    return planned
+    return planned, track
 
 
 def cover_scene(planned: list[PlannedScene]) -> tuple[PlannedScene, float]:
@@ -227,12 +256,29 @@ def _run_tasks(tasks: list[capture.Task], workers: int, chromium: str | None, fm
 
 
 def build_audio(planned: list[PlannedScene], music: dict | None, total: float, out_wav: Path,
-                warnings: list[str]) -> bool:
-    """Mix narration (placed at scene starts) and optional ducked music. Returns has_audio."""
+                warnings: list[str], track: VoiceTrack | None = None) -> dict[str, Any] | None:
+    """Mix narration and optional ducked music into ``out_wav``.
+
+    Narration is either one take placed piece by piece (``track``) or one file
+    per scene placed at the scene start. Returns None without audio, else
+    ``{"clarity": ...}`` (voice-over-music level per spoken word).
+    """
     inputs: list[str] = []
     filters: list[str] = []
     labels: list[str] = []
-    for ps in planned:
+    if track is not None and track.pieces:
+        inputs += ["-i", str(track.take.audio)]
+        n = len(track.pieces)
+        filters.append("[0:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,"
+                       + (f"asplit={n}" + "".join(f"[t{k}]" for k in range(n)) if n > 1 else "anull[t0]"))
+        for k, pc in enumerate(track.pieces):
+            d = pc.src_end - pc.src_start
+            fd = min(0.008, d / 4)
+            filters.append(f"[t{k}]atrim={pc.src_start:.4f}:{pc.src_end:.4f},asetpts=PTS-STARTPTS,"
+                           f"afade=t=in:d={fd:.4f},afade=t=out:st={max(0.0, d - fd):.4f}:d={fd:.4f},"
+                           f"adelay={int(round(pc.out_start * 1000))}:all=1[p{k}]")
+            labels.append(f"[p{k}]")
+    for ps in ([] if track is not None else planned):
         if ps.narration.audio is None:
             continue
         k = len(inputs) // 2
@@ -245,6 +291,7 @@ def build_audio(planned: list[PlannedScene], music: dict | None, total: float, o
                        f"adelay={delay}:all=1[n{k}]")
         labels.append(f"[n{k}]")
     n_voice = len(labels)
+    music_index = inputs.count("-i")
     if music is not None:
         if music.get("is_url"):
             from .media import download
@@ -253,28 +300,70 @@ def build_audio(planned: list[PlannedScene], music: dict | None, total: float, o
             mpath = Path(music["path"])
         inputs += ["-stream_loop", "-1", "-i", str(mpath)]
     if n_voice == 0 and music is None:
-        return False
+        return None
     T = f"{total:.3f}"
     if n_voice:
         voice_mix = "".join(labels) + (f"amix=inputs={n_voice}:normalize=0:dropout_transition=0," if n_voice > 1 else "anull,")
         filters.append(f"{voice_mix}highpass=f=70,acompressor=threshold=-20dB:ratio=2.5:attack=5:release=90:makeup=1.5,"
                        f"apad=whole_dur={T},atrim=0:{T}[voice]")
     if music is not None:
-        mi = n_voice
+        mi = music_index
         vol = float(music.get("volume", 0.12))
         filters.append(f"[{mi}:a]aresample=48000,aformat=sample_fmts=fltp:channel_layouts=stereo,atrim=0:{T},"
                        f"volume={vol:.3f},afade=t=in:d=0.4,afade=t=out:st={max(0.0, total - 1.5):.3f}:d=1.5[mus]")
         if n_voice:
-            filters.append("[voice]asplit=2[vmain][vkey]")
-            filters.append("[mus][vkey]sidechaincompress=threshold=0.02:ratio=8:attack=25:release=450:makeup=1[duck]")
+            filters.append("[voice]asplit=3[vmain][vkey][vstem]")
+            filters.append("[mus][vkey]sidechaincompress=threshold=0.02:ratio=8:attack=25:release=450:makeup=1,"
+                           "asplit=2[duck][mstem]")
             filters.append("[vmain][duck]amix=inputs=2:normalize=0:dropout_transition=0[mix]")
         else:
             filters.append("[mus]anull[mix]")
     else:
         filters.append("[voice]anull[mix]")
-    run_ffmpeg([*inputs, "-filter_complex", ";".join(filters), "-map", "[mix]", "-t", T,
-                "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le", str(out_wav)], "audio mix")
-    return True
+    pcm = ["-t", T, "-ar", "48000", "-ac", "2", "-c:a", "pcm_s16le"]
+    stems = music is not None and n_voice > 0
+    vstem, mstem = out_wav.with_name("stem_voice.wav"), out_wav.with_name("stem_music.wav")
+    run_ffmpeg([*inputs, "-filter_complex", ";".join(filters), "-map", "[mix]", *pcm, str(out_wav),
+                *(["-map", "[vstem]", *pcm, str(vstem), "-map", "[mstem]", *pcm, str(mstem)] if stems else [])],
+               "audio mix")
+    words = [(ps.start + w.start, ps.start + w.end) for ps in planned for w in ps.words]
+    return {"clarity": clarity(vstem, mstem, words, warnings) if stems else None}
+
+
+CLARITY_TARGET = {"overall": 16.0, "worst": 10.0}  # dB voice over music, per spoken word
+
+
+def _rms_windows(path: Path, spans: list[tuple[float, float]]) -> list[float]:
+    import array
+    import wave
+
+    with wave.open(str(path), "rb") as w:
+        rate, ch = w.getframerate(), w.getnchannels()
+        data = array.array("h", w.readframes(w.getnframes()))
+    out = []
+    for a, b in spans:
+        i0, i1 = int(a * rate) * ch, int(b * rate) * ch
+        seg = data[i0:i1:ch * 4]  # every 4th frame of the left channel is plenty for an RMS
+        out.append(math.sqrt(sum(x * x for x in seg) / len(seg)) if seg else 0.0)
+    return out
+
+
+def clarity(voice_wav: Path, music_wav: Path, words: list[tuple[float, float]], warnings: list[str]) -> dict:
+    """Narration level minus (ducked) music level over each spoken word, in dB."""
+    spans = [(a, b) for a, b in words if b - a > 0.05]
+    if not spans:
+        return {}
+    v, m = _rms_windows(voice_wav, spans), _rms_windows(music_wav, spans)
+    db = lambda x, y: 20 * math.log10(max(x, 1e-6) / max(y, 1e-6))  # noqa: E731
+    per = [db(a, b) for a, b in zip(v, m)]
+    overall = db(math.sqrt(sum(x * x for x in v) / len(v)), math.sqrt(sum(x * x for x in m) / len(m)))
+    res = {"overall_db": round(min(overall, 99.0), 1), "worst_db": round(min(min(per), 99.0), 1),
+           "target": CLARITY_TARGET}
+    if res["overall_db"] < CLARITY_TARGET["overall"] or res["worst_db"] < CLARITY_TARGET["worst"]:
+        warnings.append(f"music competes with the voice: {res['overall_db']} dB overall / {res['worst_db']} dB "
+                        f"worst word (target >= {CLARITY_TARGET['overall']:.0f} / {CLARITY_TARGET['worst']:.0f}); "
+                        "lower music.volume")
+    return res
 
 
 def contact_sheet(video: Path, out: Path, planned: list[PlannedScene], fmt: Format, cols: int = 4) -> None:
@@ -355,7 +444,7 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
     ffmpeg = find_ffmpeg()
     chromium = chromium_or_raise()
 
-    planned = plan(spec, preview, warnings, build)
+    planned, track = plan(spec, preview, warnings, build)
     fps = planned[0].fps
     total_frames = sum(p.frames for p in planned)
     total = total_frames / fps
@@ -405,7 +494,8 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
 
     # audio
     mix = build / "mix.wav"
-    has_audio = build_audio(planned, spec.music, total, mix, warnings)
+    audio_info = build_audio(planned, spec.music, total, mix, warnings, track)
+    has_audio = audio_info is not None
     tmp_out = out.with_name(out.stem + ".part.mp4")
     mux = ["-i", str(video_only)]
     if has_audio:
@@ -458,7 +548,9 @@ def render(spec_path: str | Path, out: str | Path, preview: bool = False, worker
         "chapters": chapters,
         "frames": total_frames,
         "voice": {"provider": planned[0].narration.provider if planned else None,
-                  "voice": next((p.narration.voice for p in planned if p.narration.voice), None)},
+                  "voice": next((p.narration.voice for p in planned if p.narration.voice), None),
+                  **(track.report if track else {"mode": "scene"}),
+                  "clarity": (audio_info or {}).get("clarity")},
         "loudness": {"integrated_lufs": loud.get("input_i"), "true_peak_dbtp": loud.get("input_tp"),
                      "lra": loud.get("input_lra"), "target_lufs": TARGET_LUFS} if loud else None,
         "cover": {"scene": cps.scene.index, "time": round(ct, 3)},
@@ -494,7 +586,7 @@ def still(spec_path: str | Path, scene_index: int, t: float | None, out: str | P
     if not 0 <= scene_index < len(spec.scenes):
         raise StudioError(f"--scene must be 0..{len(spec.scenes) - 1}")
     build = out.parent / f".{out.stem}.still-build"
-    planned = plan(spec, preview, warnings, build)
+    planned, _ = plan(spec, preview, warnings, build)
     ps = planned[scene_index]
     tt = ps.duration * 0.6 if t is None else max(0.0, min(t, ps.duration - 1 / ps.fps))
     png = build / "still.png"

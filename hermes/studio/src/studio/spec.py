@@ -25,6 +25,8 @@ VOICE_PROVIDERS = ("edge", "elevenlabs", "none")
 CAPTION_STYLES = ("karaoke", "pop", "plain")
 CAPTION_POSITIONS = ("lower", "middle")
 TEXT_MODES = ("minimal", "full")
+VOICE_MODES = ("continuous", "scene")  # one take for the whole video | one take per scene
+VOICE_PAUSES = ("tight", "natural")  # shorten long pauses (default) | keep the take as spoken
 MEDIA_EXT_IMAGE = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".avif")
 MEDIA_EXT_VIDEO = (".mp4", ".mov", ".m4v", ".webm", ".mkv")
 
@@ -145,6 +147,24 @@ def load_spec(path: str | Path, check_files: bool = True) -> tuple[Spec | None, 
             errors.append(f"voice.rate: must look like '+10%' or '-5%', got {voice['rate']!r}")
         if isinstance(voice.get("pitch"), str) and not re.fullmatch(r"[+-]\d{1,3}Hz", voice["pitch"]):
             errors.append(f"voice.pitch: must look like '+0Hz' or '-2Hz', got {voice['pitch']!r}")
+        is_eleven = voice["provider"] == "elevenlabs"
+        voice.setdefault("mode", "continuous" if is_eleven else "scene")
+        voice.setdefault("pauses", "tight")
+        voice.setdefault("takes", 3)
+        if voice["mode"] not in VOICE_MODES:
+            errors.append(f"voice.mode: must be one of {list(VOICE_MODES)}")
+        elif voice["mode"] == "continuous" and not is_eleven:
+            errors.append("voice.mode 'continuous' needs provider 'elevenlabs' (edge returns no reliable "
+                          "word timings across sentences); use 'scene'")
+        if voice["pauses"] not in VOICE_PAUSES:
+            errors.append(f"voice.pauses: must be one of {list(VOICE_PAUSES)}")
+        if not isinstance(voice["takes"], int) or not 1 <= voice["takes"] <= 3:
+            errors.append("voice.takes: integer 1..3")
+        if "speed" in voice and not (isinstance(voice["speed"], (int, float)) and 0.7 <= voice["speed"] <= 1.2):
+            errors.append("voice.speed: number 0.7..1.2 (omit it to keep the provider's default speed)")
+        if is_eleven and v.get("rate") not in (None, "+0%"):
+            warnings.append("voice.rate is ignored for elevenlabs: narration keeps ElevenLabs' default speed "
+                            "(set voice.speed only if a voice is genuinely too slow)")
 
     # theme
     theme = raw.get("theme", "default")

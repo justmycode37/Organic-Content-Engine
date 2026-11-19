@@ -42,8 +42,8 @@
   --caption-size: 76px;
   --caption-weight: 800;
   --caption-fg: #ffffff;
-  --caption-active-bg: var(--accent);
-  --caption-active-fg: var(--accent-ink);
+  --caption-active-bg: #ffffff;  /* active karaoke word: white box, dark ink (owner direction 2026-11-19) */
+  --caption-active-fg: #0b0b0c;
 
   /* geometry (1080x1920 canvas). Instagram covers ~bottom 20% and right 12%. */
   --safe-top: 250px;      /* below the Reels header */

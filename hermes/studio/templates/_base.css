@@ -70,15 +70,23 @@ body {
 }
 
 /* Minimal text mode (default): footage and captions carry the Reel.
-   Secondary labels (kickers, dates, venues, deks, notes) are not rendered;
-   only the headline / one key value of a template stays. */
+   Secondary labels (kickers, dates, venues, deks, notes), media caption bars
+   (e.g. "$200 / month"), the wordmark bug and the accent rule above opening
+   titles are not rendered; only the headline / one key value of a template
+   stays. */
 .text-minimal .kicker,
 .text-minimal .dek,
-.text-minimal .tpl-headline .lines,
-.text-minimal .tpl-media .bar .label,
-.text-minimal .tpl-stat .context,
-.text-minimal .tpl-compare .note,
-.text-minimal .tpl-quote .role { display: none !important; }
+.text-minimal.tpl-headline .lines,
+.text-minimal.tpl-media .bar,
+.text-minimal .studio-bug,
+.text-minimal.tpl-hook .rule,
+.text-minimal.tpl-lf-open .rule,
+.text-minimal.tpl-stat .context,
+.text-minimal.tpl-compare .note,
+.text-minimal.tpl-quote .role { display: none !important; }
+/* Opening titles are plain white: no accent highlight. */
+.text-minimal.tpl-hook .hl,
+.text-minimal.tpl-lf-open .hl { color: inherit; }
 
 /* Longform (1920x1080, YouTube): wider safe area, smaller captions low in the
    frame, the wordmark bug in the top-left corner. YouTube draws its player
@@ -96,7 +104,7 @@ body {
 .format-longform .studio-source { left: 60px; bottom: 22px; font-size: 18px; }
 .format-longform .cap-chunk { max-width: 1400px; }
 .format-longform #captions.pos-middle { top: 540px; }
-.format-longform .tpl-media .card-slot { height: 680px; }
+.format-longform.tpl-media .card-slot { height: 680px; }
 
 /* ---------------------------------------------------------------- captions */
 #captions {

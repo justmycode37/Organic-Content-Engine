@@ -27,7 +27,7 @@ from typing import Any
 from .env import CACHE_DIR, StudioError, log
 from .ffmpeg import probe_duration
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3  # 3: default speed, neutral style, seeded takes, PCM output
 EDGE_FALLBACK_VOICE = "en-US-AndrewMultilingualNeural"
 
 RECOMMENDED_VOICES = [
@@ -46,7 +46,8 @@ RECOMMENDED_VOICES = [
     {"provider": "elevenlabs", "voice": "EXAVITQu4vr4xnVDxPEm", "name": "Sarah", "gender": "female", "style": "confident, soft US"},
     {"provider": "elevenlabs", "voice": "XrExE9yKIg1WjnnlVkGX", "name": "Matilda", "gender": "female", "style": "friendly, upbeat US"},
 ]
-RATE_NOTE = "voice.rate: '+0%'..'+20%' keeps a snappy news pace; '+10%' is the default."
+RATE_NOTE = ("voice.rate (edge only): '+0%'..'+20%'; '+10%' is the default. ElevenLabs keeps its default speed; "
+             "voice.speed (0.7..1.2) overrides it but is discouraged.")
 
 
 @dataclass
@@ -158,10 +159,16 @@ def estimate_words(text: str, wps: float = 2.8, offset: float = 0.0) -> list[Wor
 # ---------------------------------------------------------------- providers
 
 
-def _cache_key(provider: str, voice: dict[str, Any], text: str) -> str:
-    payload = json.dumps({"v": CACHE_VERSION, "p": provider, "voice": voice.get("voice"),
-                          "rate": voice.get("rate"), "pitch": voice.get("pitch"),
-                          "model": voice.get("model"), "text": text}, sort_keys=True)
+def _cache_key(provider: str, voice: dict[str, Any], text: str, take: int | None = None,
+               context: tuple[str, str] | None = None) -> str:
+    fields: dict[str, Any] = {"v": CACHE_VERSION, "p": provider, "voice": voice.get("voice"),
+                              "rate": voice.get("rate"), "pitch": voice.get("pitch"),
+                              "model": voice.get("model"), "speed": voice.get("speed"), "take": take,
+                              "settings": ELEVEN_SETTINGS if provider == "elevenlabs" else None,
+                              "text": text}
+    if context:  # only when set, so keys of unchunked narration stay stable
+        fields["context"] = list(context)
+    payload = json.dumps(fields, sort_keys=True)
     return hashlib.sha256(payload.encode()).hexdigest()[:32]
 
 
@@ -209,33 +216,67 @@ async def _edge(text: str, voice: dict[str, Any], out: Path) -> list[tuple[str, 
                       "(check the voice name with `studio voices` and network access)")
 
 
-def _rate_to_speed(rate: str) -> float:
-    m = re.fullmatch(r"([+-]\d+)%", rate or "+0%")
-    pct = int(m.group(1)) if m else 0
-    return max(0.7, min(1.2, 1 + pct / 100))
+ELEVEN_SETTINGS = {"stability": 0.5, "similarity_boost": 0.75, "style": 0.0, "use_speaker_boost": True}
+ELEVEN_FORMATS = ("pcm_44100", "mp3_44100_192", "mp3_44100_128")  # best first; pcm needs a paid tier
+_REFUSED_FORMATS: set[str] = set()  # formats this account refused (asked once per process)
 
 
-def _elevenlabs(text: str, voice: dict[str, Any], out: Path) -> list[tuple[str, float, float]]:
+def _write_pcm_wav(raw: bytes, out: Path, rate: int = 44100) -> None:
+    import wave
+
+    with wave.open(str(out), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(rate)
+        w.writeframes(raw)
+
+
+def _elevenlabs(text: str, voice: dict[str, Any], out: Path, seed: int | None = None,
+                context: tuple[str, str] | None = None) -> tuple[list[tuple[str, float, float]], Path]:
+    """Synthesize ``text``; returns (word timings, audio file). ``out`` is the file stem.
+
+    Speed is left at ElevenLabs' default unless ``voice.speed`` is set: a global
+    speed-up makes a voice sound rushed, and the video may simply run longer.
+    """
     import httpx
 
     key = os.environ["ELEVENLABS_API_KEY"]
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{voice['voice']}/with-timestamps"
-    body = {
-        "text": text,
-        "model_id": voice.get("model", "eleven_multilingual_v2"),
-        "voice_settings": {"stability": 0.45, "similarity_boost": 0.8, "style": 0.15,
-                           "use_speaker_boost": True, "speed": _rate_to_speed(voice.get("rate", "+0%"))},
-    }
+    settings = dict(ELEVEN_SETTINGS)
+    if isinstance(voice.get("speed"), (int, float)):
+        settings["speed"] = float(voice["speed"])
+    body: dict[str, Any] = {"text": text, "model_id": voice.get("model", "eleven_multilingual_v2"),
+                            "voice_settings": settings}
+    if seed is not None:
+        body["seed"] = seed
+    if context:  # neighbouring text keeps intonation continuous across chunk boundaries
+        if context[0]:
+            body["previous_text"] = context[0]
+        if context[1]:
+            body["next_text"] = context[1]
     last: Exception | None = None
-    for attempt in range(3):
+    formats = [f for f in ELEVEN_FORMATS if f not in _REFUSED_FORMATS] or [ELEVEN_FORMATS[-1]]
+    attempt = 0
+    while formats and attempt < 4:
+        fmt = formats[0]
         try:
-            r = httpx.post(url, params={"output_format": "mp3_44100_128"}, json=body,
-                           headers={"xi-api-key": key, "accept": "application/json"}, timeout=120)
+            r = httpx.post(url, params={"output_format": fmt}, json=body,
+                           headers={"xi-api-key": key, "accept": "application/json"}, timeout=180)
+            if r.status_code in (400, 403, 422) and len(formats) > 1:
+                log(f"ElevenLabs refused output_format {fmt} (HTTP {r.status_code}); trying {formats[1]}")
+                _REFUSED_FORMATS.add(formats.pop(0))  # e.g. PCM is not available on this plan
+                continue
             if r.status_code in (401, 403, 404, 422):
                 raise StudioError(f"ElevenLabs HTTP {r.status_code}: {r.text[:300]}")
             r.raise_for_status()
             data = r.json()
-            out.write_bytes(base64.b64decode(data["audio_base64"]))
+            raw = base64.b64decode(data["audio_base64"])
+            if fmt.startswith("pcm_"):
+                audio = out.with_suffix(".wav")
+                _write_pcm_wav(raw, audio, int(fmt.split("_")[1]))
+            else:
+                audio = out.with_suffix(".mp3")
+                audio.write_bytes(raw)
             al = data.get("alignment") or data.get("normalized_alignment") or {}
             chars = al.get("characters", [])
             cs = al.get("character_start_times_seconds", [])
@@ -254,17 +295,28 @@ def _elevenlabs(text: str, voice: dict[str, Any], out: Path) -> list[tuple[str, 
                 en = b
             if cur:
                 words.append((cur, st, en))
-            return words
+            return words, audio
         except StudioError:
             raise
         except Exception as e:
             last = e
-            time.sleep(2 * (attempt + 1))
+            attempt += 1
+            time.sleep(2 * attempt)
     raise StudioError(f"ElevenLabs request failed: {last}")
 
 
-def synthesize(text: str, voice: dict[str, Any], warnings: list[str]) -> Narration:
-    """Synthesize one scene's narration (blocking; edge runs its own event loop)."""
+def take_seed(text: str, take: int) -> int:
+    """Deterministic per-take seed: a re-render reproduces a take, a new take sounds different."""
+    return int(hashlib.sha256(f"{take}:{text}".encode()).hexdigest()[:8], 16)
+
+
+def synthesize(text: str, voice: dict[str, Any], warnings: list[str], take: int | None = None,
+               context: tuple[str, str] | None = None) -> Narration:
+    """Synthesize narration (blocking; edge runs its own event loop).
+
+    ``take`` (elevenlabs only) selects a seeded take; takes are cached separately.
+    ``context`` (elevenlabs only) is the (previous, next) text around a chunk of a longer narration.
+    """
     provider = voice.get("provider", "edge")
     if not text.strip():
         return Narration(None, 0.0, [], provider, voice.get("voice", ""))
@@ -280,12 +332,15 @@ def synthesize(text: str, voice: dict[str, Any], warnings: list[str]) -> Narrati
 
     tts_dir = CACHE_DIR / "tts"
     tts_dir.mkdir(parents=True, exist_ok=True)
-    key = _cache_key(provider, voice, text)
+    key = _cache_key(provider, voice, text, take, context if provider == "elevenlabs" else None)
     audio = tts_dir / f"{key}.mp3"
     meta = tts_dir / f"{key}.json"
-    if audio.is_file() and meta.is_file():
+    if meta.is_file():
         m = json.loads(meta.read_text())
-        return Narration(audio, m["duration"], [Word(**w) for w in m["words"]], provider, voice["voice"], cached=True)
+        cached_audio = Path(m.get("audio") or audio)
+        if cached_audio.is_file():
+            return Narration(cached_audio, m["duration"], [Word(**w) for w in m["words"]], provider, voice["voice"],
+                             cached=True)
 
     if provider == "edge":
         # Edge outages are usually short. Keep the same voice (a voice change
@@ -300,12 +355,13 @@ def synthesize(text: str, voice: dict[str, Any], warnings: list[str]) -> Narrati
                 log(f"edge-tts unavailable, retrying the scene in {wait}s")
                 time.sleep(wait)
     else:
-        spoken = _elevenlabs(text, voice, audio)
+        spoken, audio = _elevenlabs(text, voice, tts_dir / key, take_seed(text, take) if take else None,
+                                    context)
     duration = probe_duration(audio)
     words = align_tokens(text, spoken)
     if not words:
         warnings.append(f"no word timings returned for: {text[:40]!r}; captions estimated")
         words = estimate_words(text, wps=len(text.split()) / max(duration, 0.5))
-    meta.write_text(json.dumps({"duration": duration, "words": [w.to_json() for w in words],
+    meta.write_text(json.dumps({"duration": duration, "words": [w.to_json() for w in words], "audio": str(audio),
                                 "provider": provider, "voice": voice["voice"], "text": text}, indent=1))
     return Narration(audio, duration, words, provider, voice["voice"])

@@ -67,7 +67,7 @@ bin/studio voices                                    # recommended voices
 | `OUT.contact.jpg` | 12 evenly spaced frames with timestamps and scene names, for vision QA |
 | `OUT.captions.srt` | caption chunks with global timings |
 | `OUT.chapters.txt` | YouTube chapter list (`0:00 Intro` …), only when scenes have a `chapter` |
-| `OUT.report.json` | format, duration, chapters, per-scene timings, loudness, voice, warnings, render time |
+| `OUT.report.json` | format, duration, chapters, per-scene timings, loudness, voice (takes, pacing problems, chosen take, removed silence, voice-over-music clarity), warnings, render time |
 
 `render --keep-build` keeps `OUT.build/` (scene HTML pages and segments) for
 debugging; open a scene page in a browser to inspect it.
@@ -114,9 +114,13 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `format` | `reel` \| `longform` | `reel` | `reel` = 1080x1920, 15-90 s, ≤ 40 scenes; `longform` = 1920x1080 YouTube, 120-1800 s, ≤ 240 scenes, `lf-*` templates, chapters |
 | `voice.provider` | `edge` \| `elevenlabs` \| `none` | `edge` | `none` = silent, captions use estimated timings |
 | `voice.voice` | string | `en-US-AndrewMultilingualNeural` | Edge voice name or ElevenLabs `voice_id` |
-| `voice.rate` | `"+10%"` | `+10%` | speaking rate (ElevenLabs: mapped to `speed` 0.7-1.2) |
+| `voice.mode` | `continuous` \| `scene` | `continuous` for ElevenLabs, else `scene` | `continuous` speaks the whole narration as one connected take and cuts the scenes in its pauses (ElevenLabs only); `scene` synthesizes every scene separately |
+| `voice.pauses` | `tight` \| `natural` | `tight` | continuous only. `tight` trims silence at the edges and shortens long pauses (sentence ends to 0.30 s, commas/dashes to 0.18 s); `natural` keeps the take as spoken |
+| `voice.takes` | 1-3 | 3 | continuous only: seeded takes; the first take without pacing problems wins (sentence end < 0.18 s pause, or > 0.60 s pause inside a clause), else the one with fewest problems |
+| `voice.speed` | 0.7-1.2 | unset | ElevenLabs only; leave unset - the voice's default speed sounds most natural |
+| `voice.rate` | `"+10%"` | `+10%` | Edge only (ignored with a warning for ElevenLabs) |
 | `voice.pitch` | `"+0Hz"` | `+0Hz` | Edge only |
-| `voice.model` | string | `eleven_multilingual_v2` | ElevenLabs only |
+| `voice.model` | string | `eleven_multilingual_v2` | ElevenLabs only, e.g. `eleven_v4` |
 | `theme` | string | `default` | `themes/<theme>.css` |
 | `music` | `{path, volume}` | none | path relative to the spec or URL; looped, faded, ducked under the voice |
 | `captions.enabled` | bool | `true` | burned-in captions on/off (SRT is always written) |
@@ -125,9 +129,9 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `captions.position` | `lower` \| `middle` | `lower` | lower = just above Instagram's bottom UI |
 | `captions.uppercase` | bool | `false` | |
 | `brand` | `{wordmark, handle, bug}` | `FRONTIER FEED`, `""` (hidden), `true` | corner bug and outro text |
-| `text` | `minimal` \| `full` | `minimal` | `minimal` hides secondary labels (kickers, deks, media labels, stat context, compare notes, quote roles) and shows headline media full-bleed; `full` restores the old card layouts |
+| `text` | `minimal` \| `full` | `minimal` | `minimal` hides the wordmark bug, media caption bars, the accent rule and highlight colour of opening titles (`hook`, `lf-open`) and secondary labels (kickers, deks, stat context, compare notes, quote roles) and shows headline media full-bleed; `full` restores the old card layouts |
 | `fps` | 24/25/30/60 | 30 | keep 30 for Instagram |
-| `lead` | seconds | 0.12 | default silence before each scene's narration |
+| `lead` | seconds | 0.12 | default silence before each scene's narration (continuous voice: only before the first scene) |
 
 ### Scene
 
@@ -138,7 +142,7 @@ A complete 8-scene example using every main template: `examples/example.json`.
 | `props` | object | template props (validated against the template contract) |
 | `media` | string or object | path (relative to the spec), or URL (downloaded to `cache/`). Object form: `{"src", "start" (video in-point s), "fit": "cover"\|"contain", "position" (CSS object-position), "kind": "image"\|"video"}` |
 | `min_duration` | seconds | default 1.5; the scene lasts `max(min_duration, lead + speech + hold)` |
-| `hold` | seconds | default 0.35; pause after the narration before the cut |
+| `hold` | seconds | default 0.35; pause after the narration before the cut (continuous voice: only after the last scene; inner cuts sit in the middle of the spoken pause) |
 | `lead` | seconds | override the global lead for this scene |
 | `cover` | bool | use this scene for `OUT.cover.jpg` (default: first scene) |
 | `cover_time` | seconds | frame time for the cover (default 0.9 s for hooks, 1.4 s otherwise) |
@@ -154,7 +158,7 @@ real length exceeds 90 s and warns below 15 s. Target 25-45 s for news.
 | --- | --- | --- |
 | `hook` | opener; headline fully visible on frame 1 | `headline` (2-6 words), `highlight`, `kicker`, `uppercase`, `motion`, `align` (`bottom` default / `top`: text at the top, media's lower-middle stays clear — for 16:9 clips whose subject sits low in the 9:16 crop); optional media full-bleed |
 | `headline` | the news itself | `headline`, `kicker`, `dek`, `highlight`; optional media as an image card |
-| `media` | screenshot / photo / clip | media required; `caption`, `label`, `motion` (in/out/left/right/push/pan/none; `push`/`pan` are strong camera moves that make a still feel like footage), `frame` (full/card) |
+| `media` | screenshot / photo / clip | media required; `caption`, `label` (both only shown in `text: full`), `motion` (in/out/left/right/push/pan/none; `push`/`pan` are strong camera moves that make a still feel like footage), `frame` (full/card) |
 | `stat` | one big number, counts up | `value` ("$2.5B", "87%"), `label`, `kicker`, `context` |
 | `quote` | quote + attribution | `quote`, `name`, `role`, `highlight`; optional media as round portrait |
 | `list` | 2-4 items revealing | `items`, `title`, `kicker`, `item_times`; items appear when the narration mentions them |
@@ -183,7 +187,7 @@ it cannot fit at the minimum size: shorten the text in that case.
 ### Layout and safe zones
 
 Long-form (1920x1080): content area x 120..1800, y 96..830; captions centred on
-y = 930 at 50 px; wordmark bug top-left; credit line at the bottom-left above
+y = 930 at 50 px; wordmark bug top-left (`text: full` only); credit line at the bottom-left above
 YouTube's player controls. The rest of this section describes the reel canvas.
 
 Canvas 1080x1920. Instagram covers roughly the top 230 px (header), the bottom
@@ -192,7 +196,7 @@ Canvas 1080x1920. Instagram covers roughly the top 230 px (header), the bottom
 - content area: `.content` = x 72..940, y 250..1190 (`--safe-*`, `--content-bottom`)
 - source label: bottom edge (y ≈ 1860), 19 px, 50 % opacity
 - captions: centered on y = 1395 (`--caption-center`), above the bottom UI
-- wordmark bug: top-left at y = 168
+- wordmark bug: top-left at y = 168 (`text: full` only)
 
 ### Writing or editing a template
 
@@ -254,13 +258,26 @@ Everything brand-related is in `themes/default.css`: palette (`--bg`, `--fg`,
 
 ## How rendering works
 
-1. **Narration**: per scene via edge-tts (`WordBoundary` events) or ElevenLabs
+1. **Narration** (ElevenLabs, `voice.mode: continuous`, the default): the narration
+   of all scenes is spoken as one connected take, so intonation never restarts at
+   a cut. Up to `voice.takes` seeded takes are generated and checked on their word
+   timings; long narration (long-form) is spoken in chunks of ~2,400 characters
+   split at scene boundaries, each sent with the neighbouring text as context, and
+   the chosen chunks are joined. `pauses: tight` then cuts the middle out of long
+   pauses. Scene cuts sit in the middle of the pause between two scenes, and the
+   pieces of the take are placed on the video timeline in one audio pass. The
+   report records every take, its pacing problems, the chosen take, the removed
+   silence and the voice-over-music clarity (target ≥ 16 dB overall, ≥ 10 dB in
+   the worst window).
+
+   `voice.mode: scene` (and Edge): per scene via edge-tts (`WordBoundary` events) or ElevenLabs
    `/with-timestamps` (character alignment). Cached in `cache/tts/` by
    hash(provider, voice, rate, pitch, text). Provider timings are mapped back
    onto the narration's own tokens so captions keep casing and symbols.
    The Edge endpoint sometimes rejects valid requests; the studio retries with
    inaudible variants (same voice) before giving up.
-2. **Timeline**: scene duration = lead + speech + hold (≥ `min_duration`), rounded
+2. **Timeline**: scene duration = lead + speech + hold (≥ `min_duration`; continuous
+   voice: from mid-pause to mid-pause, lead/hold only at the ends), rounded
    to whole frames. Captions: 2-4 words per chunk, broken at punctuation and pauses.
 3. **Media**: URLs downloaded to `cache/downloads/`; images normalized with Pillow;
    videos trimmed/scaled/exploded to JPEG frames with ffmpeg (deterministic and
