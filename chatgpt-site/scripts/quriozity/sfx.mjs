@@ -1,4 +1,4 @@
-// QURIOZITY sound library: every effect is an ElevenLabs sound-generation clip, cached by prompt.
+// QURIOZITY sound library: cached ElevenLabs effects and original procedural effects.
 // Owner rule (2026-11-14): effects are NON-MUSICAL — clicks, snaps, taps, thuds, whooshes, noise risers,
 // cracks, rustles. Never notes, chimes, beeps, hums, tones or synth stabs. Prompts say so, custom prompts with
 // musical words are rejected, and every generated clip passes a pitch detector (tonality.mjs) or is regenerated.
@@ -6,7 +6,9 @@ import {createHash} from 'node:crypto';
 import {access,mkdir,writeFile,readFile} from 'node:fs/promises';
 import {spawn} from 'node:child_process';
 import {join} from 'node:path';
+import {writeAtomic} from './atomic-file.mjs';
 import {tonality} from './tonality.mjs';
+import {PROCEDURAL_SFX,PROCEDURAL_SFX_VERSION,renderProceduralSfx} from './procedural-sfx.mjs';
 
 const STYLE=', one short non-musical sound effect, unpitched and atonal, dry and clean, no musical notes, no tones, no melody, no chime, no bell, no beep, no hum, no synth, no music, no voice';
 const STRICT=', purely mechanical or physical noise with no pitch at all';
@@ -28,8 +30,8 @@ export const QURIOZITY_SFX={
 };
 /** Older or exotic kinds (from automatic cues or earlier specs) fold into the simple set. */
 export const SFX_ALIAS={materialize:'pop',assemble:'click',shatter:'snap',dissolve:'swish',drop:'thump',backspace:'type',box:'click',glitch:'click','power-on':'click',chair:'tap',crack:'snap',shimmer:'swish',heartbeat:'thump',shockwave:'hit',ripple:'pop',rattle:'tap',glint:'swish',scan:'whoosh',charge:'riser',rustle:'swish',splash:'pop'};
-export const SFX_KINDS=Object.keys(QURIOZITY_SFX);
-export const simpleKind=(kind,length)=>QURIOZITY_SFX[kind]?kind:SFX_ALIAS[kind]??((length??0.5)>0.8?'whoosh':'click');
+export const SFX_KINDS=[...Object.keys(QURIOZITY_SFX),...Object.keys(PROCEDURAL_SFX)];
+export const simpleKind=(kind,length)=>Object.hasOwn(QURIOZITY_SFX,kind)||Object.hasOwn(PROCEDURAL_SFX,kind)?kind:SFX_ALIAS[kind]??((length??0.5)>0.8?'whoosh':'click');
 /** Words that describe musical or pitched sounds; a custom prompt containing one is not used. */
 export const MUSICAL=/\b(notes?|melod\w*|music\w*|tones?|tonal|chimes?|bells?|beeps?|bleeps?|boops?|ding\w*|dings|pings?|ring|rings|ringing|hum|hums|humming|drone|whine|synth\w*|chord\w*|arpeggi\w*|piano|harp|guitar|string|pluck\w*|glissando|sparkl\w*|twinkl\w*|shimmer\w*|jingle|xylophone|marimba|glockenspiel|pad|pads|tune|tuned|sing|sings|singing|whistl\w*|resonan\w*|sine|harmonic\w*|orchestra\w*|fanfare|stinger|celesta)\b/i;
 export const isMusicalPrompt=p=>MUSICAL.test(p??'');
@@ -62,9 +64,18 @@ export function sfxLibrary(cacheDir,key,{onUsage,onReject}={}){
  }
  /** A ready-to-mix WAV: leading silence removed, trimmed to length with a fade. Only simple library kinds are
   *  used; custom prompts are ignored. Null if no note-free take exists. */
- async function clip({kind,prompt,length}){
-  const k=simpleKind(kind,length);
-  if(prompt){rejected.push({prompt,reason:'custom prompt (simple library only)'});}
+ async function clip({kind,prompt,length,variant=0}){
+  // Automatic cues carry explicit event presets in the prompt field.
+  const authoredPreset=kind==null&&Object.hasOwn(PROCEDURAL_SFX,prompt);
+  const k=simpleKind(authoredPreset?prompt:kind,length);
+  if(prompt&&!authoredPreset){rejected.push({prompt,reason:'custom prompt (simple library only)'});}
+  if(Object.hasOwn(PROCEDURAL_SFX,k)){
+   const len=Math.max(0.15,Math.min(8,length??PROCEDURAL_SFX[k].seconds));
+   const slot=Number.isInteger(variant)?((variant%8)+8)%8:0;
+   const file=join(cacheDir,`procedural-${hash({version:PROCEDURAL_SFX_VERSION,kind:k,len,slot})}.wav`);
+   if(!await exists(file))await writeAtomic(file,renderProceduralSfx(k,len,slot));
+   return file;
+  }
   const d=QURIOZITY_SFX[k];let src=await raw(d.prompt,d.seconds);
   if(!src&&k!=='click')src=await raw(QURIOZITY_SFX.click.prompt,QURIOZITY_SFX.click.seconds);
   if(!src)return null;

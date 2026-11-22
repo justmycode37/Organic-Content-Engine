@@ -13,6 +13,7 @@ import {join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {stills,renderVideo,buildRenderBundle} from './render.mjs';
 import {sfxLibrary,SFX_KINDS} from './sfx.mjs';
+import {PROCEDURAL_SFX} from './procedural-sfx.mjs';
 import {loadCatalog} from './catalog.mjs';
 import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
@@ -144,7 +145,7 @@ async function mix({voice,lead,cues,sfx,bed,total,out,stems,levels=MIX_DEFAULTS}
  const inputs=['-i',voice.audio],filters=[`[0:a]aresample=48000,adelay=${Math.round(lead*1000)}:all=1,highpass=f=80,equalizer=f=250:t=q:w=1.2:g=-2,equalizer=f=3200:t=q:w=1:g=3,acompressor=threshold=0.12:ratio=3:attack=6:release=120:makeup=1.5,loudnorm=I=-16:TP=-2:LRA=7,apad=whole_dur=${total.toFixed(3)},atrim=0:${total.toFixed(3)}[voice]`];
  const fx=[];const sfxGain=10**(levels.sfxDb/20);
  for(const [i,c] of cues.entries()){
-  const file=await sfx.clip(c);if(!file)continue;const k=inputs.length/2;inputs.push('-i',file);
+  const file=await sfx.clip({...c,variant:i});if(!file)continue;const k=inputs.length/2;inputs.push('-i',file);
   const pan=[-0.18,0,0.18][i%3];
   filters.push(`[${k}:a]aresample=48000,aformat=channel_layouts=stereo,highpass=f=30,lowpass=f=11000,stereotools=balance_out=${pan},volume=${(sfxGain*(c.gain??0.6)).toFixed(4)},adelay=${Math.round(c.at*1000)}:all=1[f${k}]`);fx.push(`[f${k}]`);
  }
@@ -349,10 +350,12 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const {autoCues}=await import('../../src/quriozity/cues.ts');
  const sfx=sfxLibrary(join(AUDIO_CACHE,'sfx'),key,{onUsage:usage,onReject:r=>log(`sfx rejected (musical): ${r.prompt}`)});
  const timeline=timelineText(spec);await writeFile(join(workdir,'timeline.txt'),timeline);
+ const proceduralGuide=Object.entries(PROCEDURAL_SFX).map(([kind,{seconds,description}])=>`${kind} (${seconds}s): ${description}`).join('\n');
+ const soundContext=`${timeline}\nProcedural library effects:\n${proceduralGuide}`;
  const cueFile=join(workdir,'cues.designed.json');
  if(!await exists(cueFile)){
   const auto=autoCues(spec);
-  const designed=ask?await measure('sound design',()=>gen.designSound(ask,timeline,auto,SFX_KINDS)):auto;
+  const designed=ask?await measure('sound design',()=>gen.designSound(ask,soundContext,auto,SFX_KINDS)):auto;
   // the answer moment: one tasteful hit on the final scene's first event or start
   await writeFile(cueFile,JSON.stringify(governCues(designed,total),null,1));
  }
@@ -363,7 +366,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
   log(`mix v1 (${cues.length} cues)`);
   const c1=await measure('mix calibration and effects preparation',()=>calibrateMix({voice,lead:timed.lead,cues,sfx,bed,total,out:audio},log));
   const stats=await mixStats(audio,cues,total,!!bed,c1.clarity);provenance.mixStatsV1=stats;await save();
-  if(ask){log(`${reviewLabel}: sound review`);cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,timeline,cues,stats)),total);}
+  if(ask){log(`${reviewLabel}: sound review`);cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,soundContext,cues,stats)),total);}
   await writeFile(finalCues,JSON.stringify(cues,null,1));
  }
  cues=await readJson(finalCues);
