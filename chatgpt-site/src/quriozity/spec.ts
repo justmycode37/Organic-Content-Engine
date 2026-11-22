@@ -272,6 +272,8 @@ export function estimateWords(say:string,dur:number){
  return parts.map((text,i)=>({text,start:0.15+i*per,end:0.15+(i+0.9)*per}));
 }
 
+/** Default entrance start: staggered reveals, but a hard-cut entrance is present from the scene's first frame (no blank cut frames). */
+export function defaultEnterAt(enter:string,index:number,dur:number){return enter==='cut'?0:Math.min(0.08+index*0.12,dur*0.4);}
 export function sceneDuration(scene:Scene){
  if(scene.duration)return scene.duration;
  const n=scene.say.split(/\s+/).filter(Boolean).length;return Math.max(1.8,n/2.7+0.5);

@@ -14,7 +14,9 @@ import {createHash} from 'node:crypto';
 import {drawText,drawCaptions} from '../src/quriozity/text.ts';
 import {onionDensityResponse} from '../src/quriozity/models/onion.ts';
 import {applyStyleProfile} from '../src/quriozity/style-profile.ts';
-import {planCameras} from '../src/quriozity/camera-direction.ts';
+import {planCameras,cameraProblems} from '../src/quriozity/camera-direction.ts';
+import {transitionProblems} from '../src/quriozity/shot-transitions.ts';
+import {defaultEnterAt} from '../src/quriozity/spec.ts';
 import {planTransitions} from '../src/quriozity/shot-transitions.ts';
 import {applyVisualPatches} from '../worker/quriozity-visual-patches.ts';
 
@@ -172,6 +174,46 @@ test('patches can append/remove visual items and invalid resulting scenes cannot
   const result=await repairVisuals(async()=>JSON.stringify(proposal),spec,bad,catalogue,VISUAL_REVIEW_STAGES[0],[]);
   assert.equal(result.valid,false,JSON.stringify(proposal));
  }
+});
+
+test('a protected light patch is dropped while the rest of the repair survives',async()=>{
+ const spec=reel();
+ const result=await repairVisuals(async(_step,prompt,_max,_format,_images,context)=>{
+  assert.match(context.prefix,/Only these scene fields are editable: camera, objects/);
+  const [scene]=JSON.parse(prompt.split('Editable scenes: ')[1]);
+  assert.ok(!scene.light?.exposure&&!scene.raster?.cell,'Locked profile fields are not offered as patch targets');
+  return JSON.stringify({patches:[{scene:1,path:'/light/exposure',op:'set',valueJson:'1.3'},{scene:1,path:'/objects/0/scale',op:'set',valueJson:'0.8'}]});
+ },spec,bad,catalogue,VISUAL_REVIEW_STAGES[3],[]);
+ assert.equal(result.valid,true,JSON.stringify(result.problems));
+ assert.equal(result.spec.scenes[0].objects[0].scale,.8);
+ assert.equal(result.spec.scenes[0].light?.exposure,spec.scenes[0].light?.exposure);
+ assert.deepEqual(result.dropped.map(d=>d.path),['/light/exposure']);assert.match(result.dropped[0].reason,/Protected/);
+ assert.deepEqual(result.changes,['scene 1: set /objects/0/scale']);
+});
+
+test('a repair that introduces a jump cut keeps its other fixes and never ships the new camera conflict',async()=>{
+ const spec=reel(),scene2={...bad,findings:[{...bad.findings[0],scene:2}]};
+ const result=await repairVisuals(async()=>JSON.stringify({patches:[
+  {scene:2,path:'/camera',op:'set',valueJson:JSON.stringify({angle:'three-quarter',fill:0.86})},
+  {scene:2,path:'/objects/0/scale',op:'set',valueJson:'0.7'},
+ ]}),spec,scene2,catalogue,VISUAL_REVIEW_STAGES[1],[]);
+ assert.equal(result.valid,true,JSON.stringify(result.problems));
+ assert.equal(result.spec.scenes[1].objects[0].scale,.7);
+ assert.deepEqual([...cameraProblems(result.spec),...transitionProblems(result.spec)],[]);
+ assert.ok(result.adjustments.length||result.dropped.some(d=>d.path==='/camera'),'The conflict is resolved visibly, not silently');
+ assert.deepEqual(result.spec.scenes.filter((_s,i)=>i!==1),spec.scenes.filter((_s,i)=>i!==1),'Untouched scenes keep their reviewed shots');
+});
+
+test('problems that existed before a repair do not block an unrelated valid fix',async()=>{
+ const spec=reel();spec.scenes[1].camera=structuredClone(spec.scenes[0].camera);
+ const before=[...cameraProblems(spec),...transitionProblems(spec)];assert.ok(before.length);
+ const result=await repairVisuals(async()=>JSON.stringify(patch('/objects/0/scale',.85,5)),spec,{...bad,findings:[{...bad.findings[0],scene:5}]},catalogue,VISUAL_REVIEW_STAGES[0],[]);
+ assert.equal(result.valid,true,JSON.stringify(result.problems));assert.equal(result.spec.scenes[4].objects[0].scale,.85);
+});
+
+test('hard-cut entrances are on screen from the first frame of their scene',()=>{
+ assert.equal(defaultEnterAt('cut',0,5),0);assert.equal(defaultEnterAt('cut',3,5),0);
+ assert.equal(defaultEnterAt('materialize',0,5),.08);assert.ok(Math.abs(defaultEnterAt('materialize',2,5)-.32)<1e-9);
 });
 
 test('the single accepted visual repair is rendered and reviewed again',()=>temporary(async workdir=>{

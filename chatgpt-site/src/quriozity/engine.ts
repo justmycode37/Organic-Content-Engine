@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {MeshSurfaceSampler} from 'three/examples/jsm/math/MeshSurfaceSampler.js';
-import {HUES,resolveAt,sceneDuration,type QuriozitySpec,type Scene,type SceneObject,type SceneEvent,type CameraMove,type Hue,type Vec3} from './spec.ts';
+import {HUES,defaultEnterAt,resolveAt,sceneDuration,type QuriozitySpec,type Scene,type SceneObject,type SceneEvent,type CameraMove,type Hue,type Vec3} from './spec.ts';
 import {findModel} from './models/index.ts';
 import type {Built,ModelCtx,PoseState,ModelDef} from './models/types.ts';
 import {clamp,lerp,ease,deg,rng,seedOf,smooth,type MatOpts} from './kit.ts';
@@ -324,7 +324,7 @@ class SceneRuntime {
   const morphTargets=new Set((this.spec.events??[]).map(e=>e.morph).filter(Boolean) as string[]);
   this.objs.forEach((o,i)=>{
    const enter=morphTargets.has(o.spec.id)?'none':(o.spec.enter??'materialize');
-   if(enter!=='none'){const t0=this.at(o.spec.enterAt,Math.min(0.08+i*0.12,dur*0.4));o.fx.push({kind:enter,out:false,t0,t1:t0+(o.spec.enterDur??fxLen(enter))});}
+   if(enter!=='none'){const t0=this.at(o.spec.enterAt,defaultEnterAt(enter,i,dur));o.fx.push({kind:enter,out:false,t0,t1:t0+(o.spec.enterDur??fxLen(enter))});}
    if(o.spec.exit&&o.spec.exit!=='none'){const t0=this.at(o.spec.exitAt,Math.max(0,dur-0.75));o.fx.push({kind:o.spec.exit,out:true,t0,t1:t0+(o.spec.exitDur??fxLen(o.spec.exit))});}
   });
   const evs=[...(this.spec.events??[])].map((e,i)=>({e,i,t:0}));

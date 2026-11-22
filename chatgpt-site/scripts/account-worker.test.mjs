@@ -6,7 +6,7 @@ import {tmpdir} from 'node:os';
 import {runOnce} from './account-worker.mjs';
 import {runAccountCommand} from './account-worker-evidence.mjs';
 import {hedgyClient} from '../worker/hedgy-model-client.ts';
-import {createReelSubscription} from './reel-subscription.mjs';
+import {createReelSubscription,waitForNetwork} from './reel-subscription.mjs';
 
 const job={id:'test-job',lease:'private-lease',account:{id:'hedgy',topic:'finance'},scheduledAt:'2026-11-16T11:15:00.000Z'};
 const secret='private-key-with-"quotes"-and-\\slashes';
@@ -15,7 +15,7 @@ const config={headers:{authorization:'Bearer worker-secret-value','OAI-Sites-Aut
 async function fixture(run){
  const cacheRoot=await mkdtemp(join(tmpdir(),'oce-account-test-')),calls=[],logs=[];
  const fetchSite=async(_config,path,init)=>{calls.push({path,init});return Response.json(path.endsWith('/claim')?{job}:{});};
- const options={cacheRoot,env,fetchSite,subscription:null,log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
+ const options={cacheRoot,env,fetchSite,subscription:null,keepAwake:()=>()=>{},sleep:async()=>{},log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
  try{await run({cacheRoot,calls,logs,options});}finally{await rm(cacheRoot,{recursive:true,force:true});}
 }
 const stream=(events,{crlf=false,split=13,finalNewline=true}={})=>{
@@ -47,7 +47,7 @@ const claudeRequest={provider:'anthropic',step:'visual-realization',model:'claud
 test('subscription runners isolate credentials and stop using only the exhausted provider until its reset',async()=>{
  let time=1000;
  const commands=[];
- const ask=createReelSubscription({env,now:()=>time,run:async(bin,args,config)=>{
+ const ask=createReelSubscription({env,now:()=>time,online:async()=>false,run:async(bin,args,config)=>{
   commands.push({bin,args,config});
   assert.equal(config.env.OPENAI_API_KEY,undefined);
   assert.equal(config.env.ACCOUNT_WORKER_TOKEN,undefined);
@@ -75,13 +75,43 @@ test('subscription runners isolate credentials and stop using only the exhausted
 test('Claude needs an explicit exhausted plan window and no output or retry before API fallback',async()=>{
  const quota={type:'rate_limit_event',rate_limit_info:{status:'rejected',errorCode:'credits_required',rateLimitType:'five_hour',resetsAt:10}};
  const failure={type:'result',subtype:'error_during_execution',is_error:true,api_error_status:429,errors:['Usage limit']};
- const create=(events,authMethod='claude.ai')=>createReelSubscription({run:async(_bin,args)=>args[0]==='auth'?
+ const create=(events,authMethod='claude.ai')=>createReelSubscription({online:async()=>false,run:async(_bin,args)=>args[0]==='auth'?
   ndjson([{loggedIn:true,authMethod,apiProvider:'firstParty'}]):ndjson(events,1)});
  assert.equal((await create([quota,failure])(claudeRequest)).status,'subscription_exhausted');
  await assert.rejects(create([failure])(claudeRequest),/did not complete/);
  await assert.rejects(create([{type:'system',subtype:'api_retry'},quota,failure])(claudeRequest),/did not complete/);
  await assert.rejects(create([{type:'assistant',message:{id:'msg',model:claudeRequest.model}},quota,failure])(claudeRequest),/did not complete/);
  await assert.rejects(create([quota,failure],'console')(claudeRequest),/signed-in Claude subscription/);
+});
+
+test('Sol transport failures retry the identical request after the network returns; Opus never retries',async()=>{
+ const runs=[],waits=[],sleeps=[],logs=[];let fail=2;
+ const ask=createReelSubscription({env,online:async host=>{waits.push(host);return false;},sleep:async ms=>{sleeps.push(ms);},log:{error:m=>logs.push(m)},run:async(_bin,args,config)=>{
+  runs.push({args,timeoutMs:config.timeoutMs});
+  if(args[0]==='auth')return ndjson([{loggedIn:true,authMethod:'claude.ai',apiProvider:'firstParty'}]);
+  if(args[0]==='exec'){if(fail-->0)return ndjson([{type:'error',message:'workspace routing discovery failed'},{type:'turn.failed',error:{message:'stream disconnected'}}],1);
+   return ndjson([{type:'item.completed',item:{type:'agent_message',text:'Sol result'}},{type:'turn.completed'}]);}
+  return ndjson([{type:'result',subtype:'error_during_execution',is_error:true,errors:['Connection error']}],1);
+ }});
+ assert.equal((await ask({...openaiRequest,effort:'medium'})).text,'Sol result');
+ assert.equal(runs.length,3);assert.deepEqual(sleeps,[30000,60000]);assert.equal(logs.length,2);
+ assert.ok(runs.every(r=>r.timeoutMs===20*60*1000),'Medium Sol calls are bounded at 20 minutes');
+ assert.deepEqual(waits,['chatgpt.com','chatgpt.com','chatgpt.com']);
+ fail=5;runs.length=0;
+ await assert.rejects(ask({...openaiRequest,effort:'medium'}),/did not return a complete response/);
+ assert.equal(runs.length,3,'Sol gives up after three identical attempts');
+ runs.length=0;
+ await assert.rejects(ask(claudeRequest),/did not complete/);
+ assert.equal(runs.filter(r=>r.args[0]!=='auth').length,1,'Opus attempts count against the stage budget and are never retried');
+ assert.equal(waits.at(-1),'api.anthropic.com');
+});
+
+test('network wait polls DNS until it resolves and gives up after its bound',async()=>{
+ let t=0,fails=3;const sleeps=[];
+ const waited=await waitForNetwork('chatgpt.com',{resolve:async()=>{if(fails-->0)throw Error('ENOTFOUND');},sleep:async ms=>{sleeps.push(ms);t+=ms;},now:()=>t,stepMs:1000,limitMs:60000});
+ assert.equal(waited,true);assert.equal(sleeps.length,3);
+ t=0;const gaveUp=await waitForNetwork('chatgpt.com',{resolve:async()=>{throw Error('ENOTFOUND');},sleep:async ms=>{t+=ms;},now:()=>t,stepMs:1000,limitMs:5000});
+ assert.equal(gaveUp,true);assert.ok(t>=5000);
 });
 
 test('Hedgy bills the API only on subscription exhaustion and preserves xhigh',async()=>{
@@ -165,6 +195,25 @@ test('failure-report errors preserve the original failure separately',async()=>{
   assert.equal(JSON.parse(await readFile(join(cacheRoot,job.id,'failure.json'),'utf8')).error.message,'original model failure');
   assert.equal(JSON.parse(await readFile(join(cacheRoot,job.id,'failure-report-error.json'),'utf8')).error.message,'Site unavailable');
   assert.ok(logs.some(s=>s.includes('failure-report-error')));
+ });
+});
+
+test('a failure report survives the network waking up and stops on a rejected lease',async()=>{
+ await fixture(async({cacheRoot,options,calls})=>{
+  let offline=3;const original=options.fetchSite;
+  options.fetchSite=async(c,p,i)=>{if(p.endsWith('/fail')&&offline-->0)throw Object.assign(Error('fetch failed'),{cause:{code:'ENOTFOUND'}});return original(c,p,i);};
+  let held=0,released=0;
+  await runOnce(config,{...options,keepAwake:()=>{held++;return ()=>released++;},makeReel:async()=>{throw Error('model failure while asleep');}});
+  assert.equal(calls.filter(c=>c.path.endsWith('/fail')).length,1,'The report is delivered once the network returns');
+  assert.equal(await stat(join(cacheRoot,job.id,'failure-report-error.json')).catch(()=>null),null);
+  assert.deepEqual([held,released],[1,1],'The job holds a sleep assertion only while it runs');
+ });
+ await fixture(async({cacheRoot,options})=>{
+  let tries=0;const original=options.fetchSite;
+  options.fetchSite=async(c,p,i)=>{if(p.endsWith('/fail')){tries++;throw Error('Site request failed (409, stale_lease). Check the Site URL and worker credentials.');}return original(c,p,i);};
+  await runOnce(config,{...options,makeReel:async()=>{throw Error('late failure');}});
+  assert.equal(tries,1,'A stale lease is not retried');
+  assert.ok(await stat(join(cacheRoot,job.id,'failure-report-error.json')));
  });
 });
 

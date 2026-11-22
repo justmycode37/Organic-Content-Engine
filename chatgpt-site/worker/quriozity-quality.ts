@@ -4,10 +4,10 @@ import {QURIOZITY_POLICY} from './quriozity-policy.ts';
 import type {QuriozitySpec} from '../src/quriozity/spec.ts';
 import {specSchema,sceneSchema,specProblems} from '../src/quriozity/schema.ts';
 import {CAMERA_DIRECTION_RULES,cameraProblems} from '../src/quriozity/camera-direction.ts';
-import {SHOT_TRANSITION_RULES,transitionProblems} from '../src/quriozity/shot-transitions.ts';
+import {SHOT_TRANSITION_RULES,planTransitions,transitionProblems} from '../src/quriozity/shot-transitions.ts';
 import {SOL_STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
 import {catalogContext,specCatalogIds,type Catalog} from './quriozity-catalog-context.ts';
-import {applyVisualPatches,visualPatchSchema} from './quriozity-visual-patches.ts';
+import {applyVisualPatches,visualPatchSchema,editableSceneView,EDITABLE_SCENE_FIELDS,type VisualPatch,type DroppedPatch} from './quriozity-visual-patches.ts';
 
 export const QUALITY_REVIEW_VERSION=7;
 export const VISUAL_REVIEW_STAGES=[
@@ -26,7 +26,7 @@ export type VisualVerdict=z.infer<typeof verdictSchema>;
 /** A review is a verdict on the supplied rendered evidence, separate from authoring a repair. */
 export async function reviewVisuals(ask:Ask,spec:QuriozitySpec,sheets:Img[],frameIndex:string,_cat:Catalog,thread='',stage:VisualStage=VISUAL_REVIEW_STAGES[0]){
  if(['visual-style-reference-review','visual-final-review'].includes(stage.id)&&(!frameIndex.includes('OWNER-APPROVED PERFECT STYLE REFERENCE')||sheets.length<3))throw new Error(`${stage.id}: owner style-reference evidence is required`);
- const prefix=`You are an independent QURIOZITY visual reviewer.\nPolicy: ${JSON.stringify(QURIOZITY_POLICY)}\nJudge the RENDERED frames, not the author's intentions. Inspect every scene in order, at early/middle/late points and cut boundaries. Source comparisons establish source fidelity, not unverified realism or animation capability. Identify concrete scene/frame evidence for each finding and a feasible change. Keep suggestions separate from must-fix defects. passed=true only when no must-fix findings remain. Do not make cosmetic changes to manufacture a review benefit. Return a verdict only; a separate author repairs failures.`;
+ const prefix=`You are an independent QURIOZITY visual reviewer.\nPolicy: ${JSON.stringify(QURIOZITY_POLICY)}\nJudge the RENDERED frames, not the author's intentions. Inspect every scene in order, at early/middle/late points and cut boundaries. Source comparisons establish source fidelity, not unverified realism or animation capability. Identify concrete scene/frame evidence for each finding and a feasible change. Keep suggestions separate from must-fix defects. passed=true only when no must-fix findings remain. Do not make cosmetic changes to manufacture a review benefit. Be concise: at most 30 findings; merge repeats of one defect within a scene into one finding (list the frame times in its evidence); keep problem, evidence and change to one or two short sentences each. Return a verdict only; a separate author repairs failures.`;
  const raw=await ask(stage.id,`Required focus: ${stage.focus}\nGolden thread: ${thread}\nAttached evidence: ${frameIndex}\nSpec with narration: ${JSON.stringify(spec)}`,0,{name:'quriozity_visual_verdict',schema:verdictSchema},sheets,{prefix});
  const verdict=verdictSchema.parse(parse(raw));
  if(verdict.findings.some(f=>f.scene>spec.scenes.length))throw new Error(`${stage.id}: finding references a missing scene`);
@@ -42,27 +42,77 @@ export function authorSpec(spec:QuriozitySpec){
   ...(scene.events?{events:scene.events.map(e=>e.camera&&e.easing==='hold'&&e.dur===0.04?{...e,dur:0.05}:e)}:{}),
  }))};
 }
+/** Patches that change how a shot is framed or cut (the inputs of the camera and shot-transition linters). */
+const cameraPatch=(p:VisualPatch)=>/^\/(camera|transition|transitionDur)(\/|$)/.test(p.path)||/^\/events(\/|$)/.test(p.path)&&(p.path.includes('/camera')||p.valueJson.includes('"camera"'));
+const CAMERA_PROBLEM=/jump cut|repeats the previous|hesitant nudge|camera|angle|\bfill\b|push\/pull|orbit|transition|flicker|swings|shot/i;
+const problemScenes=(problem:string)=>[...problem.matchAll(/\bscene (\d+)/g)].map(m=>Number(m[1]));
+const reelProblems=(spec:QuriozitySpec,cat:Catalog)=>[...specProblems(spec,cat.has),...cameraProblems(spec),...transitionProblems(spec)];
+
+/**
+ * Turn an author proposal into the largest valid repair. Invalid or protected patches are dropped individually;
+ * only problems the repair introduces are blocking (pre-existing ones are not the repair's fault). A new camera
+ * conflict is first resolved by the deterministic shot planner on the patched scenes only, then by dropping the
+ * offending camera patches, then by dropping that scene's patches. Every drop/adjustment is recorded.
+ */
+export function salvageVisualPatches(spec:QuriozitySpec,author:ReturnType<typeof authorSpec>,patches:VisualPatch[],allowed:ReadonlySet<number>,cat:Catalog){
+ let keep=[...patches];const dropped:DroppedPatch[]=[],adjustments:string[]=[];
+ const baseline=new Set(reelProblems(spec,cat));
+ const drop=(which:(p:VisualPatch)=>boolean,reason:string)=>{const out=keep.filter(which);keep=keep.filter(p=>!which(p));dropped.push(...out.map(p=>({scene:p.scene,path:p.path,reason})));return out.length;};
+ for(let round=0;round<12&&keep.length;round++){
+  const lenient=applyVisualPatches(author,{patches:keep},allowed,{lenient:true});
+  if(lenient.dropped.length){const bad=new Set(lenient.dropped.map(d=>d.index));dropped.push(...lenient.dropped.map(({index:_,...d})=>d));keep=keep.filter((_p,i)=>!bad.has(i));continue;}
+  const parsed=specSchema.safeParse(lenient.spec);
+  if(!parsed.success){
+   const scenes=new Set(parsed.error.issues.flatMap(e=>e.path[0]==='scenes'&&typeof e.path[1]==='number'?[e.path[1]+1]:[]));
+   const reason=parsed.error.issues.slice(0,3).map(e=>`${e.path.join('.')}: ${e.message}`).join('; ');
+   if(!scenes.size||!drop(p=>scenes.has(p.scene),`schema: ${reason}`))return {problems:[reason],dropped,adjustments,keep:[] as VisualPatch[]};
+   continue;
+  }
+  let proposed=applyVisualPatches(spec,{patches:keep},allowed).spec;
+  const fresh=(s:QuriozitySpec)=>reelProblems(s,cat).filter(x=>!baseline.has(x));
+  let found=fresh(proposed);
+  if(!found.length)return {spec:proposed,problems:[] as string[],dropped,adjustments,keep};
+  if(found.every(x=>CAMERA_PROBLEM.test(x))){
+   // Re-plan only the patched scenes' shots; untouched scenes keep their reviewed cameras.
+   const touched=new Set(keep.map(p=>p.scene-1)),planned=planTransitions(proposed).spec;
+   const scoped=structuredClone(proposed);
+   for(const i of touched){const a=planned.scenes[i]!,b=scoped.scenes[i]!;b.camera=a.camera;b.transition=a.transition;b.transitionDur=a.transitionDur;b.events=a.events;for(const k of ['camera','transition','transitionDur','events'] as const)if(b[k]===undefined)delete b[k];}
+   if(!fresh(scoped).length){
+    const moved=[...touched].filter(i=>JSON.stringify(scoped.scenes[i])!==JSON.stringify(proposed.scenes[i])).map(i=>i+1);
+    adjustments.push(`shot planner re-cut patched scene(s) ${moved.join(', ')} to resolve: ${found.join(' | ')}`);
+    return {spec:scoped,problems:[] as string[],dropped,adjustments,keep};
+   }
+  }
+  // Drop the narrowest set of patches that can cause each new problem.
+  const implicated=new Set(found.flatMap(x=>{const n=problemScenes(x);return CAMERA_PROBLEM.test(x)?n.flatMap(k=>[k,k-1,k+1]):n;}));
+  const reason=`introduced: ${found.slice(0,3).join(' | ')}`;
+  if(found.some(x=>CAMERA_PROBLEM.test(x))&&drop(p=>cameraPatch(p)&&(implicated.has(p.scene)||!found.some(x=>problemScenes(x).length)),reason))continue;
+  if(implicated.size&&drop(p=>implicated.has(p.scene),reason))continue;
+  return {problems:found,dropped,adjustments,keep:[] as VisualPatch[]};
+ }
+ return {problems:dropped.length?[`No valid patch remained: ${dropped.slice(0,6).map(d=>`scene ${d.scene} ${d.path}: ${d.reason}`).join('; ')}`]:['No patches proposed'],dropped,adjustments,keep:[] as VisualPatch[]};
+}
+
 export async function repairVisuals(ask:Ask,spec:QuriozitySpec,review:VisualVerdict,cat:Catalog,stage:Pick<VisualStage,'id'>|{id:'storyboard-review'},sheets:Img[],validationFeedback=''){
  const allowed=new Set(review.findings.filter(f=>f.severity==='must-fix').map(f=>f.scene));
  const author=authorSpec(spec),query=`${spec.title} ${spec.scenes.map(s=>s.say).join(' ')}`;
- const prefix=`${JSON.stringify(QURIOZITY_POLICY)}\n${CAMERA_DIRECTION_RULES}\n${SHOT_TRANSITION_RULES}\nMake targeted JSON Pointer patches within the evidenced scenes, never rewrite a whole reel. Only visual fields are editable; narration, durations, words, scene order and global settings are protected. Use at most four objects per scene and event durations >=0.05. For authored camera hard cuts use easing:"hold", dur:0.05; 0.04 is internal planner output. For set, valueJson contains the JSON-encoded value; for remove it is empty. A nested parent must exist; otherwise set the enclosing field. Arrays use zero-based indices; /- appends. Keep good earlier work and use only documented assets/controls. Do not fake unavailable sources or rigs.\n${catalogContext(cat,{query,required:specCatalogIds(spec)})}\nScene field schema (say/duration are context only): ${JSON.stringify(z.toJSONSchema(sceneSchema))}`;
- const scenes=author.scenes.flatMap((s,i)=>allowed.has(i+1)?[{scene:i+1,...s}]:[]);
+ const prefix=`${JSON.stringify(QURIOZITY_POLICY)}\n${CAMERA_DIRECTION_RULES}\n${SHOT_TRANSITION_RULES}\nMake targeted JSON Pointer patches within the evidenced scenes, never rewrite a whole reel. Only these scene fields are editable: ${EDITABLE_SCENE_FIELDS}. Narration, durations, words, scene order, global settings, light exposure/contrast/gamma/ink/key/fill/rim/ambient/direction/keyframes and raster cell/dot settings belong to the locked calibrated style profile; patches to them are discarded. A camera change must keep a clear cut from the neighbouring scenes in the reel journey (>=30° angle change or >=1.3x shot size change, never the same angle and size as the previous or next scene). Use at most four objects per scene and event durations >=0.05. For authored camera hard cuts use easing:"hold", dur:0.05; 0.04 is internal planner output. For set, valueJson contains the JSON-encoded value; for remove it is empty. A nested parent must exist; otherwise set the enclosing field. Arrays use zero-based indices; /- appends. Keep good earlier work and use only documented assets/controls. Do not fake unavailable sources or rigs.\n${catalogContext(cat,{query,required:specCatalogIds(spec)})}\nScene field schema (say/duration are context only; only the editable fields listed above may be patched): ${JSON.stringify(z.toJSONSchema(sceneSchema))}`;
+ const scenes=author.scenes.flatMap((s,i)=>allowed.has(i+1)?[{scene:i+1,...editableSceneView(s)}]:[]);
  const journey=spec.scenes.map((s,i)=>({scene:i+1,say:s.say,hue:s.hue,models:s.objects.map(o=>o.model),camera:s.camera}));
  const raw=await ask(`${stage.id}-repair`,`Repair must-fix findings from ${stage.id}: ${JSON.stringify(review)}\nPrevious invalid proposal feedback: ${validationFeedback||'none'}\nReel journey (context only): ${JSON.stringify(journey)}\nEditable scenes: ${JSON.stringify(scenes)}`,0,{name:'quriozity_visual_patch',schema:visualPatchSchema},sheets,{prefix});
  let data:unknown;try{data=parse(raw);}catch{return {valid:false as const,problems:['invalid JSON'],proposal:raw};}
- let patched:ReturnType<typeof applyVisualPatches>;
- try{patched=applyVisualPatches(author,data,allowed);}catch(error){return {valid:false as const,problems:[(error as Error).message],proposal:raw};}
- const p=specSchema.safeParse(patched.spec);
- if(!p.success)return {valid:false as const,problems:p.error.issues.map(e=>`${e.path.join('.')}: ${e.message}`),proposal:raw};
- // Apply the validated patches to the runtime original. Do not run journey-wide
- // planners here: even the changed scene's unrelated fields must stay intact.
- const proposed=applyVisualPatches(spec,data,allowed).spec;
- const problems=[...specProblems(proposed,cat.has),...cameraProblems(proposed),...transitionProblems(proposed)];
+ const shape=visualPatchSchema.safeParse(data);
+ if(!shape.success)return {valid:false as const,problems:shape.error.issues.map(e=>`${e.path.join('.')}: ${e.message}`),proposal:raw};
+ // Do not run journey-wide planners here: untouched scenes and the changed scenes' unrelated fields stay intact.
+ const result=salvageVisualPatches(spec,author,shape.data.patches,allowed,cat);
+ if(!result.spec)return {valid:false as const,problems:result.problems,dropped:result.dropped,proposal:raw};
+ const proposed=result.spec;
+ const problems:string[]=[];
  if(proposed.scenes.length!==spec.scenes.length||proposed.scenes.some((s,i)=>s.say!==spec.scenes[i]?.say))problems.push('Narration/scene order changed');
  if(proposed.scenes.some((s,i)=>s.duration!==spec.scenes[i]?.duration))problems.push('Scene duration changed');
- if(problems.length)return {valid:false as const,problems,proposal:raw};
+ if(problems.length)return {valid:false as const,problems,dropped:result.dropped,proposal:raw};
  const out={...proposed,title:spec.title,musicBrief:spec.musicBrief,...(spec.beat?{beat:spec.beat}:{}),scenes:proposed.scenes.map((s,i)=>({...s,...(spec.scenes[i]!.words?{words:spec.scenes[i]!.words}:{})}))};
- return {valid:true as const,spec:out,changes:visualPatchSchema.parse(data).patches.map(p=>`scene ${p.scene}: ${p.op} ${p.path}`),proposal:raw};
+ return {valid:true as const,spec:out,changes:result.keep.map(p=>`scene ${p.scene}: ${p.op} ${p.path}`),dropped:result.dropped,adjustments:result.adjustments,proposal:raw};
 }
 
 // Native provider speed is fixed. Timing measurements never authorize a rate change.

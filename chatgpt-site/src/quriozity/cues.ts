@@ -1,4 +1,4 @@
-import {resolveAt,sceneDuration,type QuriozitySpec} from './spec.ts';
+import {defaultEnterAt,resolveAt,sceneDuration,type QuriozitySpec} from './spec.ts';
 
 export interface AutoCue {at:number;kind?:string;prompt?:string;gain?:number;length?:number;why?:string}
 
@@ -17,7 +17,7 @@ export function autoCues(spec:QuriozitySpec):AutoCue[]{
   s.objects.forEach((o,k)=>{
    const enter=o.enter??'materialize';
    if(enter.startsWith('walk-in')){const t=at(o.enterAt,0.08+k*0.12);out.push({at:t,kind:'footsteps',gain:0.5,length:1.6,why:`${o.id} walks in`});}
-   else if(ENTER_SFX[enter]){const [kind,gain]=ENTER_SFX[enter]!;const t=at(o.enterAt,Math.min(0.08+k*0.12,dur*0.4));out.push({at:enter==='drop'?t+FX_LEN.drop!*0.55:t,kind,gain,why:`${o.id} ${enter}`});}
+   else if(ENTER_SFX[enter]){const [kind,gain]=ENTER_SFX[enter]!;const t=at(o.enterAt,defaultEnterAt(enter,k,dur));out.push({at:enter==='drop'?t+FX_LEN.drop!*0.55:t,kind,gain,why:`${o.id} ${enter}`});}
    if(o.exit&&EXIT_SFX[o.exit]){const [kind,gain]=EXIT_SFX[o.exit]!;out.push({at:at(o.exitAt,Math.max(0,dur-0.75)),kind,gain,why:`${o.id} ${o.exit}`});}
   });
   for(const e of s.events??[]){

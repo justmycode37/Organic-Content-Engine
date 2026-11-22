@@ -1,10 +1,18 @@
 import {execFile} from 'node:child_process';
+import {lookup} from 'node:dns/promises';
 import {access,mkdtemp,rm,writeFile} from 'node:fs/promises';
 import {homedir,tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {z} from 'zod';
 
 const timeout=60*60*1000;
+// Normal Sol calls finish in under 11 minutes; a longer one is a runaway or a
+// call that spanned system sleep. Opus keeps the long bound: it is never retried.
+export const solTimeout=effort=>['xhigh','max'].includes(effort)?45*60*1000:20*60*1000;
+// Sol transport failures are not repairs: retry the identical request. Opus is
+// never retried here because every Opus attempt counts against its stage budget.
+export const SOL_TRANSPORT_ATTEMPTS=3;
+const HOSTS={openai:'chatgpt.com',anthropic:'api.anthropic.com'};
 const quotaCodes=new Set(['usage_limit_reached','usage_limit_exceeded','usageLimitExceeded']);
 const claudeWindows=new Set(['five_hour','seven_day','seven_day_opus','seven_day_sonnet','seven_day_haiku','overage']);
 const json=value=>{try{return JSON.parse(value);}catch{return undefined;}};
@@ -105,7 +113,7 @@ async function codexRequest(request,settings,cwd,run){
   args.push('--output-schema',schema);
  }
  args.push('--','-');
- return codexResult(await run(binary,args,{cwd,env:subscriptionEnv(settings),input:promptFor(request,!!request.format)}),!!request.format);
+ return codexResult(await run(binary,args,{cwd,env:subscriptionEnv(settings),input:promptFor(request,!!request.format),timeoutMs:solTimeout(request.effort)}),!!request.format);
 }
 
 async function claudeRequest(request,settings,cwd,run){
@@ -127,17 +135,34 @@ async function claudeRequest(request,settings,cwd,run){
  return claudeResult(await run(binary,args,{cwd,env,input}),request.model);
 }
 
-export function createReelSubscription({env=process.env,run=runCli,now=Date.now}={}){
+/** After a wake from sleep DNS can lag; wait (bounded) instead of failing a model call immediately. */
+export async function waitForNetwork(host,{resolve=lookup,sleep=ms=>new Promise(r=>setTimeout(r,ms)),limitMs=15*60*1000,stepMs=15000,now=Date.now}={}){
+ const until=now()+limitMs;
+ for(let waited=false;;waited=true){
+  try{await resolve(host);return waited;}
+  catch{if(now()>=until)return waited;await sleep(stepMs);}
+ }
+}
+
+export function createReelSubscription({env=process.env,run=runCli,now=Date.now,online=waitForNetwork,sleep=ms=>new Promise(r=>setTimeout(r,ms)),log=console}={}){
  const exhaustedUntil=new Map();
  return async request=>{
   const {provider}=request;
   const resetAt=exhaustedUntil.get(provider);
   if(resetAt>now()/1000)return quota(resetAt);
-  const cwd=await mkdtemp(join(tmpdir(),'oce-reel-'));
-  try{
-   const result=await (provider==='openai'?codexRequest:claudeRequest)(request,env,cwd,run);
-   if(result.status==='subscription_exhausted'&&Number.isFinite(result.resetAt))exhaustedUntil.set(provider,result.resetAt);
-   return result;
-  }finally{await rm(cwd,{recursive:true,force:true});}
+  const attempts=provider==='openai'?SOL_TRANSPORT_ATTEMPTS:1;
+  for(let attempt=1;;attempt++){
+   await online(HOSTS[provider]??HOSTS.openai);
+   const cwd=await mkdtemp(join(tmpdir(),'oce-reel-'));
+   try{
+    const result=await (provider==='openai'?codexRequest:claudeRequest)(request,env,cwd,run);
+    if(result.status==='subscription_exhausted'&&Number.isFinite(result.resetAt))exhaustedUntil.set(provider,result.resetAt);
+    return result;
+   }catch(error){
+    if(attempt>=attempts)throw error;
+    log.error(`[${new Date().toISOString()}] ${request.model} ${request.step}: retrying incomplete subscription request (${attempt}/${attempts-1}): ${String(error?.message??error).slice(0,300)}`);
+   }finally{await rm(cwd,{recursive:true,force:true});}
+   await sleep(attempt*30000);
+  }
  };
 }
