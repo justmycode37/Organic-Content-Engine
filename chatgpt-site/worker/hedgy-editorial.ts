@@ -48,14 +48,15 @@ function parseProblems(error:z.ZodError) {
  return error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`);
 }
 
-export async function reviewHedgyStory(ask:Ask, idea:string) {
+export async function reviewHedgyStory(ask:Ask, idea:string, concept:string) {
  const rounds = [];
  let feedback:string[] = [];
  let previousDraft = '';
  const brief = `Write one spoken Hedgy finance story for a viewer with no investing background.
 ${idea}
 Decide the single question raised by the opening and its concrete answer. Name one visible anchor (a person, object, or repeated transaction) the viewer can follow from the opening through the outcome. Build 3–7 causal beats. Each beat picks up the person, object, question, or outcome we just saw and makes one change the viewer can follow. Start where the decision or problem happens, and make the last beat answer the opening using that same anchor in its changed state. For a before/after comparison, keep what stays constant explicit so we can see what changed. Use one concrete sequence and consistent words for the same things. Prefer stories where the characters directly experience the mechanism. If you use an analogy, make its mapping explicit. Cut detours and examples that require a second setup.
-Write say as natural spoken sentences with short clauses, clear subjects, everyday verbs and pauses at thought boundaries. Aim for 55–75 spoken words and one takeaway. Explain any essential financial term through its role in the story. Avoid arithmetic, unnecessary precision, generic advice and implied guarantees. Use link to explain how each beat follows the last (or sets up the question for the opener). The say fields alone must tell the complete story, and should be easy to split across multiple quick shots.`;
+Tell it as if a friend missed what happened. In the first breath, put someone in a specific predicament we can recognize before we know the finance term. Name the object the first time we hear about it. A viewer should know what “mine,” “the pair” or “the other one” refers to when the words are spoken. The hook is provisional: replace it if it promises a different story. Let us understand why the character acts before we see the consequence. When money or an item changes hands, tell us who gives what to whom and why each side agrees, in the order we need to know it. For a comparison, establish the baseline first. Leave room for the one detail that makes the outcome click. For instance, a seller might accept less because she needs the cash today and the buyer can afford to wait. Use details appropriate to this story. Land the outcome for the person we started with, and connect it to the finance idea in everyday words.
+Write say as natural spoken sentences with short clauses, clear subjects, everyday verbs and pauses at thought boundaries. Aim for 55–75 spoken words. Keep an essential causal step even if it takes another sentence. Explain any essential financial term through its role in the story. Avoid arithmetic, unnecessary precision, generic advice and implied guarantees. Use link to explain how each beat follows the last (or sets up the question for the opener). The say fields alone must tell the complete story, and should be easy to split across multiple quick shots.`;
  for (let round = 0; round <= repairLimit; round++) {
   const raw = await ask(round ? 'story-repair' : 'story-script',
    round ? `${brief}\nPrevious draft: ${previousDraft}\nRequired fixes: ${JSON.stringify(feedback)}\nReturn the complete revised story.` : brief,
@@ -71,12 +72,25 @@ Write say as natural spoken sentences with short clauses, clear subjects, everyd
   const narration = story.beats.map(beat => beat.say).join(' ');
   const [factRaw, listenerRaw] = await Promise.all([
    ask('story-fact-check',`Independently check the finance claims in this hypothetical Hedgy story. Check causal mechanics, terminology, example numbers, conditions and tradeoffs. Flag any misleading analogy, omitted condition that changes the conclusion, implied guaranteed outcome or scenario presented as live data. Approve only when no correction is needed. Give concrete required fixes in findings and use an empty array on approval.\nNarration: ${JSON.stringify(narration)}`,{name:'hedgy_fact_review',schema:reviewSchema}),
-   ask('story-first-listen',`Read this spoken narration once as a viewer with no finance background and no picture. Report the question you heard, the answer you heard and a retelling in at most three sentences using only information stated in the narration. If any part cannot be recovered, say so. Check whether the opening makes the stakes clear immediately, each beat follows causally, references and the analogy are understood in place, the script breathes at natural thought boundaries, and the ending resolves the opening with one useful takeaway. Flag the exact words where a first-time viewer must infer an unstated connection, hold too many ideas at once or reread. Judge understanding, including the role of each necessary term. Approve only if someone can follow the whole explanation in one listen. Give concrete required fixes in findings and use an empty array on approval.\nNarration: ${JSON.stringify(narration)}`,{name:'hedgy_listener_review',schema:listenerSchema}),
+   ask('story-first-listen',`Read this spoken narration once as a viewer with no finance background and no picture. Report the question you heard, the answer you heard and a retelling in at most three sentences using only information stated in the narration. If any part cannot be recovered, say so. Check whether you can name the person, object and immediate problem from the opening without looking ahead, whether the opening makes the stakes clear immediately, each beat follows causally, references and the analogy are understood in place, the script breathes at natural thought boundaries, and the ending resolves the opening with one useful takeaway. Flag the exact words where a first-time viewer must infer an unstated connection, hold too many ideas at once or reread. Judge understanding, including the role of each necessary term. Approve only if someone can follow the whole explanation in one listen. Give concrete required fixes in findings and use an empty array on approval.\nNarration: ${JSON.stringify(narration)}`,{name:'hedgy_listener_review',schema:listenerSchema}),
   ]);
   const facts = reviewSchema.safeParse(parseEditorialJson(factRaw));
   const listener = listenerSchema.safeParse(parseEditorialJson(listenerRaw));
   feedback = [...reviewProblems('Finance',facts.data),...reviewProblems('First listen',listener.data)];
-  rounds.push({draft:story,facts:facts.data ?? factRaw,listener:listener.data ?? listenerRaw,problems:feedback});
+  // A listener can confidently understand a different story. Compare what came
+  // back with the intended mechanism without giving the judge the script to fill in gaps.
+  let takeaway;
+  if (!feedback.length && listener.data) {
+   const {heardQuestion,heardAnswer,retell} = listener.data;
+   const raw = await ask('story-takeaway-match',`Compare the intended finance lesson with what a first-time listener understood. Use only the listener account as evidence of what got through. In their own words, did they identify the opening problem, explain the decision or change that caused the outcome, and recover the point of this particular finance mechanism? Accept faithful paraphrases. A matching term or final result alone is insufficient. Reject a hook answered by a different story, reversed roles, or a missing reason that you must supply yourself. In findings identify the missing or misleading connection and the smallest spoken change that would clarify it. Use empty findings on approval.
+Intended: ${JSON.stringify({concept,question:story.question,answer:story.answer})}
+Listener account: ${JSON.stringify({heardQuestion,heardAnswer,retell})}`,{name:'hedgy_takeaway_review',schema:reviewSchema});
+   const checked = reviewSchema.safeParse(parseEditorialJson(raw));
+   takeaway = checked.data ?? raw;
+   feedback = reviewProblems('Takeaway',checked.data);
+   if (feedback.length) feedback.push(`The listener understood: ${JSON.stringify({heardQuestion,heardAnswer,retell})}`);
+  }
+  rounds.push({draft:story,takeaway,facts:facts.data ?? factRaw,listener:listener.data ?? listenerRaw,problems:feedback});
   if (!feedback.length) return {story,narration,rounds};
  }
  throw new AppError(502,'hedgy_story_unapproved','Hedgy narration did not pass finance and first-listen review',{rounds});
