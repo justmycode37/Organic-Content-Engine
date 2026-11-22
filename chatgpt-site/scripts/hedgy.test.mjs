@@ -38,7 +38,7 @@ function mockHedgy(t, respond = () => undefined) {
   active--;
   const outputs = {
    hedgy_idea:() => idea(body.input),hedgy_story:() => story,hedgy_fact_review:() => approved,
-   hedgy_listener_review:() => listener,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
+   hedgy_listener_review:() => listener,hedgy_takeaway_review:() => approved,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
   };
   const text = respond(format,body) ?? outputs[format]?.();
   return Response.json({status:'completed',output:[{content:[{type:'output_text',text:text===undefined?'production brief':JSON.stringify(text)}]}]});
@@ -54,7 +54,7 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.provenance.editorial.storyRounds.length,1);
  assert.equal(result.provenance.editorial.copyRounds.length,1);
  assert.equal(result.provenance.editorial.sceneRounds.length,1);
- assert.equal(calls.length,20);
+ assert.equal(calls.length,21);
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
  assert.ok(peak()<=4);
  assert.equal(result.spec.musicBrief,result.provenance.idea.musicBrief);
@@ -120,6 +120,30 @@ test('editorial and continuity repairs are reviewed again and assembly preserves
  assert.equal(result.provenance.editorial.storyRounds.length,2);
  assert.equal(result.provenance.editorial.sceneRounds.length,4);
  assert.equal(result.provenance.editorial.copyRounds.length,2);
+});
+
+test('a confident retelling of the wrong story requires a rewrite before staging',async t=>{
+ const wrong = {...listener,heardAnswer:'Customers stopped buying lemons.',retell:'Hedgy had too many lemons because nobody came.'};
+ let listens=0, comparisons=0;
+ mockHedgy(t,(format,body)=>{
+  if (format==='hedgy_listener_review' && ++listens===1) return wrong;
+  if (format==='hedgy_takeaway_review') {
+   assert.doesNotMatch(body.input,/Ever run out of lemons/);
+   if (++comparisons===1) {
+    assert.ok(body.input.includes(wrong.retell));
+    return {approved:false,findings:['Make the rush and missed sales explicit.']};
+   }
+   assert.ok(body.input.includes(listener.retell));
+  }
+  if (format==='hedgy_story' && comparisons===1) {
+   assert.ok(body.input.includes(wrong.retell));
+   assert.match(body.input,/Make the rush and missed sales explicit/);
+  }
+ });
+ const {provenance}=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ const rounds=provenance.editorial.storyRounds;
+ assert.deepEqual(rounds.map(r=>r.takeaway.approved),[false,true]);
+ assert.equal(listens,2);
 });
 
 test('a continuity verdict that skips a cut cannot approve the reel',async t=>{
