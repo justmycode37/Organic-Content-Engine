@@ -2,19 +2,22 @@ import {z} from 'zod';
 import type {QuriozitySpec} from '../src/quriozity/spec.ts';
 
 /** A small native structured-output schema avoids repeating the full reel schema. */
-export const visualPatchSchema=z.object({patches:z.array(z.object({
+const patchItem=z.object({
  scene:z.number().int().min(1),
  path:z.string().min(2).max(240).describe('JSON Pointer within the scene, e.g. /camera/fill or /objects/0/scale'),
  op:z.enum(['set','remove']),
  valueJson:z.string().max(50000).describe('JSON-encoded replacement value for set; empty string for remove'),
-}).strict()).min(1).max(48)}).strict();
+}).strict();
+export const visualPatchSchema=z.object({patches:z.array(patchItem).min(1).max(48)}).strict();
+/** Validation accepts a longer answer than the requested 48 patches: each patch is still checked individually. */
+export const visualPatchProposalSchema=z.object({patches:z.array(patchItem).min(1).max(120)}).strict();
 
 const ROOTS=new Set(['camera','objects','events','text','hue','transition','transitionDur','ground','ao','aoRadius','aoMethod','motionFPS','motionPhase']);
 const NESTED:Record<string,readonly string[]>={raster:['activity','activityRate'],light:['points']};
 const UNSAFE=new Set(['__proto__','prototype','constructor']);
 /** Prompt text: the only scene fields a visual repair may change. Everything else is the locked calibrated profile. */
 export const EDITABLE_SCENE_FIELDS=[...ROOTS,...Object.entries(NESTED).flatMap(([root,fields])=>fields.map(f=>`${root}.${f}`))].join(', ');
-export type VisualPatch=z.infer<typeof visualPatchSchema>['patches'][number];
+export type VisualPatch=z.infer<typeof visualPatchProposalSchema>['patches'][number];
 export type DroppedPatch={scene:number;path:string;reason:string;index?:number};
 
 /** The editable part of one authored scene, so a repair author is not shown locked profile fields as patch targets. */
@@ -65,7 +68,7 @@ function applyOne(out:QuriozitySpec,patch:VisualPatch,allowedScenes:ReadonlySet<
  * skips each invalid patch (recording why) and keeps the valid remainder.
  */
 export function applyVisualPatches(spec:QuriozitySpec,proposal:unknown,allowedScenes:ReadonlySet<number>,{lenient=false}:{lenient?:boolean}={}){
- const {patches}=visualPatchSchema.parse(proposal),out=structuredClone(spec),changed=new Set<number>(),applied:VisualPatch[]=[],dropped:DroppedPatch[]=[];
+ const {patches}=visualPatchProposalSchema.parse(proposal),out=structuredClone(spec),changed=new Set<number>(),applied:VisualPatch[]=[],dropped:DroppedPatch[]=[];
  for(const [index,patch] of patches.entries()){
   try{applyOne(out,patch,allowedScenes);}
   catch(error){if(!lenient)throw error;dropped.push({scene:patch.scene,path:patch.path,reason:(error as Error).message,index});continue;}

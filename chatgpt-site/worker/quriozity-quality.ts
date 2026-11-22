@@ -7,7 +7,7 @@ import {CAMERA_DIRECTION_RULES,cameraProblems} from '../src/quriozity/camera-dir
 import {SHOT_TRANSITION_RULES,planTransitions,transitionProblems} from '../src/quriozity/shot-transitions.ts';
 import {SOL_STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
 import {catalogContext,specCatalogIds,type Catalog} from './quriozity-catalog-context.ts';
-import {applyVisualPatches,visualPatchSchema,editableSceneView,EDITABLE_SCENE_FIELDS,type VisualPatch,type DroppedPatch} from './quriozity-visual-patches.ts';
+import {applyVisualPatches,visualPatchSchema,visualPatchProposalSchema,editableSceneView,EDITABLE_SCENE_FIELDS,type VisualPatch,type DroppedPatch} from './quriozity-visual-patches.ts';
 
 export const QUALITY_REVIEW_VERSION=7;
 export const VISUAL_REVIEW_STAGES=[
@@ -101,7 +101,7 @@ export async function repairVisuals(ask:Ask,spec:QuriozitySpec,review:VisualVerd
  const journey=spec.scenes.map((s,i)=>({scene:i+1,say:s.say,hue:s.hue,models:s.objects.map(o=>o.model),camera:s.camera}));
  const raw=await ask(`${stage.id}-repair`,`Repair must-fix findings from ${stage.id}: ${JSON.stringify(review)}\nPrevious invalid proposal feedback: ${validationFeedback||'none'}\nReel journey (context only): ${JSON.stringify(journey)}\nEditable scenes: ${JSON.stringify(scenes)}`,0,{name:'quriozity_visual_patch',schema:visualPatchSchema},sheets,{prefix});
  let data:unknown;try{data=parse(raw);}catch{return {valid:false as const,problems:['invalid JSON'],proposal:raw};}
- const shape=visualPatchSchema.safeParse(data);
+ const shape=visualPatchProposalSchema.safeParse(data);
  if(!shape.success)return {valid:false as const,problems:shape.error.issues.map(e=>`${e.path.join('.')}: ${e.message}`),proposal:raw};
  // Do not run journey-wide planners here: untouched scenes and the changed scenes' unrelated fields stay intact.
  const result=salvageVisualPatches(spec,author,shape.data.patches,allowed,cat);
