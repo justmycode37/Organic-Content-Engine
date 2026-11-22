@@ -19,6 +19,7 @@ import {transitionProblems} from '../src/quriozity/shot-transitions.ts';
 import {defaultEnterAt} from '../src/quriozity/spec.ts';
 import {planTransitions} from '../src/quriozity/shot-transitions.ts';
 import {applyVisualPatches} from '../worker/quriozity-visual-patches.ts';
+import {realizeVisuals} from '../worker/quriozity-generation.ts';
 
 test('onion material opens dark recesses while keeping coherent dense illuminated planes',()=>{
  assert.equal(onionDensityResponse(.20),0);
@@ -209,6 +210,18 @@ test('problems that existed before a repair do not block an unrelated valid fix'
  const before=[...cameraProblems(spec),...transitionProblems(spec)];assert.ok(before.length);
  const result=await repairVisuals(async()=>JSON.stringify(patch('/objects/0/scale',.85,5)),spec,{...bad,findings:[{...bad.findings[0],scene:5}]},catalogue,VISUAL_REVIEW_STAGES[0],[]);
  assert.equal(result.valid,true,JSON.stringify(result.problems));assert.equal(result.spec.scenes[4].objects[0].scale,.85);
+});
+
+test('Opus realization echo differences in Sol-owned fields are restored, a reordered narration is not',async()=>{
+ const spec=reel();spec.scenes[0].text=[{text:'Light',style:'headline'}];
+ const echo=structuredClone(spec);delete echo.beat;echo.scenes.forEach(s=>{delete s.words;delete s.duration;});echo.scenes[0].text=[{text:'LIGHT!',style:'headline'}];echo.scenes[2].hue='red';
+ const calls=[];const log={};
+ const out=await realizeVisuals(async step=>{calls.push(step);return JSON.stringify(echo);},spec,catalogue,log);
+ assert.deepEqual(calls,['visual-realization'],'A restorable echo difference uses no repair request');
+ assert.deepEqual(out.scenes.map(s=>[s.say,s.duration,s.hue,JSON.stringify(s.text)]),spec.scenes.map(s=>[s.say,s.duration,s.hue,JSON.stringify(s.text)]));
+ assert.ok(log.visualRealization[0].restored.includes('scene 1 text'));assert.ok(log.visualRealization[0].restored.includes('scene 3 hue'));
+ const swapped=structuredClone(echo);[swapped.scenes[0],swapped.scenes[1]]=[swapped.scenes[1],swapped.scenes[0]];
+ await assert.rejects(realizeVisuals(async()=>JSON.stringify(swapped),spec,catalogue,{}),e=>/narration, scene order/.test(e.message)&&e.details.attempts.length===2&&typeof e.details.attempts[0].raw==='string');
 });
 
 test('hard-cut entrances are on screen from the first frame of their scene',()=>{

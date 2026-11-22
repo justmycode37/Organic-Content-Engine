@@ -258,14 +258,36 @@ export async function realizeVisuals(ask:Ask,spec:QuriozitySpec,cat:Catalog,log:
   const raw=await ask(attempt?'visual-realization-repair':'visual-realization',`Sol plan to realize: ${JSON.stringify(input)}\nValidation feedback from prior attempt: ${feedback||'none'}`,0,{name:'quriozity_realization',schema:specSchema},[],{prefix});
   const p=specSchema.safeParse(json(raw));
   if(!p.success){feedback=p.error.issues.slice(0,16).map(i=>`${i.path.join('.')}: ${i.message}`).join('; ');records.push({attempt,raw,valid:false,problems:feedback});continue;}
+  const restored=restoreSolFields(p.data as QuriozitySpec,spec);
   const proposed=directCameras(applyStyleProfile({...p.data,style:QURIOZITY_STYLE} as QuriozitySpec),log,'visualRealization');
   const problems=[...specProblems(proposed,cat.has),...cameraProblems(proposed),...transitionProblems(proposed)];
   if(proposed.scenes.length!==spec.scenes.length||proposed.scenes.some((s,i)=>s.say!==spec.scenes[i]?.say||s.duration!==spec.scenes[i]?.duration||s.hue!==spec.scenes[i]?.hue||JSON.stringify(s.text)!==JSON.stringify(spec.scenes[i]?.text)))problems.push('Sol narration, scene order/count, durations, hues or text changed');
-  records.push({attempt,raw,valid:!problems.length,problems});log.visualRealization=records;
+  records.push({attempt,raw,valid:!problems.length,problems,restored});log.visualRealization=records;
   if(!problems.length)return {...proposed,captionStyle:spec.captionStyle,title:spec.title,musicBrief:spec.musicBrief};
   feedback=problems.join('; ');
  }
- throw new Error(`Visual realization invalid after its repair allowance: ${feedback}`);
+ throw Object.assign(new Error(`Visual realization invalid after its repair allowance: ${feedback}`),{details:{step:'visual-realization',attempts:records}});
+}
+const SOL_FIELDS=['say','duration','hue','text'] as const;
+/**
+ * Opus realizes visuals only: Sol's narration, durations, hues and text are copied back verbatim onto the
+ * matching scene instead of failing the realization over an echo difference (omitted duration, reformatted
+ * text item). A changed scene count or a reordered narration cannot be restored and stays a validation failure.
+ */
+export function restoreSolFields(proposed:QuriozitySpec,sol:QuriozitySpec){
+ const restored:string[]=[];
+ if(proposed.scenes.length!==sol.scenes.length)return restored;
+ const says=sol.scenes.map(s=>s.say);
+ if(proposed.scenes.some((s,i)=>s.say!==says[i]&&says.includes(s.say)))return restored;
+ proposed.scenes.forEach((scene,i)=>{
+  const target=scene as unknown as Record<string,unknown>,source=sol.scenes[i] as unknown as Record<string,unknown>;
+  for(const key of SOL_FIELDS){
+   if(JSON.stringify(target[key])===JSON.stringify(source[key]))continue;
+   restored.push(`scene ${i+1} ${key}`);
+   if(source[key]===undefined)delete target[key];else target[key]=structuredClone(source[key]);
+  }
+ });
+ return restored;
 }
 /** Camera planner safety net: repairs repeated views, dishonest flat-source angles and orbit/pumping excess, and logs every change. */
 export function directCameras(spec:QuriozitySpec,log:Record<string,unknown>,step:string){const {spec:planned,changes}=planCameras(spec);const {spec:out,changes:cuts}=planTransitions(planned);const all=[...changes,...cuts];if(all.length)log[`${step}CameraPlan`]=all;return out;}
