@@ -224,6 +224,13 @@ test('Opus realization echo differences in Sol-owned fields are restored, a reor
  await assert.rejects(realizeVisuals(async()=>JSON.stringify(swapped),spec,catalogue,{}),e=>/narration, scene order/.test(e.message)&&e.details.attempts.length===2&&typeof e.details.attempts[0].raw==='string');
 });
 
+test('a repair longer than the requested 48 patches is still validated patch by patch',async()=>{
+ const spec=reel(),patches=Array.from({length:60},(_,i)=>({scene:1,path:'/objects/0/scale',op:'set',valueJson:String(.5+i/200)}));
+ const result=await repairVisuals(async()=>JSON.stringify({patches}),spec,bad,catalogue,VISUAL_REVIEW_STAGES[3],[]);
+ assert.equal(result.valid,true,JSON.stringify(result.problems));assert.equal(result.changes.length,60);
+ assert.equal(result.spec.scenes[0].objects[0].scale,.5+59/200);
+});
+
 test('hard-cut entrances are on screen from the first frame of their scene',()=>{
  assert.equal(defaultEnterAt('cut',0,5),0);assert.equal(defaultEnterAt('cut',3,5),0);
  assert.equal(defaultEnterAt('materialize',0,5),.08);assert.ok(Math.abs(defaultEnterAt('materialize',2,5)-.32)<1e-9);
