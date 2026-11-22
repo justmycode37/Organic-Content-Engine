@@ -1,8 +1,9 @@
 import {workerConfig,siteRequest} from './render-worker.mjs';
 import {readFile,writeFile,stat} from 'node:fs/promises';
+import {spawn} from 'node:child_process';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
-import {safeId as safe,jobEvidence,publicFailure,runAccountCommand} from './account-worker-evidence.mjs';
+import {safeId as safe,jobEvidence,publicFailure,runAccountCommand,accountRedactor} from './account-worker-evidence.mjs';
 import {createReelSubscription} from './reel-subscription.mjs';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
@@ -37,10 +38,25 @@ async function make(job,evidence){
  }
  return {done,spec,provenance};
 }
-export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env})}={}){
+/**
+ * Hold a macOS power assertion while a job runs: blocks idle sleep, and system sleep while on AC power.
+ * It cannot stop clamshell (lid-closed) sleep on battery; -w releases it if the worker dies.
+ */
+export function keepAwakeDuringJob(){
+ if(process.platform!=='darwin')return ()=>{};
+ try{const child=spawn('/usr/bin/caffeinate',['-i','-s','-w',String(process.pid)],{stdio:'ignore'});child.on('error',()=>{});child.unref();return ()=>{try{child.kill();}catch{}};}
+ catch{return ()=>{};}
+}
+const stamp=()=>new Date().toISOString();
+// A report sent while the network is still waking (DNS) must not be lost: heartbeats keep
+// the lease alive meanwhile, so retry within the 20-minute lease instead of failing once.
+export const FAILURE_REPORT_ATTEMPTS=30,FAILURE_REPORT_SPACING=30000;
+export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env}),keepAwake=keepAwakeDuringJob,sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
  const {job}=await (await fetchSite(config,'/api/jobs/accounts/claim',{method:'POST'})).json();if(!job)return false;
+ const release=keepAwake();
  const evidence=jobEvidence(cacheRoot,job,env,config),heartbeat=setInterval(()=>fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/heartbeat`,{method:'POST'}).catch(()=>{}),30000);
  evidence.subscription=subscription;
+ log.log(`[${stamp()}] Account job ${safe(job.id)} (${safe(job.account?.id??'unknown')}) claimed`);
  try{
   await evidence.prepare();
   const result=await makeReel(job,evidence);evidence.stage='read-output';const bytes=await readFile(result.done);
@@ -48,14 +64,29 @@ export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeR
   const {materialId}=await (await fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/output`,{method:'PUT',headers:{'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes})).json();
   evidence.stage='complete';
   await fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/complete`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({materialId,spec:result.spec,provenance:result.provenance})});
-  log.log(`Account job ${safe(job.id)} complete`);
+  log.log(`[${stamp()}] Account job ${safe(job.id)} complete`);
  }catch(error){
   const failure=evidence.failure(error),message=publicFailure(error,evidence.stage);
   try{await evidence.save('failure.json',failure);}catch{log.error(`Account job ${safe(job.id)} could not save private failure evidence`);}
   log.error(evidence.text(failure));
-  try{await fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/fail`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'account_failed',message})});}
-  catch(reportError){const report=evidence.failure(reportError);try{await evidence.save('failure-report-error.json',report);}catch{}log.error(evidence.text({event:'failure-report-error',...report}));}
- }finally{clearInterval(heartbeat);}return true;
+  for(let attempt=1;;attempt++){
+   try{await fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/fail`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({code:'account_failed',message})});break;}
+   catch(reportError){
+    // A rejected lease (4xx) will not change on retry; a network error usually clears after wake.
+    const final=attempt>=FAILURE_REPORT_ATTEMPTS||/Site request failed \(4\d\d/.test(String(reportError?.message));
+    if(final){const report=evidence.failure(reportError);try{await evidence.save('failure-report-error.json',report);}catch{}log.error(evidence.text({event:'failure-report-error',attempts:attempt,...report}));break;}
+    await sleep(FAILURE_REPORT_SPACING);
+   }
+  }
+ }finally{clearInterval(heartbeat);release();}return true;
 }
 export async function tick(config=workerConfig()){await siteRequest(config,'/api/jobs/accounts/tick',{method:'POST'});}
-if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){const subscription=createReelSubscription();let stopping=false,ticking=false;const ticker=setInterval(async()=>{if(ticking)return;ticking=true;try{await tick();}catch{console.error('Account scheduling tick unavailable');}finally{ticking=false;}},30000);process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);do{try{if(!await runOnce(workerConfig(),{subscription}))await new Promise(r=>setTimeout(r,10000));}catch{console.error('Account queue unavailable; check worker setup.');await new Promise(r=>setTimeout(r,10000));}}while(!stopping);clearInterval(ticker);}
+if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
+ const subscription=createReelSubscription(),redact=accountRedactor(process.env);
+ const reason=error=>redact(String(error?.cause?.code??error?.code??'')+' '+String(error?.message??error)).trim().slice(0,240);
+ let stopping=false,ticking=false;
+ const ticker=setInterval(async()=>{if(ticking)return;ticking=true;try{await tick();}catch(error){console.error(`[${stamp()}] Account scheduling tick unavailable: ${reason(error)}`);}finally{ticking=false;}},30000);
+ process.once('SIGINT',()=>stopping=true);process.once('SIGTERM',()=>stopping=true);
+ do{try{if(!await runOnce(workerConfig(),{subscription}))await new Promise(r=>setTimeout(r,10000));}catch(error){console.error(`[${stamp()}] Account queue unavailable: ${reason(error)}`);await new Promise(r=>setTimeout(r,10000));}}while(!stopping);
+ clearInterval(ticker);
+}
