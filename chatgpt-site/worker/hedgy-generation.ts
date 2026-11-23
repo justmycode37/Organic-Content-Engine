@@ -165,9 +165,31 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
   }
   unresolvedContinuity=true;
  }
+ // A second model family directs the storyboard once before anything is rendered; the repair is kept only if
+ // it passes every storyboard check, so this pass can improve the reel but never break it.
+ const boardSchema=z.object({approved:z.boolean(),score:z.number().min(0).max(100),findings:z.array(z.object({scene:z.number().int().min(1),fix:z.string().max(400)}).strict()).max(6)}).strict();
+ let storyboardDirection:unknown;
+ if(!storyboardFallback){
+  const raw=await critic('storyboard-review',`You direct a viral animated finance reel (pixel-art hedgehog cast). Review this storyboard before rendering, imagining each shot from its documented behaviour. Check: the first shot shows the stakes or the contradiction big and instantly, never the answer; every spoken amount or quantity is visible when spoken (tags, stamps, versus cards, act count piles); every spoken action is acted out (use the act shot when no template fits); Hedgy stays on the left; 2–4 close-ups (params.camera) on reactions and reveals; no placeholder labels; no repeated identical shots; the last shot shows the payoff. Score 0–100 (90 = excellent). Give at most 5 findings as concrete changes to a scene's shot, params or sync words, using only the documented shots, params, items and worlds. Never change any say line.
+Return JSON only: {"approved":boolean,"score":number,"findings":[{"scene":number,"fix":string}]}
+Scenes: ${JSON.stringify(result.spec.scenes.map((x,i)=>({scene:i+1,say:x.say,shot:"shot" in x?x.shot:x.type,params:"params" in x?x.params:undefined,sync:x.sync})))}
+${catalog}`,{name:'hedgy_storyboard_review',schema:boardSchema});
+  const board=boardSchema.safeParse(parseEditorialJson(raw));
+  storyboardDirection=board.data??raw;
+  if(board.success&&!board.data.approved&&board.data.findings.length){
+   const repaired=await ask('storyboard-direction-repair',`Apply these director notes to the reel JSON. Change only the named scenes' shot, params, sync markers, durations and transitions. Keep every say line, hook, header, payoff, term, title, postCaption, music and musicBrief exactly.
+Notes: ${JSON.stringify(board.data.findings)}
+JSON: ${JSON.stringify(result.spec)}
+Schema: ${schema}
+${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
+   const checked=check(repaired);
+   if(checked.spec){result=checked;storyboardDirection={review:board.data,applied:true};}
+   else storyboardDirection={review:board.data,applied:false,rejected:checked.issues};
+  }
+ }
  const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption});
  const spec={...result.spec,...copy.copy};
- return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
+ return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardDirection,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
 }
 
 import {reviewRenderedHedgy,repairFromVisualReview} from './hedgy-visual-review.ts';
