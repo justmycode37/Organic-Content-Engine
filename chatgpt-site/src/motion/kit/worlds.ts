@@ -244,7 +244,11 @@ function ambient(ctx: Ctx, id: WorldId, t: number) {
 export function drawWorld(ctx: Ctx, id: WorldId, t = 0, dim = 0.42, tall = false) {
   ctx.save();
   ctx.fillStyle = BG; ctx.fillRect(-200, -300, 1200, 1800);
-  drawSprite(ctx, worldSprite(id, dim, tall), 0, tall ? -VIRAL_SHIFT : 0, { anchor: [0, 0] });
+  const sprite = worldSprite(id, dim, tall), top = tall ? -VIRAL_SHIFT : 0;
+  drawSprite(ctx, sprite, 0, top, { anchor: [0, 0] });
+  // Mirrored copies either side: zooms and the hook-time framing never reveal an empty border.
+  drawSprite(ctx, sprite, 0, top, { anchor: [0, 0], flip: true });
+  drawSprite(ctx, sprite, 2 * sprite.w, top, { anchor: [0, 0], flip: true });
   ambient(ctx, id, t);
   ctx.restore();
 }

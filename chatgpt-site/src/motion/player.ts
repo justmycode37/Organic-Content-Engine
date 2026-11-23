@@ -111,8 +111,6 @@ function activeTransition(placed: PlacedScene[], time: number, hedgy = false, vi
 export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   const placed = placeScenes(spec);
   const duration = reelDuration(spec);
-  // Viral reels end on a hard cut back to the opening frame, so the loop restarts seamlessly.
-  if (spec.look === 'viral' && duration > 3 && time > duration - 0.2) return renderReel(ctx, spec, 0);
   const hedgy = spec.series?.startsWith('HEDGY') ?? false;
   const theme = frameTheme(ctx, spec.mode, hedgy ? 'mono' : spec.accent, time);
   if (hedgy) {
