@@ -56,6 +56,14 @@ const HEAVY: Record<string, readonly string[]> = {
   '/': ['.....##', '....##.', '....##.', '...##...', '..##....', '.##.....', '.##.....', '##......', '##......'],
   '↑': ['...##...', '..####..', '.##.##.', '##..##..', '....##...', '....##...', '....##...', '....##...', '....##...'],
   '↓': ['....##...', '....##...', '....##...', '....##...', '....##...', '##..##..', '.##.##.', '..####..', '...##...'],
+  '→': ['.........', '.....#...', '.....##..', '#########', '#########', '.....##..', '.....#...', '.........', '.........'],
+  '←': ['.........', '...#.....', '..##.....', '#########', '#########', '..##.....', '...#.....', '.........', '.........'],
+  '>': ['##.....', '.##....', '..##...', '...##..', '....##.', '...##..', '..##...', '.##....', '##.....'],
+  '<': ['.....##', '....##.', '...##..', '..##...', '.##....', '..##...', '...##..', '....##.', '.....##'],
+  '#': ['.##.##.', '.##.##.', '#######', '.##.##.', '.##.##.', '#######', '.##.##.', '.##.##.', '.......'],
+  '(': ['...##', '..##.', '.##..', '##...', '##...', '##...', '.##..', '..##.', '...##'],
+  ')': ['##...', '.##..', '..##.', '...##', '...##', '...##', '..##.', '.##..', '##...'],
+  '"': ['##.##', '##.##', '##.##', '.....', '.....', '.....', '.....', '.....', '.....'],
   ' ': [''],
 };
 
@@ -69,7 +77,11 @@ export interface PixelLabelOptions { color?: string; face?: PixelFace }
 export interface PixelMeasure { cols: number; rows: number; w: number; h: number }
 const cache = new Map<string, Sprite>();
 
-function glyphFor(char: string): readonly string[] { return HEAVY[char] ?? HEAVY['?']!; }
+/** Characters the face lacks map to the closest one it has, never to "?" ("$75 → $0" must not read "$75 ? $0"). */
+const FALLBACK: Record<string, string> = { '⇒': '→', '➜': '→', '➔': '→', '⟶': '→', '–': '-', '—': '-', '’': "'", '‘': "'", '“': '"', '”': '"', '€': 'E', '£': 'L', '¢': 'C', '…': '.', '·': '.', '•': '.', '✓': '+', '✗': '×', 'x': '×' };
+function glyphFor(char: string): readonly string[] { return HEAVY[char] ?? HEAVY[FALLBACK[char] ?? ''] ?? HEAVY[' ']!; }
+/** True when every character renders with a real glyph (used by tests and checks). */
+export function pixelFaceCovers(text: string) { return [...String(text).toUpperCase()].every(char => HEAVY[char] || HEAVY[FALLBACK[char] ?? '']); }
 function glyphWidth(glyph: readonly string[]): number { return Math.max(0, ...glyph.map(row => row.length)); }
 function layout(text: string) {
   const chars = [...String(text ?? '').toUpperCase()];
