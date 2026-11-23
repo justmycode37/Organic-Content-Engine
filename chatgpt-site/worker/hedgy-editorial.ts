@@ -67,7 +67,7 @@ function parseProblems(error:z.ZodError) {
  return error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`);
 }
 
-export async function reviewHedgyStory(ask:Ask, idea:string, concept:string, critic?:Critic) {
+export async function reviewHedgyStory(ask:Ask, idea:string, concept:string, critic?:Critic, fallbackStory?:()=>z.infer<typeof storySchema>) {
  const rounds = [];
  let feedback:string[] = [];
  let previousDraft = '';
@@ -133,6 +133,10 @@ Narration: ${JSON.stringify(narration)}`,{name:'hedgy_viral_review',schema:viral
  }
  // Repairs exhausted: publish the most shareable draft that passed every correctness review.
  if (best) return {story:best.story,narration:best.narration,rounds,selected:`best correct draft (viral score ${best.score})`};
+ // A run must always end in a reel: use the latest well-formed draft (still marked unresolved with its findings).
+ const latest=[...rounds].reverse().find(r=>r.draft&&typeof r.draft==='object') as {draft:z.infer<typeof storySchema>}|undefined;
+ const story=latest?.draft??fallbackStory?.();
+ if(story)return {story,narration:story.beats.map(beat=>beat.say).join(' '),rounds,unresolved:true,selected:latest?'latest unresolved draft':'deterministic fallback story'};
  throw new AppError(502,'hedgy_story_unapproved','Hedgy narration did not pass finance and first-listen review',{rounds});
 }
 
@@ -177,5 +181,6 @@ export async function reviewHedgyCopy(ask:Ask, narration:string, initialCopy:z.i
   rounds.push({copy,review:reviewed.data ?? raw,problems:feedback});
   if (!feedback.length) return {copy,rounds};
  }
- throw new AppError(502,'hedgy_copy_unapproved','Hedgy post copy did not pass editorial review',{rounds});
+ // Copy is never a reason to withhold the reel: keep the latest schema-valid copy and its findings.
+ return {copy,rounds,unresolved:true};
 }

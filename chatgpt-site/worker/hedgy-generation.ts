@@ -51,7 +51,11 @@ function contentIssues(spec:z.infer<typeof hedgyReelSchema>,idea:HedgyIdea){
 export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unknown)=>void|Promise<void>,history:HedgyHistoryEntry[]=[],subscription?:ReelSubscription){
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
  if(!key&&!subscription)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
- const ask=hedgyClient(key,onUsage,subscription),critic=hedgyCritic(ask,onUsage,subscription);
+ // A model or transport failure must never cost the post: a failed call returns no text, which every stage
+ // treats as an invalid answer and covers with its repair or deterministic fallback.
+ const strict=hedgyClient(key,onUsage,subscription);
+ const ask:typeof strict=async(step,input,format)=>{try{return await strict(step,input,format);}catch(error){await Promise.resolve(onUsage?.({step,status:'failed-continued',code:(error as AppError)?.code,message:String((error as Error)?.message??error).slice(0,300)})).catch(()=>{});return '';}};
+ const critic=hedgyCritic(ask,onUsage,subscription);
  // 1. Ideation: a concept this account has not covered, told through a new story world and a new score.
  const candidates=conceptCandidates(history),{items:usedItems,moods}=recentlyUsed(history);
  const past=history.slice(0,12).map(h=>`- ${[h.title,h.concept,h.item&&`item ${h.item}`,h.setting,h.music&&`music ${h.music}`].filter(Boolean).join(' | ')}${h.summary?`: ${h.summary.slice(0,160)}`:''}`).join('\n')||'- none yet';
@@ -74,12 +78,18 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
   idea=pick.success&&pick.data.hook.trim()?{...chosen,hook:pick.data.hook.trim().slice(0,160)}:chosen;problems=ideaProblems(idea,candidates,history);
   if(problems.length===1&&problems[0]?.startsWith('music')&&moods[0]){idea={...idea,music:moods[0]};problems=[];}
  }
- if(!idea||problems.length)throw new AppError(502,'idea_invalid',`Ideation did not produce a new idea: ${problems.join('; ')}`);
+ // Ideation never blocks a reel: keep the closest idea, repairing the fields that repeat earlier reels.
+ let ideaFallback:string|undefined;
+ if(!idea||problems.length){
+  ideaFallback=problems.join('; ');
+  const first=candidates[0]!,base=idea??fallbackIdea(first,usedItems,moods[0]??'drive');
+  idea={...base,concept:candidates.some(c=>c.id===base.concept)?base.concept:first.id,heroItem:usedItems.includes(base.heroItem)?fallbackIdea(first,usedItems,moods[0]??'drive').heroItem:base.heroItem,music:moods.includes(base.music)?base.music:moods[0]??base.music};
+ }
  const concept=HEDGY_CONCEPTS.find(c=>c.id===idea.concept)!;
  const ideaText=`CHOSEN IDEA (keep the concept, setting, items, cast and score): concept "${concept.name}". Story: ${idea.angle} Setting: ${idea.setting}. Hero item: ${idea.heroItem}${idea.supportingItems.length?`; supporting items: ${idea.supportingItems.join(', ')}`:''}. Cast: ${idea.cast.join(', ')}. Proposed hook: ${idea.hook} Music: ${idea.music} — ${idea.musicBrief}\nEarlier reels to stay clear of: ${history.slice(0,6).map(h=>h.title).filter(Boolean).join('; ')||'none'}.`;
  // The narration may only name things the animation can show: a spoken object with no picture breaks the reel.
  const drawable=`DRAWABLE VOCABULARY (the animation can only show these): items ${SHOT_ITEMS.join(', ')}; places ${WORLDS.join(', ')}; animal characters. Every concrete object or place the narration names must be one of these (synonyms are fine: "cash" for banknotes, "store" for shop). Do not build the story on objects outside this list (no pillars, doors, tools, vehicles other than car/bike).`;
- const editorial=await reviewHedgyStory(ask,`${ideaText}\n${drawable}`,concept.name,critic);
+ const editorial=await reviewHedgyStory(ask,`${ideaText}\n${drawable}`,concept.name,critic,()=>({question:idea.hook.slice(0,200),answer:concept.name.slice(0,260),anchor:idea.heroItem,beats:[{say:idea.hook.slice(0,220),link:'opening'},{say:idea.angle.slice(0,220),link:'setup'},{say:`That's ${concept.name.split(':')[0]!.toLowerCase()}.`,link:'payoff'}]}));
  const catalog=`${describeShotCatalog()}\nWORLDS (params.world on EVERY shot; the full-frame place where the shot happens, painted behind the action): ${WORLDS.map(w=>`${w} (${WORLD_HINTS[w]})`).join('; ')}. Keep the same world while the story stays in one place; change it when the story moves, and use at least two different worlds per reel so the places (home, street, shop...) carry the story. ITEM NOTES: phone shows a stock chart (trading app); smartphone is an everyday phone as a possession.`;
  const direction=`Use the approved narration verbatim. Stage one continuous explanation in the existing shot library. Split the narration into quick shots, usually 8–14 (one clause or phrase each, 1.5–3.5 s), so the picture changes whenever the words move on; a sentence may span several shots. Give each reveal enough time to register before introducing the next idea. Every next shot starts from the object, action or result the viewer just saw. Keep the anchor's appearance, its position, roles and quantities consistent unless the story explains a change. Match the framing for before/after comparisons and clearly establish any time jump. The last image answers the opening with the same anchor. Favor a deliberate hold or repeated setup when it helps the viewer see what changed. Cut on an action, reveal or comparison that motivates the transition. Use cut, match, push or iris only when it serves that handoff.
  Each shot is a self-contained animation that starts fresh; only documented params exist (no compositing, freeze-frames, frame extension or custom staging fields), so continuity comes from choosing consecutive shots that show the same actors and items. When no template shows exactly what the words say, use the act shot and script the verbs (give, take, put, drop, appear, vanish, grow, shrink, shake, stamp, walk-in, walk-out, reactions) on the sync words; every spoken action must be visible. VIRAL STAGING: the first shot must show the hook's tension instantly (a character with the problem in a recognisable place) and land an action in its first second. Cut every 1.5–3.5 s on a visible action; never hold a static pose. The final shot shows the payoff as a clear visual change. Use explicit item params, the documented actors and items, and sparse readable labels. Time significant actions with cue words in the scene's say line, in spoken order. Match each shot to what the viewer hears at that moment.`;
@@ -88,7 +98,7 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  const plan=await ask('plan',`${brand} Plan the reel. Map the narration to one sequence, with a visible entry and exit state for each shot and precisely what the viewer follows across each cut. Give twelve specialists a production brief for staging this sequence.`);
  const contributions:string[]=new Array(ROLES.length);let next=0;
  const settled=await Promise.allSettled(Array.from({length:4},async()=>{while(next<ROLES.length){const i=next++;contributions[i]=`${ROLES[i]}: ${await ask(`specialist-${i+1}`,`${brand}\nProducer brief: ${plan}\nYour task: ${ROLES[i]}. Return at most 180 words of precise production instructions for the approved narration, no preamble.`)}`;}}));
- const failure=settled.find(x=>x.status==='rejected');if(failure?.status==='rejected')throw failure.reason;
+ void settled;// specialist failures already returned empty text through ask()
  // 3. Assembly, with bounded repairs for storyboard or schema problems.
  const schema=JSON.stringify(z.toJSONSchema(hedgyReelSchema));
  const finish=(value:z.infer<typeof hedgyReelSchema>)=>({...value,look:'viral' as const,music:idea.music,musicBrief:idea.musicBrief});
@@ -130,13 +140,27 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
  // exact narration (marked unresolved) instead of failing the reel; the rendered-frame review follows.
  let unresolvedContinuity=false;
  if(!result.spec&&lastValid){result={spec:lastValid,soft:[]};unresolvedContinuity=true;}
- if(!result.spec)throw new AppError(502,'hedgy_scenes_unapproved','Hedgy scenes did not pass assembly and continuity review',{sceneRounds});
+ // Still nothing renderable: sanitize the latest parsed storyboard, else build one from the act shot.
+ let storyboardFallback:string|undefined;
+ if(!result.spec){
+  const defaults={world:worldFor(idea.setting),hook:editorial.story.hookText??editorial.story.question,payoff:editorial.story.answer,narration:editorial.narration};
+  const latest=parseEditorialJson(output) as z.infer<typeof hedgyReelSchema>|undefined;
+  const sanitized=latest&&Array.isArray(latest.scenes)?check(JSON.stringify(sanitizeStoryboard(latest,defaults))):undefined;
+  if(sanitized?.spec){result=sanitized;storyboardFallback='sanitized latest storyboard';}
+  else{
+   const caption=hedgyPostCaptionSchema.safeParse(latest?.postCaption).success?latest!.postCaption:fallbackCaption(editorial.narration,concept.name);
+   result={spec:finish(fallbackStoryboard({narration:editorial.narration,idea,hook:defaults.hook,payoff:defaults.payoff,title:latest?.title??idea.hook,postCaption:caption,music:idea.music,musicBrief:idea.musicBrief}) as z.infer<typeof hedgyReelSchema>),soft:[]};
+   storyboardFallback='deterministic act storyboard';
+  }
+  unresolvedContinuity=true;
+ }
  const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption});
  const spec={...result.spec,...copy.copy};
- return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,copyRounds:copy.rounds}}};
+ return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardFallback,ideaFallback,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
 }
 
 import {reviewRenderedHedgy,repairFromVisualReview} from './hedgy-visual-review.ts';
+import {fallbackIdea,fallbackStoryboard,fallbackCaption,sanitizeStoryboard,worldFor} from './hedgy-fallback.ts';
 /** After rendering: Opus reviews the actual frames; Sol repairs the shot list once when it is not approved. */
 export async function hedgyRenderedReview(env:Env,spec:z.infer<typeof hedgyReelSchema>,sheets:{mime:string;base64:string}[],timeline:string,onUsage?:(usage:unknown)=>void|Promise<void>,subscription?:ReelSubscription,{repair=true}:{repair?:boolean}={}){
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
