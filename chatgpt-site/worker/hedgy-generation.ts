@@ -19,12 +19,13 @@ import type {ReelSubscription} from './reel-subscription.ts';
 import {HEDGY_MUSIC_STYLE,HEDGY_CONCEPTS,conceptCandidates,recentlyUsed,ideaSchema,ideaProblems,type HedgyHistoryEntry,type HedgyIdea} from './hedgy-ideas.ts';
 const ROLES=['hook','finance accuracy','narration','scene 1 animation','scene 2 animation','scene 3 animation','scene 4 animation','scene 5 animation','scene 6 animation','sound effects','music and pacing','captions and accessibility'];
 /** Story-level checks that keep the reel on its chosen idea instead of drifting back to library defaults. */
+/** Advice that improves a storyboard but must never invalidate an otherwise correct one. */
+const SOFT=/^(Vary the shots|The same shot appears three times|Scene [\d, ]+ repeats the previous shot)/;
 function contentIssues(spec:z.infer<typeof hedgyReelSchema>,idea:HedgyIdea){
  const shots=spec.scenes.filter(s=>s.type==='shot');if(!shots.length)return [];
  const issues:string[]=[],text=JSON.stringify(shots);
  if(!text.includes(`"${idea.heroItem}"`))issues.push(`The hero item "${idea.heroItem}" must appear in the params of the shots that show it.`);
  if(idea.heroItem!=='ticket'&&!idea.supportingItems.includes('ticket')&&/ticket/i.test(text))issues.push('Do not use tickets in this reel; show the chosen hero item instead.');
- const weak=shots.flatMap(s=>(s.sync??[]).filter(m=>/^(a|an|the|it|to|of|and|is|was)$/i.test(m.word)));if(weak.length)issues.push('Sync markers must sit on nouns or verbs, never on a/the/it/to/of/and.');
  const unplaced=shots.flatMap((s,i)=>isWorld(s.params?.world)?[]:[i+1]);
  if(unplaced.length)issues.push(`Every shot needs params.world from WORLDS (${WORLDS.join(', ')}); missing or invalid in scene ${unplaced.join(', ')}.`);
  if(!spec.hook)issues.push('Set hook: the on-screen hook title for the opening (max 7 words, key word in *asterisks*).');
@@ -34,9 +35,9 @@ function contentIssues(spec:z.infer<typeof hedgyReelSchema>,idea:HedgyIdea){
   if(unknown.length)issues.push(`Scene ${i+1} (${scene.shot}): params ${unknown.join(', ')} do not exist and are ignored by the renderer. Each shot is a self-contained animation with only its documented params (${[...allowed].join(', ')}); there is no compositing, frame freezing/extension, registration or overlay. Express continuity by choosing shots and params.`);
  }
  const counts=new Map<string,number>();for(const x of shots)counts.set(x.shot,(counts.get(x.shot)??0)+1);
- const overused=[...counts].filter(([,n])=>n>3).map(([name,n])=>`${name} ×${n}`);
- if(overused.length)issues.push(`Vary the shots: ${overused.join(', ')} is used more than 3 times. Use at most 3 of any shot and never the same shot three times in a row; pick shots that act out each line.`);
- if(shots.some((x,i)=>i>1&&x.shot===shots[i-1]!.shot&&x.shot===shots[i-2]!.shot))issues.push('The same shot appears three times in a row; alternate shots so the picture keeps changing.');
+ const overused=[...counts].filter(([name,n])=>n>(name==='act'?6:3)).map(([name,n])=>`${name} ×${n}`);
+ if(overused.length)issues.push(`Vary the shots: ${overused.join(', ')} is used more than 3 times. Use at most 3 of any template shot (act up to 6) and avoid the same shot three times in a row; pick shots that act out each line.`);
+ if(shots.some((x,i)=>i>1&&x.shot!=='act'&&x.shot===shots[i-1]!.shot&&x.shot===shots[i-2]!.shot))issues.push('The same shot appears three times in a row; alternate shots so the picture keeps changing.');
  const said=spec.scenes.map(x=>x.say).join(' ').toLowerCase().replace(/[^a-z0-9$% ]/g,' ');
  if(!spec.term)issues.push('Set term: the concept name exactly as the narration says it (e.g. "moral hazard"); it appears as a big card the moment it is spoken.');
  else if(!` ${said.replace(/\s+/g,' ')} `.includes(` ${spec.term.toLowerCase().replace(/[^a-z0-9$% ]/g,' ').replace(/\s+/g,' ').trim()} `))issues.push(`term "${spec.term}" must be words the narration actually speaks, verbatim.`);
@@ -92,15 +93,17 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  const schema=JSON.stringify(z.toJSONSchema(hedgyReelSchema));
  const finish=(value:z.infer<typeof hedgyReelSchema>)=>({...value,look:'viral' as const,music:idea.music,musicBrief:idea.musicBrief});
  let output=await ask('assembly',`${brand}\nAssemble a final reel JSON only, no markdown. Use series HEDGY / FINANCE, accent mono, mode dark, look viral, music ${idea.music}, musicBrief exactly as given. Set hook to the approved story's hookText ${JSON.stringify(editorial.story.hookText??'')} (max 7 words, mark the key word with *asterisks*) and header to a 1–4 word topic label, term to the concept's name exactly as spoken in the narration, and payoff to the answer as an end card (max 8 words, concrete numbers welcome, key word in *asterisks*). Give every shot params.world from WORLDS. Keep the anchor objects of a deal (the item, the money, both characters) on screen in every shot of that deal: prefer shots that show actor, counterpart and item together, and pass the same item ids so nothing vanishes or resets. Every scene has type shot, a shot name from the library, params that use only listed ACTORS and ITEMS, a say line, sync markers for significant actions and a transition from cut, push, match, iris that serves the handoff into that shot. Durations are approximate; narration sets the real timing. Copy the approved narration verbatim into the say lines. Sentences may continue across shots. Keep each character in the same role for the whole reel. Do not set mascot. Also write postCaption: the finished Instagram caption shown BELOW this reel, separate from say and all on-screen text. Aim for 80–140 words of useful copy (at least 60, excluding hashtags): a compelling first-line hook, 2–3 short paragraphs that expand the story and explain its mechanism or tradeoff, and a specific takeaway. Use blank lines and finish with 3–5 distinct, relevant hashtags on their own final line, mixing the specific concept with broader finance/learning tags. Match the final narration and chosen analogy; add helpful context without inventing facts, live prices or claims of returns. No generic engagement bait, greeting, disclaimer, sales pitch or narration/stage directions; a restrained emoji is optional. Keep the whole caption under 2,200 characters. Match this JSON schema exactly: ${schema}\nBrief: ${plan}\nSpecialists:\n${contributions.join('\n')}`,{name:'hedgy_reel',schema:hedgyReelSchema});
- const check=(text:string)=>{
+ const check=(text:string):{issues:string[];spec?:undefined;soft?:undefined}|{spec:ReturnType<typeof finish>;soft:string[];issues?:undefined}=>{
   const parsed=hedgyReelSchema.safeParse(parseEditorialJson(text));
   if(!parsed.success)return {issues:parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`)};
-  const issues=contentIssues(parsed.data,idea);
+  // Sync markers on filler words would time actions to "the"/"a": drop them rather than reject the storyboard.
+  for(const scene of parsed.data.scenes)if(scene.sync)scene.sync=scene.sync.filter(m=>!/^(a|an|the|it|to|of|and|is|was)$/i.test(m.word));
+  const all=contentIssues(parsed.data,idea),soft=all.filter(i=>SOFT.test(i)),issues=all.filter(i=>!SOFT.test(i));
   const assembledNarration=parsed.data.scenes.map(scene=>scene.say).join(' ');
   if(normalizeNarration(assembledNarration)!==normalizeNarration(editorial.narration)){
    issues.push('Scene say lines must contain the exact approved narration in order.');
   }
-  return issues.length?{issues}:{spec:finish(parsed.data)};
+  return issues.length?{issues:[...issues,...soft]}:{spec:finish(parsed.data),soft};
  };
  const sceneRounds=[];
  let result=check(output),lastValid:ReturnType<typeof finish>|undefined;
@@ -108,9 +111,9 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
   if(result.spec){
    lastValid=result.spec;
    const reviewed=await reviewHedgyScenes(ask,editorial.story,result.spec.scenes,catalog);
-   sceneRounds.push({scenes:result.spec.scenes,...reviewed});
+   sceneRounds.push({scenes:result.spec.scenes,...reviewed,advice:result.soft});
    if(!reviewed.problems.length)break;
-   result={issues:reviewed.problems};
+   result={issues:[...reviewed.problems,...result.soft]};
   }else{
    sceneRounds.push({draft:output,problems:result.issues});
   }
@@ -126,7 +129,7 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
  // Continuity is a quality review: after the repairs, keep the last schema-valid storyboard with the
  // exact narration (marked unresolved) instead of failing the reel; the rendered-frame review follows.
  let unresolvedContinuity=false;
- if(!result.spec&&lastValid){result={spec:lastValid};unresolvedContinuity=true;}
+ if(!result.spec&&lastValid){result={spec:lastValid,soft:[]};unresolvedContinuity=true;}
  if(!result.spec)throw new AppError(502,'hedgy_scenes_unapproved','Hedgy scenes did not pass assembly and continuity review',{sceneRounds});
  const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption});
  const spec={...result.spec,...copy.copy};
