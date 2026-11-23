@@ -79,7 +79,7 @@ function layout(text: string) {
     const glyph = glyphFor(char);
     if (previous) x += KERN[previous + char] ?? 0;
     starts.push(x);
-    x += glyphWidth(glyph) + (char === ' ' ? 2 : 1);
+    x += glyphWidth(glyph) + (char === ' ' ? 4 : 1);
     previous = char;
   }
   if (chars.length) x -= 1;

@@ -4,6 +4,7 @@ import { arc, bob, clamp, ease, phase } from '../kit/motion.ts';
 import { Grid, PAL } from '../kit/pixel.ts';
 import { drawSprite } from '../kit/sprite.ts';
 import { drawStage, label } from '../kit/stage.ts';
+import { activeWorld } from '../kit/worlds.ts';
 import { STAGE, ACTORS, actorBounds, actorFace, actorPaw, beats, cue, cuesIn, drawActor, drawItem, isItem, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -120,13 +121,21 @@ export const waitShot: ShotDef = {
     const actorX = ACTOR_X + actorCorrection;
     const actorOptions = { who: s.who, x: actorX, y: STAGE.floor, facing: 1 as const, time: t, keys };
     const held = heldItem(s, actorX, t, checkLift, sighDrop);
-    const timerY = TIMER_Y + bob(t, 2.8, 2);
+    // In a world the timer hangs on the wall (or stands on a pedestal) instead of floating over the floor.
+    const grounded = !!activeWorld();
+    const timerY = TIMER_Y + (grounded ? 0 : bob(t, 2.8, 2));
     const outcomeProgress = s.outcome ? ease.outBack(phase(t, s.outcomeStart, s.sighAt)) : 0;
     const outcomeFrom = { x: 670, y: 628 }, outcomeTo = { x: 340, y: 560 };
     const outcomePos = arc(outcomeFrom, outcomeTo, 38, outcomeProgress);
     const arrivalPoseAt = s.sighAt;
 
     const drawTimer = () => {
+      if (grounded) {
+        ctx.save(); ctx.fillStyle = PAL.ink;
+        if (s.timer === 'hourglass') { ctx.fillStyle = PAL.wood3; ctx.fillRect(TIMER_X - 70, timerY + 120, 140, 18); ctx.fillStyle = PAL.wood4; ctx.fillRect(TIMER_X - 22, timerY + 138, 44, STAGE.floor - timerY - 138); ctx.fillRect(TIMER_X - 60, STAGE.floor - 16, 120, 16); }
+        else { const top = timerY - (s.timer === 'clock' ? 170 : 150); ctx.fillRect(TIMER_X - 9, top - 36, 18, 18); ctx.strokeStyle = PAL.ink; ctx.lineWidth = 6; ctx.beginPath(); ctx.moveTo(TIMER_X - 60, top + 4); ctx.lineTo(TIMER_X, top - 27); ctx.lineTo(TIMER_X + 60, top + 4); ctx.stroke(); }
+        ctx.restore();
+      }
       if (s.timer === 'clock') {
         drawItem(ctx, 'clock', {
           x: TIMER_X, y: timerY, t, scale: TIMER_SCALE.clock,
@@ -146,7 +155,7 @@ export const waitShot: ShotDef = {
       if (s.label) label(ctx, s.label.toUpperCase(), TIMER_X, 102, { variant: 'sign', maxWidth: 320 });
     };
 
-    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: actorX, y: STAGE.floor - 2, w: 170 }, { x: TIMER_X, y: STAGE.floor - 4, w: 200 }] });
+    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: [{ x: actorX, y: STAGE.floor - 2, w: 170 }, ...(grounded && s.timer !== 'hourglass' ? [] : [{ x: TIMER_X, y: STAGE.floor - 4, w: 200 }])] });
     drawTimer();
     drawActor(ctx, {
       ...actorOptions, look: t < s.checkAt ? 'up' : held && t < s.sighAt ? 'down' : 'up',

@@ -134,6 +134,13 @@ const smartphone=make('smartphone-home',46,75,g=>{
   g.rect(10,55,26,8,PAL.blue4);[PAL.green2,PAL.blue1,PAL.red2,PAL.paper].forEach((c,i)=>g.round(12+i*6,56,5,5,1,c));
 });
 export function drawSmartphone(ctx:Ctx,o:Base){draw(ctx,smartphone,o);}
+/** A card payment terminal with a small screen, a keypad and a printed receipt tab: where people tap to pay. */
+const terminal=make('card-terminal',44,64,g=>{
+  g.round(4,8,36,54,6,PAL.grey5);g.round(6,10,32,50,5,PAL.grey4);g.rect(9,13,26,16,PAL.ink);g.rect(10,14,24,14,PAL.green1);g.rect(12,17,9,3,PAL.green4);g.rect(23,17,9,3,PAL.green4);g.rect(12,22,20,2,PAL.green3);
+  for(let r=0;r<3;r++)for(let c=0;c<3;c++)g.round(11+c*8,33+r*7,6,5,1,r===2&&c===2?PAL.green2:r===2&&c===0?PAL.red2:PAL.grey1);
+  g.rect(12,2,20,7,PAL.paper);g.rect(14,4,14,1,PAL.paperShade);g.rect(14,6,10,1,PAL.paperShade);
+});
+export function drawTerminal(ctx:Ctx,o:Base){draw(ctx,terminal,o);}
 
 function cartSprite(items:number){return cached(`shopping-cart-${items}`,()=>make(`shopping-cart-${items}`,80,60,g=>{
   // Thick basket rails and big products make the cart read at thumbnail size.

@@ -21,7 +21,7 @@ const continuity = {...approved,handoffs:lines.slice(1).map((_,index)=>({
 }))};
 const listener = {...approved,heardQuestion:story.question,heardAnswer:story.answer,retell:story.answer};
 const spec = {
- version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',look:'viral',hook:'Why *run out* of lemons?',header:'Buffers',payoff:'Extra lemons cost *money*',
+ version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',look:'viral',hook:'Why *run out* of lemons?',header:'Buffers',payoff:'Extra lemons cost *money*',term:'buffer',
  scenes:lines.map((say,i)=>({type:'shot',shot:i%2?'trade':'handoff',duration:4,params:{item:'lemonade',world:'market'},say})),
 };
 
@@ -164,20 +164,30 @@ test('a correct story keeps its best shareability draft when the critic never ap
  assert.equal(result.provenance.editorial.storyRounds.length,5);
  assert.ok(result.provenance.editorial.storyRounds.every(round=>round.correct));
 });
-test('a storyboard that never matches the schema still stops before post copy',async t=>{
- const {calls}=mockHedgy(t,format=>format==='hedgy_reel'?{version:1}:undefined);
- await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>error.code==='hedgy_scenes_unapproved');
- assert.ok(calls.every(call=>call.text?.format?.name!=='hedgy_copy_review'));
+test('a reel is produced even when every model call fails',async t=>{
+ t.mock.method(globalThis,'fetch',async()=>{throw new Error('network down');});
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ assert.equal(parseReelSpec(result.spec).ok,true);
+ assert.ok(result.spec.scenes.length>=2);
+ assert.equal(result.provenance.editorial.storyboardFallback,'deterministic act storyboard');
+});
+test('a storyboard that never matches the schema still ends in a postable act storyboard',async t=>{
+ mockHedgy(t,format=>format==='hedgy_reel'?{version:1}:undefined);
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ assert.equal(result.provenance.editorial.storyboardFallback,'deterministic act storyboard');
+ assert.equal(parseReelSpec(result.spec).ok,true);
+ assert.ok(result.spec.scenes.every(scene=>scene.shot==='act'&&scene.params.world));
+ assert.equal(result.spec.scenes.map(scene=>scene.say).join(' '),lines.join(' '));
 });
 
-test('unapproved scripts stop before animation planning after four repairs',async t=>{
- const {calls}=mockHedgy(t,format=>format==='hedgy_fact_review'
+test('unapproved scripts still produce a reel from the latest draft after four repairs',async t=>{
+ mockHedgy(t,format=>format==='hedgy_fact_review'
   ? {approved:false,findings:['The stated outcome needs a condition.']}
   : undefined);
- await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>
-  error.code==='hedgy_story_unapproved'&&error.details.rounds.length===5);
- assert.equal(calls.length,22);
- assert.ok(calls.every(call=>call.text?.format?.name!=='hedgy_reel'));
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ assert.equal(result.provenance.editorial.storyRounds.length,5);
+ assert.equal(result.provenance.editorial.storyUnresolved,true);
+ assert.equal(parseReelSpec(result.spec).ok,true);
 });
 import {DatabaseSync} from 'node:sqlite';
 import {readFileSync,readdirSync} from 'node:fs';

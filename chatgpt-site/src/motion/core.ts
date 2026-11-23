@@ -287,6 +287,8 @@ export interface ReelSpec {
   header?: string;
   /** Payoff card over the last ~2 s (viral look): the answer in a few words, e.g. "$51 FOR AN *$80* BIKE". */
   payoff?: string;
+  /** The concept's name (viral look): shown as a big card the moment the narration says it, e.g. "MORAL HAZARD". */
+  term?: string;
   scenes: SceneSpec[];
   captions?: CaptionSpec[];
 }

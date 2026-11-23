@@ -31,7 +31,7 @@ function plan(props: ShotProps, dur: number): Plan {
     left: itemParam(p, 'left', 'cash'), right: itemParam(p, 'right', 'cash'),
     leftPrice: short(str(p, 'leftPrice', '$300'), 8), rightPrice: short(str(p, 'rightPrice', '$240'), 8),
     leftLabel: short(str(p, 'leftLabel', 'LATER'), 12), rightLabel: short(str(p, 'rightLabel', 'NOW'), 12),
-    gap: short(str(p, 'gap', ''), 10), pick: pick(p, 'pick', PICKS, 'none'), who: pick(p, 'who', [...ACTORS, 'none'], 'hedgy'),
+    gap: short(str(p, 'gap', ''), 14), pick: pick(p, 'pick', PICKS, 'none'), who: pick(p, 'who', [...ACTORS, 'none'], 'hedgy'),
     mood: pick(p, 'mood', MOODS, 'shocked'), inL, inR, hit,
   };
 }
@@ -47,8 +47,8 @@ function drawCard(ctx: Frame['ctx'], s: Plan, side: 'left' | 'right', t: number,
   drawSprite(ctx, cardSprite(), 0, 0, { anchor: [0.5, 0.5] });
   const size = itemSize(item), scale = Math.min(0.55, 180 / size.w, 110 / size.h);
   drawItem(ctx, item, { x: 0, y: -92, t, scale });
-  label(ctx, price, 0, 26, { variant: 'sign', size: 108, maxWidth: 240, bg: PAL.paper });
-  label(ctx, text, 0, 118, { variant: 'tag', maxWidth: 236, bg: side === 'left' ? PAL.blue1 : PAL.gold1 });
+  label(ctx, price, 0, 26, { variant: 'sign', size: 108, maxWidth: 240, singleLine: true, bg: PAL.paper });
+  label(ctx, text, 0, 118, { variant: 'tag', maxWidth: 236, singleLine: true, bg: side === 'left' ? PAL.blue1 : PAL.gold1 });
   if (dim > 0.02) { ctx.globalAlpha = dim; ctx.strokeStyle = PAL.red2; ctx.lineWidth = 14; ctx.beginPath(); ctx.moveTo(-120, -150); ctx.lineTo(120, 150); ctx.stroke(); }
   ctx.restore();
 }
@@ -56,7 +56,7 @@ function drawCard(ctx: Frame['ctx'], s: Plan, side: 'left' | 'right', t: number,
 export const versusShot: ShotDef = {
   name: 'versus',
   stage: 'clean',
-  describe: 'Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 10 characters, e.g. -$60 or SAVED $29), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.',
+  describe: 'Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 14 characters with normal spaces, e.g. -$60 or SAVED $0.40), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: s.who === 'none' ? [] : [{ x: STAGE.centre, y: STAGE.floor - 3, w: 170 }] });
@@ -80,7 +80,7 @@ export const versusShot: ShotDef = {
       // The gap falls from above, squashes on impact and stays as the headline number.
       const y = -120 + (CARD.y + 200 + 120) * ease.inCubic(hit), sq = squash(t, s.hit, 0.3, 0.3);
       ctx.save(); ctx.translate(STAGE.centre, y); ctx.scale(sq.sx, sq.sy); ctx.rotate(-0.05);
-      label(ctx, s.gap, 0, 0, { variant: 'stamp', size: 108, maxWidth: 420, bg: PAL.paper });
+      label(ctx, s.gap, 0, 0, { variant: 'stamp', size: 108, maxWidth: 440, singleLine: true, bg: PAL.paper });
       ctx.restore();
       sparks(ctx, STAGE.centre, CARD.y + 200, s.hit, t, { count: 8, seed: frame.seed, duration: 0.5 });
       poof(ctx, STAGE.centre, CARD.y + 250, s.hit, t, { count: 5, seed: frame.seed + 2, radius: 40 });

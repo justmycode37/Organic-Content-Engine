@@ -16,7 +16,8 @@ export const renderEnv=spec=>({MOTION_SPEECH_TEMPO:process.env.MOTION_SPEECH_TEM
 async function renderVersion(dir,name,spec,{runner=run}={}){
  const specFile=join(dir,`${name}.json`),out=join(dir,`${name}.mp4`),kit=join(dir,`${name}-review`);
  await writeFile(specFile,JSON.stringify(spec,null,2));
- if(!await exists(out))await runner(process.execPath,[join(ROOT,'scripts/motion-audio.mjs'),specFile,out],renderEnv(spec));
+ // A transient provider/render failure gets one more attempt; audio clips already made are cached.
+ if(!await exists(out))await runner(process.execPath,[join(ROOT,'scripts/motion-audio.mjs'),specFile,out],renderEnv(spec)).catch(()=>runner(process.execPath,[join(ROOT,'scripts/motion-audio.mjs'),specFile,out],renderEnv(spec)));
  if(!await exists(join(kit,'motion.txt')))await runner(process.execPath,[join(ROOT,'scripts/review-reel.mjs'),out,kit,'2']);
  return {out,kit};
 }
@@ -33,11 +34,14 @@ export async function finishHedgy(dir,spec,{env=process.env,onUsage,subscription
  let selection={version:'render-v1',reason:'no visual review'};
  if(spec.look==='viral'){
   const s1=await sheets(v1.kit);
-  const first=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},spec,s1.images,s1.timeline,onUsage,subscription);
+  const first=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},spec,s1.images,s1.timeline,onUsage,subscription).catch(error=>({error:String(error?.message??error)}));
   await writeFile(join(dir,'visual-review-v1.json'),JSON.stringify(first,null,2));
   selection={version:'render-v1',reason:first.review?`visual review score ${first.review.score}${first.review.approved?' (approved)':''}`:`visual review unavailable: ${first.error??'invalid'}`};
   if(first.spec){
-   const v2=await renderVersion(dir,'render-v2',first.spec,{runner});
+   // A repair that cannot be rendered never costs the post: keep the reviewed first render.
+   const v2=await renderVersion(dir,'render-v2',first.spec,{runner}).catch(async error=>{await writeFile(join(dir,'render-v2-error.txt'),String(error?.message??error));return undefined;});
+   if(!v2){selection={version:'render-v1',reason:'repair render failed; kept the reviewed original'};}
+   else {
    const s2=await sheets(v2.kit);
    const second=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},first.spec,s2.images,s2.timeline,onUsage,subscription,{repair:false}).catch(error=>({error:String(error?.message??error)}));
    const {spec:_ignored,...secondRecord}=second;
@@ -46,6 +50,7 @@ export async function finishHedgy(dir,spec,{env=process.env,onUsage,subscription
    const a=first.review?.score??0,b=second.review?.score??a;
    if(b>=a){selection={version:'render-v2',reason:`repair scored ${b} vs ${a}`};spec=first.spec;}
    else selection={version:'render-v1',reason:`repair scored ${b} vs ${a}; kept the original`};
+   }
   }
  }
  await copyFile(join(dir,`${selection.version}.mp4`),finished);

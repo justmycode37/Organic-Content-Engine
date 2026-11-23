@@ -3,6 +3,23 @@
 export interface ShotCatalogEntry { name: string; describe: string; params: readonly string[] }
 export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
   {
+    "name": "act",
+    "describe": "A general choreography shot that acts out a line no other shot covers: up to two actors (left, right) and up to three items, with a script of verbs that fire on the sync words in order. params: left (actor id, default hedgy), right (actor id or none, default clerk), leftMood/rightMood, item (item standing at centre), leftItem/rightItem (item held in that actor's paw), tag (short word on the centre item), moves (1–6 steps, each {\"event\":1..6,\"action\":\"give|take|put|drop|appear|vanish|grow|shrink|shake|stamp|walk-in|walk-out|point|jump|celebrate|shock\",\"who\":\"left|right\",\"item\":\"item id (optional)\",\"word\":\"STAMP WORD (stamp only)\"}). give = who hands their item to the other actor; take = who grabs the centre item (or the other actor's); put = who sets their item down at centre; drop = an item falls from above onto the centre; appear/vanish = an item pops in at centre / poofs away; grow/shrink/shake = the centre item gets bigger / smaller / wobbles; stamp = a word slams down above the action; walk-in/walk-out = who enters or leaves; point/jump/celebrate/shock = who reacts. Items move paw to paw in clear arcs and stay where they land.",
+    "params": [
+      "item",
+      "left",
+      "leftItem",
+      "leftMood",
+      "moves",
+      "right",
+      "rightItem",
+      "rightMood",
+      "tag",
+      "x",
+      "y"
+    ]
+  },
+  {
     "name": "arrive",
     "describe": "A second character walks or runs in from the side and joins the first beside an item; they turn and react together, and the newcomer can carry a small item such as cash or a contract. params: first (actor id, default hedgy), arriver (actor id, default buyer), item (any item id, default ticket), carry (optional item id, default none), side (left|right, default right), pace (walk|run, default walk). Events: 1 = the newcomer reaches the item and the first character turns to greet them; missing events use a late-arrival fallback.",
     "params": [
@@ -299,7 +316,7 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
   },
   {
     "name": "versus",
-    "describe": "Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 10 characters, e.g. -$60 or SAVED $29), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.",
+    "describe": "Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 14 characters with normal spaces, e.g. -$60 or SAVED $0.40), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.",
     "params": [
       "gap",
       "left",
@@ -329,7 +346,7 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
 ];
 export const SHOT_NAMES = SHOT_CATALOG.map(entry => entry.name);
 /** Props a spec may name in item-type params. */
-export const SHOT_ITEMS = ["ticket","ticketStack","banknote","cash","cashPile","coin","coinStack","priceTag","iou","wallet","safe","padlock","clock","hourglass","booth","poster","megaphone","press","share","contract","bond","piggy","moneyBag","gold","card","calculator","percent","pie","barChart","candles","basket","umbrella","shield","lever","magnifier","calendar","dice","crypto","bank","exchange","house","factory","shop","taxOffice","bull","bear","crate","warning","check","cross","question","apple","appleCrate","lemonade","pizza","pizzaSlice","car","phone","smartphone","cart","gift","key","bulb","weather","tree","snowball","coffeeCup","bread","burger","bike","laptop","sneaker","watch","chocolateBar","lemon"] as const;
+export const SHOT_ITEMS = ["ticket","ticketStack","banknote","cash","cashPile","coin","coinStack","priceTag","iou","wallet","safe","padlock","clock","hourglass","booth","poster","megaphone","press","share","contract","bond","piggy","moneyBag","gold","card","calculator","percent","pie","barChart","candles","basket","umbrella","shield","lever","magnifier","calendar","dice","crypto","bank","exchange","house","factory","shop","taxOffice","bull","bear","crate","warning","check","cross","question","apple","appleCrate","lemonade","pizza","pizzaSlice","car","phone","smartphone","terminal","cart","gift","key","bulb","weather","tree","snowball","coffeeCup","bread","burger","bike","laptop","sneaker","watch","chocolateBar","lemon"] as const;
 /** Cast: 'hedgy' (the mascot), role presets and species. */
 export const SHOT_ROLES = [{"role":"broker","species":"badger"},{"role":"banker","species":"badger"},{"role":"lender","species":"owl"},{"role":"buyer","species":"raccoon"},{"role":"trader","species":"fox"},{"role":"rival","species":"fox"},{"role":"clerk","species":"mouse"},{"role":"saver","species":"mouse"},{"role":"fan1","species":"rabbit"},{"role":"fan2","species":"rabbit2"},{"role":"fan3","species":"rabbit3"},{"role":"customer","species":"rabbit"},{"role":"seller1","species":"hedgehog"},{"role":"seller2","species":"hedgehog2"},{"role":"investor","species":"hedgehog"}] as const;
 export const SHOT_CAST = [{"id":"hedgy","looks":"the brown hedgehog mascot"},{"id":"hedgehog","looks":"grey hedgehog (others like Hedgy)"},{"id":"hedgehog2","looks":"russet hedgehog"},{"id":"fox","looks":"orange fox, bushy white-tipped tail"},{"id":"badger","looks":"stocky badger, striped face"},{"id":"owl","looks":"brown owl, big eyes, gold beak"},{"id":"raccoon","looks":"grey raccoon, black mask, ringed tail"},{"id":"rabbit","looks":"white rabbit, ears up"},{"id":"rabbit2","looks":"white rabbit, one ear flopped"},{"id":"rabbit3","looks":"white lop-eared rabbit"},{"id":"mouse","looks":"small grey mouse, pink ears"}] as const;

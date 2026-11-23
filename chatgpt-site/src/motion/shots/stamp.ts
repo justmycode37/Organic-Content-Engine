@@ -131,6 +131,14 @@ function layout(s: Plan) {
   }
   stampX = clamp(stampX, edgeMargin + safeWidth / 2, 678 - safeWidth / 2);
   stampY = clamp(stampY, minY, maxY);
+  // Never slam the plate across the actor's face: if it would overlap the head band, slide it right of the
+  // actor or lift it above the head.
+  const headTop = STAGE.floor - 390, headBottom = STAGE.floor - 230, plateLeft = stampX - wordWidth / 2, actorRight = actorX + 120;
+  if (stampY + wordHeight / 2 > headTop && stampY - wordHeight / 2 < headBottom && plateLeft < actorRight) {
+    const shifted = actorRight + wordWidth / 2;
+    if (shifted <= 678 - safeWidth / 2) stampX = shifted;
+    else stampY = clamp(headTop - 12 - wordHeight / 2, minY, maxY);
+  }
   return { size, itemScale, itemX, actorX, itemY, wordWidth, wordHeight, stampX, stampY, placement };
 }
 

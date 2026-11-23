@@ -5,10 +5,16 @@ import { clamp, ease, font, markupWords, type Ctx, type PlacedScene, type ReelSp
 import type { ActiveCaption } from './captions.ts';
 
 const YELLOW = '#FFD23F', INK = '#0B0B0D', WHITE = '#FFFFFF';
-const HEADER_Y = 150, HOOK_Y = 330;
+const HEADER_Y = 150, HOOK_Y = 330, PAYOFF_Y = 1440;
+/** The payoff card replaces the captions once the narration has finished, so it never covers the final shot. */
+function payoffAt(captions: readonly ActiveCaption[], end: number, hookEnd: number) { const last = captions.at(-1)?.end; return Math.max(hookEnd + 1, last !== undefined && last < end - 0.4 ? last : end - 1.4); }
 // The persistent header collided with in-shot signs at the top of the stage; the hook and payoff cards carry the topic instead.
 const SHOW_HEADER = false;
 
+/** Attach punctuation tokens (".", "?") to the previous word so cards never show "PAYS .". */
+function joinPunctuation(words: { text: string; accent: boolean }[]) {
+  return words.reduce<{ text: string; accent: boolean }[]>((list, w) => { if (/^[.,!?;:…%)\]}”’"]+$/.test(w.text) && list.length) list[list.length - 1]!.text += w.text; else list.push({ ...w }); return list; }, []);
+}
 function width(ctx: Ctx, text: string, size: number) { ctx.font = font(size, 900); return ctx.measureText(text).width; }
 function wrap(ctx: Ctx, words: string[], size: number, max: number) {
   const lines: string[][] = []; let line: string[] = [];
@@ -35,15 +41,60 @@ function richLine(ctx: Ctx, words: { text: string; accent: boolean }[], cx: numb
   words.forEach((word, i) => { strokedText(ctx, word.text, x + widths[i]! / 2, y, size, word.accent ? YELLOW : WHITE); x += widths[i]! + space; });
 }
 
-/** Hook over the first scene, then a compact header for the rest of the reel. */
-export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[]) {
+/** When the narration first says the concept's name: the start of its first word on the reel timeline. */
+export function termTime(term: string | undefined, captions: readonly ActiveCaption[]): number | undefined {
+  const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9$%]/g, '');
+  const target = (term ?? '').split(/\s+/).map(norm).filter(Boolean);
+  if (!target.length) return undefined;
+  for (const caption of captions) {
+    const words = String(caption.text).split(/\s+/).map(norm).filter(Boolean);
+    for (let i = 0; i + target.length <= words.length; i++) {
+      if (target.every((w, k) => words[i + k] === w)) return caption.wordTimings?.[i]?.start ?? caption.start;
+    }
+  }
+  return undefined;
+}
+
+function cardText(text: string) { return joinPunctuation(markupWords(text.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent }))); }
+/** The device-space band covered by whichever overlay card (hook, concept term or payoff) is on screen. */
+export function cardZone(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []): { top: number; bottom: number } | undefined {
+  const hook = spec.hook?.trim(), firstEnd = placed[0]?.end ?? 0, hookEnd = hook ? Math.min(Math.max(1.6, firstEnd), 3.2) : 0;
+  const end = placed.at(-1)?.end ?? 0, payoffStart = payoffAt(captions, end, hookEnd);
+  const band = (text: string, sizes: number[], max: number, lineK: number, pad: number, center: number) => {
+    const { size, lines } = fit(ctx, cardText(text).map(w => w.text).join(' '), sizes, max, 3);
+    const h = lines.length * size * lineK + pad;
+    return { top: center - h / 2 - 12, bottom: center + h / 2 + 12 };
+  };
+  if (hook && time < hookEnd + 0.25) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 56, HOOK_Y);
+  if (spec.payoff?.trim() && time >= payoffStart) return band(spec.payoff, [96, 88, 80, 72, 64, 58], 940, 1.1, 60, PAYOFF_Y);
+  const termAt = termTime(spec.term, captions);
+  if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) return band(spec.term, [104, 96, 88, 80, 72, 64, 58], 940, 1.1, 60, HOOK_Y + 20);
+  return undefined;
+}
+
+function drawCard(ctx: Ctx, text: string, k: number, centerY: number) {
+  const parsed = joinPunctuation(markupWords(text.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
+  const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [104, 96, 88, 80, 72, 64, 58], 940, 3);
+  let index = 0;
+  const rows = lines.map(line => line.map(() => parsed[index++]!));
+  const lineH = size * 1.1, h = rows.length * lineH + 60;
+  ctx.save();
+  ctx.globalAlpha = clamp(k * 1.4);
+  ctx.translate(540, centerY); ctx.scale(0.75 + 0.25 * k, 0.75 + 0.25 * k);
+  ctx.fillStyle = 'rgba(11,11,13,0.8)'; ctx.fillRect(-510, -h / 2, 1020, h);
+  ctx.fillStyle = YELLOW; ctx.fillRect(-510, h / 2 - 10, 1020, 10);
+  rows.forEach((row, r) => richLine(ctx, row, 0, -h / 2 + 30 + lineH / 2 + r * lineH, size));
+  ctx.restore();
+}
+
+export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []) {
   const hook = spec.hook?.trim(), header = (spec.header ?? '').trim();
   const firstEnd = placed[0]?.end ?? 0;
   const hookEnd = hook ? Math.min(Math.max(1.6, firstEnd), 3.2) : 0;
   ctx.save();
   if (hook && time < hookEnd + 0.25) {
     const exit = clamp((hookEnd + 0.25 - time) / 0.25);
-    const parsed = markupWords(hook.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent }));
+    const parsed = joinPunctuation(markupWords(hook.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
     const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [104, 96, 88, 80, 72, 64], 960, 3);
     let index = 0;
     const rows = lines.map(line => line.map(() => parsed[index++]!));
@@ -62,15 +113,15 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
       ctx.restore();
     });
   }
-  const payoff = spec.payoff?.trim(), end = placed.at(-1)?.end ?? 0, payoffStart = Math.max(hookEnd + 1, end - 2.1);
+  const payoff = spec.payoff?.trim(), end = placed.at(-1)?.end ?? 0, payoffStart = payoffAt(captions, end, hookEnd);
   if (payoff && time >= payoffStart) {
     // The answer lands as a big card over the final shot, so the reel ends on its punchline.
     const k = ease.outBack(clamp((time - payoffStart) / 0.3));
-    const parsed = markupWords(payoff.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent }));
+    const parsed = joinPunctuation(markupWords(payoff.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
     const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [96, 88, 80, 72, 64, 58], 940, 3);
     let index = 0;
     const rows = lines.map(line => line.map(() => parsed[index++]!));
-    const lineH = size * 1.1, h = rows.length * lineH + 60, top = HOOK_Y + 20 - h / 2;
+    const lineH = size * 1.1, h = rows.length * lineH + 60, top = PAYOFF_Y - h / 2;
     ctx.save();
     ctx.globalAlpha = clamp(k * 1.4);
     ctx.translate(540, top + h / 2); ctx.scale(0.75 + 0.25 * k, 0.75 + 0.25 * k);
@@ -80,6 +131,12 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
     ctx.restore();
     ctx.restore();
     return;
+  }
+  // The concept's name lands as a card the moment it is spoken (not over the hook or the payoff).
+  const termAt = termTime(spec.term, captions);
+  if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) {
+    const out = clamp((termAt + 1.5 - time) / 0.15);
+    drawCard(ctx, `*${spec.term.replace(/\*/g, '')}*`, Math.min(ease.outBack(clamp((time - termAt) / 0.25)), out), HOOK_Y + 20);
   }
   if (header && time >= hookEnd && SHOW_HEADER) {
     const k = ease.outExpo(clamp((time - hookEnd) / 0.3));
@@ -98,28 +155,30 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
  * Large word-pop captions for the viral look: 1–2 short lines of heavy white
  * sans with a thick dark stroke; the word being spoken turns yellow and pops.
  */
-export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number, centerY = 1565) {
+export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number, centerY = 1440, centerX = 500) {
   const raw = String(caption.text ?? '').trim();
   if (!raw || time < caption.start || time >= caption.end) return;
   // Spoken-dialogue quote marks read as stray glyphs in big captions; drop them.
   const words = markupWords(raw.replace(/["“”]|(^|\s)[‘']|[’'](?=[\s.,!?]|$)/g, '$1')).map(w => w.text).filter(w => w.trim()).reduce<string[]>((list, w) => { if (/^[.,!?;:…%)\]}”’"]+$/.test(w) && list.length) list[list.length - 1] += w; else list.push(w); return list; }, []);
   const span = Math.max(0.05, caption.end - caption.start), timings = caption.wordTimings;
   const starts = words.map((_, i) => timings?.[i]?.start ?? caption.start + span * i / words.length);
-  const { size, lines } = fit(ctx, words.join(' '), [92, 86, 80, 74, 68, 62, 56], 940, 2);
+  const { size, lines } = fit(ctx, words.join(' '), [80, 76, 70, 64, 58, 52], 800, 2);
   const lineH = size * 1.12, top = centerY - (lines.length - 1) * lineH / 2;
-  const appear = ease.outBack(clamp((time - caption.start) / 0.16)), exit = clamp((caption.end - time) / 0.08);
+  // Hard cuts between phrases (a fade-out read as a flicker); only the new phrase pops in.
+  const appear = ease.outBack(clamp((time - caption.start) / 0.16)), exit = 1;
   ctx.save();
   ctx.globalAlpha = exit;
   let index = 0;
   lines.forEach((line, r) => {
     ctx.font = font(size, 900);
-    const space = ctx.measureText(' ').width, widths = line.map(w => ctx.measureText(w).width);
-    let x = 540 - (widths.reduce((a, b) => a + b, 0) + space * (line.length - 1)) / 2;
+    // The thick stroke eats into word gaps ("onlysqueezes"): widen each gap by the stroke width.
+    const space = ctx.measureText(' ').width + size * 0.24, widths = line.map(w => ctx.measureText(w).width);
+    let x = centerX - (widths.reduce((a, b) => a + b, 0) + space * (line.length - 1)) / 2;
     const y = top + r * lineH;
     line.forEach((word, c) => {
       const i = index++, start = starts[i]!, next = starts[i + 1] ?? caption.end;
       const active = time >= start && time < next, spoken = time >= start;
-      const pop = active ? 1 + 0.12 * (1 - clamp((time - start) / 0.18)) : 1;
+      const pop = active ? 1 + 0.08 * (1 - clamp((time - start) / 0.18)) : 1;
       const cx = x + widths[c]! / 2;
       ctx.save(); ctx.translate(cx, y); ctx.scale(pop * (0.85 + 0.15 * appear), pop * (0.85 + 0.15 * appear));
       strokedText(ctx, word, 0, 0, size, active ? YELLOW : spoken ? WHITE : 'rgba(255,255,255,0.92)', INK, size * 0.22);

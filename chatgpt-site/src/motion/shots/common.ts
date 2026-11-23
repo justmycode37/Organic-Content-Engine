@@ -4,6 +4,7 @@
 import type { Cue, CueKind, ShotProps } from '../core.ts';
 import { drawHedgy, hedgyAt, hedgyBounds, hedgyFace, hedgyPaw, type HedgyKey, type HedgyOptions } from '../actor/hedgy.ts';
 import { ROLE_ALIASES, type Who } from '../props/people.ts';
+import { registerFace } from '../kit/stage.ts';
 import * as ticket from '../props/ticket.ts';
 import * as money from '../props/money.ts';
 import * as paper from '../props/paper.ts';
@@ -58,7 +59,13 @@ function actorOptions(o: ActorOptions): HedgyOptions {
   return { pose: 'idle', shadow: true, ...rest, ...timeline, species: role ? role.species : (who as HedgyOptions['species']), accessory: o.accessory ?? role?.accessory };
 }
 /** Draw any cast member ('hedgy', a role like 'broker', or a species). `keys` = blended pose timeline evaluated at `time`. */
-export const drawActor = (ctx: Ctx, o: ActorOptions) => drawHedgy(ctx, actorOptions(o));
+export const drawActor = (ctx: Ctx, o: ActorOptions) => {
+  const options = actorOptions(o);
+  // Record the face in device space so labels drawn this frame can keep clear of it (kit/stage label()).
+  const face = hedgyFace(options), m = ctx.getTransform();
+  registerFace({ x: m.a * face.x + m.c * face.y + m.e, y: m.b * face.x + m.d * face.y + m.f, r: face.r * Math.abs(m.a) * 1.25 });
+  return drawHedgy(ctx, options);
+};
 export const actorPaw = (o: ActorOptions) => hedgyPaw(actorOptions(o));
 export const actorFace = (o: ActorOptions) => hedgyFace(actorOptions(o));
 export const actorBounds = (o: ActorOptions) => hedgyBounds(actorOptions(o));
@@ -92,7 +99,7 @@ export const ITEMS = {
   warning: I(symbols.drawWarningTriangle, 360, 330), check: I(symbols.drawCheckStamp, 300, 300), cross: I(symbols.drawCrossStamp, 300, 300), question: I(symbols.drawQuestionMark, 240, 330),
   apple: I(everyday.drawApple, 330, 330), appleCrate: I(everyday.drawAppleCrate, 450, 360), lemonade: I(everyday.drawLemonadeStand, 450, 600), pizza: I(everyday.drawPizza, everyday.PIZZA_SIZE.w, everyday.PIZZA_SIZE.h),
   pizzaSlice: I(everyday.drawPizzaSlice, everyday.PIZZA_SLICE_SIZE.w, everyday.PIZZA_SLICE_SIZE.h),
-  car: I(everyday.drawCar, 510, 300), phone: I(everyday.drawPhoneChart, 276, 450), smartphone: I(everyday.drawSmartphone, 276, 450), cart: I(everyday.drawShoppingCart, 480, 360), gift: I(everyday.drawGiftBox, 330, 330),
+  car: I(everyday.drawCar, 510, 300), phone: I(everyday.drawPhoneChart, 276, 450), smartphone: I(everyday.drawSmartphone, 276, 450), terminal: I(everyday.drawTerminal, 264, 384), cart: I(everyday.drawShoppingCart, 480, 360), gift: I(everyday.drawGiftBox, 330, 330),
   key: I(everyday.drawKey, 420, 180), bulb: I(everyday.drawLightBulb, 330, 420), weather: I(everyday.drawRiskWeather, 480, 390), tree: I(everyday.drawCompoundingTree, 390, 420, { state: { grow: 1 } }),
   snowball: I(everyday.drawSnowball, 300, 300, { state: { size: 1 } }),
   coffeeCup: I(everyday.drawCoffeeCup, everyday.COFFEE_CUP_SIZE.w, everyday.COFFEE_CUP_SIZE.h), bread: I(everyday.drawBread, everyday.BREAD_SIZE.w, everyday.BREAD_SIZE.h),

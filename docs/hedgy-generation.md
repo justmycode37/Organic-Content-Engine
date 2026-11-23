@@ -97,3 +97,14 @@ Produce a reel locally with the account-worker path:
 cd chatgpt-site
 node --env-file-if-exists=.env.hedgy --env-file-if-exists=.env.motion scripts/hedgy-local-reel.mjs ../artifacts/hedgy/<run> [history.json]
 ```
+
+### Every run ends in a reel
+
+A Hedgy run never ends without a postable reel. A failed model or transport call returns no text, and each stage treats empty text as an invalid answer:
+
+- **Ideation** keeps the closest idea, or falls back to an eligible concept with an unused everyday item.
+- **Story** uses the best fully correct draft. Failing that, it uses the latest well-formed draft, and as a last resort a minimal story.
+- **Storyboard** uses the last valid storyboard. Failing that, it uses the latest storyboard sanitised to documented params, worlds, hook and payoff, and as a last resort a deterministic storyboard of `act` shots that keeps every spoken word.
+- **Post copy** keeps the latest valid copy.
+
+Rendering is retried once, and a repair render that fails keeps the reviewed first render. Each fallback is recorded in provenance as unresolved (`ideaFallback`, `storyUnresolved`, `storyboardFallback`, `copyUnresolved`), together with every finding. The only remaining stop is a missing model credential.
