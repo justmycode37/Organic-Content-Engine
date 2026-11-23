@@ -133,24 +133,23 @@ test('Hedgy bills the API only on subscription exhaustion and preserves xhigh',a
  }finally{globalThis.fetch=original;}
 });
 
-test('incomplete output retains the exact stage, reason, request ID and usage; no retry or repair',async()=>{
+test('incomplete output is logged with stage, reason, request ID and usage; no retry, and the reel still finishes from fallbacks',async()=>{
  const original=globalThis.fetch;let calls=0;const usage={output_tokens:3000,output_tokens_details:{reasoning_tokens:3000}};
  globalThis.fetch=async()=>{calls++;return stream([{type:'response.incomplete',response:{id:'resp-incomplete',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage}}]);};
  try{
-  await fixture(async({cacheRoot,calls:routes,logs,options})=>{
+  await fixture(async({cacheRoot,options})=>{
    assert.equal(await runOnce(config,options),true);
-   assert.equal(calls,1);assert.equal(routes.filter(c=>c.path.endsWith('/claim')).length,1);
-   assert.equal(routes.some(c=>/\/(output|complete)$/.test(c.path)),false);
-   const failure=JSON.parse(await readFile(join(cacheRoot,job.id,'failure.json'),'utf8'));
-   assert.equal(failure.jobId,job.id);assert.equal(failure.stage,'generation');assert.equal(failure.error.code,'generation_incomplete');
-   assert.equal(failure.error.details.step,'idea-1');assert.equal(failure.error.details.incompleteReason,'max_output_tokens');
-   assert.deepEqual(failure.error.details.usage,usage);assert.equal(failure.error.details.requestId,'req-test');
-   assert.match(JSON.parse(routes.at(-1).init.body).message,/generation idea-1.*max_output_tokens/);
+   // One paid request, never repeated; generation continues without further model calls.
+   assert.equal(calls,1);
    const events=(await readFile(join(cacheRoot,job.id,'generation-events.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
-   assert.equal(events[0].status,'started');assert.equal(events[1].status,'incomplete');assert.equal(events.at(-1).code,'generation_incomplete');
-   assert.ok(logs.some(s=>s.includes('generation_incomplete')));
+   const failed=events.find(e=>e.status==='failed');
+   assert.equal(failed.step,'idea-1');assert.equal(failed.code,'generation_incomplete');assert.equal(failed.incompleteReason,'max_output_tokens');
+   assert.deepEqual(failed.usage,usage);assert.equal(failed.requestId,'req-test');
+   assert.ok(events.some(e=>e.status==='degraded-to-fallback'&&e.step==='idea-1'));
+   const provenance=JSON.parse(await readFile(join(cacheRoot,job.id,'provenance.json'),'utf8'));
+   assert.equal(provenance.editorial.modelFailure.step,'idea-1');
+   assert.equal(provenance.editorial.storyboardFallback,'deterministic act storyboard');
    assert.equal((await stat(join(cacheRoot,job.id))).mode&0o777,0o700);
-   assert.equal((await stat(join(cacheRoot,job.id,'failure.json'))).mode&0o777,0o600);
   });
  }finally{globalThis.fetch=original;}
 });
@@ -160,12 +159,12 @@ test('provider errors remain diagnosable while all configured credentials are re
  globalThis.fetch=async()=>Response.json({error:{code:'invalid_api_key',message:`Bad key ${secret}; Bearer unknown-provider-secret; worker-secret-value sites-secret-value`}}, {status:401,headers:{'x-request-id':'req-denied'}});
  try{await fixture(async({cacheRoot,calls,logs,options})=>{
   await runOnce(config,options);
-  const failure=await readFile(join(cacheRoot,job.id,'failure.json'),'utf8'),events=await readFile(join(cacheRoot,job.id,'generation-events.jsonl'),'utf8');
-  const data=JSON.parse(failure);assert.equal(data.error.details.httpStatus,401);assert.equal(data.error.details.providerError.code,'invalid_api_key');
-  assert.match(JSON.parse(calls.at(-1).init.body).message,/HTTP 401/);
+  const failure=await readFile(join(cacheRoot,job.id,'failure.json'),'utf8').catch(()=>''),events=await readFile(join(cacheRoot,job.id,'generation-events.jsonl'),'utf8');
+  const failed=events.trim().split('\n').map(JSON.parse).find(e=>e.status==='failed');
+  assert.equal(failed.httpStatus,401);assert.equal(failed.providerError.code,'invalid_api_key');
   const all=[failure,events,...logs,...calls.map(c=>c.init?.body??'')].join('\n');
   for(const value of [...Object.values(env),JSON.stringify(secret).slice(1,-1),'unknown-provider-secret'])assert.equal(all.includes(value),false,value);
-  assert.match(failure,/REDACTED/);
+  assert.match(events,/REDACTED/);
  });}finally{globalThis.fetch=original;}
 });
 

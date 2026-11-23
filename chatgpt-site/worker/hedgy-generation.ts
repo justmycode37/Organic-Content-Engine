@@ -53,9 +53,18 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  if(!key&&!subscription)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
  // A model or transport failure must never cost the post: a failed call returns no text, which every stage
  // treats as an invalid answer and covers with its repair or deterministic fallback.
+ // After a failed (possibly paid) request the run makes no further model calls: it never blindly pays again,
+ // and finishes the reel deterministically from what was already approved. The client has already logged
+ // the failure with its stage, reason, request ID and usage.
  const strict=hedgyClient(key,onUsage,subscription);
- const ask:typeof strict=async(step,input,format)=>{try{return await strict(step,input,format);}catch(error){await Promise.resolve(onUsage?.({step,status:'failed-continued',code:(error as AppError)?.code,message:String((error as Error)?.message??error).slice(0,300)})).catch(()=>{});return '';}};
- const critic=hedgyCritic(ask,onUsage,subscription);
+ let degraded:{step:string;code?:string;message:string}|undefined;
+ const ask:typeof strict=async(step,input,format)=>{
+  if(degraded)return '';
+  try{return await strict(step,input,format);}
+  catch(error){degraded={step,code:(error as AppError)?.code,message:String((error as Error)?.message??error).slice(0,300)};await Promise.resolve(onUsage?.({step,status:'degraded-to-fallback',code:degraded.code})).catch(()=>{});return '';}
+ };
+ const fullCritic=hedgyCritic(ask,onUsage,subscription);
+ const critic:typeof fullCritic=(step,input,format,images)=>degraded?Promise.resolve(''):fullCritic(step,input,format,images);
  // 1. Ideation: a concept this account has not covered, told through a new story world and a new score.
  const candidates=conceptCandidates(history),{items:usedItems,moods}=recentlyUsed(history);
  const past=history.slice(0,12).map(h=>`- ${[h.title,h.concept,h.item&&`item ${h.item}`,h.setting,h.music&&`music ${h.music}`].filter(Boolean).join(' | ')}${h.summary?`: ${h.summary.slice(0,160)}`:''}`).join('\n')||'- none yet';
@@ -156,7 +165,7 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
  }
  const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption});
  const spec={...result.spec,...copy.copy};
- return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardFallback,ideaFallback,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
+ return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
 }
 
 import {reviewRenderedHedgy,repairFromVisualReview} from './hedgy-visual-review.ts';
