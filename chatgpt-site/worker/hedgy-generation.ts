@@ -115,6 +115,8 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  const check=(text:string):{issues:string[];spec?:undefined;soft?:undefined}|{spec:ReturnType<typeof finish>;soft:string[];issues?:undefined}=>{
   const parsed=hedgyReelSchema.safeParse(parseEditorialJson(text));
   if(!parsed.success)return {issues:parsed.error.issues.map(i=>`${i.path.join('.')}: ${i.message}`)};
+  // A 1–2 word line makes a half-second flash shot: fold it into the previous scene (narration unchanged).
+  for(let i=parsed.data.scenes.length-1;i>0;i--){const scene=parsed.data.scenes[i]!;if(scene.say.trim().split(/\s+/).length<=2){const prev=parsed.data.scenes[i-1]!;prev.say=`${prev.say} ${scene.say}`;prev.duration=Math.min(7,prev.duration+scene.duration);if(scene.sync?.length)prev.sync=[...(prev.sync??[]),...scene.sync].slice(0,8);parsed.data.scenes.splice(i,1);}}
   // Sync markers on filler words would time actions to "the"/"a": drop them rather than reject the storyboard.
   for(const scene of parsed.data.scenes)if(scene.sync)scene.sync=scene.sync.filter(m=>!/^(a|an|the|it|to|of|and|is|was)$/i.test(m.word));
   const all=contentIssues(parsed.data,idea),soft=all.filter(i=>SOFT.test(i)),issues=all.filter(i=>!SOFT.test(i));

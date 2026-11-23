@@ -151,7 +151,9 @@ function wrapLabel(text: string, maxWidth: number | undefined, padCells: number,
   return lines.length ? lines : [''];
 }
 function labelSprite(text: string, variant: LabelVariant, options: LabelOptions): Sprite {
-  const color = options.fg ?? (variant === 'stamp' ? PAL.red2 : PAL.ink);
+  // Gains are green, losses red: a stamp that announces a gain must not use the loss colour.
+  const gain = /^\+|\b(GAIN|GAINS|PROFIT|SAVED|SAVE|EARN|EARNED|WIN|WON|UP)\b/.test(String(text).toUpperCase());
+  const color = options.fg ?? (variant === 'stamp' ? (gain ? PAL.green3 : PAL.red2) : PAL.ink);
   const bg = options.bg ?? PAL.paper;
   const scale = Math.max(1, Math.round(Math.max(54, options.size ?? 56) / 54));
   const lines = options.singleLine ? [String(text ?? '').toUpperCase().trim()] : wrapLabel(text, options.maxWidth, variant === 'stamp' ? 5 : 4, scale);
@@ -230,7 +232,8 @@ export function label(ctx: Ctx, text: string, x: number, y: number, options: Lab
   if (worldTall()) {
     // A sign wider than the visible frame shrinks around its centre instead of being cropped ("GENERAL ADMISS…").
     const m = reelTransform(ctx), dx = m.a * x + m.c * y + m.e, half = sprite.w * fit / 2 * Math.hypot(m.a, m.b);
-    const room = Math.min(dx - 40, 1040 - dx);
+    const dyc = m.b * x + m.d * y + m.f, right = dyc > 800 ? 950 : 1040; // the Reels icon rail sits low on the right
+    const room = Math.min(dx - 40, right - dx);
     if (half > room && room > 40) fit *= room / half;
   }
   const pop = (typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1) * fit;
