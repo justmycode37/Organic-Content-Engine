@@ -126,6 +126,8 @@ export interface LabelOptions {
   /** Scale applied at draw time; use briefly for a pop (for example 1.08). */
   pop?: number | boolean;
   maxWidth?: number;
+  /** Keep the text on one line and shrink the sign to maxWidth instead of wrapping. */
+  singleLine?: boolean;
   face?: PixelFace;
 }
 const labelCache = new Map<string, Sprite>();
@@ -150,7 +152,7 @@ function labelSprite(text: string, variant: LabelVariant, options: LabelOptions)
   const color = options.fg ?? (variant === 'stamp' ? PAL.red2 : PAL.ink);
   const bg = options.bg ?? PAL.paper;
   const scale = Math.max(1, Math.round(Math.max(54, options.size ?? 56) / 54));
-  const lines = wrapLabel(text, options.maxWidth, variant === 'stamp' ? 5 : 4, scale);
+  const lines = options.singleLine ? [String(text ?? '').toUpperCase().trim()] : wrapLabel(text, options.maxWidth, variant === 'stamp' ? 5 : 4, scale);
   const metrics = lines.map(line => measure(line));
   const textCols = Math.max(0, ...metrics.map(item => item.cols * scale));
   // Stamps have a double border: keep a clear cell between it and the letters ("L" must not read as "[").
@@ -213,11 +215,12 @@ export function label(ctx: Ctx, text: string, x: number, y: number, options: Lab
   // Viral framing: name plates under the feet would sit on the captions.
   if (worldTall()) {
     const m = ctx.getTransform(), dy = m.b * x + m.d * y + m.f;
-    if (dy > 1370) return { x, y, w: 0, h: 0 };
+    if (dy > 1335) return { x, y, w: 0, h: 0 };
     // A sign or stamp must not cover a face: lift it just above the highest face it would overlap.
     const dx = m.a * x + m.c * y + m.e, halfW = sprite.w / 2 * Math.abs(m.a), halfH = sprite.h / 2 * Math.abs(m.d);
     const hit = knownFaces().filter(f => Math.abs(f.x - dx) < halfW + f.r * 0.6 && Math.abs(f.y - dy) < halfH + f.r * 0.6);
     if (hit.length && m.d) { const top = Math.min(...hit.map(f => f.y - f.r)); y += (top - 8 - halfH - dy) / m.d; }
+    if (cardBand) { const cy = m.b * x + m.d * y + m.f; if (cy + halfH > cardBand.top && cy - halfH < cardBand.bottom) return { x, y, w: 0, h: 0 }; }
   }
   const fit = options.maxWidth && sprite.w > options.maxWidth ? options.maxWidth / sprite.w : 1;
   const pop = (typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1) * fit;
@@ -231,6 +234,9 @@ type Face = { x: number; y: number; r: number };
 let faces: Face[] = [], sceneKey = -1;
 const lastFaces = new Map<number, Face[]>();
 export function registerFace(face: Face) { faces.push(face); }
+let cardBand: { top: number; bottom: number } | undefined;
+/** While an overlay card is on screen, in-shot signs under it stay hidden: one overlay at a time. */
+export function setCardZone(zone: { top: number; bottom: number } | undefined) { cardBand = zone; }
 export function resetFaces(key = -1) { if (sceneKey >= 0) lastFaces.set(sceneKey, faces); sceneKey = key; faces = []; }
 const knownFaces = () => [...faces, ...(lastFaces.get(sceneKey) ?? [])];
 

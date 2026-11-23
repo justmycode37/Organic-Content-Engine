@@ -38,7 +38,10 @@ export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best sh
 - The FIRST spoken sentence is the hook: at most 12 words, instantly clear, and it opens a curiosity gap or names a surprising, relatable tension (a question the viewer suddenly needs answered, or a claim that sounds wrong). No scene-setting before it.
 - Concrete stakes for one character the viewer recognises; the viewer should feel "wait, why?" within 3 seconds.
 - One "aha" turn where the mechanism clicks, shown by what happens to the anchor.
-- The last line pays off the hook in a punchy, memorable way (a twist, reversal, or a line people would quote), ideally echoing the opening words so the reel loops.
+- Stakes must feel worth a stranger's 30 seconds: use a realistic case where the money at stake is noticeable (a trip, rent, a car, a paycheck, a year of coffee), or scale the example up in one line ("on a $400 hotel that's $40").
+- The hook names the trap, the loss or the surprising result, not a neutral situation.
+- The last line pays off the hook in a punchy, memorable way and leaves ONE practical rule or insight the viewer can use or repeat ("Always pay in the local currency."), ideally echoing the opening words so the reel loops.
+- Every number must agree exactly everywhere (narration, hookText, any on-screen figure); never round "40 cents" up to "dollars".
 - Brisk: 55–80 spoken words, no filler, no throat-clearing, no lecture tone. Talk like a sharp friend.
 - One or two simple round numbers are welcome when they make the surprise concrete; never ask the viewer to calculate.
 - hookText: the on-screen hook title (max 7 words, may mark the key word with *asterisks*), punchier than the spoken line and never a spoiler of the answer.`;

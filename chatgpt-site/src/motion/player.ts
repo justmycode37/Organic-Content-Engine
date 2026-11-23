@@ -10,6 +10,8 @@ import { compositeTransition, cleanTransition, TRANSITION_DURATIONS } from './fx
 import { SCENES } from './scenes/index.ts';
 import { drawHookAndHeader, drawViralCaption } from './viral.ts';
 import { setWorldTall } from './kit/worlds.ts';
+import { setCardZone } from './kit/stage.ts';
+import { cardZone } from './viral.ts';
 
 interface Surface { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx }
 const surfacesBySize = new Map<string, [Surface, Surface]>();
@@ -37,7 +39,7 @@ function extendSmallCaptionGaps(captions: ActiveCaption[]): ActiveCaption[] {
   for (let index = 0; index < sorted.length - 1; index++) {
     const current = sorted[index]!, next = sorted[index + 1]!;
     const gap = next.start - current.end;
-    if (gap > 0 && gap < 0.25) current.end = next.start;
+    if (gap > 0 && gap < 0.6) current.end = next.start;
   }
   return sorted;
 }
@@ -117,6 +119,7 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   if (!scene) { ctx.restore(); return; }
   const activeFrame: Frame = { ctx, t: time - scene.start, dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
   const transition = activeTransition(placed, time, hedgy, spec.look === 'viral');
+  setCardZone(spec.look === 'viral' ? cardZone(ctx, spec, time, placed, reelCaptions(spec, placed)) : undefined);
   const sceneCtx = ctx;
   if (transition) {
     const [outgoing, incoming] = transitionSurfaces(W, H);
