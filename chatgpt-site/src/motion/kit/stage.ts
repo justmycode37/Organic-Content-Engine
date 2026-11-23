@@ -3,6 +3,7 @@ import { Grid, PAL } from './pixel.ts';
 import { ART, drawSprite, makeSprite, type DrawSpriteOptions, type Sprite } from './sprite.ts';
 import { paintPixelText, measure, type PixelFace } from './type.ts';
 import { clamp, ease, type Point } from './motion.ts';
+import { activeWorld, drawWorld, worldTall } from './worlds.ts';
 
 export const STAGE_BG = '#0B0B0D';
 export const STAGE_WHITE = PAL.paper;
@@ -97,14 +98,15 @@ function floorSprite(width: number, height: number, color: string): Sprite {
 /** Fill the flat stage and optionally draw a one-pixel-grid floor and solid pixel shadows. */
 export function drawStage(ctx: Ctx, { floorY, line: lineOption, shadow = [] }: StageOptions = {}): void {
   ctx.save();
-  ctx.fillStyle = STAGE_BG;
-  ctx.fillRect(0, 0, 1080, 1290);
+  const world = activeWorld();
+  if (world) drawWorld(ctx, world.id, world.t, undefined, world.tall);
+  else { ctx.fillStyle = STAGE_BG; ctx.fillRect(0, 0, 1080, 1290); }
   for (const item of shadow) {
     const h = item.h ?? item.w * 0.18;
     drawSprite(ctx, shadowSprite(item.w, h, '#050506'), item.x, item.y, { anchor: [0.5, 0.5] });
   }
   const lineConfig = typeof lineOption === 'object' ? lineOption : {};
-  const drawLine = lineOption ?? floorY !== undefined;
+  const drawLine = !world && (lineOption ?? floorY !== undefined);
   if (drawLine) {
     const y = Math.round((lineConfig.y ?? floorY ?? 1120) / ART) * ART;
     const lineHeight = Math.max(ART, lineConfig.width ?? ART);
@@ -138,14 +140,8 @@ function wrapLabel(text: string, maxWidth: number | undefined, padCells: number,
     const candidate = line ? `${line} ${word}` : word;
     if (line && measure(candidate).cols <= maxCells) { line = candidate; continue; }
     if (line) lines.push(line);
-    if (measure(word).cols <= maxCells) { line = word; continue; }
-    let chunk = '';
-    for (const char of [...word]) {
-      const next = chunk + char;
-      if (chunk && measure(next).cols > maxCells) { lines.push(chunk); chunk = char; }
-      else chunk = next;
-    }
-    line = chunk;
+    // Never split a word across lines ("RESEL / L / LATER"); label() shrinks an over-wide sign instead.
+    line = word;
   }
   if (line) lines.push(line);
   return lines.length ? lines : [''];
@@ -213,7 +209,13 @@ function labelSprite(text: string, variant: LabelVariant, options: LabelOptions)
 export function label(ctx: Ctx, text: string, x: number, y: number, options: LabelOptions = {}): { x: number; y: number; w: number; h: number } {
   const variant = options.variant ?? 'sign';
   const sprite = labelSprite(String(text ?? '').toUpperCase(), variant, options);
-  const pop = typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1;
+  // Viral framing: name plates under the feet would sit on the captions.
+  if (worldTall()) {
+    const m = ctx.getTransform(), dy = m.b * x + m.d * y + m.f;
+    if (dy > 1400) return { x, y, w: 0, h: 0 };
+  }
+  const fit = options.maxWidth && sprite.w > options.maxWidth ? options.maxWidth / sprite.w : 1;
+  const pop = (typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1) * fit;
   drawSprite(ctx, sprite, x, y, { scale: pop, rot: options.rot, anchor: [0.5, 0.5] });
   return { x: x - sprite.w * pop / 2, y: y - sprite.h * pop / 2, w: sprite.w * pop, h: sprite.h * pop };
 }

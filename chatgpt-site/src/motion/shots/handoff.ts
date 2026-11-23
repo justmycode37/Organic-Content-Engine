@@ -27,7 +27,8 @@ export const handoffShot: ShotDef = {
     const itemScale = Math.min(0.5, 230 / rawSize.w, 230 / rawSize.h);
     const size = itemSize(s.item, itemScale);
     // Key positions: shown above the giver's head, lowered to the paw, passed paw to paw, lifted by the taker.
-    const show = { x: FROM_X + 108, y: SHOW_Y }, give = { x: FROM_X + 138, y: PAW_Y }, take = { x: TO_X - 138, y: PAW_Y }, lift = { x: TO_X - 108, y: SHOW_Y };
+    // Held in the giver's paw at chest height (never floating overhead), passed, then held by the taker.
+    const show = { x: FROM_X + 122, y: PAW_Y - 26 }, give = { x: FROM_X + 138, y: PAW_Y }, take = { x: TO_X - 138, y: PAW_Y }, lift = { x: TO_X - 122, y: PAW_Y - 26 };
     const leave = s.give - 0.08, landed = leave + TRAVEL;
     const lower = ease.inOutCubic(phase(t, leave - 0.34, leave - 0.02)), u = tween(t, leave, TRAVEL, 0, 1, ease.inOutCubic), raise = ease.inOutCubic(phase(t, landed + 0.1, landed + 0.46));
     let pos = { x: show.x + (give.x - show.x) * lower, y: show.y + (give.y - show.y) * lower };
@@ -48,13 +49,13 @@ export const handoffShot: ShotDef = {
     drawActor(ctx, {
       who: s.from, x: FROM_X, y: STAGE.floor, time: t, look: raise > 0 && !giverCatches ? 'up' : 'forward',
       keys: [{ at: 0, pose: 'hold' }, { at: leave - 0.12, pose: 'give' }, { at: leave + 0.26, pose: s.backItem ? 'idle' : 'wave-off' }, ...(s.backItem ? [{ at: backStart + TRAVEL * 0.4, pose: 'receive' as const }, { at: backStart + TRAVEL + 0.12, pose: 'celebrate' as const, expression: 'happy' as const }] : [])],
-      handTarget: giverCatches > 0 ? { x: backPos.x - 8, y: backPos.y + 16 } : { x: pos.x - 10, y: itemY + size.h * 0.32 }, reach: Math.max(giverHolds * lower, giverCatches * (1 - phase(t, backStart + TRAVEL + 0.1, backStart + TRAVEL + 0.3))),
+      handTarget: giverCatches > 0 ? { x: backPos.x - 8, y: backPos.y + 16 } : { x: pos.x - 10, y: itemY + size.h * 0.32 }, reach: Math.max(giverHolds, giverCatches * (1 - phase(t, backStart + TRAVEL + 0.1, backStart + TRAVEL + 0.3))),
     });
     const takerHolds = phase(t, leave + TRAVEL * 0.4, landed);
     drawActor(ctx, {
       who: s.to, x: TO_X, y: STAGE.floor, facing: -1, time: t, look: raise > 0.3 ? 'up' : 'forward',
       keys: [{ at: 0, pose: 'idle' }, { at: leave - 0.12, pose: 'think' }, { at: leave + 0.04, pose: 'receive' }, { at: landed, pose: 'shock', expression: 'shocked' }, { at: landed + 0.14, pose: 'celebrate', expression: 'happy' }, { at: landed + 0.46, pose: 'hold', expression: 'happy' }],
-      handTarget: { x: pos.x + 10, y: itemY + size.h * 0.32 }, reach: takerHolds * (1 - raise),
+      handTarget: { x: pos.x + 10, y: itemY + size.h * 0.32 }, reach: takerHolds,
     });
 
     // carried things are drawn over the bodies but stay below the chins or above the heads

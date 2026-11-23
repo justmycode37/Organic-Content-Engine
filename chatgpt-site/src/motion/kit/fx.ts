@@ -1,3 +1,4 @@
+import { worldTall } from './worlds.ts';
 import type { Ctx } from '../core.ts';
 import { Grid, PAL } from './pixel.ts';
 import { ART, drawSprite, type Sprite } from './sprite.ts';
@@ -34,7 +35,8 @@ function ringSprite(radius: number, width: number, color: string): Sprite {
 export interface RingOptions { r?: number; width?: number; duration?: number; color?: string }
 /** One expanding pixel ring with three calm fade levels; it never flashes or loops. */
 export function ring(ctx: Ctx, x: number, y: number, t0: number, t: number, { r = 96, width = 12, duration = 0.44, color = PAL.paper }: RingOptions = {}): void {
-  if (t < t0 || duration <= 0) return;
+  // The viral look reads rings at reel scale as dashed-circle artifacts; actions carry the emphasis instead.
+  if (t < t0 || duration <= 0 || worldTall()) return;
   const p = phase(t, t0, t0 + duration);
   if (p >= 1) return;
   const radius = r * (0.16 + 0.84 * ease.outCubic(p));

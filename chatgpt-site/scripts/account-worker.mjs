@@ -33,8 +33,11 @@ async function make(job,evidence){
  if(!await stat(done).catch(()=>null)){
   if(await stat(join(cache,'generation-started')).catch(()=>null)){/* A saved spec is safe to render again. */}
   evidence.stage='render';
-  const input=join(cache,'spec.json'),out=done;const childEnv={...evidence.env,MOTION_SPEECH_TEMPO:'0.85',MOTION_LEAD:'0.04',MOTION_TAIL:'0.12'};
-  await runAccountCommand(process.execPath,[join(ROOT,'scripts/motion-audio.mjs'),input,out],childEnv);
+  // Render, let a second model review the actual frames, repair once and keep the better version.
+  const {finishHedgy}=await import('./hedgy-finish.mjs');
+  const finished=await finishHedgy(cache,spec,{env:evidence.env,onUsage:entry=>evidence.usage(entry),subscription:evidence.subscription,
+   runner:(cmd,args,env)=>runAccountCommand(cmd,args,{...evidence.env,...(env??{})})});
+  if(finished.spec){spec=finished.spec;provenance={...provenance,renderSelection:finished.selection};}
  }
  return {done,spec,provenance};
 }

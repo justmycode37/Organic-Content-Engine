@@ -125,6 +125,15 @@ function phoneSprite(direction:'up'|'down'){return cached(`phone-${direction}`,(
   g.rect(13,17,2,3,PAL.blue2);g.rect(17,17,2,3,PAL.blue2);g.rect(21,17,2,3,PAL.blue2);
 }));}
 export function drawPhoneChart(ctx:Ctx,o:Base&{direction?:'up'|'down';trend?:'up'|'down'}){draw(ctx,phoneSprite(o.direction??o.trend??'up'),o);}
+/** An everyday smartphone on its home screen (clock, app grid, dock): a phone as a possession, not a trading screen. */
+const smartphone=make('smartphone-home',46,75,g=>{
+  g.round(4,2,38,71,7,PAL.ink);g.round(7,4,32,67,5,PAL.grey4);g.round(9,7,28,59,3,PAL.blue3);g.rect(9,7,28,20,PAL.blue2);g.rect(19,9,8,2,PAL.grey5);g.ellipse(23,64,2,2,PAL.grey2);
+  g.rect(15,13,16,4,PAL.paper);g.rect(22,13,2,4,PAL.blue2);
+  const apps=[PAL.red2,PAL.green2,PAL.gold2,PAL.orange2,PAL.pink2,PAL.blue1,PAL.green3,PAL.gold1,PAL.red1,PAL.paper,PAL.orange1,PAL.green1];
+  apps.forEach((c,i)=>{const x=12+(i%4)*6,y=29+Math.floor(i/4)*7;g.round(x,y,5,5,1,c);});
+  g.rect(10,55,26,8,PAL.blue4);[PAL.green2,PAL.blue1,PAL.red2,PAL.paper].forEach((c,i)=>g.round(12+i*6,56,5,5,1,c));
+});
+export function drawSmartphone(ctx:Ctx,o:Base){draw(ctx,smartphone,o);}
 
 function cartSprite(items:number){return cached(`shopping-cart-${items}`,()=>make(`shopping-cart-${items}`,80,60,g=>{
   // Thick basket rails and big products make the cart read at thumbnail size.

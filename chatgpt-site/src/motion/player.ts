@@ -8,6 +8,8 @@ import { drawBackground } from './fx/background.ts';
 import { applyCamera, cameraFocus, drawImpact } from './fx/camera.ts';
 import { compositeTransition, cleanTransition, TRANSITION_DURATIONS } from './fx/transitions.ts';
 import { SCENES } from './scenes/index.ts';
+import { drawHookAndHeader, drawViralCaption } from './viral.ts';
+import { setWorldTall } from './kit/worlds.ts';
 
 interface Surface { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx }
 const surfacesBySize = new Map<string, [Surface, Surface]>();
@@ -61,9 +63,18 @@ function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: nu
   const frame: Frame = { ctx, t: time - scene.start, dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
   if (hedgy) { ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H); }
   else drawBackground(frame, time);
-  const clipBottom = isShot ? 1290 : hedgy && scene.spec.type === 'hedgy' ? 1260 : undefined;
+  const viral = spec.look === 'viral';
+  const clipBottom = isShot ? (viral ? H : 1290) : hedgy && scene.spec.type === 'hedgy' ? 1260 : undefined;
   applyCamera(frame, hits, clipBottom, hedgy || isShot, spec.scenes[scene.index + 1]?.transition === 'zoom' || spec.scenes[scene.index + 1]?.transition === 'zoomthrough', isShot, hedgy);
   ctx.save();
+  if (viral && isShot) {
+    // A slow push-in across the shot plus a short punch on every narration event keeps the frame alive.
+    const events = (scene.spec.type === 'shot' ? scene.spec.events ?? [] : []).map(e => e.at);
+    const punch = events.reduce((sum, at) => { const dt = frame.t - at; return dt >= 0 && dt < 0.3 ? Math.max(sum, Math.sin(dt / 0.3 * Math.PI) * 0.028) : sum; }, 0);
+    const zoom = 1.05 + 0.06 * Math.min(1, Math.max(0, frame.t / Math.max(0.5, frame.dur))) + punch;
+    ctx.translate(540, 1000); ctx.scale(zoom, zoom); ctx.translate(-540, -1000);
+  }
+  setWorldTall(viral);
   // Keep the established Hedgy scene aperture exactly as it was; shot scenes use the new full bleed aperture.
   if (hedgy && scene.spec.type === 'hedgy') { ctx.beginPath(); ctx.rect(96, 240, 888, 1020); ctx.clip(); }
   const def = SCENES[scene.spec.type] as SceneDef<unknown>;
@@ -74,11 +85,12 @@ function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: nu
   ctx.restore();
 }
 
-function activeTransition(placed: PlacedScene[], time: number, hedgy = false) {
+function activeTransition(placed: PlacedScene[], time: number, hedgy = false, viral = false) {
   for (let index = 1; index < placed.length; index++) {
     const incoming = placed[index]!;
     const requested = incoming.spec.transition ?? 'cut';
-    const name = hedgy ? cleanTransition(requested) : requested;
+    // Viral reels cut hard: the 'match' crossfade read as a muddy double exposure.
+    const clean = hedgy ? cleanTransition(requested) : requested, name = viral && clean === 'match' ? 'cut' : clean;
     const duration = TRANSITION_DURATIONS[name as TransitionName] ?? 0;
     if (duration <= 0) continue;
     const progress = (time - (incoming.start - duration / 2)) / duration;
@@ -104,7 +116,7 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   ctx.fillStyle = theme.bg; ctx.fillRect(0, 0, W, H);
   if (!scene) { ctx.restore(); return; }
   const activeFrame: Frame = { ctx, t: time - scene.start, dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
-  const transition = activeTransition(placed, time, hedgy);
+  const transition = activeTransition(placed, time, hedgy, spec.look === 'viral');
   const sceneCtx = ctx;
   if (transition) {
     const [outgoing, incoming] = transitionSurfaces(W, H);
@@ -121,7 +133,7 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
     sceneCtx.imageSmoothingEnabled = false;
     sceneCtx.drawImage(outgoing.canvas, 0, 0, W, H);
     const isShot = transition.outgoing.spec.type === 'shot' || transition.incoming.spec.type === 'shot';
-    const height = isShot ? 1290 : hedgy ? 1260 : H;
+    const height = isShot ? (spec.look === 'viral' ? H : 1290) : hedgy ? 1260 : H;
     compositeTransition(sceneCtx, outgoing.canvas, incoming.canvas, transition.name, transition.progress, theme, transition.incoming.index + 1, {
       focus: cameraFocus(activeFrame, transition.incoming.spec.transitionAt),
       direction: transition.incoming.spec.transitionDir,
@@ -131,10 +143,12 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
     renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy);
   }
   drawChrome(activeFrame, spec, time, duration);
+  if (spec.look === 'viral') drawHookAndHeader(ctx, spec, time, placed);
   const caption = reelCaptions(spec, placed).find(item => time >= item.start && time < item.end);
   if (caption) {
     ctx.save();
-    drawCaption(activeFrame, caption, time, hedgy ? { top: 1320, bottom: 1650 } : undefined);
+    if (spec.look === 'viral') drawViralCaption(ctx, caption, time);
+    else drawCaption(activeFrame, caption, time, hedgy ? { top: 1320, bottom: 1650 } : undefined);
     ctx.restore();
   }
   ctx.restore();

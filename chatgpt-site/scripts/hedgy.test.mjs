@@ -21,8 +21,8 @@ const continuity = {...approved,handoffs:lines.slice(1).map((_,index)=>({
 }))};
 const listener = {...approved,heardQuestion:story.question,heardAnswer:story.answer,retell:story.answer};
 const spec = {
- version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',
- scenes:lines.map(say=>({type:'shot',shot:'trade',duration:4,params:{item:'lemonade'},say})),
+ version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',look:'viral',hook:'Why *run out* of lemons?',header:'Buffers',payoff:'Extra lemons cost *money*',
+ scenes:lines.map((say,i)=>({type:'shot',shot:i%2?'trade':'handoff',duration:4,params:{item:'lemonade',world:'market'},say})),
 };
 
 function mockHedgy(t, respond = () => undefined) {
@@ -37,7 +37,7 @@ function mockHedgy(t, respond = () => undefined) {
   await new Promise(resolve=>setTimeout(resolve,1));
   active--;
   const outputs = {
-   hedgy_idea:() => idea(body.input),hedgy_story:() => story,hedgy_fact_review:() => approved,
+   hedgy_idea:() => idea(body.input),hedgy_ideas:() => ({candidates:[idea(body.input),idea(body.input),idea(body.input)]}),hedgy_idea_pick:() => ({index:0,why:'Relatable stakes.',hook:'Ever run out of lemons?'}),hedgy_viral_review:() => ({approved:true,score:92,findings:[]}),hedgy_story:() => story,hedgy_fact_review:() => approved,
    hedgy_listener_review:() => listener,hedgy_takeaway_review:() => approved,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
   };
   const text = respond(format,body) ?? outputs[format]?.();
@@ -54,7 +54,9 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.provenance.editorial.storyRounds.length,1);
  assert.equal(result.provenance.editorial.copyRounds.length,1);
  assert.equal(result.provenance.editorial.sceneRounds.length,1);
- assert.equal(calls.length,21);
+ // idea, idea pick, story, fact, listener, viral critic, takeaway, plan, 12 specialists, assembly, scenes, copy.
+ assert.equal(calls.length,23);
+ assert.equal(result.spec.look,'viral');
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
  assert.ok(peak()<=4);
  assert.equal(result.spec.musicBrief,result.provenance.idea.musicBrief);
@@ -146,22 +148,35 @@ test('a confident retelling of the wrong story requires a rewrite before staging
  assert.equal(listens,2);
 });
 
-test('a continuity verdict that skips a cut cannot approve the reel',async t=>{
- const {calls}=mockHedgy(t,format=>format==='hedgy_scene_review'
+test('a continuity verdict that skips a cut cannot approve the reel; the last valid storyboard is kept as unresolved',async t=>{
+ mockHedgy(t,format=>format==='hedgy_scene_review'
   ? {...continuity,handoffs:continuity.handoffs.slice(1)}
   : undefined);
- await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>
-  error.code==='hedgy_scenes_unapproved'&&error.details.sceneRounds.length===4);
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ assert.equal(result.provenance.editorial.sceneRounds.length,4);
+ assert.equal(result.provenance.editorial.unresolvedContinuity,true);
+ assert.ok(result.provenance.editorial.sceneRounds.every(round=>round.problems.length));
+});
+test('a correct story keeps its best shareability draft when the critic never approves',async t=>{
+ let score=60;
+ mockHedgy(t,format=>format==='hedgy_viral_review'?{approved:false,score:score++,findings:['Sharpen the hook.']}:undefined);
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
+ assert.equal(result.provenance.editorial.storyRounds.length,5);
+ assert.ok(result.provenance.editorial.storyRounds.every(round=>round.correct));
+});
+test('a storyboard that never matches the schema still stops before post copy',async t=>{
+ const {calls}=mockHedgy(t,format=>format==='hedgy_reel'?{version:1}:undefined);
+ await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>error.code==='hedgy_scenes_unapproved');
  assert.ok(calls.every(call=>call.text?.format?.name!=='hedgy_copy_review'));
 });
 
-test('unapproved scripts stop before animation planning after three repairs',async t=>{
+test('unapproved scripts stop before animation planning after four repairs',async t=>{
  const {calls}=mockHedgy(t,format=>format==='hedgy_fact_review'
   ? {approved:false,findings:['The stated outcome needs a condition.']}
   : undefined);
  await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk'),error=>
-  error.code==='hedgy_story_unapproved'&&error.details.rounds.length===4);
- assert.equal(calls.length,13);
+  error.code==='hedgy_story_unapproved'&&error.details.rounds.length===5);
+ assert.equal(calls.length,22);
  assert.ok(calls.every(call=>call.text?.format?.name!=='hedgy_reel'));
 });
 import {DatabaseSync} from 'node:sqlite';
