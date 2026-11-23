@@ -18,7 +18,7 @@ const MOODS = ['happy', 'worried', 'shocked', 'smug', 'determined', 'sad', 'neut
 const X = { left: 128, right: 592, center: 360 } as const, PAW_Y = 600, FLOOR = STAGE.floor;
 interface Move { at: number; verb: Verb; who: Side; item?: ItemId; word?: string }
 interface Segment { at: number; dur: number; from: Loc; to: Loc; verb: Verb }
-interface Plan { left: string; right: string; moods: Record<Side, typeof MOODS[number]>; moves: Move[]; items: Map<ItemId, { start: Loc; segments: Segment[]; tag?: string }>; dur: number }
+interface Plan { count: number; left: string; right: string; moods: Record<Side, typeof MOODS[number]>; moves: Move[]; items: Map<ItemId, { start: Loc; segments: Segment[]; tag?: string }>; dur: number }
 
 const other = (side: Side): Side => side === 'left' ? 'right' : 'left';
 function plan(props: ShotProps, dur: number): Plan {
@@ -53,7 +53,7 @@ function plan(props: ShotProps, dur: number): Plan {
     else if (m.verb === 'vanish') go(pickItem(m, ['center', 'left', 'right']), 'hidden', 0.3);
     else if (m.verb === 'grow' || m.verb === 'shrink' || m.verb === 'shake') { const id = pickItem(m, ['center']); if (id) go(id, locOf(id), 0.5); }
   }
-  return { left: pick(p, 'left', ACTORS, 'hedgy'), right: str(p, 'right', 'none') === 'none' ? 'none' : pick(p, 'right', ACTORS, 'clerk'), moods: { left: pick(p, 'leftMood', MOODS, 'neutral'), right: pick(p, 'rightMood', MOODS, 'neutral') }, moves, items, dur };
+  return { count: Math.max(1, Math.min(60, Math.round(typeof p.count === 'number' ? p.count : 1))), left: pick(p, 'left', ACTORS, 'hedgy'), right: str(p, 'right', 'none') === 'none' ? 'none' : pick(p, 'right', ACTORS, 'clerk'), moods: { left: pick(p, 'leftMood', MOODS, 'neutral'), right: pick(p, 'rightMood', MOODS, 'neutral') }, moves, items, dur };
 }
 
 function sizeScale(id: ItemId, loc: Loc) {
@@ -88,6 +88,24 @@ function itemState(id: ItemId, s: Plan, t: number) {
   if (u >= 1) return { ...target, rot: 0, alpha: 1, sx: sq.sx, sy: sq.sy, loc };
   const pos = seg.verb === 'drop' ? { x: target.x, y: from.y + (target.y - from.y) * ease.inCubic(u) } : arc(from, target, 70, e);
   return { x: pos.x, y: pos.y, scale: from.scale + (target.scale - from.scale) * e, rot: Math.sin(u * Math.PI) * 0.12, alpha: 1, sx: 1, sy: 1, loc: u > 0.5 ? loc : seg.from };
+}
+
+/** Many copies of the centre item as a heap/wall, so "forty pairs" looks like forty. Rows pop in from the back. */
+function drawPile(ctx: Frame['ctx'], id: ItemId, count: number, t: number, st: { x: number; y: number; scale: number; alpha: number; sx: number; sy: number }, appearAt: number) {
+  const perRow = Math.max(2, Math.ceil(Math.sqrt(count * 1.2))), rows = Math.ceil(count / perRow);
+  const base = itemSize(id), grow = Math.max(0.01, st.scale / Math.max(0.01, sizeScale(id, 'center')));
+  const scale = Math.min(0.6, 400 / (perRow * base.w * 0.92)) * grow;
+  const size = itemSize(id, scale), step = Math.max(size.h * 0.72, size.w * 0.42), floorY = st.y + itemSize(id, st.scale).h / 2;
+  let n = 0;
+  for (let r = rows - 1; r >= 0; r--) {
+    const inRow = Math.min(perRow - (r % 2 ? 1 : 0), count - n);
+    for (let c = 0; c < inRow && n < count; c++, n++) {
+      const pop = ease.outBack(clamp((t - appearAt - (rows - 1 - r) * 0.05 - c * 0.015) / 0.25));
+      if (pop <= 0) continue;
+      const x = st.x + (c - (inRow - 1) / 2) * size.w * 0.92, y = floorY - size.h / 2 - r * step;
+      drawItem(ctx, id, { x, y, t, scale: scale * pop, alpha: st.alpha, rot: ((c * 7 + r * 3) % 5 - 2) * 0.03 });
+    }
+  }
 }
 
 function actorKeys(side: Side, s: Plan): HedgyKey[] {
@@ -127,14 +145,19 @@ function actorX(side: Side, s: Plan, t: number) {
 export const actShot: ShotDef = {
   name: 'act',
   stage: 'clean',
-  describe: 'A general choreography shot that acts out a line no other shot covers: up to two actors (left, right) and up to three items, with a script of verbs that fire on the sync words in order. params: left (actor id, default hedgy), right (actor id or none, default clerk), leftMood/rightMood, item (item standing at centre), leftItem/rightItem (item held in that actor\'s paw), tag (short word on the centre item), moves (1–6 steps, each {"event":1..6,"action":"give|take|put|drop|appear|vanish|grow|shrink|shake|stamp|walk-in|walk-out|point|jump|celebrate|shock","who":"left|right","item":"item id (optional)","word":"STAMP WORD (stamp only)"}). give = who hands their item to the other actor; take = who grabs the centre item (or the other actor\'s); put = who sets their item down at centre; drop = an item falls from above onto the centre; appear/vanish = an item pops in at centre / poofs away; grow/shrink/shake = the centre item gets bigger / smaller / wobbles; stamp = a word slams down above the action; walk-in/walk-out = who enters or leaves; point/jump/celebrate/shock = who reacts. Items move paw to paw in clear arcs and stay where they land.',
+  describe: 'A general choreography shot that acts out a line no other shot covers: up to two actors (left, right) and up to three items, with a script of verbs that fire on the sync words in order. params: left (actor id, default hedgy), right (actor id or none, default clerk), leftMood/rightMood, item (item standing at centre), count (1–60: show the centre item as a heap/wall of that many copies, e.g. 40 unsold pairs), leftItem/rightItem (item held in that actor\'s paw), tag (short word on the centre item), moves (1–6 steps, each {"event":1..6,"action":"give|take|put|drop|appear|vanish|grow|shrink|shake|stamp|walk-in|walk-out|point|jump|celebrate|shock","who":"left|right","item":"item id (optional)","word":"STAMP WORD (stamp only)"}). give = who hands their item to the other actor; take = who grabs the centre item (or the other actor\'s); put = who sets their item down at centre; drop = an item falls from above onto the centre; appear/vanish = an item pops in at centre / poofs away; grow/shrink/shake = the centre item gets bigger / smaller / wobbles; stamp = a word slams down above the action; walk-in/walk-out = who enters or leaves; point/jump/celebrate/shock = who reacts. Items move paw to paw in clear arcs and stay where they land.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
     const sides: Side[] = s.right === 'none' ? ['left'] : ['left', 'right'];
     drawStage(ctx, { floorY: FLOOR, line: true, shadow: sides.map(side => ({ x: actorX(side, s, t), y: FLOOR - 2, w: 160 })) });
     const states = [...s.items.keys()].map(id => ({ id, st: itemState(id, s, t) }));
     // Centre items behind the actors' paws; held/travelling items in front.
-    for (const { id, st } of states) if (st && st.loc === 'center' && s.items.get(id)!.start !== 'onCenter') drawItem(ctx, id, { x: st.x, y: st.y + bob(t + 0.3, 2.4, 3), t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
+    const pileId = s.count > 1 && isItem(props.params?.item) ? props.params!.item as ItemId : undefined;
+    for (const { id, st } of states) {
+      if (!st || st.loc !== 'center' || s.items.get(id)!.start === 'onCenter') continue;
+      if (id === pileId) { const appear = s.items.get(id)!.segments.find(g => g.verb === 'appear' || g.verb === 'drop')?.at ?? -1; drawPile(ctx, id, s.count, t, st, appear); }
+      else drawItem(ctx, id, { x: st.x, y: st.y + bob(t + 0.3, 2.4, 3), t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
+    }
     for (const side of sides) {
       const held = states.find(x => x.st && x.st.loc === side);
       const who = side === 'left' ? s.left : s.right;
