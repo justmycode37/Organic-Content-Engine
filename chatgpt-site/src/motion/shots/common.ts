@@ -4,6 +4,7 @@
 import type { Cue, CueKind, ShotProps } from '../core.ts';
 import { drawHedgy, hedgyAt, hedgyBounds, hedgyFace, hedgyPaw, type HedgyKey, type HedgyOptions } from '../actor/hedgy.ts';
 import { ROLE_ALIASES, type Who } from '../props/people.ts';
+import { registerFace } from '../kit/stage.ts';
 import * as ticket from '../props/ticket.ts';
 import * as money from '../props/money.ts';
 import * as paper from '../props/paper.ts';
@@ -58,7 +59,13 @@ function actorOptions(o: ActorOptions): HedgyOptions {
   return { pose: 'idle', shadow: true, ...rest, ...timeline, species: role ? role.species : (who as HedgyOptions['species']), accessory: o.accessory ?? role?.accessory };
 }
 /** Draw any cast member ('hedgy', a role like 'broker', or a species). `keys` = blended pose timeline evaluated at `time`. */
-export const drawActor = (ctx: Ctx, o: ActorOptions) => drawHedgy(ctx, actorOptions(o));
+export const drawActor = (ctx: Ctx, o: ActorOptions) => {
+  const options = actorOptions(o);
+  // Record the face in device space so labels drawn this frame can keep clear of it (kit/stage label()).
+  const face = hedgyFace(options), m = ctx.getTransform();
+  registerFace({ x: m.a * face.x + m.c * face.y + m.e, y: m.b * face.x + m.d * face.y + m.f, r: face.r * Math.abs(m.a) * 1.25 });
+  return drawHedgy(ctx, options);
+};
 export const actorPaw = (o: ActorOptions) => hedgyPaw(actorOptions(o));
 export const actorFace = (o: ActorOptions) => hedgyFace(actorOptions(o));
 export const actorBounds = (o: ActorOptions) => hedgyBounds(actorOptions(o));

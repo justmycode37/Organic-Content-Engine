@@ -42,5 +42,5 @@ ${describeShotCatalog()}`,{name:'hedgy_reel',schema});
  const next=parsed.data as Spec;
  if(normalizeNarration(next.scenes.map(s=>s.say).join(' '))!==narration)return {problems:['repair changed the narration']};
  if(next.scenes.some(s=>s.shot&&!isWorld(s.params?.world)))return {problems:['repair dropped a world']};
- return {spec:{...spec,...next,hook:spec.hook,header:spec.header,payoff:spec.payoff,title:spec.title,postCaption:spec.postCaption,music:spec.music,musicBrief:spec.musicBrief,look:spec.look}};
+ return {spec:{...spec,...next,hook:spec.hook,header:spec.header,payoff:spec.payoff,term:spec.term,title:spec.title,postCaption:spec.postCaption,music:spec.music,musicBrief:spec.musicBrief,look:spec.look}};
 }

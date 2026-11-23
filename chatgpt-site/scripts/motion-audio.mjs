@@ -203,7 +203,7 @@ async function effect(name,key,variant=0,requestedSeconds=undefined,noteHz=null,
 }
 
 async function music(mood,seconds,key,brief){
- const prompt=brief?`Instrumental only, no vocals. High-energy electronic action score (heist/chase trailer energy, never happy, cute or playful) under narration for a short vertical finance story: ${brief} Punchy drums and driving bass from the first second, leave mid-range space for the voice, end on a clean hit.`:MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+1.5)/5)*5));
+ const prompt=brief?`Instrumental only, no vocals. High-energy electronic action score (heist/chase trailer energy, never happy, cute or playful) under narration for a short vertical finance story: ${brief} Punchy drums and driving bass from the first second, leave mid-range space for the voice, end on a clean hit.`:MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+(brief?4:1.5))/5)*5)); // generated scores wind down near their end; keep that outro past the reel
  const file=join(CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!(await exists(file))){
   if(musicGenerationsThisRender>=1)throw new Error('Music generation cap reached (1); use the cached music asset');
@@ -461,7 +461,7 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
   // Viral reels end right after the payoff lands (a short hold for the payoff card), never on a long freeze.
   const last=index===spec.scenes.length-1,viral=spec.look==='viral';
-  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.6:cinematicTail));
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
@@ -527,9 +527,11 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   cues.push({sfx:'hum',at:0,length:reelEnd,gain:0.9,_class:'secondary',_ambient:true});
  }
  if(ACTIVE_STYLE==='cinematic')placed.slice(1).forEach((scene,index)=>{
-  const swellLength=Math.min(0.62,scene.start),target=scene.start;
-  if(swellLength>0)cues.push({sfx:'rise',at:target-swellLength,length:swellLength,gain:0.48,tail:0.04,_class:'transition',_sceneIndex:index+1,_localAt:0});
-  cues.push({sfx:'sub',at:target,length:0.96,gain:0.52,_class:'transition',_sceneIndex:index+1,_localAt:0,underlay:true});
+  const swellLength=Math.min(0.62,scene.start),target=scene.start,viral=spec.look==='viral';
+  // Viral reels cut every ~2 s: a swell plus a tuned accent on every cut turns into a wall of risers.
+  if(swellLength>0&&!viral)cues.push({sfx:'rise',at:target-swellLength,length:swellLength,gain:0.48,tail:0.04,_class:'transition',_sceneIndex:index+1,_localAt:0});
+  cues.push({sfx:'sub',at:target,length:0.96,gain:viral?0.4:0.52,_class:'transition',_sceneIndex:index+1,_localAt:0,underlay:true});
+  if(viral)return;
   const kind=['pluck','coin','pop','ding'][index%4];
   cues.push({sfx:kind,at:target+0.35,gain:0.72,_class:'story',_sceneIndex:index+1,_localAt:0.35});
  });
@@ -666,8 +668,12 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    ].sort((a,b)=>a.at-b.at);
    const bodyLiftExpression=steppedVolumeExpression(bodyLiftPoints,0);
    const pressureGain=musicAutomation.pressure?`if(between(t,${Math.max(0,musicAutomation.pressure.at-0.1).toFixed(3)},${Math.min(duration,musicAutomation.pressure.at+0.3).toFixed(3)}),1.584893,1)`:'1';
-   const musicCutFilter=musicCut?`volume='${musicCut}':eval=frame,`:'';
-   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-0.82).toFixed(3)}:d=0.82,extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
+   // Viral reels: the bed drops out for a beat before the payoff line so the punchline lands in the gap.
+   const payoffAt=spec.look==='viral'?placeScenes(spec).at(-1)?.start:undefined;
+   const payoffGap=payoffAt>1?`if(between(t,${(payoffAt-0.5).toFixed(3)},${(payoffAt+0.12).toFixed(3)}),0.16,1)`:null;
+   const cutExpression=[musicCut,payoffGap].filter(Boolean).join('*');
+   const musicCutFilter=cutExpression?`volume='${cutExpression}':eval=frame,`:'';
+   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-(spec.look==='viral'?0.35:0.82)).toFixed(3)}:d=${spec.look==='viral'?'0.35':'0.82'},extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
    // Keep the low band grounded, then add a narrow body-band lift at the jump and pressure points.
    // Air and transient bands open at reveal/jump events; voice sidechain still ducks the full bed.
    filters.push('[musicSource]asplit=4[musicBodySource][musicBodyLiftSource][musicAirSource][musicPercSource]');

@@ -143,8 +143,9 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
     renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy);
   }
   drawChrome(activeFrame, spec, time, duration);
-  if (spec.look === 'viral') drawHookAndHeader(ctx, spec, time, placed);
-  const caption = reelCaptions(spec, placed).find(item => time >= item.start && time < item.end);
+  const captions = reelCaptions(spec, placed);
+  if (spec.look === 'viral') drawHookAndHeader(ctx, spec, time, placed, captions);
+  const caption = captions.find(item => time >= item.start && time < item.end);
   if (caption) {
     ctx.save();
     if (spec.look === 'viral') drawViralCaption(ctx, caption, time);

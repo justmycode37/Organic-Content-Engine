@@ -150,11 +150,12 @@ function labelSprite(text: string, variant: LabelVariant, options: LabelOptions)
   const color = options.fg ?? (variant === 'stamp' ? PAL.red2 : PAL.ink);
   const bg = options.bg ?? PAL.paper;
   const scale = Math.max(1, Math.round(Math.max(54, options.size ?? 56) / 54));
-  const lines = wrapLabel(text, options.maxWidth, variant === 'stamp' ? 3 : 4, scale);
+  const lines = wrapLabel(text, options.maxWidth, variant === 'stamp' ? 5 : 4, scale);
   const metrics = lines.map(line => measure(line));
   const textCols = Math.max(0, ...metrics.map(item => item.cols * scale));
-  const padX = variant === 'stamp' ? 3 : 2;
-  const padY = 2;
+  // Stamps have a double border: keep a clear cell between it and the letters ("L" must not read as "[").
+  const padX = variant === 'stamp' ? 5 : 2;
+  const padY = variant === 'stamp' ? 4 : 2;
   const bodyW = textCols + padX * 2;
   const bodyH = metrics.reduce((sum, item) => sum + item.rows * scale, 0) + Math.max(0, lines.length - 1) * scale + padY * 2;
   const top = variant === 'tag' ? 4 : 0, tail = variant === 'bubble' ? 4 : 0;
@@ -212,13 +213,26 @@ export function label(ctx: Ctx, text: string, x: number, y: number, options: Lab
   // Viral framing: name plates under the feet would sit on the captions.
   if (worldTall()) {
     const m = ctx.getTransform(), dy = m.b * x + m.d * y + m.f;
-    if (dy > 1400) return { x, y, w: 0, h: 0 };
+    if (dy > 1370) return { x, y, w: 0, h: 0 };
+    // A sign or stamp must not cover a face: lift it just above the highest face it would overlap.
+    const dx = m.a * x + m.c * y + m.e, halfW = sprite.w / 2 * Math.abs(m.a), halfH = sprite.h / 2 * Math.abs(m.d);
+    const hit = knownFaces().filter(f => Math.abs(f.x - dx) < halfW + f.r * 0.6 && Math.abs(f.y - dy) < halfH + f.r * 0.6);
+    if (hit.length && m.d) { const top = Math.min(...hit.map(f => f.y - f.r)); y += (top - 8 - halfH - dy) / m.d; }
   }
   const fit = options.maxWidth && sprite.w > options.maxWidth ? options.maxWidth / sprite.w : 1;
   const pop = (typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1) * fit;
   drawSprite(ctx, sprite, x, y, { scale: pop, rot: options.rot, anchor: [0.5, 0.5] });
   return { x: x - sprite.w * pop / 2, y: y - sprite.h * pop / 2, w: sprite.w * pop, h: sprite.h * pop };
 }
+
+// Faces drawn in the current frame (device space). Labels keep clear of them in the viral look.
+// Labels drawn before the actors in a frame use the same shot's faces from its previous frame.
+type Face = { x: number; y: number; r: number };
+let faces: Face[] = [], sceneKey = -1;
+const lastFaces = new Map<number, Face[]>();
+export function registerFace(face: Face) { faces.push(face); }
+export function resetFaces(key = -1) { if (sceneKey >= 0) lastFaces.set(sceneKey, faces); sceneKey = key; faces = []; }
+const knownFaces = () => [...faces, ...(lastFaces.get(sceneKey) ?? [])];
 
 export interface ArrowOptions { color?: string; width?: number; progress?: number; curve?: number }
 const arrowHeadCache = new Map<string, Sprite>();

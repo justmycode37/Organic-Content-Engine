@@ -3,6 +3,23 @@
 export interface ShotCatalogEntry { name: string; describe: string; params: readonly string[] }
 export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
   {
+    "name": "act",
+    "describe": "A general choreography shot that acts out a line no other shot covers: up to two actors (left, right) and up to three items, with a script of verbs that fire on the sync words in order. params: left (actor id, default hedgy), right (actor id or none, default clerk), leftMood/rightMood, item (item standing at centre), leftItem/rightItem (item held in that actor's paw), tag (short word on the centre item), moves (1–6 steps, each {\"event\":1..6,\"action\":\"give|take|put|drop|appear|vanish|grow|shrink|shake|stamp|walk-in|walk-out|point|jump|celebrate|shock\",\"who\":\"left|right\",\"item\":\"item id (optional)\",\"word\":\"STAMP WORD (stamp only)\"}). give = who hands their item to the other actor; take = who grabs the centre item (or the other actor's); put = who sets their item down at centre; drop = an item falls from above onto the centre; appear/vanish = an item pops in at centre / poofs away; grow/shrink/shake = the centre item gets bigger / smaller / wobbles; stamp = a word slams down above the action; walk-in/walk-out = who enters or leaves; point/jump/celebrate/shock = who reacts. Items move paw to paw in clear arcs and stay where they land.",
+    "params": [
+      "item",
+      "left",
+      "leftItem",
+      "leftMood",
+      "moves",
+      "right",
+      "rightItem",
+      "rightMood",
+      "tag",
+      "x",
+      "y"
+    ]
+  },
+  {
     "name": "arrive",
     "describe": "A second character walks or runs in from the side and joins the first beside an item; they turn and react together, and the newcomer can carry a small item such as cash or a contract. params: first (actor id, default hedgy), arriver (actor id, default buyer), item (any item id, default ticket), carry (optional item id, default none), side (left|right, default right), pace (walk|run, default walk). Events: 1 = the newcomer reaches the item and the first character turns to greet them; missing events use a late-arrival fallback.",
     "params": [

@@ -21,7 +21,7 @@ const continuity = {...approved,handoffs:lines.slice(1).map((_,index)=>({
 }))};
 const listener = {...approved,heardQuestion:story.question,heardAnswer:story.answer,retell:story.answer};
 const spec = {
- version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',look:'viral',hook:'Why *run out* of lemons?',header:'Buffers',payoff:'Extra lemons cost *money*',
+ version:1,title:'Lemons',postCaption,series:'HEDGY / FINANCE',mode:'dark',accent:'mono',music:'drive',look:'viral',hook:'Why *run out* of lemons?',header:'Buffers',payoff:'Extra lemons cost *money*',term:'buffer',
  scenes:lines.map((say,i)=>({type:'shot',shot:i%2?'trade':'handoff',duration:4,params:{item:'lemonade',world:'market'},say})),
 };
 
