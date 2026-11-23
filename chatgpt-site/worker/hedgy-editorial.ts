@@ -37,7 +37,7 @@ const viralSchema = reviewSchema.extend({score:z.number().min(0).max(100),hookVe
 export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best short-form explainers):
 - The FIRST spoken sentence is the hook: at most 12 words, instantly clear, and it opens a curiosity gap or names a surprising, relatable tension (a question the viewer suddenly needs answered, or a claim that sounds wrong). No scene-setting before it.
 - Concrete stakes for one character the viewer recognises; the viewer should feel "wait, why?" within 3 seconds.
-- One "aha" turn where the mechanism clicks, shown by what happens to the anchor.
+- One "aha" turn where the mechanism clicks, shown by what happens to the anchor, and ONE plain spoken line that says why it happens (who gains and how), e.g. "the shop's machine converts at its own marked-up rate".
 - Stakes must feel worth a stranger's 30 seconds: use a realistic case where the money at stake is noticeable (a trip, rent, a car, a paycheck, a year of coffee), or scale the example up in one line ("on a $400 hotel that's $40").
 - The hook names the trap, the loss or the surprising result, not a neutral situation.
 - The last line pays off the hook in a punchy, memorable way and leaves ONE practical rule or insight the viewer can use or repeat ("Always pay in the local currency."), ideally echoing the opening words so the reel loops.

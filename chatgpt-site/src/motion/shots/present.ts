@@ -155,7 +155,8 @@ export const presentShot: ShotDef = {
     poof(ctx, itemX, itemY + size.h * 0.3, s.revealAt, t, { count: 3, seed: frame.seed + 3, radius: 22, duration: 0.34 });
     const itemTop = itemDrawY - size.h / 2;
     const connectorStartY = tagAbove ? tagY + 34 : tagY - 34;
-    if (moveProgress > 0.04 && s.tag) connector(ctx, { x: tagX, y: connectorStartY }, { x: Math.max(movingX - size.w / 2 + 20, Math.min(tagX, movingX + size.w / 2 - 20)), y: itemTop + (tagAbove ? 2 : size.h - 2) }, { width: 8, slack: 10, curve: tagAbove ? 0 : 24 });
+    // The string only hangs when the tag is over the item; an offset tag would leave a stray stub.
+    if (moveProgress > 0.04 && s.tag && Math.abs(tagX - movingX) < size.w / 2 - 20) connector(ctx, { x: tagX, y: connectorStartY }, { x: Math.max(movingX - size.w / 2 + 20, Math.min(tagX, movingX + size.w / 2 - 20)), y: itemTop + (tagAbove ? 2 : size.h - 2) }, { width: 8, slack: 10, curve: tagAbove ? 0 : 24 });
     drawItem(ctx, s.item, {
       x: movingX, y: itemDrawY, t, scale: s.scale, rot: itemRot,
       ...(s.item === 'ticket' ? { tag: 'none' } : {}),

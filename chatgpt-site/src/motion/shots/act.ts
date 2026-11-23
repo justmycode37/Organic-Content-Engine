@@ -13,7 +13,7 @@ import type { ShotDef } from './index.ts';
 const VERBS = ['give', 'take', 'put', 'drop', 'appear', 'vanish', 'grow', 'shrink', 'shake', 'stamp', 'walk-in', 'walk-out', 'point', 'jump', 'celebrate', 'shock'] as const;
 type Verb = typeof VERBS[number];
 type Side = 'left' | 'right';
-type Loc = 'hidden' | 'center' | 'left' | 'right' | 'top';
+type Loc = 'hidden' | 'center' | 'left' | 'right' | 'top' | 'onCenter';
 const MOODS = ['happy', 'worried', 'shocked', 'smug', 'determined', 'sad', 'neutral'] as const;
 const X = { left: 128, right: 592, center: 360 } as const, PAW_Y = 600, FLOOR = STAGE.floor;
 interface Move { at: number; verb: Verb; who: Side; item?: ItemId; word?: string }
@@ -47,7 +47,7 @@ function plan(props: ShotProps, dur: number): Plan {
     };
     if (m.verb === 'give') go(pickItem(m, [m.who, 'center']), other(m.who));
     else if (m.verb === 'take') go(pickItem(m, ['center', other(m.who)]), m.who);
-    else if (m.verb === 'put') go(pickItem(m, [m.who]), 'center');
+    else if (m.verb === 'put') { const id = pickItem(m, [m.who]); const occupied = [...items.keys()].some(other => other !== id && locOf(other) === 'center'); go(id, occupied ? 'onCenter' : 'center'); }
     else if (m.verb === 'drop') go(m.item ?? pickItem(m, ['hidden', 'top']), 'center', 0.36, 'top');
     else if (m.verb === 'appear') go(m.item ?? pickItem(m, ['hidden']), m.item && items.get(m.item) ? 'center' : 'center', 0.22, 'hidden');
     else if (m.verb === 'vanish') go(pickItem(m, ['center', 'left', 'right']), 'hidden', 0.3);
@@ -57,13 +57,19 @@ function plan(props: ShotProps, dur: number): Plan {
 }
 
 function sizeScale(id: ItemId, loc: Loc) {
-  const s = itemSize(id), hand = loc === 'left' || loc === 'right';
+  const s = itemSize(id), hand = loc === 'left' || loc === 'right' || loc === 'onCenter';
   return hand ? Math.min(0.42, 130 / s.w, 130 / s.h) : Math.min(0.8, 250 / s.w, 300 / s.h);
 }
 function place(id: ItemId, loc: Loc, s: Plan): { x: number; y: number; scale: number } {
   const scale = sizeScale(id, loc), h = itemSize(id, scale).h;
   if (loc === 'left' || loc === 'right') { const solo = s.right === 'none' && loc === 'left'; return { x: X[loc] + (loc === 'left' ? 118 : -118) + (solo ? 20 : 0), y: PAW_Y - 10, scale }; }
   if (loc === 'top') return { x: X.center, y: -160, scale };
+  if (loc === 'onCenter') {
+    // Tapped onto / laid against the item already standing at centre (a card on a terminal, cash on a counter item).
+    const base = [...s.items.keys()].find(other => other !== id && s.items.get(other)!.start === 'center') ?? id;
+    const bs = sizeScale(base, 'center'), bh = itemSize(base, bs).h;
+    return { x: X.center + 20, y: FLOOR - bh - 6 + bh * 0.42, scale };
+  }
   return { x: X.center, y: FLOOR - h / 2 - 6, scale };
 }
 
@@ -128,7 +134,7 @@ export const actShot: ShotDef = {
     drawStage(ctx, { floorY: FLOOR, line: true, shadow: sides.map(side => ({ x: actorX(side, s, t), y: FLOOR - 2, w: 160 })) });
     const states = [...s.items.keys()].map(id => ({ id, st: itemState(id, s, t) }));
     // Centre items behind the actors' paws; held/travelling items in front.
-    for (const { id, st } of states) if (st && st.loc === 'center') drawItem(ctx, id, { x: st.x, y: st.y + bob(t + 0.3, 2.4, 3), t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
+    for (const { id, st } of states) if (st && st.loc === 'center' && s.items.get(id)!.start !== 'onCenter') drawItem(ctx, id, { x: st.x, y: st.y + bob(t + 0.3, 2.4, 3), t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
     for (const side of sides) {
       const held = states.find(x => x.st && x.st.loc === side);
       const who = side === 'left' ? s.left : s.right;
