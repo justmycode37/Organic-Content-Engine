@@ -91,7 +91,7 @@ function itemState(id: ItemId, s: Plan, t: number) {
 }
 
 /** Many copies of the centre item as a heap/wall, so "forty pairs" looks like forty. Rows pop in from the back. */
-function drawPile(ctx: Frame['ctx'], id: ItemId, count: number, t: number, st: { x: number; y: number; scale: number; alpha: number; sx: number; sy: number }, appearAt: number) {
+function drawPile(ctx: Frame['ctx'], id: ItemId, count: number, t: number, st: { x: number; y: number; scale: number; alpha: number; sx: number; sy: number }, appearAt: number): number {
   const perRow = Math.max(2, Math.ceil(Math.sqrt(count * 1.2))), rows = Math.ceil(count / perRow);
   const base = itemSize(id), grow = Math.max(0.01, st.scale / Math.max(0.01, sizeScale(id, 'center')));
   const scale = Math.min(0.6, 400 / (perRow * base.w * 0.92)) * grow;
@@ -106,6 +106,7 @@ function drawPile(ctx: Frame['ctx'], id: ItemId, count: number, t: number, st: {
       drawItem(ctx, id, { x, y, t, scale: scale * pop, alpha: st.alpha, rot: ((c * 7 + r * 3) % 5 - 2) * 0.03 });
     }
   }
+  return floorY - size.h - (rows - 1) * step;
 }
 
 function actorKeys(side: Side, s: Plan): HedgyKey[] {
@@ -153,10 +154,11 @@ export const actShot: ShotDef = {
     drawStage(ctx, { floorY: FLOOR, line: true, shadow: sides.map(side => ({ x: actorX(side, s, t), y: FLOOR - 2, w: 160 })) });
     const states = [...s.items.keys()].map(id => ({ id, st: itemState(id, s, t) }));
     // Centre items behind the actors' paws; held/travelling items in front.
+    let pileTop: number | undefined;
     const pileId = s.count > 1 && isItem(props.params?.item) ? props.params!.item as ItemId : undefined;
     for (const { id, st } of states) {
       if (!st || st.loc !== 'center' || s.items.get(id)!.start === 'onCenter') continue;
-      if (id === pileId) { const appear = s.items.get(id)!.segments.find(g => g.verb === 'appear' || g.verb === 'drop')?.at ?? -1; drawPile(ctx, id, s.count, t, st, appear); }
+      if (id === pileId) { const appear = s.items.get(id)!.segments.find(g => g.verb === 'appear' || g.verb === 'drop')?.at ?? -1; pileTop = drawPile(ctx, id, s.count, t, st, appear); }
       else drawItem(ctx, id, { x: st.x, y: st.y + bob(t + 0.3, 2.4, 3), t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
     }
     for (const side of sides) {
@@ -166,7 +168,7 @@ export const actShot: ShotDef = {
     }
     for (const { id, st } of states) if (st && st.loc !== 'center') drawItem(ctx, id, { x: st.x, y: st.y, t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
     const centre = states.find(x => x.st?.loc === 'center' && s.items.get(x.id)?.tag);
-    if (centre?.st) label(ctx, s.items.get(centre.id)!.tag!, centre.st.x, centre.st.y - itemSize(centre.id, centre.st.scale).h / 2 - 40, { variant: 'tag', maxWidth: 320 });
+    if (centre?.st) label(ctx, s.items.get(centre.id)!.tag!, centre.st.x, (centre.id === pileId && pileTop !== undefined ? pileTop : centre.st.y - itemSize(centre.id, centre.st.scale).h / 2) - 40, { variant: 'tag', maxWidth: 320 });
     for (const m of s.moves) {
       if (m.verb === 'stamp' && m.word && t >= m.at - 0.12) {
         const k = phase(t, m.at - 0.12, m.at), sq = squash(t, m.at, 0.3, 0.3);
