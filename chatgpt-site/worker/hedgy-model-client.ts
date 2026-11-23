@@ -85,3 +85,23 @@ export function hedgyClient(key:string,onUsage?:Usage,subscription?:ReelSubscrip
   }
  };
 }
+
+export const HEDGY_CRITIC_MODEL='claude-opus-5-5',HEDGY_CRITIC_EFFORT='high';
+/**
+ * A second-opinion model for Hedgy reviews and choices. Reviews from a different
+ * model family catch what the writer's own model accepts. Uses the local Claude
+ * subscription; without one (or when it is exhausted) it falls back to the Sol client
+ * so production never stalls on the critic.
+ */
+export function hedgyCritic(fallback:ReturnType<typeof hedgyClient>,onUsage?:Usage,subscription?:ReelSubscription){
+ return async(step:string,input:string,format?:{name:string;schema:z.ZodType},images?:{mime:string;base64:string}[])=>{
+  if(subscription){
+   try{
+    const text=await tryReelSubscription(subscription,{provider:'anthropic',step,model:HEDGY_CRITIC_MODEL,effort:HEDGY_CRITIC_EFFORT,input,format,images,role:'critic'},onUsage);
+    if(text!==undefined)return text;
+   }catch(error){await onUsage?.({step,model:HEDGY_CRITIC_MODEL,status:'critic-fallback',reason:String((error as Error)?.message??error).slice(0,300)});}
+  }
+  if(images?.length)throw new AppError(503,'critic_unavailable','The visual critic needs the Claude subscription to see frames',{step});
+  return fallback(`${step}-sol`,input,format);
+ };
+}

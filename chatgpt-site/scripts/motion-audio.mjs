@@ -293,15 +293,15 @@ function tuneAccents(cues,key){
 }
 
 /** Caption phrases follow the voice in readable chunks without splitting sentence beats. */
-export function captionsFromSpeech(say,words,offset,sceneEnd){
+export function captionsFromSpeech(say,words,offset,sceneEnd,{maxWords=6,maxChars=34}={}){
  const marked=markupWords(say),groups=[];let segment=[];
  const chars=list=>list.reduce((sum,item)=>sum+item.text.replaceAll('*','').length,0)+Math.max(0,list.length-1);
  // Split at sentence ends first, then break long segments into BALANCED chunks (no orphaned last word).
- const flush=()=>{if(!segment.length)return;const parts=Math.max(Math.ceil(segment.length/6),Math.ceil(chars(segment)/34));let i=0;for(let part=parts;part>0;part--){let end=part===1?segment.length:i+Math.ceil((segment.length-i)/part);if(part>1){for(const d of [0,-1,1]){const k=end+d;if(k>i+1&&k<segment.length&&/[,;]$/.test(segment[k-1].text)){end=k;break;}}}groups.push(segment.slice(i,end));i=end;}segment=[];};
+ const flush=()=>{if(!segment.length)return;const parts=Math.max(Math.ceil(segment.length/maxWords),Math.ceil(chars(segment)/maxChars));let i=0;for(let part=parts;part>0;part--){let end=part===1?segment.length:i+Math.ceil((segment.length-i)/part);if(part>1){for(const d of [0,-1,1]){const k=end+d;if(k>i+1&&k<segment.length&&/[,;]$/.test(segment[k-1].text)){end=k;break;}}}groups.push(segment.slice(i,end));i=end;}segment=[];};
  words.forEach((word,index)=>{
   const text=marked[index]?.accent?`*${word.text}*`:word.text;
   segment.push({...word,text});
-  if(/[.!?…:][”’"')\]]*$/.test(word.text))flush();
+  if(/[.!?…:][”’"')\]]*$/.test(word.text)||(maxWords<6&&/[,;—–][”’"')\]]*$/.test(word.text)&&segment.length>=2))flush();
  });
  flush();
  return groups.map((items,index)=>{
@@ -459,7 +459,9 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const needed=CONTINUOUS&&voice.length?Math.round(voice.length*FPS)/FPS:Math.ceil((LEAD+voice.words.at(-1).end+TAIL)*FPS)/FPS;
   // The final scene keeps at least its authored length: the payoff needs a hold after the last word.
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
-  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,index===spec.scenes.length-1?scene.duration:0)+cinematicTail);
+  // Viral reels end right after the payoff lands (a short hold for the payoff card), never on a long freeze.
+  const last=index===spec.scenes.length-1,viral=spec.look==='viral';
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.6:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
@@ -539,8 +541,14 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   :{sfx:'ding',at:reelEnd-1.35,length:1.35,gain:12,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
  const musicAutomation=deriveMusicAutomation(placed);
  const governed=governCues(cues,reelEnd,placed),voiceCues=cues.filter(cue=>!cue.sfx);
+ // Viral reels keep only purposeful hits: story beats, primary actions, transitions and their sub underlays.
+ if(spec.look==='viral'){governed.cues=governed.cues.filter(cue=>cue.ending||cue._class!=='secondary'||cue.underlay||cueIsPrimary(cue));
+  // At most ~1.3 audible effects per second: keep primary and story hits first, then transitions, earliest first.
+  const budget=Math.round(1.3*reelEnd),rank=cue=>cue.ending||cueIsPrimary(cue)?0:cue._class==='story'?1:cue._class==='transition'?2:3;
+  const audible=governed.cues.filter(cue=>!cue.underlay).sort((a,b)=>rank(a)-rank(b)||a.at-b.at),keep=new Set(audible.slice(0,budget));
+  governed.cues=governed.cues.filter(cue=>keep.has(cue)||(cue.underlay&&governed.cues.some(other=>keep.has(other)&&Math.abs(other.at-cue.at)<0.05)));governed.stats.after=governed.cues.length;governed.stats.densityPerSecond=governed.cues.length/Math.max(1,reelEnd);governed.stats.viralThinned=true;}
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
- const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd):[];
+ const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24}:undefined):[];
  if(captions.length)timed.captions=captions;
  return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats,musicAutomation};
 }

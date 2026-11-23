@@ -4,8 +4,12 @@ import {AppError} from './errors.ts';
 import type {hedgyClient} from './hedgy-model-client.ts';
 
 type Ask = ReturnType<typeof hedgyClient>;
+type Critic = (step:string,input:string,format?:{name:string;schema:z.ZodType},images?:{mime:string;base64:string}[])=>Promise<string>;
 const repairLimit = 3;
+/** Story drafts get one extra repair: the cross-model critic adds a second axis (shareability) to correctness. */
+const storyRepairLimit = 4;
 const storySchema = z.object({
+ hookText: z.string().trim().min(3).max(60).optional(),
  question: z.string().trim().min(1).max(200),
  answer: z.string().trim().min(1).max(260),
  anchor: z.string().trim().min(1).max(200),
@@ -28,10 +32,25 @@ const sceneReviewSchema = reviewSchema.extend({
   evidence:z.string().trim().min(1).max(400),
  }).strict()).max(15),
 });
+const viralSchema = reviewSchema.extend({score:z.number().min(0).max(100),hookVerdict:z.string().trim().max(400).optional()});
+/** Cross-model gate: the story must be strong enough to stop a scroll and be worth sharing. */
+export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best short-form explainers):
+- The FIRST spoken sentence is the hook: at most 12 words, instantly clear, and it opens a curiosity gap or names a surprising, relatable tension (a question the viewer suddenly needs answered, or a claim that sounds wrong). No scene-setting before it.
+- Concrete stakes for one character the viewer recognises; the viewer should feel "wait, why?" within 3 seconds.
+- One "aha" turn where the mechanism clicks, shown by what happens to the anchor.
+- The last line pays off the hook in a punchy, memorable way (a twist, reversal, or a line people would quote), ideally echoing the opening words so the reel loops.
+- Brisk: 55–80 spoken words, no filler, no throat-clearing, no lecture tone. Talk like a sharp friend.
+- One or two simple round numbers are welcome when they make the surprise concrete; never ask the viewer to calculate.
+- hookText: the on-screen hook title (max 7 words, may mark the key word with *asterisks*), punchier than the spoken line and never a spoiler of the answer.`;
 const copySchema = z.object({title:z.string().trim().min(1).max(90),postCaption:hedgyPostCaptionSchema}).strict();
 
 export function parseEditorialJson(raw:string):unknown {
- try {return JSON.parse(raw);} catch {return undefined;}
+ try {return JSON.parse(raw);} catch {}
+ // Critics from another model family sometimes wrap JSON in a fence or a sentence.
+ const fenced = /```(?:json)?\s*([\s\S]*?)```/.exec(raw)?.[1] ?? raw;
+ const start = fenced.search(/[[{]/), end = Math.max(fenced.lastIndexOf('}'), fenced.lastIndexOf(']'));
+ if (start < 0 || end <= start) return undefined;
+ try {return JSON.parse(fenced.slice(start, end + 1));} catch {return undefined;}
 }
 
 export function normalizeNarration(text:string) {
@@ -48,16 +67,18 @@ function parseProblems(error:z.ZodError) {
  return error.issues.map(issue => `${issue.path.join('.')}: ${issue.message}`);
 }
 
-export async function reviewHedgyStory(ask:Ask, idea:string, concept:string) {
+export async function reviewHedgyStory(ask:Ask, idea:string, concept:string, critic?:Critic) {
  const rounds = [];
  let feedback:string[] = [];
  let previousDraft = '';
+ let best:{story:z.infer<typeof storySchema>;narration:string;score:number}|undefined;
  const brief = `Write one spoken Hedgy finance story for a viewer with no investing background.
 ${idea}
 Decide the single question raised by the opening and its concrete answer. Name one visible anchor (a person, object, or repeated transaction) the viewer can follow from the opening through the outcome. Build 3–7 causal beats. Each beat picks up the person, object, question, or outcome we just saw and makes one change the viewer can follow. Start where the decision or problem happens, and make the last beat answer the opening using that same anchor in its changed state. For a before/after comparison, keep what stays constant explicit so we can see what changed. Use one concrete sequence and consistent words for the same things. Prefer stories where the characters directly experience the mechanism. If you use an analogy, make its mapping explicit. Cut detours and examples that require a second setup.
 Tell it as if a friend missed what happened. In the first breath, put someone in a specific predicament we can recognize before we know the finance term. Name the object the first time we hear about it. A viewer should know what “mine,” “the pair” or “the other one” refers to when the words are spoken. The hook is provisional: replace it if it promises a different story. Let us understand why the character acts before we see the consequence. When money or an item changes hands, tell us who gives what to whom and why each side agrees, in the order we need to know it. For a comparison, establish the baseline first. Leave room for the one detail that makes the outcome click. For instance, a seller might accept less because she needs the cash today and the buyer can afford to wait. Use details appropriate to this story. Land the outcome for the person we started with, and connect it to the finance idea in everyday words.
-Write say as natural spoken sentences with short clauses, clear subjects, everyday verbs and pauses at thought boundaries. Aim for 55–75 spoken words. Keep an essential causal step even if it takes another sentence. Explain any essential financial term through its role in the story. Avoid arithmetic, unnecessary precision, generic advice and implied guarantees. Use link to explain how each beat follows the last (or sets up the question for the opener). The say fields alone must tell the complete story, and should be easy to split across multiple quick shots.`;
- for (let round = 0; round <= repairLimit; round++) {
+Write say as natural spoken sentences with short clauses, clear subjects, everyday verbs and pauses at thought boundaries. Aim for 55–80 spoken words. Keep an essential causal step even if it takes another sentence. Explain any essential financial term through its role in the story. Avoid arithmetic, unnecessary precision, generic advice and implied guarantees. Use link to explain how each beat follows the last (or sets up the question for the opener). The say fields alone must tell the complete story, and should be easy to split across multiple quick shots.
+${VIRAL_STORY_RULES}`;
+ for (let round = 0; round <= storyRepairLimit; round++) {
   const raw = await ask(round ? 'story-repair' : 'story-script',
    round ? `${brief}\nPrevious draft: ${previousDraft}\nRequired fixes: ${JSON.stringify(feedback)}\nFix the meaning in the fewest spoken words. If a line introduces a distracting side lesson, cut or narrow the claim instead of appending a technical explanation. Preserve working beats. Return the complete revised story.` : brief,
    {name:'hedgy_story',schema:storySchema});
@@ -90,9 +111,28 @@ Listener account: ${JSON.stringify({heardQuestion,heardAnswer,retell})}`,{name:'
    feedback = reviewProblems('Takeaway',checked.data);
    if (feedback.length) feedback.push(`The listener understood: ${JSON.stringify({heardQuestion,heardAnswer,retell})}`);
   }
-  rounds.push({draft:story,takeaway,facts:facts.data ?? factRaw,listener:listener.data ?? listenerRaw,problems:feedback});
+  const correct = !feedback.length;
+  // Shareability is judged by a different model family, as a polish pass on top of correctness:
+  // it never vetoes a correct story, and its rewrites go back through every correctness check.
+  let viral, viralScore = 0;
+  if (critic) {
+   const viralRaw = await critic('story-viral-review',`You are the head of content at a top short-form explainer studio (Instagram Reels / TikTok). Judge this narration for a ~30 s animated reel with a hedgehog cast, before any animation exists. ${VIRAL_STORY_RULES}
+Score 0–100 how likely this script is to hold and delight a broad audience and get shared (90 = excellent). Check the hook (would people stop scrolling?), the curiosity gap, clarity on first listen, the aha moment, the punch of the last line, pacing and wordiness. Approve when score >= 85 and nothing important is missing. Give at most 3 findings, most important first, each a specific rewrite (quote words, give the better line); do not ask for more terminology or length. Every rewrite must stay literally true and precise: a finance fact-checker rejects paradoxes that overstate (e.g. "the bank doesn't have your money"), so make the surprise come from true specifics, not exaggeration. Never contradict the required fixes from the other reviewers listed below. Empty findings on approval.
+Required fixes from the finance and first-listen reviewers (already being applied): ${JSON.stringify(feedback)}
+Return JSON only: {"approved":boolean,"score":number,"hookVerdict":string,"findings":string[]}
+Hook title on screen: ${JSON.stringify(story.hookText ?? '')}
+Narration: ${JSON.stringify(narration)}`,{name:'hedgy_viral_review',schema:viralSchema});
+   const checked = viralSchema.safeParse(parseEditorialJson(viralRaw));
+   viral = checked.data ?? viralRaw;
+   // An unreadable critic reply is not a finding about the story; it must not force a rewrite.
+   if (checked.success) { viralScore = checked.data.score; if (checked.data.score < 85) feedback.push(...checked.data.findings.slice(0, 3).map(f => `Viral (score ${checked.data.score}): ${f}`)); }
+  }
+  rounds.push({draft:story,takeaway,viral,correct,facts:facts.data ?? factRaw,listener:listener.data ?? listenerRaw,problems:feedback});
+  if (correct && (!best || viralScore > best.score)) best = {story,narration,score:viralScore};
   if (!feedback.length) return {story,narration,rounds};
  }
+ // Repairs exhausted: publish the most shareable draft that passed every correctness review.
+ if (best) return {story:best.story,narration:best.narration,rounds,selected:`best correct draft (viral score ${best.score})`};
  throw new AppError(502,'hedgy_story_unapproved','Hedgy narration did not pass finance and first-listen review',{rounds});
 }
 

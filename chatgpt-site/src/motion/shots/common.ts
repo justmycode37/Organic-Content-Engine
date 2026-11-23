@@ -92,7 +92,7 @@ export const ITEMS = {
   warning: I(symbols.drawWarningTriangle, 360, 330), check: I(symbols.drawCheckStamp, 300, 300), cross: I(symbols.drawCrossStamp, 300, 300), question: I(symbols.drawQuestionMark, 240, 330),
   apple: I(everyday.drawApple, 330, 330), appleCrate: I(everyday.drawAppleCrate, 450, 360), lemonade: I(everyday.drawLemonadeStand, 450, 600), pizza: I(everyday.drawPizza, everyday.PIZZA_SIZE.w, everyday.PIZZA_SIZE.h),
   pizzaSlice: I(everyday.drawPizzaSlice, everyday.PIZZA_SLICE_SIZE.w, everyday.PIZZA_SLICE_SIZE.h),
-  car: I(everyday.drawCar, 510, 300), phone: I(everyday.drawPhoneChart, 276, 450), cart: I(everyday.drawShoppingCart, 480, 360), gift: I(everyday.drawGiftBox, 330, 330),
+  car: I(everyday.drawCar, 510, 300), phone: I(everyday.drawPhoneChart, 276, 450), smartphone: I(everyday.drawSmartphone, 276, 450), cart: I(everyday.drawShoppingCart, 480, 360), gift: I(everyday.drawGiftBox, 330, 330),
   key: I(everyday.drawKey, 420, 180), bulb: I(everyday.drawLightBulb, 330, 420), weather: I(everyday.drawRiskWeather, 480, 390), tree: I(everyday.drawCompoundingTree, 390, 420, { state: { grow: 1 } }),
   snowball: I(everyday.drawSnowball, 300, 300, { state: { size: 1 } }),
   coffeeCup: I(everyday.drawCoffeeCup, everyday.COFFEE_CUP_SIZE.w, everyday.COFFEE_CUP_SIZE.h), bread: I(everyday.drawBread, everyday.BREAD_SIZE.w, everyday.BREAD_SIZE.h),

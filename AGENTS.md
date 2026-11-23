@@ -23,7 +23,7 @@ blue-on-black recording still defines dot structure, density, typography and
 motion; compare its normalized ink coverage while respecting the new polarity.
 Source mattes may stay black/transparent internally. Legacy reference-recording
 studies retain their original colors; normal production uses style `paper-ink`.
-Hedgy uses `gpt-6.2-sol` at `xhigh`, preserving its existing reasoning effort.
+Hedgy uses `gpt-6.2-sol` at `xhigh` for writing and planning, plus `claude-opus-5-5` at `high` as a cross-model critic (idea pick, viral story review, rendered-frame review); see docs/hedgy-generation.md.
 Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
 

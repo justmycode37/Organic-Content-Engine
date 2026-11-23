@@ -279,6 +279,14 @@ export interface ReelSpec {
   musicBrief?: string;
   /** Series name, for example "UNDER THE HOOD". Not drawn by the chrome; use it as the title's kicker. */
   series?: string;
+  /** 'viral': full-bleed worlds behind shots, a hook title and persistent header, large stroked captions. */
+  look?: 'viral';
+  /** Big on-screen hook shown over the first scene (viral look), e.g. "WHY DID BREAD GET PRICIER?". */
+  hook?: string;
+  /** Short persistent topic header at the top of the frame after the hook (viral look). */
+  header?: string;
+  /** Payoff card over the last ~2 s (viral look): the answer in a few words, e.g. "$51 FOR AN *$80* BIKE". */
+  payoff?: string;
   scenes: SceneSpec[];
   captions?: CaptionSpec[];
 }

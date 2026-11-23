@@ -132,10 +132,12 @@ export const presentShot: ShotDef = {
     const itemRot = (1 - easedMove) * (s.reveal === 'drop' ? -0.12 : 0.12) + Math.sin(Math.min(1, postHit / 0.52) * Math.PI) * 0.08;
     const tagProgress = s.backTag ? phase(t, s.secondAt - 0.14, s.secondAt + 0.14) : 0;
     const tagText = s.backTag && tagProgress >= 0.5 ? s.backTag : s.tag;
-    const tagX = movingX;
     const tagY = tagAbove ? itemDrawY - size.h / 2 - 48 : itemDrawY + size.h / 2 + 52;
     const actorProgress = ease.outCubic(phase(t, moveStart - 0.16, s.revealAt + 0.12));
     const actorX = 112 + actorProgress * 94;
+    // Keep the tag clear of the actor's head: slide it right of the actor when they would overlap.
+    const tagHalf = Math.max(measure(s.tag).w, measure(s.backTag || '').w) / 2 + 36;
+    const tagX = Math.max(tagHalf + 60, Math.min(STAGE.w - tagHalf - 64, Math.max(movingX, actorX + 96 + tagHalf)));
     const timeline = livelyKeys([
       { at: 0, pose: 'walk', expression: 'determined', look: 'forward' },
       { at: Math.max(0, moveStart - 0.05), pose: 'push', expression: 'determined', look: 'forward' },
@@ -153,7 +155,7 @@ export const presentShot: ShotDef = {
     poof(ctx, itemX, itemY + size.h * 0.3, s.revealAt, t, { count: 3, seed: frame.seed + 3, radius: 22, duration: 0.34 });
     const itemTop = itemDrawY - size.h / 2;
     const connectorStartY = tagAbove ? tagY + 34 : tagY - 34;
-    if (moveProgress > 0.04 && s.tag) connector(ctx, { x: tagX, y: connectorStartY }, { x: tagX, y: itemTop + (tagAbove ? 2 : size.h - 2) }, { width: 8, slack: 10, curve: tagAbove ? 0 : 24 });
+    if (moveProgress > 0.04 && s.tag) connector(ctx, { x: tagX, y: connectorStartY }, { x: Math.max(movingX - size.w / 2 + 20, Math.min(tagX, movingX + size.w / 2 - 20)), y: itemTop + (tagAbove ? 2 : size.h - 2) }, { width: 8, slack: 10, curve: tagAbove ? 0 : 24 });
     drawItem(ctx, s.item, {
       x: movingX, y: itemDrawY, t, scale: s.scale, rot: itemRot,
       ...(s.item === 'ticket' ? { tag: 'none' } : {}),

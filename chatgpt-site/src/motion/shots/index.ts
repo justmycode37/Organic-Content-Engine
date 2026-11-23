@@ -28,7 +28,9 @@ import { arriveShot } from './arrive.ts';
 import { lockawayShot } from './lockaway.ts';
 import { revealShot } from './reveal.ts';
 import { breaksShot } from './breaks.ts';
+import { versusShot } from './versus.ts';
 import { STAGE_ZOOM } from '../kit/sprite.ts';
+import { isWorld, setActiveWorld, worldTall, VIRAL_SHIFT } from '../kit/worlds.ts';
 
 export interface ShotDef {
   name: string;
@@ -66,6 +68,7 @@ export const SHOTS: Record<string, ShotDef> = {
   [lockawayShot.name]: lockawayShot,
   [revealShot.name]: revealShot,
   [breaksShot.name]: breaksShot,
+  [versusShot.name]: versusShot,
   [hedgyDemoShot.name]: hedgyDemoShot,
 };
 
@@ -77,7 +80,10 @@ export const shotScene: SceneDef<ShotProps> = {
     if (shot.stage !== 'clean') { shot.render(frame, props); return; }
     frame.ctx.save();
     frame.ctx.scale(STAGE_ZOOM, STAGE_ZOOM);
-    shot.render(frame, props);
+    if (worldTall()) frame.ctx.translate(0, VIRAL_SHIFT);
+    const world = props.params?.world;
+    setActiveWorld(isWorld(world) ? world : undefined, frame.t + frame.index * 3.7, worldTall());
+    try { shot.render(frame, props); } finally { setActiveWorld(undefined); }
     frame.ctx.restore();
   },
   cues(props, dur) { return SHOTS[props.shot]?.cues?.(props, dur) ?? []; },
