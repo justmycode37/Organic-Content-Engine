@@ -202,14 +202,33 @@ async function effect(name,key,variant=0,requestedSeconds=undefined,noteHz=null,
  return file;
 }
 
+async function cachedScore(seconds){
+ const {readdir,stat}=await import('node:fs/promises');
+ const files=(await readdir(CACHE)).filter(f=>/^music-.*\.mp3$/.test(f));
+ const candidates=[];
+ for(const f of files){
+  const path=join(CACHE,f);
+  try{const length=Number(execFileSync('ffprobe',['-v','error','-show_entries','format=duration','-of','csv=p=0',path]).toString().trim());if(length>=seconds+2)candidates.push({path,mtime:(await stat(path)).mtimeMs});}catch{}
+ }
+ return candidates.sort((a,b)=>b.mtime-a.mtime)[0]?.path;
+}
+
 async function music(mood,seconds,key,brief){
  const prompt=brief?`Instrumental only, no vocals. High-energy electronic action score (heist/chase trailer energy, never happy, cute or playful) under narration for a short vertical finance story: ${brief} Punchy drums and driving bass from the first second, leave mid-range space for the voice, end on a clean hit.`:MUSIC[mood]??MUSIC.drive,length=Math.min(120,Math.max(10,Math.ceil((seconds+(brief?4:1.5))/5)*5)); // generated scores wind down near their end; keep that outro past the reel
  const file=join(CACHE,`music-${hash({prompt,length})}.mp3`);
  if(!(await exists(file))){
   if(musicGenerationsThisRender>=1)throw new Error('Music generation cap reached (1); use the cached music asset');
   musicGenerationsThisRender++;
-  const response=await eleven('/v1/music?output_format=mp3_44100_128',{prompt,music_length_ms:length*1000,force_instrumental:true},key);
-  await writeFile(file,Buffer.from(await response.arrayBuffer()));
+  try{
+   const response=await eleven('/v1/music?output_format=mp3_44100_128',{prompt,music_length_ms:length*1000,force_instrumental:true},key);
+   await writeFile(file,Buffer.from(await response.arrayBuffer()));
+  }catch(error){
+   // No credits or a provider outage must not cost the reel: reuse the newest cached score that is long enough.
+   const fallback=await cachedScore(seconds);
+   if(!fallback)throw error;
+   console.error(`Music generation failed (${String(error?.message??error).slice(0,160)}); reusing cached score ${fallback}`);
+   return fallback;
+  }
  }
  return file;
 }
