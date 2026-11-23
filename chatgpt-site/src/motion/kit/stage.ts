@@ -216,7 +216,7 @@ export function label(ctx: Ctx, text: string, x: number, y: number, options: Lab
   const sprite = labelSprite(String(text ?? '').toUpperCase(), variant, options);
   // Viral framing: name plates under the feet would sit on the captions.
   if (worldTall()) {
-    const m = ctx.getTransform(), dy = m.b * x + m.d * y + m.f;
+    const m = reelTransform(ctx), dy = m.b * x + m.d * y + m.f;
     if (dy > 1335) return { x, y, w: 0, h: 0 };
     // A sign or stamp must not cover a face: lift it just above the highest face it would overlap.
     const dx = m.a * x + m.c * y + m.e, halfW = sprite.w / 2 * Math.abs(m.a), halfH = sprite.h / 2 * Math.abs(m.d);
@@ -226,7 +226,13 @@ export function label(ctx: Ctx, text: string, x: number, y: number, options: Lab
     { const top = m.b * x + m.d * y + m.f - halfH; if (top < 240 && m.d) y += (240 - top) / m.d; }
     if (cardBand) { const cy = m.b * x + m.d * y + m.f; if (cy + halfH > cardBand.top && cy - halfH < cardBand.bottom) return { x, y, w: 0, h: 0 }; }
   }
-  const fit = options.maxWidth && sprite.w > options.maxWidth ? options.maxWidth / sprite.w : 1;
+  let fit = options.maxWidth && sprite.w > options.maxWidth ? options.maxWidth / sprite.w : 1;
+  if (worldTall()) {
+    // A sign wider than the visible frame shrinks around its centre instead of being cropped ("GENERAL ADMISS…").
+    const m = reelTransform(ctx), dx = m.a * x + m.c * y + m.e, half = sprite.w * fit / 2 * Math.hypot(m.a, m.b);
+    const room = Math.min(dx - 40, 1040 - dx);
+    if (half > room && room > 40) fit *= room / half;
+  }
   const pop = (typeof options.pop === 'number' ? options.pop : options.pop ? 1.08 : 1) * fit;
   drawSprite(ctx, sprite, x, y, { scale: pop, rot: options.rot, anchor: [0.5, 0.5] });
   return { x: x - sprite.w * pop / 2, y: y - sprite.h * pop / 2, w: sprite.w * pop, h: sprite.h * pop };
@@ -239,6 +245,10 @@ let faces: Face[] = [], sceneKey = -1;
 const lastFaces = new Map<number, Face[]>();
 export function registerFace(face: Face) { faces.push(face); }
 let cardBand: { top: number; bottom: number } | undefined;
+// The player's base transform (e.g. a thumbnail scale): layout checks work in 1080 x 1920 reel pixels.
+let baseInverse: DOMMatrix | undefined;
+export function setReelBase(matrix: DOMMatrix | undefined) { baseInverse = matrix ? matrix.inverse() : undefined; }
+export function reelTransform(ctx: Ctx): DOMMatrix { const m = ctx.getTransform(); return baseInverse ? baseInverse.multiply(m) : m; }
 /** While an overlay card is on screen, in-shot signs under it stay hidden: one overlay at a time. */
 export function setCardZone(zone: { top: number; bottom: number } | undefined) { cardBand = zone; }
 export function resetFaces(key = -1) { if (sceneKey >= 0) lastFaces.set(sceneKey, faces); sceneKey = key; faces = []; }

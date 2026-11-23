@@ -39,7 +39,8 @@ export const handoffShot: ShotDef = {
 
     // The return item goes back at paw height once the first item is on its way up.
     const backStart = Math.max(s.back - TRAVEL + 0.04, landed + 0.12), backU = s.backItem ? tween(t, backStart, TRAVEL, 0, 1, ease.inOutCubic) : 0;
-    const backPos = arc({ x: take.x + 6, y: PAW_Y + 22 }, { x: give.x - 6, y: PAW_Y + 22 }, 44, backU);
+    // The return item travels on a lower lane so the two items never stack into a clump mid-air.
+    const backPos = arc({ x: take.x + 6, y: PAW_Y + 70 }, { x: give.x - 6, y: PAW_Y + 70 }, -30, backU);
     const backShown = s.backItem ? ease.outBack(phase(t, backStart - 0.16, backStart)) : 0;
     const backSquash = squash(t, backStart + TRAVEL, 0.14, 0.22);
 
