@@ -65,7 +65,7 @@ export function sanitizeStoryboard<T extends {scenes:{type:string;shot?:string;p
  const said=` ${defaults.narration.toLowerCase().replace(/[^a-z0-9$% ]/g,' ').replace(/\s+/g,' ')} `;
  const scenes=spec.scenes.map(scene=>{
   if(scene.type!=='shot')return scene;
-  const allowed=new Set([...(SHOT_CATALOG.find(e=>e.name===scene.shot)?.params??[]),'world']);
+  const allowed=new Set([...(SHOT_CATALOG.find(e=>e.name===scene.shot)?.params??[]),'world','camera']);
   const params=Object.fromEntries(Object.entries(scene.params??{}).filter(([k])=>allowed.has(k)));
   if(!isWorld(params.world))params.world=defaults.world;
   return {...scene,params};

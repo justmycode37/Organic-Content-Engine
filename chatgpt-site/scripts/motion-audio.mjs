@@ -312,12 +312,13 @@ function tuneAccents(cues,key){
 }
 
 /** Caption phrases follow the voice in readable chunks without splitting sentence beats. */
-export function captionsFromSpeech(say,words,offset,sceneEnd,{maxWords=6,maxChars=34}={}){
+export function captionsFromSpeech(say,words,offset,sceneEnd,{maxWords=6,maxChars=34,breaks=new Set()}={}){
  const marked=markupWords(say),groups=[];let segment=[];
  const chars=list=>list.reduce((sum,item)=>sum+item.text.replaceAll('*','').length,0)+Math.max(0,list.length-1);
  // Split at sentence ends first, then break long segments into BALANCED chunks (no orphaned last word).
  const flush=()=>{if(!segment.length)return;const parts=Math.max(Math.ceil(segment.length/maxWords),Math.ceil(chars(segment)/maxChars));let i=0;for(let part=parts;part>0;part--){let end=part===1?segment.length:i+Math.ceil((segment.length-i)/part);if(part>1){for(const d of [0,-1,1]){const k=end+d;if(k>i+1&&k<segment.length&&/[,;]$/.test(segment[k-1].text)){end=k;break;}}}groups.push(segment.slice(i,end));i=end;}segment=[];};
  words.forEach((word,index)=>{
+  if(breaks.has(index))flush(); // a caption never runs across a shot cut
   const text=marked[index]?.accent?`*${word.text}*`:word.text;
   segment.push({...word,text});
   if(/[.!?…:][”’"')\]]*$/.test(word.text)||(maxWords<6&&/[,;—–][”’"')\]]*$/.test(word.text)&&segment.length>=2))flush();
@@ -569,7 +570,8 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const audible=governed.cues.filter(cue=>!cue.underlay).sort((a,b)=>rank(a)-rank(b)||a.at-b.at),keep=new Set(audible.slice(0,budget));
   governed.cues=governed.cues.filter(cue=>keep.has(cue)||(cue.underlay&&governed.cues.some(other=>keep.has(other)&&Math.abs(other.at-cue.at)<0.05)));governed.stats.after=governed.cues.length;governed.stats.densityPerSecond=governed.cues.length/Math.max(1,reelEnd);governed.stats.viralThinned=true;}
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
- const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24}:undefined):[];
+ const cutAt=new Set();if(spec.look==='viral'){let n=0;for(const item of speech){if(n)cutAt.add(n);n+=item.words.length;}}
+ const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24,breaks:cutAt}:undefined):[];
  if(captions.length)timed.captions=captions;
  return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats,musicAutomation};
 }

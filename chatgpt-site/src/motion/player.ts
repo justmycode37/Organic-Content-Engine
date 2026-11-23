@@ -1,6 +1,6 @@
 // Renders one frame of a reel. Overlapping transitions render their two pure-time scene layers
 // into cached canvases, then composite those images before chrome and captions.
-import { H, W, placeScenes, reelDuration, type Ctx, type Frame, type PlacedScene, type ReelSpec, type SceneDef, type Theme, type TransitionName } from './core.ts';
+import { ease, H, W, placeScenes, reelDuration, type Ctx, type Frame, type PlacedScene, type ReelSpec, type SceneDef, type Theme, type TransitionName } from './core.ts';
 import { drawCaption, type ActiveCaption } from './captions.ts';
 import { frameTheme } from './pix.ts';
 import { drawChrome } from './chrome.ts';
@@ -8,9 +8,9 @@ import { drawBackground } from './fx/background.ts';
 import { applyCamera, cameraFocus, drawImpact } from './fx/camera.ts';
 import { compositeTransition, cleanTransition, TRANSITION_DURATIONS } from './fx/transitions.ts';
 import { SCENES } from './scenes/index.ts';
-import { drawHookAndHeader, drawViralCaption } from './viral.ts';
+import { drawHookAndHeader, drawViralCaption, hookEndTime } from './viral.ts';
 import { setWorldTall } from './kit/worlds.ts';
-import { setCardZone } from './kit/stage.ts';
+import { setCardZone, setReelBase } from './kit/stage.ts';
 import { cardZone } from './viral.ts';
 
 interface Surface { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx }
@@ -75,6 +75,13 @@ function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: nu
     const punch = events.reduce((sum, at) => { const dt = frame.t - at; return dt >= 0 && dt < 0.3 ? Math.max(sum, Math.sin(dt / 0.3 * Math.PI) * 0.028) : sum; }, 0);
     const zoom = 1.05 + 0.06 * Math.min(1, Math.max(0, frame.t / Math.max(0.5, frame.dur))) + punch;
     ctx.translate(540, 1000); ctx.scale(zoom, zoom); ctx.translate(-540, -1000);
+    // While the hook card is up, the opening shot sits smaller (anchored at the actors' feet) so its signs
+    // are not hidden behind the card; it eases back to full size as the hook leaves.
+    const hookEnd = hookEndTime(spec, placeScenes(spec));
+    if (hookEnd && time < hookEnd + 0.45) {
+      const k = 1 - ease.inOutCubic(Math.min(1, Math.max(0, (time - hookEnd) / 0.45))), shrink = 1 - 0.24 * k;
+      ctx.translate(540, 1290); ctx.scale(shrink, shrink); ctx.translate(-540, -1290);
+    }
   }
   setWorldTall(viral);
   // Keep the established Hedgy scene aperture exactly as it was; shot scenes use the new full bleed aperture.
@@ -104,6 +111,8 @@ function activeTransition(placed: PlacedScene[], time: number, hedgy = false, vi
 export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   const placed = placeScenes(spec);
   const duration = reelDuration(spec);
+  // Viral reels end on a hard cut back to the opening frame, so the loop restarts seamlessly.
+  if (spec.look === 'viral' && duration > 3 && time > duration - 0.2) return renderReel(ctx, spec, 0);
   const hedgy = spec.series?.startsWith('HEDGY') ?? false;
   const theme = frameTheme(ctx, spec.mode, hedgy ? 'mono' : spec.accent, time);
   if (hedgy) {
@@ -112,6 +121,7 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
     theme.accent = theme.fg; theme.accentSolid = theme.fg; theme.onAccent = theme.bg; theme.spectrum = [theme.bg, theme.fg];
   }
   const scene = placed.find(item => time < item.end) ?? placed.at(-1);
+  setReelBase(ctx.getTransform());
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';

@@ -84,6 +84,15 @@ export const shotScene: SceneDef<ShotProps> = {
     frame.ctx.save();
     frame.ctx.scale(STAGE_ZOOM, STAGE_ZOOM);
     if (worldTall()) frame.ctx.translate(0, VIRAL_SHIFT);
+    // Close-ups: push in on a face or the item (stage units), easing in over the first 0.35 s.
+    const camera = props.params?.camera;
+    const focus = camera === 'close-left' ? { x: 190, y: 540, k: 1.65 } : camera === 'close-right' ? { x: 530, y: 540, k: 1.65 } : camera === 'close-center' ? { x: 360, y: 600, k: 1.6 } : undefined;
+    if (focus) {
+      const e = Math.min(1, Math.max(0, frame.t / 0.35)), k = 1 + (focus.k - 1) * (1 - (1 - e) ** 3);
+      // Keep the focus point where the action normally sits on screen (stage x 360, y 560).
+      const p = (k - 1) / (focus.k - 1);
+      frame.ctx.translate(360, 560); frame.ctx.scale(k, k); frame.ctx.translate(-(360 + (focus.x - 360) * p), -(560 + (focus.y - 560) * p));
+    }
     resetFaces(frame.index);
     const world = props.params?.world;
     setActiveWorld(isWorld(world) ? world : undefined, frame.t + frame.index * 3.7, worldTall());

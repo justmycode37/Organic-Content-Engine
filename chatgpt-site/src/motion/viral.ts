@@ -41,6 +41,9 @@ function richLine(ctx: Ctx, words: { text: string; accent: boolean }[], cx: numb
   words.forEach((word, i) => { strokedText(ctx, word.text, x + widths[i]! / 2, y, size, word.accent ? YELLOW : WHITE); x += widths[i]! + space; });
 }
 
+/** When the hook card leaves the screen (reel seconds); 0 without a hook. */
+export function hookEndTime(spec: ReelSpec, placed: PlacedScene[]) { return spec.hook?.trim() ? Math.min(Math.max(1.6, placed[0]?.end ?? 0), 3.2) : 0; }
+
 /** When the narration first says the concept's name: the start of its first word on the reel timeline. */
 export function termTime(term: string | undefined, captions: readonly ActiveCaption[]): number | undefined {
   const norm = (w: string) => w.toLowerCase().replace(/[^a-z0-9$%]/g, '');

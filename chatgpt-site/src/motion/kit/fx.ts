@@ -80,7 +80,8 @@ function puffSprite(size: number, color: string): Sprite {
 }
 /** A few chunky stepped puffs separate and rise before fading. */
 export function poof(ctx: Ctx, x: number, y: number, t0: number, t: number, { count = 4, seed = 1, duration = 0.52, radius = 28, color = PAL.grey2 }: PoofOptions = {}): void {
-  if (t < t0 || duration <= 0) return;
+  // Viral look: grey puffs read as smudges over faces and signs.
+  if (t < t0 || duration <= 0 || worldTall()) return;
   const p = phase(t, t0, t0 + duration);
   if (p >= 1) return;
   const travel = ease.outCubic(p), alpha = alphaStep((1 - p) ** 1.35), puffs = Math.max(3, Math.min(5, Math.round(count)));

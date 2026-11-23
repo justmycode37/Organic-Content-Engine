@@ -59,7 +59,7 @@ export const versusShot: ShotDef = {
   describe: 'Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 14 characters with normal spaces, e.g. -$60 or SAVED $0.40), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.',
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur);
-    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: s.who === 'none' ? [] : [{ x: STAGE.centre, y: STAGE.floor - 3, w: 170 }] });
+    drawStage(ctx, { floorY: STAGE.floor, line: true, shadow: s.who === 'none' ? [] : [{ x: s.gap ? 120 : STAGE.centre, y: STAGE.floor - 3, w: 170 }] });
     const inL = phase(t, s.inL - 0.05, s.inL + 0.3), inR = phase(t, s.inR - 0.05, s.inR + 0.3), hit = phase(t, s.hit - 0.18, s.hit);
     const decided = ease.outCubic(phase(t, s.hit, s.hit + 0.3));
     const dimL = s.pick === 'right' ? decided : 0, dimR = s.pick === 'left' ? decided : 0;
@@ -74,16 +74,16 @@ export const versusShot: ShotDef = {
         { at: s.hit, pose: s.mood === 'happy' || s.mood === 'smug' ? 'celebrate' : 'shock', expression: s.mood, look: 'up' },
         { at: s.hit + 0.5, pose: 'point', expression: s.mood, look: 'up' },
       ];
-      drawActor(ctx, { who: s.who, x: STAGE.centre, y: STAGE.floor, time: t, keys, scale: 0.72 });
+      drawActor(ctx, { who: s.who, x: s.gap ? 100 : STAGE.centre, y: STAGE.floor, time: t, keys, scale: 0.72 });
     }
     if (s.gap && t >= s.hit - 0.18) {
       // The gap falls from above, squashes on impact and stays as the headline number.
-      const y = -120 + (CARD.y + 200 + 120) * ease.inCubic(hit), sq = squash(t, s.hit, 0.3, 0.3);
-      ctx.save(); ctx.translate(STAGE.centre, y); ctx.scale(sq.sx, sq.sy); ctx.rotate(-0.05);
-      label(ctx, s.gap, 0, 0, { variant: 'stamp', size: 108, maxWidth: 440, singleLine: true, bg: PAL.paper });
+      const y = -120 + (CARD.y + CARD.h / 2 + 70 + 120) * ease.inCubic(hit), sq = squash(t, s.hit, 0.3, 0.3);
+      ctx.save(); ctx.translate(STAGE.centre + (s.who === 'none' ? 0 : 110), y); ctx.scale(sq.sx, sq.sy); ctx.rotate(-0.05);
+      label(ctx, s.gap, 0, 0, { variant: 'stamp', size: 108, maxWidth: s.who === 'none' ? 460 : 380, singleLine: true, bg: PAL.paper, keepPosition: true });
       ctx.restore();
-      sparks(ctx, STAGE.centre, CARD.y + 200, s.hit, t, { count: 8, seed: frame.seed, duration: 0.5 });
-      poof(ctx, STAGE.centre, CARD.y + 250, s.hit, t, { count: 5, seed: frame.seed + 2, radius: 40 });
+      sparks(ctx, STAGE.centre + 110, CARD.y + CARD.h / 2 + 70, s.hit, t, { count: 8, seed: frame.seed, duration: 0.5 });
+      poof(ctx, STAGE.centre + 110, CARD.y + CARD.h / 2 + 110, s.hit, t, { count: 5, seed: frame.seed + 2, radius: 40 });
     }
   },
   cues(props: ShotProps, dur: number): Cue[] {
