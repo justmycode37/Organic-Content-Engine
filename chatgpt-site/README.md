@@ -167,6 +167,9 @@ matching Site code too: its completion gate validates the model/review profile.
 
 ## Silicon Footnote
 
+Use the [editorial foundation](scripts/silicon-footnote/EDITORIAL-FOUNDATION.md)
+for YouTube references, episode selection, and source-backed reporting briefs.
+
 Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
 workspace binds a unique channel named Silicon Footnote or The Silicon Footnote
 on first discovery. You can also choose a channel manually. **Research and
