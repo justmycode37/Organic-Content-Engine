@@ -12,9 +12,11 @@ async function call(path,input){
  const init=input===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)};
  return (await siteRequest(config,base+path,init)).json();
 }
+const editionRound=dir.match(/(?:^|[\\/])evaluation[\\/]r(\d+)(?:[\\/]|$)/)?.[1];
+const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.json'),'utf8')):null;
+if(action==='publish' && [editionRound,pack.round].some(round=>round!==undefined && (!Number.isSafeInteger(Number(round))||Number(round)<4)))throw Error('Public evaluation uploads start at Round 4');
 let state=await call('status');
 if(action==='publish'&&state.state==='ready'){
- const pack=JSON.parse(await readFile(join(dir,'publication.json'),'utf8'));
  const custom=pack.variant && pack.variant!=='automatic';
  for(const kind of custom?['video',pack.variant]:['video']){
   await call('assets/'+kind,{});
