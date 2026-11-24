@@ -1105,3 +1105,26 @@ test('reel notifications exclude old intermediate events and only report unackno
   assert.equal(JSON.parse((await s.db.prepare("SELECT last_result FROM job_state WHERE name='account_notice:fixture:generated'").first()).last_result).acknowledged,false);
  }finally{await s.stop();}
 });
+
+test('Silicon Footnote binds only YouTube and delivers an on-demand private episode',async()=>{
+ const yt={id:'silicon-yt',name:'The Silicon Footnote',identifier:'youtube'};
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken,POSTIZ_API_KEY:'test'},{persist:'silicon',outboundService:async()=>Response.json([yt,{...yt,id:'other',identifier:'instagram'}])});
+ const root='/api/jobs/accounts/silicon',machine={headers:accountHeaders};
+ const list=await s.call('GET','/api/accounts');
+ assert.equal(list.body.accounts.find(a=>a.id==='silicon-footnote').postizIntegrationId,yt.id);
+ assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:yt.id}})).status,409);
+ const q=await s.call('POST','/api/silicon/episodes',{json:{topic:'Mars'}});
+ assert.equal(q.status,201);assert.equal((await s.call('POST','/api/silicon/episodes',{json:{topic:'Duplicate'}})).status,409);
+ const claimed=await s.call('POST',root+'/claim',machine);assert.equal(claimed.body.job.id,q.body.id);
+ assert.equal((await s.call('POST',root+'/claim',machine)).body.job,null);
+ const path=root+'/'+q.body.id;
+ const init=await s.call('POST',path+'/upload',machine);assert.equal(init.status,200);
+ const uploadId=init.body.uploadId;
+ const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:new Uint8Array(200)});
+ assert.equal(part.status,200);
+ const done=await s.call('POST',path+'/complete',{...machine,json:{title:'Episode',seconds:700,sources:[],uploadId,parts:[await part.json()]}});
+ assert.equal(done.status,200);assert.equal((await s.call('GET','/api/silicon/episodes')).body.episodes[0].status,'ready');
+ const video=await s.call('GET','/api/silicon/episodes/'+q.body.id+'/video',{headers:{...OWNER,range:'bytes=0-9'}});
+ assert.equal(video.status,206);assert.equal(video.headers.get('content-range'),'bytes 0-9/200');
+ await s.stop();
+});

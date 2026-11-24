@@ -65,7 +65,7 @@ export async function tickAccounts(c:Container,env:Env){
  if(!enabled.length||!postiz.configured)return {queued};
  const targets=await postiz.integrations();
  for(const a of enabled){
-  const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);if(!target)continue;
+  const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled&&['instagram','instagram-standalone'].includes(t.identifier));if(!target)continue;
   const previous=await c.settings.getJob(`account_schedule:${a.id}`),since=Math.max(Date.parse(a.enabledSince??tickAt),previous.lastRunAt?Date.parse(previous.lastRunAt):at.getTime()-86400000,at.getTime()-86400000);
   for(const slot of accountSlots(a,at,-1,3).filter(s=>Date.parse(s.scheduledAt)>=since&&Date.parse(s.scheduledAt)<=at.getTime())){
    const missed=Date.now()-Date.parse(slot.scheduledAt)>15*60000,id=crypto.randomUUID();

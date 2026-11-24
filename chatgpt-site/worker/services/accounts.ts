@@ -38,7 +38,7 @@ export async function listAccounts(db:Db){
   db.prepare("DELETE FROM accounts WHERE id='acryllex'"),
  ]);
  const common={platform:'instagram',postsPerDay:1,timezone:'Europe/Zurich',enabled:false,notifyResults:true};
- const seeds=[{...common,id:'hedgy',name:'hedgy',topic:HEDGY_TOPIC,postingTime:'18:00',brand:HEDGY_POLICY},{...common,id:'quriozity',name:'Quriozity',topic:QURIOZITY_POLICY.topic,postingTime:'19:00',brand:QURIOZITY_POLICY}];
+ const seeds=[{...common,id:'hedgy',name:'hedgy',topic:HEDGY_TOPIC,postingTime:'18:00',brand:HEDGY_POLICY},{...common,id:'quriozity',name:'Quriozity',topic:QURIOZITY_POLICY.topic,postingTime:'19:00',brand:QURIOZITY_POLICY},{...common,id:'silicon-footnote',name:'Silicon Footnote',platform:'youtube',topic:'Long-form AI news',postingTime:'18:00'}];
  for(const [i,a] of seeds.entries())await db.prepare('INSERT OR IGNORE INTO accounts(id,value,created_at,updated_at) VALUES(?,?,?,?)').bind(a.id,JSON.stringify(a),new Date(Date.now()+i).toISOString(),new Date().toISOString()).run();
  // Upgrade the stock brief on existing accounts, including accounts migrated from Acryllex.
  await db.prepare("UPDATE accounts SET value=json_set(value,'$.topic',?,'$.brand',json(?)) WHERE id='quriozity' AND json_extract(value,'$.topic')=?").bind(QURIOZITY_POLICY.topic,JSON.stringify(QURIOZITY_POLICY),'Curious explainers: things people are curious about but never thought about before (why we sleep and dream, why the blue LED was so hard to invent, why the sky is blue, why ice floats).').run();

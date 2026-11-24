@@ -1,3 +1,4 @@
+import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,reportEpisode,siliconId} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
@@ -99,7 +100,7 @@ export function createApp(): Hono<AppEnv> {
     if (!/^\/api\/social\/(instagram|tiktok|youtube|x|linkedin)\/callback$/.test(c.req.path) && !c.req.path.startsWith('/api/media/')) assertSameOrigin(c);
     await next();
   });
-  app.use('/api/*', async (c,next)=>{if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/(?:render|accounts)\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
+  app.use('/api/*', async (c,next)=>{if(/^\/api\/jobs\/accounts\/silicon\/[a-f0-9-]+\/part\/\d+$/.test(c.req.path))return bodyLimit({maxSize:9*1024*1024})(c,next);if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/(?:render|accounts)\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: () => {
       throw new AppError(413, 'payload_too_large', 'Request body too large');
@@ -202,6 +203,45 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.use('/api/jobs/accounts/*',async(c,next)=>{await assertRenderCaller(c,{...c.get('container').config,renderWorkerToken:typeof c.env.ACCOUNT_WORKER_TOKEN==='string'?c.env.ACCOUNT_WORKER_TOKEN:null},c.get('access'));await next();});
+  app.post('/api/jobs/accounts/silicon/sync',async c=>{
+   const db=c.get('container').db;await listAccounts(db);
+   const targets=await new Postiz(c.env).integrations();const match=await bindSilicon(db,targets);
+   return c.json({matched:match?.name,channels:targets.filter(t=>t.identifier==='youtube').map(t=>t.name)});
+  });
+  app.post('/api/jobs/accounts/silicon/import',async c=>{
+   const {id,title}=await readBody(c,validator.object({id:validator.uuid(),title:validator.string().max(100)}));
+   const created=new Date().toISOString(),job={id,topic:title,status:'producing',created},db=c.get('container').db;
+   await db.prepare('INSERT OR IGNORE INTO job_state(name,last_run_at,last_result) VALUES(?,?,?)').bind('silicon-episode:'+id,created,JSON.stringify(job)).run();
+   return c.json({job:await activeEpisode(db,id)});
+  });
+  app.post('/api/jobs/accounts/silicon/claim',async c=>c.json({job:await claimEpisode(c.get('container').db)}));
+  app.post('/api/jobs/accounts/silicon/:id/heartbeat',async c=>{
+   const db=c.get('container').db;
+   await db.prepare("UPDATE job_state SET last_run_at=? WHERE name=? AND json_extract(last_result,'$.status')='producing'").bind(new Date().toISOString(),'silicon-episode:'+c.req.param('id')).run();return c.json({ok:true});
+  });
+  app.post('/api/jobs/accounts/silicon/:id/upload',async c=>{
+   const e=await activeEpisode(c.get('container').db,c.req.param('id'));
+   const upload=await c.env.BUCKET!.createMultipartUpload('silicon/'+e.id+'.mp4',{httpMetadata:{contentType:'video/mp4'}});
+   return c.json({uploadId:upload.uploadId});
+  });
+  app.put('/api/jobs/accounts/silicon/:id/part/:n',async c=>{
+   const e=await activeEpisode(c.get('container').db,c.req.param('id'));
+   const upload=c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',validator.string().min(1).parse(c.req.header('x-upload-id')));
+   const n=validator.coerce.number().int().min(1).max(512).parse(c.req.param('n'));
+   if(!c.req.raw.body)throw new AppError(400,'file_missing','Missing video part');
+   return c.json(await upload.uploadPart(n,await c.req.arrayBuffer()));
+  });
+  app.post('/api/jobs/accounts/silicon/:id/complete',async c=>{
+   const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id'));
+   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100)}));
+   await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).complete(v.parts);
+   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources});return c.json({ok:true});
+  });
+  app.post('/api/jobs/accounts/silicon/:id/fail',async c=>{
+   const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id')),v=await readBody(c,validator.object({error:validator.string().max(300),uploadId:validator.string().optional()}));
+   if(v.uploadId)await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).abort().catch(()=>{});
+   await reportEpisode(db,{...e,status:'failed',error:v.error});return c.json({ok:true});
+  });
   app.post('/api/jobs/accounts/tick',async c=>{const x=c.get('container');await x.settings.setJob('account_worker',new Date().toISOString(),{online:true});const publication=await publishAccountJobs(x,c.env);return c.json({...publication,...await tickAccounts(x,c.env)});});
   app.get('/api/jobs/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
   app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
@@ -235,6 +275,16 @@ export function createApp(): Hono<AppEnv> {
     await next();
   });
 
+  api.get('/silicon/episodes',async c=>c.json({episodes:await episodes(c.get('container').db)}));
+  api.post('/silicon/episodes',async c=>{const {topic}=await readBody(c,validator.object({topic:validator.string().trim().max(300).default('')}));return c.json(await queueEpisode(c.get('container').db,topic),201)});
+  api.get('/silicon/episodes/:id/video',async c=>{
+   const id=validator.uuid().parse(c.req.param('id')),obj=await c.env.BUCKET!.get('silicon/'+id+'.mp4',{range:c.req.raw.headers});
+   if(!obj)throw notFound('Video',id);
+   const range=obj.range as {offset:number;length:number}|undefined;
+   const headers=new Headers({'Content-Type':'video/mp4','Cache-Control':'private, no-store','Accept-Ranges':'bytes','Content-Length':String(range?.length??obj.size)});
+   if(range)headers.set('Content-Range',`bytes ${range.offset}-${range.offset+range.length-1}/${obj.size}`);
+   return new Response(obj.body,{headers,status:range?206:200});
+  });
   api.post('/accounts/:id/connect',async c=>{const x=c.get('container'),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();if(!row)throw notFound('Account',c.req.param('id'));const account=JSON.parse(row.value);const social=new SocialAccounts(x.db,runtime(c.env),fetch,account.id);const browser=randomHex(32);const url=await social.start(scopedPlatformOf(account.platform),browser);setCookie(c,'oce_oauth',browser,{httpOnly:true,secure:true,sameSite:'Lax',path:'/api/social',maxAge:600});return c.json({url});});
   api.get('/postiz/integrations',async c=>{const p=new Postiz(c.env);return c.json({configured:p.configured,integrations:p.configured?await p.integrations():[]});});
   api.get('/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
@@ -242,9 +292,14 @@ export function createApp(): Hono<AppEnv> {
    const x=c.get('container'),accounts=await listAccounts(x.db),heartbeat=await x.settings.getJob('account_worker'),postiz=new Postiz(c.env);
    let targets:Awaited<ReturnType<Postiz['integrations']>>=[],postizError='';
    if(postiz.configured)try{targets=await postiz.integrations();}catch{postizError='Postiz connection unavailable';}
+   const silicon=accounts.find(a=>a.id===siliconId);
+   if(silicon&&!silicon.postizIntegrationId){
+    const match=await bindSilicon(x.db,targets);
+    if(match){const row=await x.db.prepare("SELECT json_extract(value,'$.postizIntegrationId') AS dest FROM accounts WHERE id=?").bind(siliconId).first<{dest:string|null}>();silicon.postizIntegrationId=row?.dest??null;}
+   }
    for(const a of accounts){
     const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);
-    const issues=[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','quriozity'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Quriozity and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
+    const issues=a.id===siliconId?(target?[]:[postizError||'Choose a connected Postiz YouTube channel']):[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','quriozity'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Quriozity and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
     (a as any).connectionStatus={connected:!!target,setupRequired:postiz.configured?[]:['POSTIZ_API_KEY'],provider:'postiz',profile:target?.profile};
     (a as any).health={state:!a.enabled?'paused':issues.length?'blocked':'running',issues};
     const runs=await x.db.prepare('SELECT id,scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();
@@ -256,7 +311,7 @@ export function createApp(): Hono<AppEnv> {
   api.patch('/accounts/:id',async c=>{
    const x=c.get('container'),patch=await readBody(c,accountPatch),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();
    if(!row)throw notFound('Account',c.req.param('id'));const next={...JSON.parse(row.value),...patch};
-   if(patch.postizIntegrationId)await new Postiz(c.env).target(patch.postizIntegrationId);
+   if(patch.postizIntegrationId)await new Postiz(c.env).target(patch.postizIntegrationId,next.platform);
    if(patch.enabled===true){
     if(!['hedgy','quriozity'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','Automatic reel production supports Quriozity and Hedgy on Instagram');
     if(!next.week?.some((d:{times:string[]})=>d.times.length)&&next.week)throw new AppError(409,'schedule_empty','Choose at least one day and generation time');

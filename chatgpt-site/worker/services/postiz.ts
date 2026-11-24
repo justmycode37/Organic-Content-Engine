@@ -16,8 +16,8 @@ export class Postiz {
   if(!r.ok)throw new AppError(502,'postiz_rejected',`Postiz request failed (${r.status}). Check account access and API limits.`);
   try{return await r.json() as any;}catch{throw new AppError(502,'postiz_invalid','Postiz returned an invalid response');}
  }
- async integrations():Promise<PostizIntegration[]>{const rows=await this.request('/integrations');if(!Array.isArray(rows))throw new AppError(502,'postiz_invalid','Postiz account list is invalid');return rows.filter(x=>['instagram','instagram-standalone'].includes(x.identifier)).map(x=>({id:x.id,name:x.name,identifier:x.identifier,profile:x.profile,picture:profilePicture(x.picture),disabled:!!x.disabled}));}
- async target(id:string){const a=(await this.integrations()).find(x=>x.id===id&&!x.disabled);if(!a)throw new AppError(409,'postiz_account_missing','This Instagram account is unavailable in Postiz');return a;}
+ async integrations():Promise<PostizIntegration[]>{const rows=await this.request('/integrations');if(!Array.isArray(rows))throw new AppError(502,'postiz_invalid','Postiz account list is invalid');return rows.filter(x=>['instagram','instagram-standalone','youtube'].includes(x.identifier)).map(x=>({id:x.id,name:x.name,identifier:x.identifier,profile:x.profile,picture:profilePicture(x.picture),disabled:!!x.disabled}));}
+ async target(id:string,platform='instagram'){const a=(await this.integrations()).find(x=>x.id===id&&!x.disabled&&(x.identifier===platform||platform==='instagram'&&x.identifier==='instagram-standalone'));if(!a)throw new AppError(409,'postiz_account_missing',`This ${platform} account is unavailable in Postiz`);return a;}
  async upload(source:ReadableStream<Uint8Array>,name:string){
   // Stream private R2 media through multipart instead of buffering a 100 MB reel in a 128 MB Worker.
   const boundary=`oce-${crypto.randomUUID()}`,encode=new TextEncoder(),reader=source.getReader();let phase=0;
