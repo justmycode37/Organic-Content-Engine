@@ -7,6 +7,7 @@ import type { HedgyKey, HedgyPose, HedgyExpression } from '../actor/hedgy.ts';
 import { arc, bob, clamp, ease, phase, squash } from '../kit/motion.ts';
 import { poof, sparks } from '../kit/fx.ts';
 import { drawStage, label } from '../kit/stage.ts';
+import { worldTall } from '../kit/worlds.ts';
 import { ACTORS, STAGE, cue, cuesIn, drawActor, drawItem, isItem, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
 
@@ -29,11 +30,11 @@ function plan(props: ShotProps, dur: number): Plan {
     if (!m || typeof m !== 'object') return [];
     const o = m as Record<string, unknown>, verb = VERBS.includes(o.action as Verb) ? o.action as Verb : undefined;
     if (!verb) return [];
-    return [{ at: at(o.event, i), verb, who: (o.who === 'right' ? 'right' : 'left') as Side, item: isItem(o.item) ? o.item : undefined, word: typeof o.word === 'string' ? o.word.toUpperCase().slice(0, 14) : undefined }];
+    return [{ at: at(o.event, i), verb, who: (o.who === 'right' ? 'right' : 'left') as Side, item: isItem(o.item) ? o.item : undefined, word: typeof o.word === 'string' ? o.word.trim() : undefined }];
   }).sort((a, b) => a.at - b.at);
   const items = new Map<ItemId, { start: Loc; segments: Segment[]; tag?: string }>();
   const center = isItem(p.item) ? p.item : undefined, leftItem = isItem(p.leftItem) ? p.leftItem : undefined, rightItem = isItem(p.rightItem) ? p.rightItem : undefined;
-  if (center) items.set(center, { start: 'center', segments: [], tag: str(p, 'tag', '').toUpperCase().slice(0, 12) || undefined });
+  if (center) items.set(center, { start: 'center', segments: [], tag: str(p, 'tag', '').trim() || undefined });
   if (leftItem) items.set(leftItem, { start: 'left', segments: [] });
   if (rightItem) items.set(rightItem, { start: 'right', segments: [] });
   const locOf = (id: ItemId) => { const s = items.get(id)!; return s.segments.at(-1)?.to ?? s.start; };
@@ -169,14 +170,16 @@ export const actShot: ShotDef = {
     }
     for (const { id, st } of states) if (st && st.loc !== 'center') drawItem(ctx, id, { x: st.x, y: st.y, t, scale: st.scale, rot: st.rot, alpha: st.alpha, sx: st.sx, sy: st.sy });
     const centre = states.find(x => x.st?.loc === 'center' && s.items.get(x.id)?.tag);
-    if (centre?.st) label(ctx, s.items.get(centre.id)!.tag!, centre.st.x, (centre.id === pileId && pileTop !== undefined ? pileTop : centre.st.y - itemSize(centre.id, centre.st.scale).h / 2) - 40, { variant: 'tag', maxWidth: 320 });
+    const stamp = s.moves.filter(m => m.verb === 'stamp' && m.word && t >= m.at - 0.12).at(-1);
+    if (centre?.st && !stamp) label(ctx, s.items.get(centre.id)!.tag!, centre.st.x, (centre.id === pileId && pileTop !== undefined ? pileTop : centre.st.y - itemSize(centre.id, centre.st.scale).h / 2) - 40, { variant: 'tag', maxWidth: 320, maxHeight: 144 });
     for (const m of s.moves) {
-      if (m.verb === 'stamp' && m.word && t >= m.at - 0.12) {
+      if (m === stamp && m.word) {
         const k = phase(t, m.at - 0.12, m.at), sq = squash(t, m.at, 0.3, 0.3);
-        ctx.save(); ctx.translate(X.center, 150 - (1 - ease.inCubic(k)) * 260); ctx.scale(sq.sx * (1.4 - 0.4 * k), sq.sy * (1.4 - 0.4 * k)); ctx.rotate(-0.05);
-        label(ctx, m.word, 0, 0, { variant: 'stamp', maxWidth: 560 });
+        const y = worldTall() && frame.index === 0 ? 264 : 150;
+        ctx.save(); ctx.translate(X.center, y - (1 - ease.inCubic(k)) * 260); ctx.scale(sq.sx * (1.4 - 0.4 * k), sq.sy * (1.4 - 0.4 * k)); ctx.rotate(-0.05);
+        label(ctx, m.word, 0, 0, { variant: 'stamp', maxWidth: 500, maxHeight: 160 });
         ctx.restore();
-        sparks(ctx, X.center, 170, m.at, t, { count: 6, seed: frame.seed });
+        sparks(ctx, X.center, y + 20, m.at, t, { count: 6, seed: frame.seed });
       }
       if (m.verb === 'vanish') { const id = [...s.items.keys()].find(i => s.items.get(i)!.segments.some(g => g.at === m.at && g.verb === 'vanish')); if (id) { const p = place(id, s.items.get(id)!.segments.find(g => g.at === m.at)!.from, s); poof(ctx, p.x, p.y, m.at, t, { count: 6, seed: frame.seed + 3, radius: 50 }); } }
       if (m.verb === 'drop') poof(ctx, X.center, FLOOR - 10, m.at + 0.36, t, { count: 5, seed: frame.seed + 5, radius: 40 });

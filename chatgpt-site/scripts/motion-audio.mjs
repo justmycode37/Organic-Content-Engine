@@ -487,7 +487,16 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
-  const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
+  const normalizeToken=token=>token.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const tokens=voice.words.map(word=>normalizeToken(word.text));
+  const events=scene.sync?.flatMap(cue=>{
+   const phrase=cue.word.trim().split(/\s+/).map(normalizeToken).filter(Boolean);
+   if(!phrase.length)return [];
+   let index=tokens.findIndex((_,i)=>phrase.every((word,j)=>word===tokens[i+j]));
+   // Legacy cues sometimes name a word stem. A whole word or phrase always wins.
+   if(index<0&&phrase.length===1)index=tokens.findIndex(word=>word.includes(phrase[0]));
+   return index<0?[]:[{kind:cue.kind,at:LEAD+voice.words[index].start}];
+  });
   return {...rest,duration,...(events?{events}:{}),...(scene.hits?{hits:scene.hits.map(hit=>Math.round(Math.min(duration-0.05,hit*duration/scene.duration)*100)/100)}:{})};
  });
  const timed={...spec,scenes};

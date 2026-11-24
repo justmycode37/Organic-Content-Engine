@@ -15,13 +15,14 @@ const out=resolve(outArg);await mkdir(out,{recursive:true});
 const exists=p=>stat(p).then(()=>true,()=>false);
 const run=(cmd,args,env)=>new Promise((ok,fail)=>{const p=spawn(cmd,args,{stdio:'inherit',cwd:ROOT,env:{...process.env,...env}});p.on('close',c=>c===0?ok():fail(new Error(`${cmd} exited ${c}`)));});
 const specFile=join(out,'spec.json');
+const astraReview=process.env.HEDGY_LOCAL_ASTRA_REVIEW==='1';
 if(!await exists(specFile)){
  const history=historyArg?JSON.parse(await readFile(historyArg,'utf8')):[];
  const usage=[],started=Date.now();
  const save=()=>writeFile(join(out,'api-usage.json'),JSON.stringify({startedAt:new Date(started).toISOString(),elapsedSeconds:(Date.now()-started)/1000,calls:usage},null,2));
  const {generateHedgyReel}=await import('../worker/hedgy-generation.ts');
  const topic=process.env.HEDGY_TOPIC||'Non-obvious finance mechanisms with concrete everyday stakes';
- const result=await generateHedgyReel({OPENAI_API_KEY:process.env.OPENAI_API_KEY},topic,async entry=>{usage.push({...entry,outputText:undefined});console.log(`[${((Date.now()-started)/1000).toFixed(0)}s] ${entry.step} ${entry.status} ${entry.billing??''}`);await save();},history,createReelSubscription()).catch(async e=>{await writeFile(join(out,'failure.json'),JSON.stringify({message:e.message,code:e.code,details:e.details},null,2));return e;});
+ const result=await generateHedgyReel({OPENAI_API_KEY:process.env.OPENAI_API_KEY},topic,async entry=>{usage.push({...entry,outputText:undefined});console.log(`[${((Date.now()-started)/1000).toFixed(0)}s] ${entry.step} ${entry.status} ${entry.billing??''}`);await save();},history,createReelSubscription(),{astraReview}).catch(async e=>{await writeFile(join(out,'failure.json'),JSON.stringify({message:e.message,code:e.code,details:e.details},null,2));return e;});
  await save();
  if(result instanceof Error)throw result;
  await writeFile(join(out,'provenance.json'),JSON.stringify(result.provenance,null,2));

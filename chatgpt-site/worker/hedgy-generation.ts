@@ -14,7 +14,7 @@ export const hedgyReelSchema=z.object({version:z.literal(1),title:z.string().max
 
 import type {Env} from './container.ts';
 import {AppError} from './errors.ts';
-import {hedgyClient,hedgyCritic,HEDGY_MODEL,HEDGY_EFFORT,HEDGY_CRITIC_MODEL} from './hedgy-model-client.ts';
+import {hedgyAstraCritic,hedgyClient,hedgyCritic,HEDGY_MODEL,HEDGY_EFFORT,HEDGY_CRITIC_MODEL,HEDGY_ASTRA_REVIEW} from './hedgy-model-client.ts';
 import type {ReelSubscription} from './reel-subscription.ts';
 import {HEDGY_MUSIC_STYLE,HEDGY_CONCEPTS,conceptCandidates,recentlyUsed,ideaSchema,ideaProblems,type HedgyHistoryEntry,type HedgyIdea} from './hedgy-ideas.ts';
 const ROLES=['hook','finance accuracy','narration','scene 1 animation','scene 2 animation','scene 3 animation','scene 4 animation','scene 5 animation','scene 6 animation','sound effects','music and pacing','captions and accessibility'];
@@ -48,7 +48,7 @@ function contentIssues(spec:z.infer<typeof hedgyReelSchema>,idea:HedgyIdea){
  return issues;
 }
 /** Ideation → reviewed narration → production plan and specialists → assembly → post-copy review. */
-export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unknown)=>void|Promise<void>,history:HedgyHistoryEntry[]=[],subscription?:ReelSubscription){
+export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unknown)=>void|Promise<void>,history:HedgyHistoryEntry[]=[],subscription?:ReelSubscription,{astraReview=false}:{astraReview?:boolean}={}){
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
  if(!key&&!subscription)throw new AppError(503,'api_key_missing','Configure the server OPENAI_API_KEY');
  // A model or transport failure must never cost the post: a failed call returns no text, which every stage
@@ -63,8 +63,17 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
   try{return await strict(step,input,format);}
   catch(error){degraded={step,code:(error as AppError)?.code,message:String((error as Error)?.message??error).slice(0,300)};await Promise.resolve(onUsage?.({step,status:'degraded-to-fallback',code:degraded.code})).catch(()=>{});return '';}
  };
- const fullCritic=hedgyCritic(ask,onUsage,subscription);
- const critic:typeof fullCritic=(step,input,format,images)=>degraded?Promise.resolve(''):fullCritic(step,input,format,images);
+ const fullCritic=astraReview?hedgyAstraCritic(subscription,onUsage):hedgyCritic(ask,onUsage,subscription);
+ const critic:typeof fullCritic=async(step,input,format,images)=>{
+  if(degraded)return '';
+  try{return await fullCritic(step,input,format,images);}
+  catch(error){
+   if(!astraReview)throw error;
+   await onUsage?.({step,model:HEDGY_ASTRA_REVIEW,status:'critic-unavailable'});
+   return '';
+  }
+ };
+ const review:typeof ask=(step,input,format)=>astraReview?critic(step,input,format):ask(step,input,format);
  // 1. Ideation: a concept this account has not covered, told through a new story world and a new score.
  const candidates=conceptCandidates(history),{items:usedItems,moods}=recentlyUsed(history);
  const past=history.slice(0,12).map(h=>`- ${[h.title,h.concept,h.item&&`item ${h.item}`,h.setting,h.music&&`music ${h.music}`].filter(Boolean).join(' | ')}${h.summary?`: ${h.summary.slice(0,160)}`:''}`).join('\n')||'- none yet';
@@ -98,10 +107,10 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  const ideaText=`CHOSEN IDEA (keep the concept, setting, items, cast and score): concept "${concept.name}". Story: ${idea.angle} Setting: ${idea.setting}. Hero item: ${idea.heroItem}${idea.supportingItems.length?`; supporting items: ${idea.supportingItems.join(', ')}`:''}. Cast: ${idea.cast.join(', ')}. Proposed hook: ${idea.hook} Music: ${idea.music} — ${idea.musicBrief}\nEarlier reels to stay clear of: ${history.slice(0,6).map(h=>h.title).filter(Boolean).join('; ')||'none'}.`;
  // The narration may only name things the animation can show: a spoken object with no picture breaks the reel.
  const drawable=`DRAWABLE VOCABULARY (the animation can only show these): items ${SHOT_ITEMS.join(', ')}; places ${WORLDS.join(', ')}; animal characters. Every concrete object or place the narration names must be one of these (synonyms are fine: "cash" for banknotes, "store" for shop). Do not build the story on objects outside this list (no pillars, doors, tools, vehicles other than car/bike).`;
- const editorial=await reviewHedgyStory(ask,`${ideaText}\nConcept's standard name to say once: "${concept.name.split(':')[0]!.trim()}".\n${drawable}`,concept.name,critic,()=>({question:idea.hook.slice(0,200),answer:concept.name.slice(0,260),anchor:idea.heroItem,beats:[{say:idea.hook.slice(0,220),link:'opening'},{say:idea.angle.slice(0,220),link:'setup'},{say:`That's ${concept.name.split(':')[0]!.toLowerCase()}.`,link:'payoff'}]}));
+ const editorial=await reviewHedgyStory(ask,`${ideaText}\nConcept's standard name to say once: "${concept.name.split(':')[0]!.trim()}".\n${drawable}`,concept.name,critic,()=>({question:idea.hook.slice(0,200),answer:concept.name.slice(0,260),anchor:idea.heroItem,beats:[{say:idea.hook.slice(0,220),link:'opening'},{say:idea.angle.slice(0,220),link:'setup'},{say:`That's ${concept.name.split(':')[0]!.toLowerCase()}.`,link:'payoff'}]}),review);
  const catalog=`${describeShotCatalog()}\nWORLDS (params.world on EVERY shot; the full-frame place where the shot happens, painted behind the action): ${WORLDS.map(w=>`${w} (${WORLD_HINTS[w]})`).join('; ')}. CAMERA: any shot may set params.camera to close-left (the left actor's face), close-right (the right actor's face) or close-center (the centre item) for a close-up; use 2–4 close-ups per reel for reactions and reveals, keep the rest wide. Keep the same world while the story stays in one place; change it when the story moves, and use at least two different worlds per reel so the places (home, street, shop...) carry the story. ITEM NOTES: phone shows a stock chart (trading app); smartphone is an everyday phone as a possession; terminal is a card payment machine (tap to pay).`;
  const direction=`Use the approved narration verbatim. Stage one continuous explanation in the existing shot library. Split the narration into quick shots, usually 8–14 (one clause or phrase each, 1.5–3.5 s), so the picture changes whenever the words move on; a sentence may span several shots. Give each reveal enough time to register before introducing the next idea. Every next shot starts from the object, action or result the viewer just saw. Keep the anchor's appearance, its position, roles and quantities consistent unless the story explains a change. Match the framing for before/after comparisons and clearly establish any time jump. The last image answers the opening with the same anchor. Favor a deliberate hold or repeated setup when it helps the viewer see what changed. Cut on an action, reveal or comparison that motivates the transition. Use cut, match, push or iris only when it serves that handoff.
- Each shot is a self-contained animation that starts fresh; only documented params exist (no compositing, freeze-frames, frame extension or custom staging fields), so continuity comes from choosing consecutive shots that show the same actors and items. When no template shows exactly what the words say, use the act shot and script the verbs (give, take, put, drop, appear, vanish, grow, shrink, shake, stamp, walk-in, walk-out, reactions) on the sync words; every spoken action must be visible. Keep Hedgy on the LEFT side of the frame in every shot (screen direction); when he receives something, stage it so the other character stands on the right. PLACES ARE WORLDS: never use building items (shop, bank, house, factory, exchange, taxOffice) or a building place param as a prop; the world already shows the place, and miniature buildings next to the characters look wrong. Keep one counter, one clerk and one place for a transaction. NO TRIPLE REPEATS: a result appears once as a stamp or card; the payoff card states the rule or implication, not the same number again. DON'T SPOIL: the first shot shows the stakes and the question, never the answer; a number or result appears on screen only when it is spoken. Never put the term itself on a stamp or sign (the term card shows it). SHOW THE NUMBERS: every amount or quantity the narration says must be visible when it is spoken (a tag, stamp, versus card, or an act count pile for quantities like "forty pairs"); the first shot shows the stakes on screen. Never leave placeholder or generic labels (INFO, ASSET, ASKING, BOX); every label must say something from the story, or be omitted. VIRAL STAGING: the first shot must show the hook's tension instantly (a character with the problem in a recognisable place) and land an action in its first second. Cut every 1.5–3.5 s on a visible action; never hold a static pose. The final shot shows the payoff as a clear visual change. Use explicit item params, the documented actors and items, and sparse readable labels. Time significant actions with cue words in the scene's say line, in spoken order. Match each shot to what the viewer hears at that moment.`;
+ Each shot is a self-contained animation that starts fresh; only documented params exist (no compositing, freeze-frames, frame extension or custom staging fields), so continuity comes from choosing consecutive shots that show the same actors and items. When no template shows exactly what the words say, use the act shot and script the verbs (give, take, put, drop, appear, vanish, grow, shrink, shake, stamp, walk-in, walk-out, reactions) on the sync words; every spoken action must be visible. Keep Hedgy on the LEFT side of the frame in every shot (screen direction); when he receives something, stage it so the other character stands on the right. PLACES ARE WORLDS: never use building items (shop, bank, house, factory, exchange, taxOffice) or a building place param as a prop; the world already shows the place, and miniature buildings next to the characters look wrong. Keep one counter, one clerk and one place for a transaction. NO TRIPLE REPEATS: a result appears once as a stamp or card; the payoff card states the rule or implication, not the same number again. DON'T SPOIL: the first shot shows the stakes and the question, never the answer; a number or result appears on screen only when it is spoken. Never put the term itself on a stamp or sign (the term card shows it). SHOW THE NUMBERS: every amount or quantity the narration says must be visible when it is spoken (a tag, stamp, versus card, or an act count pile for quantities like "forty pairs"); the first shot shows the stakes on screen. Never leave placeholder or generic labels (INFO, ASSET, ASKING, BOX); every label must say something from the story, or be omitted. VIRAL STAGING: the first shot must show the hook's tension instantly (a character with the problem in a recognisable place) and land an action in its first second. Cut every 1.5–3.5 s on a visible action; never hold a static pose. The final shot shows the payoff as a clear visual change. For running balances, stage the original amount, the change and the updated amount on the same readable surface. Do not show a duplicate floating figure or stamp when the prop already carries the result. Give the viewer one dominant label for each beat. Use explicit item params, the documented actors and items, and sparse readable labels. Time significant actions with cue words in the scene's say line, in spoken order. Match each shot to what the viewer hears at that moment.`;
  const brand=`${JSON.stringify(HEDGY_POLICY)}\n${direction}\n${ideaText}\nAPPROVED STORY: ${JSON.stringify(editorial.story)}\n${catalog}`;
  // 2. Plan and specialists.
  const plan=await ask('plan',`${brand} Plan the reel. Map the narration to one sequence, with a visible entry and exit state for each shot and precisely what the viewer follows across each cut. Give twelve specialists a production brief for staging this sequence.`);
@@ -131,7 +140,7 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  for(let round=0;round<=3;round++){
   if(result.spec){
    lastValid=result.spec;
-   const reviewed=await reviewHedgyScenes(ask,editorial.story,result.spec.scenes,catalog);
+   const reviewed=await reviewHedgyScenes(review,editorial.story,result.spec.scenes,catalog);
    sceneRounds.push({scenes:result.spec.scenes,...reviewed,advice:result.soft});
    if(!reviewed.problems.length)break;
    result={issues:[...reviewed.problems,...result.soft]};
@@ -187,17 +196,17 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
    else storyboardDirection={review:board.data,applied:false,rejected:checked.issues};
   }
  }
- const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption});
+ const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption},review);
  const spec={...result.spec,...copy.copy};
- return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardDirection,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
+ return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:astraReview?HEDGY_ASTRA_REVIEW:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,title:spec.title},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardDirection,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
 }
 
 import {reviewRenderedHedgy,repairFromVisualReview} from './hedgy-visual-review.ts';
 import {fallbackIdea,fallbackStoryboard,fallbackCaption,sanitizeStoryboard,worldFor} from './hedgy-fallback.ts';
 /** After rendering: Opus reviews the actual frames; Sol repairs the shot list once when it is not approved. */
-export async function hedgyRenderedReview(env:Env,spec:z.infer<typeof hedgyReelSchema>,sheets:{mime:string;base64:string}[],timeline:string,onUsage?:(usage:unknown)=>void|Promise<void>,subscription?:ReelSubscription,{repair=true}:{repair?:boolean}={}){
+export async function hedgyRenderedReview(env:Env,spec:z.infer<typeof hedgyReelSchema>,sheets:{mime:string;base64:string}[],timeline:string,onUsage?:(usage:unknown)=>void|Promise<void>,subscription?:ReelSubscription,{repair=true,astraReview=false}:{repair?:boolean;astraReview?:boolean}={}){
  const key=typeof env.OPENAI_API_KEY==='string'?env.OPENAI_API_KEY.trim():'';
- const ask=hedgyClient(key,onUsage,subscription),critic=hedgyCritic(ask,onUsage,subscription);
+ const ask=hedgyClient(key,onUsage,subscription),critic=astraReview?hedgyAstraCritic(subscription,onUsage):hedgyCritic(ask,onUsage,subscription);
  let review;
  try{review=await reviewRenderedHedgy(critic,spec,sheets,timeline);}catch(error){return {error:String((error as Error)?.message??error)};}
  if(!repair||!review||review.approved||!review.findings.length)return {review};

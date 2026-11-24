@@ -208,8 +208,13 @@ export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: P
   if (cardUp) return;
   const scene = placed.find(p => time >= p.start && time < p.end);
   if (!scene) return;
-  // Versus cards already show their prices; everywhere else a spoken amount gets its own pop.
-  if (scene.spec.type === 'shot' && scene.spec.shot === 'versus') return;
+  if (scene.spec.type === 'shot' && ['versus', 'statement'].includes(scene.spec.shot)) return;
+  const params = scene.spec.type === 'shot' ? scene.spec.params : undefined;
+  const printed = scene.spec.type === 'shot' && scene.spec.shot === 'act'
+    ? [params?.tag, ...(Array.isArray(params?.moves) ? params.moves.map((move: unknown) => move && typeof move === 'object' && 'word' in move ? move.word : '') : [])]
+        .flatMap(value => typeof value === 'string' ? value.split(/\s+/) : [])
+    : [];
+  let latest: { word: string; at: number } | undefined;
   for (const caption of captions) {
     if (caption.end < time - 1.4 || caption.start > time) continue;
     const words = String(caption.text).split(/\s+/);
@@ -223,12 +228,16 @@ export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: P
       if (!/^\$\d[\d,.]*[kKmM]?$|^\d+(?:\.\d+)?%$|^\d+¢$/.test(word)) return;
       const at = caption.wordTimings?.[i]?.start ?? caption.start;
       if (time < at || time > at + 1.25 || at < scene.start - 0.05) return;
-      const k = ease.outBack(clamp((time - at) / 0.22)), out = clamp((at + 1.25 - time) / 0.15);
-      ctx.save();
-      ctx.globalAlpha = out;
-      ctx.translate(540, 470); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); ctx.rotate(-0.04);
-      strokedText(ctx, word, 0, 0, 150, YELLOW, INK, 30);
-      ctx.restore();
+      if (printed.some(value => clean(value).replace(/^\+/, '') === word)) return;
+      if (!latest || at > latest.at) latest = { word, at };
     });
   }
+  if (!latest) return;
+  const { at, word } = latest;
+  const k = ease.outBack(clamp((time - at) / 0.22)), out = clamp((at + 1.25 - time) / 0.15);
+  ctx.save();
+  ctx.globalAlpha = out;
+  ctx.translate(540, 470); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); ctx.rotate(-0.04);
+  strokedText(ctx, word, 0, 0, 150, YELLOW, INK, 30);
+  ctx.restore();
 }

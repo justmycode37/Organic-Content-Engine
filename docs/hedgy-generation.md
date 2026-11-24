@@ -98,6 +98,16 @@ cd chatgpt-site
 node --env-file-if-exists=.env.hedgy --env-file-if-exists=.env.motion scripts/hedgy-local-reel.mjs ../artifacts/hedgy/<run> [history.json]
 ```
 
+For local evaluation while the Opus quota is exhausted, set
+`HEDGY_LOCAL_ASTRA_REVIEW=1` to run the pipeline's reviews with Astra (high)
+through the Codex subscription. Sol (xhigh) still writes and repairs the reel.
+The account worker uses its usual model settings.
+
+The `statement` shot stages an offer, unpaid interest accumulating, that amount
+moving into the loan balance, and the next charge becoming visible. Its figures
+are authored in the spec and revealed at narration events. Give each stage only
+the figures needed to understand that beat.
+
 ### Every run ends in a reel
 
 A Hedgy run never ends without a postable reel. A failed model or transport call returns no text, and each stage treats empty text as an invalid answer:

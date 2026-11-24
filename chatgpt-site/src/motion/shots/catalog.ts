@@ -280,6 +280,21 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
     ]
   },
   {
+    "name": "statement",
+    "describe": "A large paper statement with legible balances and a Hedgy reaction. params: view (\"offer\", \"accrue\", \"balance\", \"charge\" or \"question\"), title (short name on the paper), before (starting balance as text), change (signed amount as text), after (updated balance as text), rate (unchanged annual rate as text), months (2–12), monthly (dollars accruing each month), next (optional next interest charge attributable to change, as text). For loan-payment deferral: offer shows a car and a pause button, event 1 presses it and event 2 reveals the extra debt; accrue counts months and unpaid interest from event 1 to 2; balance shows the old balance, event 1 slides in unpaid interest and event 2 posts it to principal; charge holds the new balance and shows the next interest charge branching from that amount on event 2; question returns to the opening offer and leaves the pause button unpressed. Keep the amounts and timing consistent with narration and use consecutive views only when they advance the mechanism. The printed values already carry the result.",
+    "params": [
+      "after",
+      "before",
+      "change",
+      "monthly",
+      "months",
+      "next",
+      "rate",
+      "title",
+      "view"
+    ]
+  },
+  {
     "name": "store",
     "describe": "An actor carries an item to an open container; it shrinks inside, then the door or lid closes and locks as the actor pats it. params: container (safe|piggy|bank|wallet|crate, default safe), item (any item id, default cash), who (actor id, default broker), label (optional short tag on the container, default none). Events: 1 = the item lands inside; 2 = the door or lid closes and the lock snaps.",
     "params": [
