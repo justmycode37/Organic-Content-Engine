@@ -93,10 +93,11 @@ def lower(beat,credit):
         boxw=min(1130,max(face(53,'title').getlength(person),face(34).getlength(role),face(24).getlength(date))+68)
         center=W*beat.get('speakerX',.5)
         x=round(max(48,min(W-48-boxw,center-boxw/2)))
-        d.rounded_rectangle((x,505,x+boxw,677 if date else 649),radius=12,fill=(18,20,22,223))
-        typeblock(d,x+26,524,person,boxw-52,53,WHITE,'title',1)
-        typeblock(d,x+27,590,role,boxw-52,34,WHITE,'sans',1)
-        if date:typeblock(d,x+27,639,date,boxw-52,24,'#e3e5e8',lines=1)
+        lift=beat.get('tagLift',0)
+        d.rounded_rectangle((x,505-lift,x+boxw,(677 if date else 649)-lift),radius=12,fill=(18,20,22,223))
+        typeblock(d,x+26,524-lift,person,boxw-52,53,WHITE,'title',1)
+        typeblock(d,x+27,590-lift,role,boxw-52,34,WHITE,'sans',1)
+        if date:typeblock(d,x+27,639-lift,date,boxw-52,24,'#e3e5e8',lines=1)
         return im
     card=beat.get('creditCard') or {}
     label=card.get('title','Sources & footage') if beat.get('closing') else (name.get('name') or beat['title'])

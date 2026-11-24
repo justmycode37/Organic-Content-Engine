@@ -11,7 +11,8 @@ from film import Sequence,lower
 from score import score
 from credits import write_credits,closing_cards
 from timeline import assemble
-from footage import place_footage, choose_title_position
+from footage import place_footage
+from title_layout import place_titles
 from captions import render_captions
 from PIL import Image
 import subprocess
@@ -96,12 +97,11 @@ def render(root):
         place_footage(root,plan['beats'],timing,pack['clips'])
         speakers=set()
         for b in plan['beats']:
-            if b['kind']=='footage' and not b.get('originalSpeech') and not b.get('clean') and not b.get('titlePosition'):
-                b['titlePosition']=choose_title_position(root/f"clip-{b['clip']}.mp4",b.get('clipStart',0))
             if b.get('originalSpeech'):
                 identity=tuple(b['nameplate'].get(k,'').strip().casefold() for k in ('name','date'))
                 b['introduceSpeaker']=identity not in speakers
                 speakers.add(identity)
+        place_titles(root,plan['beats'],timing,pack['clips'])
     (root/'picture-edit.json').write_text(json.dumps({'plan':plan,'seconds':timing},indent=2))
     write_credits(root,plan,pack)
     modern=all(beat.get('art') for beat in plan['beats'])

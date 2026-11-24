@@ -29,6 +29,19 @@ class MotionTests(unittest.TestCase):
         self.assertGreater(np.sum(np.all(plate==255,axis=2)),100)
 
 class DocumentaryTests(unittest.TestCase):
+    def test_archival_header_and_interview_chyron_stay_readable(self):
+        from title_layout import avoid_source_text
+        title = {'title':'Mission control', 'titlePosition':'upper-left'}
+        avoid_source_text(title, 'Mission archive', [(0, 20, 600, 150)])
+        self.assertEqual(title['titlePosition'], 'upper-right')
+        avoid_source_text(title, 'Mission archive', [(0, 0, 1280, 720)])
+        self.assertTrue(title['clean'])
+        speaker = {'title':'An interview', 'originalSpeech':True, 'speakerX':.25,
+                   'nameplate':{'name':'Interviewee','role':'Mission scientist','date':'2026'}}
+        avoid_source_text(speaker, 'Mission archive', [(20, 640, 800, 690)])
+        self.assertLessEqual(677-speaker['tagLift']+16, 640)
+        self.assertGreater(505-speaker['tagLift'], 360)
+
     def test_archive_keeps_round_when_working_file_is_replaced_or_removed(self):
         from pathlib import Path
         from tempfile import TemporaryDirectory
