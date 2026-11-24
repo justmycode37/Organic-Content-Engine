@@ -176,7 +176,12 @@ their credit manifest beside the video.
 
 Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
 workspace binds a unique channel named Silicon Footnote or The Silicon Footnote
-on first discovery. You can also choose a channel manually. **Research and
+on first discovery. You can also choose a channel manually. Set weekly generation
+days, times, and timezone under **Your weekly rhythm**, save the plan, then
+press **Start**. The Mac producer polls the Site and claims one episode at a time
+using its signed-in ChatGPT subscription. Overlapping starts are queued while
+the producer is online. **Stop** cancels queued scheduled starts. The current
+episode can finish and remains private for review with its two thumbnails. **Research and
 produce** accepts an optional story focus. An empty focus asks the producer to
 find a current AI story. The finished private MP4 and its reporting and footage
 credits appear under **Episodes**.

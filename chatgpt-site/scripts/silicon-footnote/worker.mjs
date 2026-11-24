@@ -1,4 +1,5 @@
 import {open,stat,readFile,mkdir,writeFile} from 'node:fs/promises';
+import {execFileSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {workerConfig,siteRequest} from '../render-worker.mjs';
 import {produce} from './produce.mjs';
@@ -6,6 +7,15 @@ import {prepareThumbnails} from './thumbnail.mjs';
 const config=workerConfig();
 const jobs='/api/jobs/accounts/silicon';
 const post=(path,body={})=>siteRequest(config,jobs+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
+function subscriptionStatus(){
+ if(!process.env.ELEVENLABS_API_KEY)return 'voice_required';
+ try{
+  const login=execFileSync(process.env.OCE_CODEX_BIN||'codex',['login','status'],{
+   encoding:'utf8',timeout:5000,stdio:['ignore','pipe','pipe'],
+  });
+  return /logged in using chatgpt/i.test(login)?'ready':'login_required';
+ }catch{return 'login_required';}
+}
 async function run(job){
  const imported=process.argv[2]==='--import';
  const root=imported?resolve(process.argv[3]):resolve(process.env.SILICON_OUTPUT_DIR||'outputs/silicon-footnote',job.id);
@@ -47,9 +57,19 @@ if(process.argv[2]==='--import'){
  const {job}=await (await post('/import',{id,title:result.title,replace:process.argv.includes('--replace')})).json();await run(job);
 }
 else if(process.argv[2]==='--sync'){console.log(await (await post('/sync')).json());}
-else do{
- try{const {job}=await (await post('/claim')).json();if(job)await run(job);}
- catch(error){console.error(String(error.message).slice(0,400));if(process.argv[2])process.exitCode=1;}
- if(process.argv[2])break;
- await new Promise(done=>setTimeout(done,15000));
-}while(true);
+else{
+ let reported;
+ do{
+  try{
+   const subscription=subscriptionStatus();
+   const {job}=await (await post('/claim',{subscription})).json();
+   if(reported!==subscription){
+    console.log('Silicon Footnote schedule connection: '+subscription);
+    reported=subscription;
+   }
+   if(job)await run(job);
+  }catch(error){console.error(String(error.message).slice(0,400));if(process.argv[2])process.exitCode=1;}
+  if(process.argv[2])break;
+  await new Promise(done=>setTimeout(done,15000));
+ }while(true);
+}
