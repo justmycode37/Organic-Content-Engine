@@ -5,15 +5,27 @@ import { clamp, ease, font, markupWords, type Ctx, type PlacedScene, type ReelSp
 import type { ActiveCaption } from './captions.ts';
 
 const YELLOW = '#FFD23F', INK = '#0B0B0D', WHITE = '#FFFFFF';
-const HEADER_Y = 150, HOOK_Y = 330, PAYOFF_Y = 1440;
-/** The payoff card replaces the captions once the narration has finished, so it never covers the final shot. */
-function payoffAt(captions: readonly ActiveCaption[], end: number, hookEnd: number) { const last = captions.at(-1)?.end; return Math.max(hookEnd + 1, last !== undefined && last < end - 0.4 ? last : end - 1.4); }
+const HEADER_Y = 150, HOOK_Y = 330, PAYOFF_Y = 1270;
+const PAYOFF_X = 486, PAYOFF_TEXT_WIDTH = 752;
+const PAYOFF_SIZES = [78, 72, 66, 60, 54, 48];
+
+/** Reveal the final card just after the last spoken word, independently of caption linger. */
+export function payoffStartTime(spec: ReelSpec, placed: PlacedScene[], captions: readonly ActiveCaption[]) {
+  const end = placed.at(-1)?.end ?? 0, last = captions.at(-1);
+  const spokenEnd = last?.wordTimings?.at(-1)?.end;
+  const start = spokenEnd !== undefined ? spokenEnd + 0.06 : last && last.end < end - 0.4 ? last.end : end - 1.4;
+  return Math.max(hookEndTime(spec, placed) + 1, start);
+}
 // The persistent header collided with in-shot signs at the top of the stage; the hook and payoff cards carry the topic instead.
 const SHOW_HEADER = false;
 
-/** Attach punctuation tokens (".", "?") to the previous word so cards never show "PAYS .". */
-function joinPunctuation(words: { text: string; accent: boolean }[]) {
-  return words.reduce<{ text: string; accent: boolean }[]>((list, w) => { if (/^[.,!?;:…%)\]}”’"]+$/.test(w.text) && list.length) list[list.length - 1]!.text += w.text; else list.push({ ...w }); return list; }, []);
+/** Preserve punctuation and strip the authoring markup from title cards. */
+function titleWords(text: string) {
+  return markupWords(text.toUpperCase()).map(word => word.text).reduce<string[]>((list, word) => {
+    if (/^[.,!?;:…%)\]}”’"]+$/.test(word) && list.length) list[list.length - 1] += word;
+    else list.push(word);
+    return list;
+  }, []);
 }
 function width(ctx: Ctx, text: string, size: number) { ctx.font = font(size, 900); return ctx.measureText(text).width; }
 function wrap(ctx: Ctx, words: string[], size: number, max: number) {
@@ -33,12 +45,12 @@ function strokedText(ctx: Ctx, text: string, x: number, y: number, size: number,
   ctx.lineWidth = strokeWidth; ctx.strokeStyle = stroke; ctx.strokeText(text, x, y);
   ctx.fillStyle = fill; ctx.fillText(text, x, y);
 }
-/** Draw a line where `*marked*` words are yellow and the rest white. */
-function richLine(ctx: Ctx, words: { text: string; accent: boolean }[], cx: number, y: number, size: number) {
+function titleLine(ctx: Ctx, text: string, x: number, y: number, size: number) {
   ctx.font = font(size, 900);
-  const space = ctx.measureText(' ').width, widths = words.map(w => ctx.measureText(w.text).width);
-  let x = cx - (widths.reduce((a, b) => a + b, 0) + space * (words.length - 1)) / 2;
-  words.forEach((word, i) => { strokedText(ctx, word.text, x + widths[i]! / 2, y, size, word.accent ? YELLOW : WHITE); x += widths[i]! + space; });
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillStyle = WHITE;
+  ctx.fillText(text, x, y);
 }
 
 /** When the hook card leaves the screen (reel seconds); 0 without a hook. */
@@ -58,35 +70,29 @@ export function termTime(term: string | undefined, captions: readonly ActiveCapt
   return undefined;
 }
 
-function cardText(text: string) { return joinPunctuation(markupWords(text.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent }))); }
 /** The device-space band covered by whichever overlay card (hook, concept term or payoff) is on screen. */
 export function cardZone(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []): { top: number; bottom: number } | undefined {
   const hook = spec.hook?.trim(), hookEnd = hookEndTime(spec, placed);
-  const end = placed.at(-1)?.end ?? 0, payoffStart = payoffAt(captions, end, hookEnd);
+  const payoffStart = payoffStartTime(spec, placed, captions);
   const band = (text: string, sizes: number[], max: number, lineK: number, pad: number, center: number) => {
-    const { size, lines } = fit(ctx, cardText(text).map(w => w.text).join(' '), sizes, max, 3);
+    const { size, lines } = fit(ctx, titleWords(text).join(' '), sizes, max, 3);
     const h = lines.length * size * lineK + pad;
     return { top: center - h / 2 - 12, bottom: center + h / 2 + 12 };
   };
-  if (hook && time < hookEnd) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 56, HOOK_Y);
-  if (spec.payoff?.trim() && time >= payoffStart) return band(spec.payoff, [96, 88, 80, 72, 64, 58], 940, 1.1, 60, PAYOFF_Y);
+  if (hook && time < hookEnd) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 12, HOOK_Y);
+  if (spec.payoff?.trim() && time >= payoffStart) return band(spec.payoff, PAYOFF_SIZES, PAYOFF_TEXT_WIDTH, 1.1, 12, PAYOFF_Y);
   const termAt = termTime(spec.term, captions);
-  if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) return band(spec.term, [104, 96, 88, 80, 72, 64, 58], 940, 1.1, 60, HOOK_Y + 20);
+  if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) return band(spec.term, [104, 96, 88, 80, 72, 64, 58], 940, 1.1, 12, HOOK_Y + 20);
   return undefined;
 }
 
 function drawCard(ctx: Ctx, text: string, k: number, centerY: number) {
-  const parsed = joinPunctuation(markupWords(text.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
-  const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [104, 96, 88, 80, 72, 64, 58], 940, 3);
-  let index = 0;
-  const rows = lines.map(line => line.map(() => parsed[index++]!));
-  const lineH = size * 1.1, h = rows.length * lineH + 60;
+  const { size, lines } = fit(ctx, titleWords(text).join(' '), [104, 96, 88, 80, 72, 64, 58], 940, 3);
+  const lineH = size * 1.1;
   ctx.save();
   ctx.globalAlpha = clamp(k * 1.4);
   ctx.translate(540, centerY); ctx.scale(0.75 + 0.25 * k, 0.75 + 0.25 * k);
-  ctx.fillStyle = 'rgba(11,11,13,0.8)'; ctx.fillRect(-510, -h / 2, 1020, h);
-  ctx.fillStyle = YELLOW; ctx.fillRect(-510, h / 2 - 10, 1020, 10);
-  rows.forEach((row, r) => richLine(ctx, row, 0, -h / 2 + 30 + lineH / 2 + r * lineH, size));
+  lines.forEach((line, index) => titleLine(ctx, line.join(' '), 0, (index - (lines.length - 1) / 2) * lineH, size));
   ctx.restore();
 }
 
@@ -96,40 +102,28 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
   ctx.save();
   if (hook && time < hookEnd) {
     const exit = clamp((hookEnd - time) / 0.22);
-    const parsed = joinPunctuation(markupWords(hook.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
-    const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [104, 96, 88, 80, 72, 64], 960, 3);
-    let index = 0;
-    const rows = lines.map(line => line.map(() => parsed[index++]!));
-    const lineH = size * 1.08, top = HOOK_Y - (rows.length - 1) * lineH / 2;
+    const { size, lines } = fit(ctx, titleWords(hook).join(' '), [104, 96, 88, 80, 72, 64], 960, 3);
+    const lineH = size * 1.08, top = HOOK_Y - (lines.length - 1) * lineH / 2;
     ctx.globalAlpha = exit;
-    // A plate behind the hook keeps it readable over whatever the opening shot draws up top.
-    const plateH = rows.length * lineH + 56, plateK = ease.outExpo(clamp(time / 0.2));
-    ctx.fillStyle = 'rgba(11,11,13,0.8)'; ctx.fillRect(540 - 520 * plateK, HOOK_Y - plateH / 2, 1040 * plateK, plateH);
-    ctx.fillStyle = YELLOW; ctx.fillRect(540 - 520 * plateK, HOOK_Y + plateH / 2 - 10, 1040 * plateK, 10);
-    rows.forEach((row, r) => {
+    lines.forEach((line, r) => {
       // Visible from the very first frame (the thumbnail), with a quick punch-in.
       const local = ease.outBack(clamp((time - r * 0.06) / 0.24));
       ctx.save(); ctx.translate(540, top + r * lineH); ctx.scale(0.82 + 0.18 * local, 0.82 + 0.18 * local); ctx.rotate((1 - local) * -0.03);
       ctx.globalAlpha = exit;
-      richLine(ctx, row, 0, 0, size);
+      titleLine(ctx, line.join(' '), 0, 0, size);
       ctx.restore();
     });
   }
-  const payoff = spec.payoff?.trim(), end = placed.at(-1)?.end ?? 0, payoffStart = payoffAt(captions, end, hookEnd);
+  const payoff = spec.payoff?.trim(), payoffStart = payoffStartTime(spec, placed, captions);
   if (payoff && time >= payoffStart) {
     // The answer lands as a big card over the final shot, so the reel ends on its punchline.
-    const k = ease.outBack(clamp((time - payoffStart) / 0.3));
-    const parsed = joinPunctuation(markupWords(payoff.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
-    const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [96, 88, 80, 72, 64, 58], 940, 3);
-    let index = 0;
-    const rows = lines.map(line => line.map(() => parsed[index++]!));
-    const lineH = size * 1.1, h = rows.length * lineH + 60, top = PAYOFF_Y - h / 2;
+    const k = ease.outCubic(clamp((time - payoffStart) / 0.18));
+    const { size, lines } = fit(ctx, titleWords(payoff).join(' '), PAYOFF_SIZES, PAYOFF_TEXT_WIDTH, 3);
+    const lineH = size * 1.1;
     ctx.save();
     ctx.globalAlpha = clamp(k * 1.4);
-    ctx.translate(540, top + h / 2); ctx.scale(0.75 + 0.25 * k, 0.75 + 0.25 * k);
-    ctx.fillStyle = 'rgba(11,11,13,0.78)'; ctx.fillRect(-510, -h / 2, 1020, h);
-    ctx.fillStyle = YELLOW; ctx.fillRect(-510, h / 2 - 10, 1020, 10);
-    rows.forEach((row, r) => richLine(ctx, row, 0, -h / 2 + 30 + lineH / 2 + r * lineH, size));
+    ctx.translate(PAYOFF_X, PAYOFF_Y); ctx.scale(0.86 + 0.14 * k, 0.86 + 0.14 * k);
+    lines.forEach((line, index) => titleLine(ctx, line.join(' '), 0, (index - (lines.length - 1) / 2) * lineH, size));
     ctx.restore();
     ctx.restore();
     return;
@@ -143,12 +137,10 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
   if (header && time >= hookEnd && SHOW_HEADER) {
     const k = ease.outExpo(clamp((time - hookEnd) / 0.3));
     const { size, lines } = fit(ctx, header.toUpperCase(), [46, 42, 38, 34], 900, 1);
-    const text = lines[0]!.join(' '), w = width(ctx, text, size) + 56, h = size * 1.5;
+    const text = lines[0]!.join(' ');
     ctx.globalAlpha = k;
     ctx.translate(540, HEADER_Y - (1 - k) * 30);
-    ctx.fillStyle = 'rgba(11,11,13,0.72)'; ctx.fillRect(-w / 2, -h / 2, w, h);
-    ctx.fillStyle = YELLOW; ctx.fillRect(-w / 2, h / 2 - 8, w, 8);
-    strokedText(ctx, text, 0, 2, size, WHITE, INK, 0);
+    titleLine(ctx, text, 0, 2, size);
   }
   ctx.restore();
 }

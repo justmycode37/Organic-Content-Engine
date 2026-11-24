@@ -27,6 +27,14 @@ Hedgy uses `gpt-6.2-sol` at `xhigh` for writing and planning, plus `claude-opus-
 Other coding work defaults
 to `gpt-6.1-sol` with `xhigh` reasoning. One-off experiments do not change these defaults.
 
+For each new Hedgy evaluation round, also run a separate Gemini 4 Carbon review
+at high through Antigravity. In `jester.md` at the project root, log amusing
+quotes and claims you can verify against the rendered reel as hallucinations.
+Identify the round and cite the relevant evidence. Carbon is for entertainment
+and has no bearing on edits, the 90/100 target, or publication.
+Use plain bold white text for Hedgy titles and title cards, with no strokes,
+underlines, or decorative rules.
+
 ## Required Quriozity reviews
 
 Every normal Quriozity reel must run the full review pipeline: factual accuracy,
@@ -100,6 +108,8 @@ quota. Judge causal links, clear references and conceptual load.
 Periodically create a PR for a coherent, tested batch and merge it into `main`.
 The user has authorized this workflow; preserve unrelated work and satisfy the
 repository's checks/review requirements before merging.
+For the Hedgy evaluation series, create one PR for each completed numbered
+round and merge it into `main` after its checks and required reviews pass.
 
 ## Perfect style reference
 

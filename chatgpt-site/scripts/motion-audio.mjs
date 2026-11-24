@@ -18,6 +18,8 @@ import {fileURLToPath} from 'node:url';
 import {transformSync} from 'esbuild';
 import {parseReelSpec} from '../src/motion/spec.ts';
 import {CUE_KINDS,FPS,markupWords,placeScenes,stripMarkup} from '../src/motion/core.ts';
+import {reelCaptions} from '../src/motion/captions.ts';
+import {payoffStartTime} from '../src/motion/viral.ts';
 import {transitionCues} from '../src/motion/fx/transitions.ts';
 import {SFX,MUSIC_BPM,variantPitch,designFor,isTonalAccent,CINEMATIC_ACCENTS} from './audio/sfx-design.mjs';
 import {synthesizeToFile} from './audio/synth.mjs';
@@ -569,8 +571,14 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
  });
  for(const cue of [...cues])if(cue.sfx&&cueIsPrimary(cue)&&(cue.sub===true||(ACTIVE_STYLE==='foley'&&foleyFill&&PRIMARY_IMPACTS.has(cue.sfx))))
   cues.push({sfx:'sub',at:cue.at,length:0.22,gain:0.72,pan:cue.pan??0,_class:'secondary',_sceneIndex:cue._sceneIndex,_localAt:cue._localAt,underlay:true});
- // A soft tuned accent keeps a long, audible tail into the final held frame.
- if(reelEnd>2.1)cues.push(ACTIVE_STYLE==='cinematic'
+ const cutAt=new Set();if(spec.look==='viral'){let n=0;for(const item of speech){if(n)cutAt.add(n);n+=item.words.length;}}
+ const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24,breaks:cutAt}:undefined):[];
+ if(captions.length)timed.captions=captions;
+ // Land the closing accent on the same frame as the payoff card. An in-scene ending has its own cues.
+ if(spec.look==='viral'){
+  const at=payoffStartTime(timed,placed,reelCaptions(timed,placed));
+  if(spec.payoff?.trim()&&reelEnd-at>=0.2)cues.push({sfx:'ding',at,length:Math.min(0.62,reelEnd-at),gain:ACTIVE_STYLE==='cinematic'?0.78:5,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
+ }else if(reelEnd>2.1)cues.push(ACTIVE_STYLE==='cinematic'
   ?{sfx:'ding',at:reelEnd-1.5,length:1.5,gain:0.88,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'}
   :{sfx:'ding',at:reelEnd-1.35,length:1.35,gain:12,pan:0,step:0.68,ending:true,_class:'story',priority:'primary'});
  const musicAutomation=deriveMusicAutomation(placed);
@@ -584,9 +592,6 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   // At most two audible effects at once: a later cue that would be the third voice is dropped.
   const live=[];governed.cues=governed.cues.sort((a,b)=>a.at-b.at).filter(cue=>{if(cue.underlay||cue.ending)return true;const now=live.filter(c=>c.at+Math.min(0.6,cueDuration(c))>cue.at);live.length=0;live.push(...now);if(now.length>=2&&!cueIsPrimary(cue))return false;live.push(cue);return true;});governed.stats.after=governed.cues.length;governed.stats.densityPerSecond=governed.cues.length/Math.max(1,reelEnd);governed.stats.viralThinned=true;}
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
- const cutAt=new Set();if(spec.look==='viral'){let n=0;for(const item of speech){if(n)cutAt.add(n);n+=item.words.length;}}
- const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24,breaks:cutAt}:undefined):[];
- if(captions.length)timed.captions=captions;
  return {spec:timed,cues,duration:reelEnd,cueStats:governed.stats,musicAutomation};
 }
 
