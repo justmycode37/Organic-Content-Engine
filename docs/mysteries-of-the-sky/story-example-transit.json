@@ -1,0 +1,227 @@
+{
+  "version": 1,
+  "brand": "Mysteries of the Sky",
+  "storyId": "the-dip-that-might-be-a-planet",
+  "status": "preproduction",
+  "updatedAt": "2026-11-24",
+  "brief": {
+    "title": "The dip that might be a planet",
+    "centralQuestion": "How can a dip in starlight reveal a planet we cannot directly see?",
+    "audience": "Curious viewers without an astronomy background",
+    "oneSentenceAnswer": "A possible transit links missing light to an orbiting object's size and timing, but similar signals need to be ruled out.",
+    "hook": "This tiny dip could be a planet.",
+    "payoff": "The dip is a clue to a hidden world. The evidence has to show what made it.",
+    "targetDurationSeconds": 64,
+    "scope": "Explain transit inference with a generic schematic and one explicitly invented numerical example.",
+    "exclusions": [
+      "No new discovery or named-planet measurement is claimed in the narration.",
+      "No inference about mass, atmosphere, habitability or life.",
+      "No invented telescope dataset or observatory image."
+    ]
+  },
+  "sources": [
+    {
+      "id": "charbonneau-transit",
+      "title": "Detection of Planetary Transits Across a Sun-like Star",
+      "authors": ["David Charbonneau", "Timothy M. Brown", "David W. Latham", "Michel Mayor"],
+      "kind": "research-paper",
+      "institution": "Author manuscript archived by arXiv; published in The Astrophysical Journal Letters",
+      "url": "https://arxiv.org/abs/astro-ph/9911436v1",
+      "version": "arXiv v1, accepted manuscript; journal reference ApJ 529 (2000) L45",
+      "published": "2000; preprint submitted 1999-11-23",
+      "accessedAt": "2026-11-24",
+      "primaryReason": "The observers report their own photometric detection of two transits of HD 209458.",
+      "evidenceNote": "Read the abstract: transit timing agrees with prior radial-velocity observations; the light-curve shape includes limb darkening. The reel does not reuse this system's measurements."
+    },
+    {
+      "id": "seager-transit-geometry",
+      "title": "On the Unique Solution of Planet and Star Parameters from an Extrasolar Planet Transit Light Curve",
+      "authors": ["Sara Seager", "Gabriela Mallen-Ornelas"],
+      "kind": "research-preprint",
+      "institution": "Institute for Advanced Study and Princeton / Pontificia Universidad Catolica de Chile; arXiv",
+      "url": "https://arxiv.org/abs/astro-ph/0206228v1",
+      "version": "arXiv v1 (2002-06-13); later journal reference ApJ 585 (2003) 1038-1055",
+      "published": "Preprint 2002-06-13; journal 2003",
+      "accessedAt": "2026-11-24",
+      "primaryReason": "The authors derive the transit-geometry equations and state their assumptions.",
+      "evidenceNote": "Read sections 2 and 3.1-3.2.1 of v1: consecutive transits determine period; equation (1) gives depth as squared radius ratio and equation (6) its inverse."
+    },
+    {
+      "id": "kepler-false-positives",
+      "title": "The Kepler Certified False Positive Table",
+      "authors": ["Stephen T. Bryson and the Kepler False Positive Working Group"],
+      "kind": "mission-documentation",
+      "institution": "NASA Ames Research Center / Kepler Science Office; MAST archive",
+      "url": "https://archive.stsci.edu/kepler/manuals/KSCI-19093-003.pdf",
+      "version": "KSCI-19093-003, June 13, 2017 revision",
+      "published": "2017-06-13 revision; document's recommended citation lists 2015",
+      "accessedAt": "2026-11-24",
+      "primaryReason": "The mission's own working group documents its vetting process and false-positive classes.",
+      "evidenceNote": "Read section 1.1, printed pages 6-7: repeated transit-like events are clues; diluted background eclipsing binaries can mimic planetary transits."
+    }
+  ],
+  "claims": [
+    {
+      "id": "candidate-clue",
+      "statement": "A repeating transit-like dip can indicate a planet but does not establish one by itself.",
+      "kind": "inference",
+      "support": [{ "sourceId": "kepler-false-positives", "locator": "Section 1.1, printed pages 6-7", "supports": "Transit-like signals require vetting against alternative explanations." }],
+      "uncertainty": "A candidate interpretation, not a confirmation.",
+      "limitations": ["No real candidate is being analyzed in this example."]
+    },
+    {
+      "id": "transit-dimming",
+      "statement": "An appropriately aligned planet crossing its star can cause a measured dip in starlight.",
+      "kind": "observation",
+      "support": [{ "sourceId": "charbonneau-transit", "locator": "Abstract, two photometric transit detections", "supports": "An observed example of this mechanism; the animation generalizes it." }],
+      "uncertainty": "The illustration explains the mechanism rather than reproducing those observations.",
+      "limitations": ["A crossing must occur along the observer's line of sight; most orbit orientations do not transit."]
+    },
+    {
+      "id": "repeat-period",
+      "statement": "Consecutive transits of the same planet reveal its orbital period.",
+      "kind": "inference",
+      "support": [{ "sourceId": "seager-transit-geometry", "locator": "Section 2, final condition; section 3.1 observables", "supports": "Consecutive events identify the period used by the model." }],
+      "uncertainty": "Assumes the events belong to one planet and no intervening transit was missed.",
+      "limitations": ["Gaps or other periodic sources can confuse the interpretation."]
+    },
+    {
+      "id": "radius-example",
+      "statement": "In an idealized uniform-star model, 1% blocked light corresponds to a planet-to-star radius ratio of 0.1.",
+      "kind": "illustrative-calculation",
+      "support": [{ "sourceId": "seager-transit-geometry", "locator": "Section 3.1, equation (1); section 3.2.1, equation (6)", "supports": "Depth equals squared radius ratio in the specified idealization." }],
+      "uncertainty": "Exact within these assumptions; illustrative input, not an observed measurement.",
+      "limitations": ["Real fits account for limb darkening, grazing geometry and extra light."],
+      "calculation": {
+        "inputs": ["Invented fractional flux loss: delta = 0.01 (dimensionless)"],
+        "formula": "delta = (Rp/Rstar)^2; Rp/Rstar = sqrt(0.01) = 0.1",
+        "result": "Rp = 0.1 Rstar, or 10% of the stellar radius; no absolute radius is inferred.",
+        "assumptions": ["Uniform projected stellar brightness (no limb darkening)", "Opaque dark planet fully within the stellar disk at mid-transit", "No blended light or measurement noise"]
+      }
+    },
+    {
+      "id": "binary-mimic",
+      "statement": "A background eclipsing binary diluted by brighter target-star light can mimic a planetary transit.",
+      "kind": "inference",
+      "support": [{ "sourceId": "kepler-false-positives", "locator": "Section 1.1, Background Eclipsing or Transiting Object, printed page 7", "supports": "The mission documents this astrophysical false-positive mechanism." }],
+      "uncertainty": "One possible alternative; the source describes several others.",
+      "limitations": ["This is a conceptual example of a contaminant, not a verdict on a particular target."]
+    }
+  ],
+  "beats": [
+    {
+      "id": "a-dip",
+      "role": "hook",
+      "durationSeconds": 4,
+      "narration": "This tiny dip could be a planet.",
+      "claimIds": ["candidate-clue"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Open on a clean brightness-versus-time trace with one shallow dip. Highlight the dip without revealing a planet yet. Label both axes; do not present fabricated telescope points.",
+        "onScreenText": ["A PLANET?", "Brightness", "Time"],
+        "provenanceLabel": "Schematic light curve",
+        "claimIds": ["candidate-clue"],
+        "sourceIds": ["kepler-false-positives"],
+        "visualCaveats": ["Stylized trace; dip depth and timescale are not measurements."],
+        "continuity": "Retain this trace below the geometry in the next beat.",
+        "transition": "cut"
+      }
+    },
+    {
+      "id": "crossing-the-star",
+      "role": "evidence",
+      "durationSeconds": 11,
+      "narration": "A telescope records starlight. If a planet crosses the star from our viewpoint, the measured brightness falls.",
+      "claimIds": ["transit-dimming"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Show a dark disk moving across a uniform stellar disk from the observer's view. Advance a cursor along the retained light curve; dimming begins at first overlap and ends after the disk exits.",
+        "onScreenText": ["LESS LIGHT REACHES US", "Observer's view"],
+        "provenanceLabel": "Schematic transit; not telescope footage",
+        "claimIds": ["transit-dimming"],
+        "sourceIds": ["charbonneau-transit"],
+        "visualCaveats": ["Resolved disks illustrate geometry; the telescope measurement can be unresolved.", "Do not show light physically dimming everywhere in space."],
+        "continuity": "Use the same star and disk in all single-planet shots.",
+        "transition": "match-cut"
+      }
+    },
+    {
+      "id": "the-repeat",
+      "role": "mechanism",
+      "durationSeconds": 10,
+      "narration": "Matching dips at regular intervals can reveal its orbital period, if each orbit's transit is observed.",
+      "claimIds": ["repeat-period"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Extend the trace to show three equally spaced dips. Put a bracket between consecutive mid-transit times labeled one orbit. Show a small orbital inset with observer direction; compress elapsed time visibly.",
+        "onScreenText": ["ONE ORBIT", "Consecutive transits", "Time compressed"],
+        "provenanceLabel": "Schematic; no real period specified",
+        "claimIds": ["repeat-period"],
+        "sourceIds": ["seager-transit-geometry"],
+        "visualCaveats": ["Assume no missed transits and the same object in each crossing.", "Animation seconds do not represent the orbital period."],
+        "continuity": "Keep the same trace's baseline; use matching midpoints for the interval brackets.",
+        "transition": "match-cut"
+      }
+    },
+    {
+      "id": "depth-to-radius",
+      "role": "mechanism",
+      "durationSeconds": 16,
+      "narration": "Depth carries another clue. In this simplified model, a one-percent dip means the planet's radius is one tenth of the star's.",
+      "claimIds": ["radius-example"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Freeze full overlap against a uniformly bright star. Draw labeled radius segments with a 10-to-1 length ratio. Plot 100% and 99% flux ticks beside the dip; mark the cropped vertical axis. Hold the result long enough to read with its assumptions.",
+        "onScreenText": ["1% LESS LIGHT", "10% OF THE STAR'S RADIUS", "Uniform star; full overlap; no extra light"],
+        "provenanceLabel": "Illustrative calculation; schematic",
+        "claimIds": ["radius-example"],
+        "sourceIds": ["seager-transit-geometry"],
+        "visualCaveats": ["Use radius ratio, not mass or area ratio, for the 10% label.", "The 1% value is invented for arithmetic clarity; never label it HD 209458 data.", "The stellar disk is uniform only for this idealization."],
+        "continuity": "Retain the same star center; adjust the planet radius to precisely 0.1 of stellar radius for this labeled example.",
+        "transition": "hold"
+      }
+    },
+    {
+      "id": "a-lookalike",
+      "role": "caveat",
+      "durationSeconds": 14,
+      "narration": "But a faint pair of eclipsing stars can mimic that signal. Astronomers test these alternatives before calling it a planet.",
+      "claimIds": ["binary-mimic", "candidate-clue"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Split the model into target star plus a fainter background stellar pair. One star eclipses the other. Combine their light into one schematic aperture and show a shallow dip. Keep the target star visible so dilution is understandable.",
+        "onScreenText": ["A POSSIBLE LOOKALIKE", "Target star + background pair", "Check the alternatives"],
+        "provenanceLabel": "Schematic false-positive example",
+        "claimIds": ["binary-mimic", "candidate-clue"],
+        "sourceIds": ["kepler-false-positives"],
+        "visualCaveats": ["Separate the conceptual components for explanation; do not imply the telescope resolves the blended pair.", "This is one alternative, not a complete vetting procedure."],
+        "continuity": "Use a clear cut to prevent the planet model from silently becoming the binary model.",
+        "transition": "cut"
+      }
+    },
+    {
+      "id": "earned-answer",
+      "role": "payoff",
+      "durationSeconds": 9,
+      "narration": "The dip is a clue to a hidden world. The evidence has to show what made it.",
+      "claimIds": ["candidate-clue"],
+      "shot": {
+        "representation": "schematic",
+        "direction": "Return to the original trace beside the two explicitly labeled explanations. Finish on the dip with a candidate label. Do not stamp either model confirmed or add a discovery claim.",
+        "onScreenText": ["A CLUE, THEN A TEST", "Planet candidate"],
+        "provenanceLabel": "Schematic hypotheses",
+        "claimIds": ["candidate-clue"],
+        "sourceIds": ["kepler-false-positives"],
+        "visualCaveats": ["No real candidate has been confirmed by this worked example."],
+        "continuity": "Match the opening trace and settle on the same dip.",
+        "transition": "match-cut"
+      }
+    }
+  ],
+  "reviews": [
+    { "stage": "factual-accuracy", "status": "pending", "reviewer": "unassigned", "evidence": "pending", "findings": [] },
+    { "stage": "story-clarity", "status": "pending", "reviewer": "unassigned", "evidence": "pending", "findings": [] },
+    { "stage": "visual-science", "status": "pending", "reviewer": "unassigned", "evidence": "pending", "findings": [] },
+    { "stage": "readability-timing", "status": "pending", "reviewer": "unassigned", "evidence": "pending", "findings": [] }
+  ]
+}
