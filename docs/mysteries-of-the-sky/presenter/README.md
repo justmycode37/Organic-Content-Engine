@@ -1,6 +1,6 @@
 # Professor Rowan Ellery
 
-Rowan is the fictional on-camera physics professor for *Mysteries of the Sky*. His fictional PhD is in physics. He is in his early sixties, clean-shaven, with a high, receding hairline and short, casually swept grey hair. His rectangular glasses have faint handling marks at the edges. He wears a lightly rumpled white shirt with an open collar in his bookshelf study.
+Rowan is the fictional on-camera physics expert for *Mysteries of the Sky*. Titan narrates the main explanation. Bring Rowan into the edit for a short interview answer or question, then cut back to Titan over the evidence. His fictional PhD is in physics. He is in his early sixties, clean-shaven, with a high, receding hairline and short, casually swept grey hair. His rectangular glasses have faint handling marks at the edges. He wears a lightly rumpled white shirt with an open collar in his bookshelf study.
 
 The [current portrait](rowan-ellery.png) is the visual identity. The [voice sample](rowan-ellery-voice.m4a) is from Rowan’s HeyGen take with the older voice direction. Use the mild softness and muted indoor colour of an older webcam for the interview footage. Add readable titles after scaling the footage. The earlier [speaking master](rowan-ellery-master.mp4) shows a superseded design. The white-shirt speaking take is pending.
 

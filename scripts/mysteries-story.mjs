@@ -3,6 +3,13 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+import { presenterRequest } from './mysteries-presenter.mjs';
+
+// Matches the verified Silicon Footnote Titan preset (39b666e).
+const titan = {voiceId: 'dtSEyYGNJqjrtBArPCVZ', model: 'eleven_flash_v2_5', settings: {stability: 0.2, similarity_boost: 0.2}};
+const onCamera = beat => beat.shot.representation === 'presenter';
+const speaker = beat => onCamera(beat) ? 'Rowan on camera' : 'Titan voiceover';
+
 const schema = JSON.parse(await readFile(new URL('../docs/mysteries-of-the-sky/story.schema.json', import.meta.url), 'utf8'));
 export const reviewStages = ['factual-accuracy', 'story-clarity', 'visual-science', 'readability-timing'];
 
@@ -106,7 +113,7 @@ export function validateStory(story) {
       if (claim && !claim.support.some(support => shotSources.has(support.sourceId))) errors.push(`beats.${beat.id}.shot: claim ${id} needs at least one of its supporting sources`);
     }
     for (const id of shotSources) if (!sources.has(id)) errors.push(`beats.${beat.id}.shot: unknown source ${id}`);
-    const labelTerms = { schematic: /\b(?:schematic|illustrative)\b/iu, 'replotted-data': /\bdata\b/iu, 'source-image': /\bimage\b/iu };
+    const labelTerms = { presenter: /\b(?:Rowan|presenter)\b/iu, schematic: /\b(?:schematic|illustrative)\b/iu, 'replotted-data': /\bdata\b/iu, 'source-image': /\bimage\b/iu };
     if (!labelTerms[beat.shot.representation].test(beat.shot.provenanceLabel)) errors.push(`beats.${beat.id}.shot: provenanceLabel must identify ${beat.shot.representation}`);
     const calculated = beat.claimIds.some(id => claims.get(id)?.kind === 'illustrative-calculation');
     if (calculated && !/\b(?:illustrative|example)\b/iu.test([beat.shot.provenanceLabel, ...beat.shot.onScreenText].join(' '))) errors.push(`beats.${beat.id}: label the numerical example as illustrative`);
@@ -118,11 +125,34 @@ export function validateStory(story) {
     if (review.status === 'changes-requested' && !review.findings.length) errors.push(`reviews.${review.stage}: record the requested changes`);
   }
   const durationSeconds = Number(story.beats.reduce((total, beat) => total + beat.durationSeconds, 0).toFixed(3));
+  const rowanSeconds = story.beats.filter(onCamera).reduce((total, beat) => total + beat.durationSeconds, 0);
+  if (rowanSeconds * 2 >= durationSeconds) errors.push('beats: Titan must carry the majority of the narration; use Rowan for brief expert cutaways');
+  for (const [index, beat] of story.beats.entries()) {
+    if (!onCamera(beat)) continue;
+    if (beat.durationSeconds > 15) errors.push(`beats.${beat.id}: a single HeyGen presenter take supports at most 15 seconds`);
+    if (beat.durationSeconds > 7 || (index > 0 && onCamera(story.beats[index - 1]))) warnings.push(`beats.${beat.id}: review the interview cut for brevity; aim for a single short thought before returning to Titan`);
+  }
   const narrationWords = story.beats.reduce((total, beat) => total + beat.narration.trim().split(/\s+/u).length, 0);
   if (Math.abs(durationSeconds - story.brief.targetDurationSeconds) > 3) warnings.push(`Planned beats total ${durationSeconds}s; brief target is ${story.brief.targetDurationSeconds}s. Review timing; do not compress narration to fit.`);
   const pendingReviews = story.reviews.filter(review => review.status !== 'pass').map(review => review.stage);
   if (pendingReviews.length) warnings.push(`Review not passed: ${pendingReviews.join(', ')}`);
-  return { valid: errors.length === 0, errors, warnings, summary: { storyId: story.storyId, sources: sources.size, claims: claims.size, beats: story.beats.length, durationSeconds, narrationWords, pendingReviews } };
+  return { valid: errors.length === 0, errors, warnings, summary: { storyId: story.storyId, sources: sources.size, claims: claims.size, beats: story.beats.length, durationSeconds, rowanSeconds, narrationWords, pendingReviews } };
+}
+
+export function voicePlan(story) {
+  const result = validateStory(story);
+  if (!result.valid) throw new Error(result.errors.join('\n'));
+  return story.beats.map((beat, i, beats) => {
+    const cue = {beatId: beat.id, speaker: speaker(beat), plannedSeconds: beat.durationSeconds};
+    if (onCamera(beat)) {
+      return {...cue, provider: 'heygen', endpoint: '/v1/video/heygen-video-1-r2v',
+        body: presenterRequest(beat.narration, Math.max(5, Math.ceil(beat.durationSeconds)))};
+    }
+    return {...cue, provider: 'elevenlabs', endpoint: `/v1/text-to-speech/${titan.voiceId}/with-timestamps?output_format=mp3_44100_128`,
+      body: {text: beat.narration, model_id: titan.model, voice_settings: {...titan.settings},
+        previous_text: i > 0 && !onCamera(beats[i - 1]) ? beats[i - 1].narration : undefined,
+        next_text: i + 1 < beats.length && !onCamera(beats[i + 1]) ? beats[i + 1].narration : undefined}};
+  });
 }
 
 export function createDraft() {
@@ -144,12 +174,12 @@ export function renderHandoff(story) {
     `Story: ${story.storyId} · Updated: ${story.updatedAt} · Planned duration: ${number(result.summary.durationSeconds)}s · Narration: ${result.summary.narrationWords} words`, '',
     `Review: ${result.summary.pendingReviews.length ? `not approved (${result.summary.pendingReviews.join(', ')})` : 'all preproduction reviews recorded as passed; production review remains separate'}`, '', '## Brief', ''];
   for (const key of ['centralQuestion', 'audience', 'oneSentenceAnswer', 'hook', 'payoff', 'scope']) lines.push(`- **${key}:** ${md(story.brief[key])}`);
-  lines.push(`- **Exclusions:** ${story.brief.exclusions.map(md).join('; ')}`, '', '## Narration', '', ...story.beats.flatMap(beat => [md(beat.narration), '']), '## Beat and shot handoff', '');
+  lines.push(`- **Exclusions:** ${story.brief.exclusions.map(md).join('; ')}`, '', '## Narration', '', `Planned voice time · Titan ${number(result.summary.durationSeconds - result.summary.rowanSeconds)}s · Rowan ${number(result.summary.rowanSeconds)}s`, '', ...story.beats.flatMap(beat => [`**${speaker(beat)}** · ${md(beat.narration)}`, '']), '## Beat and shot handoff', '');
   let cursor = 0;
   for (const beat of story.beats) {
     const end = cursor + beat.durationSeconds;
     lines.push(`### ${beat.id} · ${number(cursor)}–${number(end)}s · ${beat.role}`, '',
-      `**Narration / verbatim captions:** ${md(beat.narration)}`, '',
+      `**${speaker(beat)} / verbatim captions:** ${md(beat.narration)}`, '',
       `**Shot (${beat.shot.representation}):** ${md(beat.shot.direction)}`, '',
       `**On-screen text:** ${beat.shot.onScreenText.map(md).join(' / ')}`, '',
       `**Visible provenance label:** ${md(beat.shot.provenanceLabel)}`, '',
@@ -179,6 +209,7 @@ const help = `Local source-to-story preproduction (Node 20+, no dependencies or 
   node scripts/mysteries-story.mjs init <draft.json>
   node scripts/mysteries-story.mjs validate <story.json> [--json]
   node scripts/mysteries-story.mjs handoff <story.json> <handoff.md>
+  node scripts/mysteries-story.mjs voice-plan <story.json> <provider-requests.json>
 
 init writes an incomplete draft. validate checks structure and traceability only.
 handoff validates first and preserves existing output files. Exit 0: valid;
@@ -188,7 +219,7 @@ exit 1: invalid story or I/O failure; exit 2: invalid command/arguments.
 export async function main(args) {
   const [command, input, output, ...extra] = args;
   if (command === '--help' || command === '-h') { process.stdout.write(help); return 0; }
-  if (extra.length || !input || (command === 'init' && output) || (command === 'validate' && output && output !== '--json') || (command === 'handoff' && !output) || !['init', 'validate', 'handoff'].includes(command)) {
+  if (extra.length || !input || (command === 'init' && output) || (command === 'validate' && output && output !== '--json') || (['handoff', 'voice-plan'].includes(command) && !output) || !['init', 'validate', 'handoff', 'voice-plan'].includes(command)) {
     process.stderr.write(help);
     return 2;
   }
@@ -207,7 +238,8 @@ export async function main(args) {
     }
     if (!result.valid) throw new Error(`Invalid story:\n${result.errors.join('\n')}`);
     if (resolve(input) === resolve(output)) throw new Error('Input and output paths must differ');
-    await writeFile(output, renderHandoff(story), { flag: 'wx' });
+    const contents = command === 'voice-plan' ? JSON.stringify(voicePlan(story), null, 2) + '\n' : renderHandoff(story);
+    await writeFile(output, contents, { flag: 'wx' });
     process.stdout.write(`Preproduction handoff: ${resolve(output)}\n`);
     return 0;
   } catch (error) {

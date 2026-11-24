@@ -182,10 +182,28 @@
       }
     },
     {
+      "id": "rowan-on-the-dip",
+      "role": "evidence",
+      "durationSeconds": 5,
+      "narration": "The dip tells us light is missing. But what blocked it?",
+      "claimIds": ["candidate-clue"],
+      "shot": {
+        "representation": "presenter",
+        "direction": "Cut to Rowan in his bookshelf study for this single question. Return to the diagram as Titan answers.",
+        "onScreenText": ["Professor Rowan Ellery"],
+        "provenanceLabel": "Rowan Ellery · fictional presenter",
+        "claimIds": ["candidate-clue"],
+        "sourceIds": ["kepler-false-positives"],
+        "visualCaveats": ["The interview poses the question; the following model illustrates the alternative."],
+        "continuity": "Leave the light curve on the same dip for the return cut.",
+        "transition": "cut"
+      }
+    },
+    {
       "id": "a-lookalike",
       "role": "caveat",
-      "durationSeconds": 14,
-      "narration": "But a faint pair of eclipsing stars can mimic that signal. Astronomers test these alternatives before calling it a planet.",
+      "durationSeconds": 9,
+      "narration": "A faint pair of eclipsing stars can mimic that signal. Astronomers check for these lookalikes.",
       "claimIds": ["binary-mimic", "candidate-clue"],
       "shot": {
         "representation": "schematic",

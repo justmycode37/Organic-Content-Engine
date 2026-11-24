@@ -10,10 +10,11 @@ Run these commands from the repository root:
 ```sh
 node scripts/mysteries-story.mjs validate docs/mysteries-of-the-sky/story-example-transit.json
 node scripts/mysteries-story.mjs handoff docs/mysteries-of-the-sky/story-example-transit.json /tmp/mysteries-transit-handoff.md
+node scripts/mysteries-story.mjs voice-plan docs/mysteries-of-the-sky/story-example-transit.json /tmp/mysteries-transit-voices.json
 node --test scripts/mysteries-story.test.mjs
 ```
 
-The example has 3 primary sources, 5 claims and 6 shots, planned over 64 seconds.
+The example has 3 primary sources, 5 claims and 7 shots, planned over 64 seconds.
 `story-example-transit.md` is its checked-in readable handoff; a test keeps that
 document synchronized with the JSON and generator.
 Its four reviews remain **pending**. A successful validation means the story's
@@ -34,6 +35,14 @@ second command intentionally fails until those are filled. Use
 creation: choose a new filename for each revision; existing files are preserved.
 The script resolves its schema relative to itself, so it also works from other
 working directories when called by absolute path.
+
+## Narration and interview cuts
+
+Titan tells the story over the animations, diagrams and source material. Rowan appears in brief interview inserts like the David Tong cutaways in the reference film. Give him one thought that benefits from seeing an expert say it: a question that changes how we read the evidence, an intuition, or a caveat. Cut directly back to Titan and the relevant visual. A standing presenter introduction is optional.
+
+Set `shot.representation` to `presenter` for Rowan. The handoff assigns every other shot to Titan, including older stories without presenter shots. The transit example gives Rowan five seconds at 0:41 to ask what blocked the light. Titan uses the next diagram to answer. The planned split is 59 seconds for Titan and five for Rowan.
+
+The `voice-plan` command writes ordered provider requests for later production. Titan uses ElevenLabs voice `dtSEyYGNJqjrtBArPCVZ`, model `eleven_flash_v2_5`, with stability and similarity boost each at 0.20. Rowan uses the saved portrait and his own mature voice via HeyGen. If a cutaway plays for less than five seconds, generate the five-second minimum and trim the quiet handles to fit. Use the actual recorded speech to time the edit.
 
 ## Authoring sequence
 

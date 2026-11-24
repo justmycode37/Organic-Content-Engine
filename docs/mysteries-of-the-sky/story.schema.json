@@ -105,7 +105,7 @@
           "additionalProperties": false,
           "required": ["representation", "direction", "onScreenText", "provenanceLabel", "claimIds", "sourceIds", "visualCaveats", "continuity", "transition"],
           "properties": {
-            "representation": { "enum": ["schematic", "replotted-data", "source-image"] },
+            "representation": { "enum": ["schematic", "replotted-data", "source-image", "presenter"] },
             "direction": { "$ref": "#/$defs/text" },
             "onScreenText": { "$ref": "#/$defs/textList" },
             "provenanceLabel": { "$ref": "#/$defs/text" },

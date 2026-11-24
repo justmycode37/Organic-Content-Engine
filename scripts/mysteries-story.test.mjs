@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import test from 'node:test';
-import { createDraft, renderHandoff, validateStory } from './mysteries-story.mjs';
+import { createDraft, renderHandoff, validateStory, voicePlan } from './mysteries-story.mjs';
 
 const example = JSON.parse(await readFile(new URL('../docs/mysteries-of-the-sky/story-example-transit.json', import.meta.url), 'utf8'));
 const copy = () => structuredClone(example);
@@ -24,7 +24,7 @@ test('worked example passes structure checks and keeps its review status explici
   assert.equal(result.summary.durationSeconds, 64);
   assert.equal(result.summary.sources, 3);
   assert.equal(result.summary.claims, 5);
-  assert.equal(result.summary.beats, 6);
+  assert.equal(result.summary.beats, 7);
   assert.equal(result.summary.pendingReviews.length, 4);
   assert.match(result.warnings.join('\n'), /Review not passed/);
 });
@@ -97,7 +97,7 @@ test('sources require HTTPS URLs, real access dates, primary rationale and preci
 test('narrative order requires an opening, a visible caveat and a final payoff', () => {
   invalid(story => { story.beats[0].role = 'evidence'; }, /first beat must be the hook/);
   invalid(story => { story.beats.at(-1).role = 'mechanism'; }, /last beat must be the payoff/);
-  invalid(story => { story.beats[4].role = 'mechanism'; }, /include a caveat/);
+  invalid(story => { story.beats.find(beat => beat.role === 'caveat').role = 'mechanism'; }, /include a caveat/);
 });
 
 test('invalid durations fail; timing differences remain review notes', () => {
@@ -132,6 +132,27 @@ test('handoff retains complete narration, timing, caveats, calculations and evid
   story.brief.title = '*Literal* <text> [label]';
   assert.match(renderHandoff(story), /\\\*Literal\\\* \\<text\\> \\\[label\\\]/);
   assert.throws(() => renderHandoff(createDraft()), /Invalid story/);
+});
+
+test('route only the expert cutaway to Rowan and all other beats to the saved Titan preset', () => {
+  const plan = voicePlan(example);
+  assert.equal(validateStory(example).summary.rowanSeconds, 5);
+  assert.equal(plan.filter(cue => cue.provider === 'heygen').length, 1);
+  for (const [i, cue] of plan.entries()) {
+    assert.equal(cue.beatId, example.beats[i].id);
+    if (cue.provider === 'heygen') {
+      assert.equal(cue.body.duration, 5);
+      assert.ok(cue.body.reference_audio.length && cue.body.prompt.includes(example.beats[i].narration));
+      assert.equal(plan[i - 1].body.next_text, undefined);
+      assert.equal(plan[i + 1].body.previous_text, undefined);
+    } else {
+      assert.match(cue.endpoint, /dtSEyYGNJqjrtBArPCVZ/);
+      assert.equal(cue.body.text, example.beats[i].narration);
+      assert.equal(cue.body.model_id, 'eleven_flash_v2_5');
+      assert.deepEqual(cue.body.voice_settings, {stability: 0.2, similarity_boost: 0.2});
+    }
+  }
+  invalid(story => { for (const beat of story.beats) beat.shot.representation = 'presenter'; }, /Titan must carry the majority/);
 });
 
 test('checked-in handoff matches the example and current generator', async () => {

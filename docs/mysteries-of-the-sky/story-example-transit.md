@@ -2,7 +2,7 @@
 
 Local preproduction handoff. Structure checked; this does not certify facts, assets, delivery or a finished video.
 
-Story: the-dip-that-might-be-a-planet · Updated: 2026-11-24 · Planned duration: 64s · Narration: 98 words
+Story: the-dip-that-might-be-a-planet · Updated: 2026-11-24 · Planned duration: 64s · Narration: 104 words
 
 Review: not approved (factual-accuracy, story-clarity, visual-science, readability-timing)
 
@@ -18,23 +18,27 @@ Review: not approved (factual-accuracy, story-clarity, visual-science, readabili
 
 ## Narration
 
-This tiny dip could be a planet.
+Planned voice time · Titan 59s · Rowan 5s
 
-A telescope records starlight. If a planet crosses the star from our viewpoint, the measured brightness falls.
+**Titan voiceover** · This tiny dip could be a planet.
 
-Matching dips at regular intervals can reveal its orbital period, if each orbit's transit is observed.
+**Titan voiceover** · A telescope records starlight. If a planet crosses the star from our viewpoint, the measured brightness falls.
 
-Depth carries another clue. In this simplified model, a one-percent dip means the planet's radius is one tenth of the star's.
+**Titan voiceover** · Matching dips at regular intervals can reveal its orbital period, if each orbit's transit is observed.
 
-But a faint pair of eclipsing stars can mimic that signal. Astronomers test these alternatives before calling it a planet.
+**Titan voiceover** · Depth carries another clue. In this simplified model, a one-percent dip means the planet's radius is one tenth of the star's.
 
-The dip is a clue to a hidden world. The evidence has to show what made it.
+**Rowan on camera** · The dip tells us light is missing. But what blocked it?
+
+**Titan voiceover** · A faint pair of eclipsing stars can mimic that signal. Astronomers check for these lookalikes.
+
+**Titan voiceover** · The dip is a clue to a hidden world. The evidence has to show what made it.
 
 ## Beat and shot handoff
 
 ### a-dip · 0–4s · hook
 
-**Narration / verbatim captions:** This tiny dip could be a planet.
+**Titan voiceover / verbatim captions:** This tiny dip could be a planet.
 
 **Shot (schematic):** Open on a clean brightness-versus-time trace with one shallow dip. Highlight the dip without revealing a planet yet. Label both axes; do not present fabricated telescope points.
 
@@ -50,7 +54,7 @@ The dip is a clue to a hidden world. The evidence has to show what made it.
 
 ### crossing-the-star · 4–15s · evidence
 
-**Narration / verbatim captions:** A telescope records starlight. If a planet crosses the star from our viewpoint, the measured brightness falls.
+**Titan voiceover / verbatim captions:** A telescope records starlight. If a planet crosses the star from our viewpoint, the measured brightness falls.
 
 **Shot (schematic):** Show a dark disk moving across a uniform stellar disk from the observer's view. Advance a cursor along the retained light curve; dimming begins at first overlap and ends after the disk exits.
 
@@ -66,7 +70,7 @@ The dip is a clue to a hidden world. The evidence has to show what made it.
 
 ### the-repeat · 15–25s · mechanism
 
-**Narration / verbatim captions:** Matching dips at regular intervals can reveal its orbital period, if each orbit's transit is observed.
+**Titan voiceover / verbatim captions:** Matching dips at regular intervals can reveal its orbital period, if each orbit's transit is observed.
 
 **Shot (schematic):** Extend the trace to show three equally spaced dips. Put a bracket between consecutive mid-transit times labeled one orbit. Show a small orbital inset with observer direction; compress elapsed time visibly.
 
@@ -82,7 +86,7 @@ The dip is a clue to a hidden world. The evidence has to show what made it.
 
 ### depth-to-radius · 25–41s · mechanism
 
-**Narration / verbatim captions:** Depth carries another clue. In this simplified model, a one-percent dip means the planet's radius is one tenth of the star's.
+**Titan voiceover / verbatim captions:** Depth carries another clue. In this simplified model, a one-percent dip means the planet's radius is one tenth of the star's.
 
 **Shot (schematic):** Freeze full overlap against a uniformly bright star. Draw labeled radius segments with a 10-to-1 length ratio. Plot 100% and 99% flux ticks beside the dip; mark the cropped vertical axis. Hold the result long enough to read with its assumptions.
 
@@ -96,9 +100,25 @@ The dip is a clue to a hidden world. The evidence has to show what made it.
 
 **Continuity:** Retain the same star center; adjust the planet radius to precisely 0.1 of stellar radius for this labeled example. · **Transition:** hold
 
-### a-lookalike · 41–55s · caveat
+### rowan-on-the-dip · 41–46s · evidence
 
-**Narration / verbatim captions:** But a faint pair of eclipsing stars can mimic that signal. Astronomers test these alternatives before calling it a planet.
+**Rowan on camera / verbatim captions:** The dip tells us light is missing. But what blocked it?
+
+**Shot (presenter):** Cut to Rowan in his bookshelf study for this single question. Return to the diagram as Titan answers.
+
+**On-screen text:** Professor Rowan Ellery
+
+**Visible provenance label:** Rowan Ellery · fictional presenter
+
+**Beat claims:** candidate-clue · **Shot claims:** candidate-clue · **Shot sources:** kepler-false-positives
+
+**Visual caveats:** The interview poses the question; the following model illustrates the alternative.
+
+**Continuity:** Leave the light curve on the same dip for the return cut. · **Transition:** cut
+
+### a-lookalike · 46–55s · caveat
+
+**Titan voiceover / verbatim captions:** A faint pair of eclipsing stars can mimic that signal. Astronomers check for these lookalikes.
 
 **Shot (schematic):** Split the model into target star plus a fainter background stellar pair. One star eclipses the other. Combine their light into one schematic aperture and show a shallow dip. Keep the target star visible so dilution is understandable.
 
@@ -114,7 +134,7 @@ The dip is a clue to a hidden world. The evidence has to show what made it.
 
 ### earned-answer · 55–64s · payoff
 
-**Narration / verbatim captions:** The dip is a clue to a hidden world. The evidence has to show what made it.
+**Titan voiceover / verbatim captions:** The dip is a clue to a hidden world. The evidence has to show what made it.
 
 **Shot (schematic):** Return to the original trace beside the two explicitly labeled explanations. Finish on the dip with a candidate label. Do not stamp either model confirmed or add a discovery claim.
 
