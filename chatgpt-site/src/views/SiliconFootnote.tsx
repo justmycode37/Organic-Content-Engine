@@ -1,8 +1,8 @@
 import {useCallback,useEffect,useState} from 'react';
 import {ArrowUpRight} from 'lucide-react';
 import type {Account} from '../api/types';
-type Thumbnail={id:'subject'|'evidence';line:string;credit?:{label:string;url:string}};
-type Episode={id:string;topic:string;status:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[];thumbnails?:Thumbnail[]};
+type Thumbnail={id:'subject'|'evidence';line:string;title?:string;credit?:{label:string;url:string}};
+type Episode={id:string;topic:string;status:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;thumbnailError?:string;sources?:{title:string;url:string}[];thumbnails?:Thumbnail[]};
 export function SiliconFootnote({account}:{account:Account}){
  const [topic,setTopic]=useState(''),[episodes,setEpisodes]=useState<Episode[]>([]),[error,setError]=useState(''),[sending,setSending]=useState(false);
  const reload=useCallback(async()=>{
@@ -25,13 +25,15 @@ export function SiliconFootnote({account}:{account:Account}){
   <section className="activity-panel"><h2>Episodes</h2>{!episodes.length&&<p>Finished episodes and their sources appear here.</p>}
    {episodes.map(e=><article key={e.id}><h3>{e.title||e.topic||'AI news briefing'}</h3><p>{e.status}{e.scheduledAt&&' · Scheduled '+new Date(e.scheduledAt).toLocaleString(undefined,{timeZone:account.timezone})}{e.seconds?` · ${Math.floor(e.seconds/60)}m ${Math.floor(e.seconds%60)}s`:''}{e.error&&' · '+e.error}</p>
     {e.status==='ready'&&<><video controls preload="none" style={{width:'100%',aspectRatio:'16/9'}} src={`/api/silicon/episodes/${e.id}/video`}/>
-     {e.thumbnails?.length?<details><summary>YouTube thumbnails ({e.thumbnails.length})</summary>
+     {e.thumbnailError&&<p role="status">{e.thumbnailError}</p>}
+     {e.thumbnails?.length?<details><summary>YouTube titles and thumbnails ({e.thumbnails.length})</summary>
       <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,240px),1fr))',gap:16}}>
-       {e.thumbnails.map(cover=>{
+       {e.thumbnails.map((cover,index)=>{
         const url=`/api/silicon/episodes/${e.id}/thumbnail/${cover.id}`;
         return <div key={cover.id}>
          <img src={url} loading="lazy" alt={cover.line} width={3840} height={2160} style={{width:'100%',height:'auto',display:'block'}}/>
-         <a href={url} download={`silicon-footnote-${cover.id}.jpg`}>Download {cover.id} thumbnail</a>
+         {cover.title&&<p><strong>{cover.title}</strong></p>}
+         <a href={url} download={`silicon-footnote-${cover.id}.jpg`}>Download thumbnail {index+1}</a>
          {cover.credit&&<p><a href={cover.credit.url} target="_blank" rel="noreferrer">{cover.credit.label} <ArrowUpRight size={12}/></a></p>}
         </div>;
        })}

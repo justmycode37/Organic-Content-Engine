@@ -21,7 +21,6 @@ export async function produce(dir,{topic='',sourceFile}={}){
   const key=process.env.ELEVENLABS_API_KEY;
   if(!key)throw Error('Set ELEVENLABS_API_KEY on the production machine');
   const plan=await prepare(dir,topic,sourceFile),timing=[],tracks=[];
-  const thumbnails=prepareThumbnails(dir);
   for(const [i,beat] of plan.beats.entries()){
    const file=join(dir,`voice-${i}.wav`);
    if(!existsSync(file)){
@@ -43,7 +42,13 @@ export async function produce(dir,{topic='',sourceFile}={}){
   await new Promise((ok,fail)=>{const p=spawn('python3',[join(here,'render.py'),dir],{stdio:'inherit'});p.on('error',fail);p.on('close',c=>c===0?ok():fail(Error('Renderer exited '+c)))});
   const output=join(dir,'episode.mp4');
   if(Math.abs(duration(output)-seconds)>.15)throw Error('Final picture and narration duration differ');
-  return {output,title:plan.title,seconds,thumbnails,sources:read(join(dir,'sources.json'))};
+  let thumbnails,thumbnailError;
+  try{thumbnails=await prepareThumbnails(dir);}
+  catch(error){
+   writeFileSync(join(dir,'thumbnail-error.txt'),String(error.message));
+   thumbnailError='Thumbnail generation stopped. The episode is ready for review.';
+  }
+  return {output,title:thumbnails?.[0]?.title??plan.title,seconds,thumbnails,thumbnailError,sources:read(join(dir,'sources.json'))};
  }finally{unlinkSync(lock);}
 }
 if(import.meta.url===pathToFileURL(process.argv[1]??'').href){

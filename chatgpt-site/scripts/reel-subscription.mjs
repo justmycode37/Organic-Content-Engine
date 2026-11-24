@@ -1,6 +1,6 @@
 import {execFile} from 'node:child_process';
 import {lookup} from 'node:dns/promises';
-import {access,mkdtemp,rm,writeFile} from 'node:fs/promises';
+import {access,mkdtemp,readFile,readdir,rm,writeFile} from 'node:fs/promises';
 import {homedir,tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {z} from 'zod';
@@ -95,11 +95,25 @@ function promptFor({input,prefix,format},envelope=false){
   envelope&&'Put the serialized JSON value in the json string field of the response envelope.'].filter(Boolean).join('\n\n');
 }
 
+async function codexArtworkResult(result,settings){
+ const events=result.stdout.split('\n').map(json).filter(Boolean);
+ const thread=events.find(e=>e.type==='thread.started')?.thread_id;
+ if(result.exitCode===0&&events.at(-1)?.type==='turn.completed'&&/^[a-f0-9-]{36}$/.test(thread??'')){
+  const directory=join(settings.HOME??homedir(),'.codex','generated_images',thread);
+  const images=(await readdir(directory).catch(()=>[])).filter(name=>/^exec-[a-f0-9-]{36}\.png$/i.test(name));
+  if(images.length===1)return {status:'completed',image:await readFile(join(directory,images[0]))};
+ }
+ const text=codexResult(result,false);
+ if(text.status==='subscription_exhausted')return text;
+ throw new Error('Codex did not finish exactly one native image generation.');
+}
+
 async function codexRequest(request,settings,cwd,run){
  const binary=await executable(settings,'OCE_CODEX_BIN','codex',['/opt/homebrew/bin/codex','/usr/local/bin/codex']);
  const args=['exec','--json','--ephemeral','--ignore-user-config','--skip-git-repo-check','--sandbox','read-only',
   '--disable','shell_tool','--disable','unified_exec','--disable','multi_agent','--disable','plugins','--disable','skill_search',
   '-m',request.model,'-c',`model_reasoning_effort="${request.effort}"`,'-c','forced_login_method="chatgpt"','-c',request.webSearch===true?'web_search="live"':'web_search="disabled"'];
+ if(request.artwork)args.push('--enable','image_generation');
  for(const [index,image] of (request.images??[]).entries()){
   const extension={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'}[image.mime];
   if(!extension)throw new Error(`Unsupported review image type: ${image.mime}`);
@@ -113,7 +127,8 @@ async function codexRequest(request,settings,cwd,run){
   args.push('--output-schema',schema);
  }
  args.push('--','-');
- return codexResult(await run(binary,args,{cwd,env:subscriptionEnv(settings),input:promptFor(request,!!request.format),timeoutMs:solTimeout(request.effort)}),!!request.format);
+ const result=await run(binary,args,{cwd,env:subscriptionEnv(settings),input:promptFor(request,!!request.format),timeoutMs:solTimeout(request.effort)});
+ return request.artwork?codexArtworkResult(result,settings):codexResult(result,!!request.format);
 }
 
 async function claudeRequest(request,settings,cwd,run){
@@ -150,7 +165,7 @@ export function createReelSubscription({env=process.env,run=runCli,now=Date.now,
   const {provider}=request;
   const resetAt=exhaustedUntil.get(provider);
   if(resetAt>now()/1000)return quota(resetAt);
-  const attempts=provider==='openai'?SOL_TRANSPORT_ATTEMPTS:1;
+  const attempts=provider==='openai'&&!request.artwork?SOL_TRANSPORT_ATTEMPTS:1;
   for(let attempt=1;;attempt++){
    await online(HOSTS[provider]??HOSTS.openai);
    const cwd=await mkdtemp(join(tmpdir(),'oce-reel-'));

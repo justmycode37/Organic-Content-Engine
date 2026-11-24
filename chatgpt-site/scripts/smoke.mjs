@@ -1122,7 +1122,7 @@ test('Silicon Footnote binds only YouTube and delivers an on-demand private epis
  const uploadId=init.body.uploadId;
  const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:new Uint8Array(200)});
  assert.equal(part.status,200);
- const thumbnails=[{id:'subject',line:'A Drive on Mars'},{id:'evidence',line:'Planned from Earth'}];
+ const thumbnails=[{id:'subject',line:'AI ON MARS',title:'NASA Let Claude Plan a Drive on Mars'},{id:'evidence',line:'NO JOYSTICK',title:'How Claude Helped NASA Drive a Rover on Mars'}];
  const body={title:'Episode',seconds:700,sources:[],uploadId,parts:[await part.json()],thumbnails};
  const cover='/api/silicon/episodes/'+q.body.id+'/thumbnail/subject';
  const request=(variant,body)=>s.mf.dispatchFetch('https://site.example'+path+'/thumbnail/'+variant,{
