@@ -10,8 +10,8 @@ const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.js
 if(action==='publish'){
  const directoryRound=dir.match(/(?:^|[\/])evaluation[\/]r(\d+)(?:[\/]|$)/)?.[1];
  if(directoryRound||Object.hasOwn(pack,'round')){
-  if(!Number.isInteger(pack.round)||pack.round<11||(directoryRound&&Number(directoryRound)!==pack.round)){
-   throw Error('Round publication resumed with round 11. Check the edition number.');
+  if(![11,12].includes(pack.round)||(directoryRound&&Number(directoryRound)!==pack.round)){
+   throw Error('Only rounds 11 and 12 are authorized for this publication run. Keep later rounds in videos/.');
   }
  }
 }
