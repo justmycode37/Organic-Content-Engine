@@ -1,11 +1,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {generateHedgyReel} from '../worker/hedgy-generation.ts';
+import {generateHedgyReel as generate} from '../worker/hedgy-generation.ts';
 import {hedgyPostCaptionSchema} from '../worker/hedgy-caption.ts';
 import {HEDGY_TOPIC,HEDGY_SERIES} from '../worker/hedgy-policy.ts';
 import {HEDGY_CONCEPTS} from '../worker/hedgy-ideas.ts';
 import {SHOT_NAMES,SHOT_ITEMS} from '../src/motion/shots/catalog.ts';
 import {isWorld} from '../src/motion/kit/world-ids.ts';
+const query='how unusual physics explains everyday objects';
+const {id:seedId,tag:seedTag,source:seedSource,...seedDraft}=HEDGY_CONCEPTS[0];
+const seedTopic={...seedDraft,topic:'phantom traffic jam',sourceIndex:0};
+const search=async()=>({runId:'monid-fixture',results:[{title:'Research evidence',url:seedSource,snippet:'Research evidence for the fixture.'}]});
+const generateHedgyReel=(env,topic,onUsage,history,subscription,options)=>generate(env,topic,onUsage,history,subscription,{search,...options});
 const postCaption='The cheapest choice can still cost you more.\n\nHedgy buys just enough lemons for his stand, but a busy afternoon leaves him with customers he cannot serve. Keeping extra stock ties up money and risks waste. Keeping too little means missing sales when demand surprises him. The tradeoff is between the cost of holding a buffer and the cost of running out.\n\nA buffer does not have to cover every possible rush. It needs to reflect how unpredictable demand is and how quickly you can restock. That is the useful question behind the story: what would running out actually cost?\n\n#InventoryRisk #RiskManagement #FinanceExplained';
 test('missing API key blocks without subscription fallback',async()=>{await assert.rejects(generateHedgyReel({},'diversification'),e=>e.code==='api_key_missing')});
 const idea=input=>({concept:/Choose concept from exactly these ids: ([a-z-]+)/.exec(input)[1],angle:'Hedgy runs a lemonade stand.',setting:'a lemonade stand',heroItem:'lemonade',supportingItems:[],cast:['hedgy'],hook:'Ever run out of lemons?',music:'drive',musicBrief:'Darksynth chase at 136 BPM: distorted bass, hard drums, guitar stabs, building to a hit on the reveal.'});
@@ -41,6 +46,7 @@ function mockHedgy(t, respond = () => undefined) {
   await new Promise(resolve=>setTimeout(resolve,1));
   active--;
   const outputs = {
+   hedgy_topic_query:()=>({query}),hedgy_topic_research:()=>({topics:[seedTopic]}),
    hedgy_idea:() => idea(body.input),hedgy_ideas:() => ({candidates:[idea(body.input),idea(body.input),idea(body.input)]}),hedgy_idea_pick:() => ({index:0,why:'Relatable stakes.',hook:'Ever run out of lemons?'}),hedgy_viral_review:() => ({approved:true,score:92,findings:[]}),hedgy_storyboard_review:() => ({approved:true,score:90,findings:[]}),hedgy_story:() => story,hedgy_fact_review:() => approved,
    hedgy_listener_review:() => listener,hedgy_takeaway_review:() => approved,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
   };
@@ -59,7 +65,9 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.provenance.editorial.copyRounds.length,1);
  assert.equal(result.provenance.editorial.sceneRounds.length,1);
  // idea, idea pick, story, fact, listener, viral critic, takeaway, plan, 12 specialists, assembly, scenes, storyboard critic, copy.
- assert.equal(calls.length,24);
+ assert.equal(calls.length,26);
+ assert.deepEqual(calls.slice(0,2).map(call=>call.text.format.name),['hedgy_topic_query','hedgy_topic_research']);
+ assert.equal(result.provenance.topicResearch.runId,'monid-fixture');
  assert.equal(result.spec.look,'viral');
  assert.equal(result.spec.series,HEDGY_SERIES);
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
@@ -97,7 +105,7 @@ test('local Astra review mode leaves the script and storyboard with Sol',async t
  assert.deepEqual([...seen].sort(),Object.keys(reviews).sort());
  assert.equal(result.provenance.critic,'gpt-6.2-astra');
  assert.equal(result.provenance.editorial.unresolvedContinuity,false);
- assert.ok(calls.every(call=>['hedgy_ideas','hedgy_story','hedgy_reel',undefined].includes(call.text?.format?.name)));
+ assert.ok(calls.every(call=>['hedgy_topic_query','hedgy_topic_research','hedgy_ideas','hedgy_story','hedgy_reel',undefined].includes(call.text?.format?.name)));
 });
 test('post captions require useful paragraphs and a small set of distinct hashtags',()=>{
  assert.equal(hedgyPostCaptionSchema.safeParse(postCaption).success,true);
@@ -200,8 +208,14 @@ test('a correct story keeps its best shareability draft when the critic never ap
  assert.equal(result.provenance.editorial.storyRounds.length,5);
  assert.ok(result.provenance.editorial.storyRounds.every(round=>round.correct));
 });
-test('the three researched stories remain drawable and postable without model responses',async t=>{
- t.mock.method(globalThis,'fetch',async()=>{throw new Error('network down');});
+test('the three researched stories remain drawable when writing fails after research',async t=>{
+ let topic;
+ t.mock.method(globalThis,'fetch',async (_url,init)=>{
+  const format=JSON.parse(init.body).text?.format?.name;
+  if(format==='hedgy_ideas')throw new Error('network down after topic research');
+  const text=JSON.stringify(format==='hedgy_topic_query'?{query}:{topics:[topic]});
+  return Response.json({status:'completed',output:[{content:[{type:'output_text',text}]}]});
+ });
  const expectedShots={
   'phantom-traffic-jam':['trafficwave','trafficwave','trafficwave'],
   'pufferfish-sand-nest':['sandnest','sandnest','sandnest'],
@@ -212,8 +226,10 @@ test('the three researched stories remain drawable and postable without model re
   assert.ok(isWorld(concept.world),concept.id);
   const shots=expectedShots[concept.id];
   if(!shots)continue;
+  const {id,tag,source,...draft}=concept;
+  topic={...draft,topic:id,sourceIndex:0};
   const history=HEDGY_CONCEPTS.filter(other=>other!==concept).map(other=>({concept:other.id,item:other.heroItem}));
-  const result=await generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,history);
+  const result=await generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,history,undefined,{search:async()=>({runId:'test',results:[{url:source,title:concept.name,snippet:concept.context}]})});
   assert.equal(result.provenance.idea.concept,concept.id);
   assert.equal(result.spec.series,HEDGY_SERIES);
   assert.equal(parseReelSpec(result.spec).ok,true);
@@ -309,14 +325,50 @@ test('the viral payoff chime follows the last spoken word, before caption paddin
  assert.ok(Math.abs(extraHold-0.45)<1/30);
 });
 
-test('ideation avoids concepts, items and moods used by earlier reels',async()=>{
- const {conceptCandidates,recentlyUsed,ideaProblems}=await import('../worker/hedgy-ideas.ts');
- const history=[{concept:'short-selling',item:'ticket',music:'tense'},{concept:'recall-risk',item:'ticket',music:'tense'}];
- const picks=conceptCandidates(history,5,()=>0.5);assert.equal(picks.length,5);assert.deepEqual(new Set(picks.slice(0,3).map(c=>c.id)),new Set(['phantom-traffic-jam','pufferfish-sand-nest','unclaimed-luggage']));
- const all=HEDGY_CONCEPTS.map(c=>({concept:c.id}));assert.equal(conceptCandidates(all,1)[0].id,HEDGY_CONCEPTS.at(-1).id);
+test('recently used hero items and music remain deprioritized',async()=>{
+ const {recentlyUsed,ideaProblems}=await import('../worker/hedgy-ideas.ts');
+ const history=[{concept:'short-selling',item:'ticket',music:'tense'}];
+ const picks=[{id:'some-new-topic'}];
  assert.deepEqual(recentlyUsed(history),{items:['ticket'],moods:['drive']});
  const base={concept:picks[0].id,angle:'a',setting:'s',heroItem:'ticket',supportingItems:[],cast:['hedgy'],hook:'h',music:'tense',musicBrief:'x'.repeat(40)};
  assert.equal(ideaProblems(base,picks,history).length,2);assert.equal(ideaProblems({...base,heroItem:'pizza',music:'drive'},picks,history).length,0);
+});
+test('topic research rejects title-only legacy repeats and invented source references', async()=>{
+ const {researchHedgyTopics}=await import('../worker/hedgy-research.ts');
+ const history=[...Array.from({length:30},(_,i)=>({title:`Earlier story ${i}`})),{title:'Why a phantom traffic jam happens'}];
+ const phases=[];
+ const result=await researchHedgyTopics(async (step,prompt)=>{
+  phases.push(step);
+  assert.match(prompt,/phantom traffic jam happens/);
+  if(step==='topic-query-1')return JSON.stringify({query});
+  if(step==='topic-query-2')return JSON.stringify({query:'fresh evidence on the lives of shorebirds'});
+  return JSON.stringify({topics:step==='topic-research-1'?[seedTopic,{...seedTopic,topic:'seabird flight formations',sourceIndex:99}]:[{...seedTopic,topic:'seabird flight formations',name:'How birds fly together'}]});
+ },search,HEDGY_TOPIC,history);
+ assert.equal(result.topics[0].topic,'seabird flight formations');
+ assert.equal(result.topics[0].source,seedSource);
+ assert.deepEqual(phases,['topic-query-1','topic-research-1','topic-query-2','topic-research-2']);
+});
+test('a covered topic blocks generation before ideation or reservation',async t=>{
+ const {calls}=mockHedgy(t,format=>format==='hedgy_topic_query'?{query}:undefined);
+ let reserved=false;
+ await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,[{concept:'phantom-traffic-jam'}],undefined,{reserveTopic:async()=>{reserved=true;}}),e=>e.code==='hedgy_no_new_topic');
+ assert.equal(reserved,false);
+ assert.ok(calls.every(call=>['hedgy_topic_query','hedgy_topic_research'].includes(call.text.format.name)));
+});
+test('two concurrent attempts cannot reserve the same topic on the worker',async()=>{
+ const {mkdtemp,rm}=await import('node:fs/promises');
+ const {join}=await import('node:path');
+ const {tmpdir}=await import('node:os');
+ const {hedgyTopicResearch}=await import('./hedgy-topic-research.mjs');
+ const dir=await mkdtemp(join(tmpdir(),'hedgy-topic-test-'));
+ try {
+  const ledger=hedgyTopicResearch({HEDGY_TOPIC_LEDGER:dir});
+  const entry={title:'A jam that moves backward',topic:'phantom traffic jam',topicKey:'phantom-traffic-jam'};
+  const results=await Promise.allSettled([ledger.reserveTopic(entry),ledger.reserveTopic(entry)]);
+  assert.equal(results.filter(result=>result.status==='fulfilled').length,1);
+  assert.equal(results.find(result=>result.status==='rejected').reason.code,'hedgy_topic_repeat');
+  assert.equal((await ledger.history())[0].topicKey,entry.topicKey);
+ }finally{await rm(dir,{recursive:true,force:true});}
 });
 test('Hedgy cinematic sound design uses recorded Foley, never tuned synth tones',async()=>{
  const {designFor,SFX}=await import('./audio/sfx-design.mjs');

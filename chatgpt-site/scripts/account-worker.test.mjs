@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import {mkdtemp,mkdir,readFile,readdir,rm,stat,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
 import {tmpdir} from 'node:os';
+import {HEDGY_CONCEPTS} from '../worker/hedgy-ideas.ts';
+import {hedgyTopicResearch} from './hedgy-topic-research.mjs';
 import {runOnce} from './account-worker.mjs';
 import {runAccountCommand} from './account-worker-evidence.mjs';
 import {hedgyClient} from '../worker/hedgy-model-client.ts';
@@ -15,7 +17,8 @@ const config={headers:{authorization:'Bearer worker-secret-value','OAI-Sites-Aut
 async function fixture(run){
  const cacheRoot=await mkdtemp(join(tmpdir(),'oce-account-test-')),calls=[],logs=[];
  const fetchSite=async(_config,path,init)=>{calls.push({path,init});return Response.json(path.endsWith('/claim')?{job}:{});};
- const options={cacheRoot,env,fetchSite,subscription:null,keepAwake:()=>()=>{},sleep:async()=>{},log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
+ const hedgyResearch=hedgyTopicResearch({HEDGY_TOPIC_LEDGER:join(cacheRoot,'topic-ledger')},async()=>({runId:'fixture',results:[{title:'Traffic research',url:HEDGY_CONCEPTS[0].source,snippet:HEDGY_CONCEPTS[0].context}]}));
+ const options={cacheRoot,env,hedgyResearch,fetchSite,subscription:null,keepAwake:()=>()=>{},sleep:async()=>{},log:{log:s=>logs.push(s),error:s=>logs.push(s)}};
  try{await run({cacheRoot,calls,logs,options});}finally{await rm(cacheRoot,{recursive:true,force:true});}
 }
 const stream=(events,{crlf=false,split=13,finalNewline=true}={})=>{
@@ -135,12 +138,19 @@ test('Hedgy bills the API only on subscription exhaustion and preserves xhigh',a
 
 test('incomplete output is logged with stage, reason, request ID and usage; no retry, and the reel still finishes from fallbacks',async()=>{
  const original=globalThis.fetch;let calls=0;const usage={output_tokens:3000,output_tokens_details:{reasoning_tokens:3000}};
- globalThis.fetch=async()=>{calls++;return stream([{type:'response.incomplete',response:{id:'resp-incomplete',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage}}]);};
+ globalThis.fetch=async(_url,init)=>{
+  calls++;
+  const name=JSON.parse(init.body).text?.format?.name;
+  const {id,source,tag,...topic}=HEDGY_CONCEPTS[0];
+  const answer=name==='hedgy_topic_query'?{query:'research unexpected traffic phenomena'}:name==='hedgy_topic_research'?{topics:[{...topic,topic:id,sourceIndex:0}]}:undefined;
+  if(answer)return stream([{type:'response.completed',response:{id:'research-ok',status:'completed',output:[{content:[{type:'output_text',text:JSON.stringify(answer)}]}]}}]);
+  return stream([{type:'response.incomplete',response:{id:'resp-incomplete',status:'incomplete',incomplete_details:{reason:'max_output_tokens'},usage}}]);
+ };
  try{
   await fixture(async({cacheRoot,options})=>{
    assert.equal(await runOnce(config,options),true);
-   // One paid request, never repeated; generation continues without further model calls.
-   assert.equal(calls,1);
+   // Two research requests, then one failed idea request with no retry.
+   assert.equal(calls,3);
    const events=(await readFile(join(cacheRoot,job.id,'generation-events.jsonl'),'utf8')).trim().split('\n').map(JSON.parse);
    const failed=events.find(e=>e.status==='failed');
    assert.equal(failed.step,'idea-1');assert.equal(failed.code,'generation_incomplete');assert.equal(failed.incompleteReason,'max_output_tokens');

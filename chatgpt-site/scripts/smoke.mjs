@@ -911,13 +911,21 @@ test('account automation scopes connections, waits for Meta setup and enforces a
 test('account worker leases exclusively, persists one finished output and completes idempotently',async()=>{
  const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token},{persist:'account-leases'});const headers={authorization:`Bearer ${token}`};
  try{await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true'),'$.topic','Simple finance and market explainers') WHERE id='hedgy'").run();const id=crypto.randomUUID(),date=new Date(Date.now()-1000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
+ const nextId=crypto.randomUUID(),nextDate=new Date(Date.now()-500).toISOString();
+ await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(nextId,nextDate,nextDate,nextDate).run();
  const first=await s.call('POST','/api/jobs/accounts/claim',{headers});assert.equal(first.status,200);const job=first.body.job;assert.equal(job.id,id);assert.match(job.account.topic,/everyday mysteries.*animal behavior.*hidden journeys/);assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers})).body.job,null);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/wrong/heartbeat`,{headers})).status,409);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/heartbeat`,{headers})).status,200);
  const bytes=new Uint8Array(256);const response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...headers,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});assert.equal(response.status,200);const {materialId}=await response.json();
- const completed=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(completed.status,200);
- const twice=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance:{test:true}}});assert.equal(twice.status,200);
+ const provenance={idea:{topic:'phantom traffic jam',topicKey:'phantom-traffic-jam'}};
+ const completed=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance}});assert.equal(completed.status,200);
+ const twice=await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/complete`,{headers,json:{materialId,spec:{title:'Test'},provenance}});assert.equal(twice.status,200);
  const row=await s.db.prepare('SELECT status,output_material_id FROM account_automation_jobs WHERE id=?').bind(id).first();assert.equal(row.status,'completed');assert.equal(row.output_material_id,materialId);assert.equal(JSON.parse((await mcp(s,'list_reel_notifications')).result.content[0].text).events.length,0);
+ const next=await s.call('POST','/api/jobs/accounts/claim',{headers});
+ assert.equal(next.body.job.id,nextId);assert.equal(next.body.job.history[0].topicKey,'phantom-traffic-jam');
+ assert.equal((await s.call('GET','/api/jobs/accounts/hedgy/history',{headers:{}})).status,401);
+ const history=await s.call('GET','/api/jobs/accounts/hedgy/history',{headers});
+ assert.equal(history.body.history[0].topic,'phantom traffic jam');
  }finally{await s.stop()}
 });
 

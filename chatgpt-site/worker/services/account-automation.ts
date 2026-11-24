@@ -8,7 +8,7 @@ import {HEDGY_SERIES_IDS,HEDGY_TOPIC} from '../hedgy-policy.ts';
 import {hedgyPostCaptionSchema} from '../hedgy-caption.ts';
 const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
-export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
+export function reelHistory(row:{spec:string;provenance:string|null}){const spec=parse(row.spec),prov=parse(row.provenance),idea=prov.idea??(prov.plan?{topic:prov.plan.topic,topicKey:prov.topicKey}:{});return {title:spec.title,topic:idea.topic,topicKey:idea.topicKey,concept:idea.concept,conceptName:idea.conceptName,item:idea.heroItem,setting:idea.setting,music:spec.music,musicBrief:spec.musicBrief,summary:Array.isArray(spec.scenes)?spec.scenes.map((s:{say?:string})=>s.say??'').join(' ').slice(0,200):undefined};}
 export const runtime=(env:Env)=>Object.fromEntries(Object.entries(env).filter((e):e is [string,string]=>typeof e[1]==='string'));
 
 // Reserve a UUID namespace for deterministic rounds and reuse the existing MP4 upload route.
@@ -80,12 +80,17 @@ export async function claimAccountJob(c:Container){
  const expired=await c.db.prepare("UPDATE account_automation_jobs SET status='needs_attention',error='Worker stopped during production; inspect cached output before retrying',lease_id=NULL,updated_at=? WHERE status='leased' AND lease_until<? RETURNING *").bind(now(),now()).all<any>();
  for(const row of expired.results)await accountNotice(c,row,'needs_attention',row.error);
  const lease=crypto.randomUUID(),until=new Date(Date.now()+20*60000).toISOString();
- const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND j.scheduled_at<=? AND json_extract(a.value,'$.enabled')=1 AND a.id IN ('hedgy','quriozity') ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now(),now()).first<any>();
+ const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND j.scheduled_at<=? AND json_extract(a.value,'$.enabled')=1 AND a.id IN ('hedgy','quriozity') AND (a.id<>'hedgy' OR NOT EXISTS (SELECT 1 FROM account_automation_jobs active WHERE active.account_id=a.id AND active.status='leased')) ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now(),now()).first<any>();
  if(!row)return {job:null};const a=await c.db.prepare('SELECT value FROM accounts WHERE id=?').bind(row.account_id).first<{value:string}>();
- const past=await c.db.prepare('SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC LIMIT 2000').bind(row.account_id,row.id).all<{spec:string;provenance:string|null}>();
  const account=JSON.parse(a!.value) as Account;
  if(account.id==='hedgy')account.topic=HEDGY_TOPIC;
- return {job:{id:row.id,lease,account,scheduledAt:row.scheduled_at,history:past.results.map(reelHistory)}};
+ const history=await accountReelHistory(c,account.id,{excludeJob:row.id});
+ return {job:{id:row.id,lease,account,scheduledAt:row.scheduled_at,history}};
+}
+export async function accountReelHistory(c:Container,accountId:string,{excludeJob=''}={}){
+ const limit=accountId==='hedgy'?'':' LIMIT 2000';
+ const past=await c.db.prepare(`SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC${limit}`).bind(accountId,excludeJob).all<{spec:string;provenance:string|null}>();
+ return past.results.map(reelHistory);
 }
 export async function accountLease(c:Container,id:string,lease:string){const row=await c.db.prepare("SELECT * FROM account_automation_jobs WHERE id=? AND lease_id=? AND status='leased' AND lease_until>?").bind(id,lease,now()).first<any>();if(!row)throw new AppError(409,'stale_lease','This job is no longer leased to this worker');return row;}
 export async function heartbeatAccountJob(c:Container,id:string,lease:string){await accountLease(c,id,lease);await c.db.prepare('UPDATE account_automation_jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_id=?').bind(new Date(Date.now()+20*60000).toISOString(),now(),id,lease).run();await c.settings.setJob('account_worker',now(),{online:true});return {ok:true};}

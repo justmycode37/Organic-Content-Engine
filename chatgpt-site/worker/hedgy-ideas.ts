@@ -1,5 +1,6 @@
 import {z} from 'zod';
 import {SHOT_ITEMS} from '../src/motion/shots/catalog.ts';
+import type {WorldId} from '../src/motion/kit/world-ids.ts';
 
 /** Each entry gives the writer a factual starting point and a drawable story. */
 export const HEDGY_CONCEPTS=[
@@ -74,14 +75,18 @@ export const HEDGY_CONCEPTS=[
   source:'https://sos.noaa.gov/catalog/live-programs/go-with-the-flow-the-hansa-carriers-lost-shoes/',
  },
 ] as const;
-export type HedgyConcept=(typeof HEDGY_CONCEPTS)[number];
-export type HedgyConceptId=HedgyConcept['id'];
+export interface HedgyConcept {
+ id:string;topic?:string;lane:'everyday mysteries'|'animal behavior'|'hidden journeys';
+ name:string;heroItem:string;setting:string;world:WorldId;tag:string;hook:string;
+ payoff:string;context:string;beats:readonly [string,string,string];reveal:string;source:string;
+}
+export type HedgyConceptId=(typeof HEDGY_CONCEPTS)[number]['id'];
 /** Hedgy keeps action and forward motion, led by a clear melody rather than trailer drama. */
 export const HEDGY_MOODS=['drive','tense'] as const;
 export const HEDGY_MUSIC_STYLE='Energetic, melodic electronic / experimental indie instrumental with strong rhythmic drive and a clearly audible melodic hook. Favor fast, percussive piano-like or slightly gritty electric-keyboard patterns, answering synth phrases, syncopated accents, moving warm bass and tight supporting drums. Roughly 90–120 BPM with brisk double-time melodic motion; vary the lead, rhythm and harmony between stories. Keep plenty of action and forward momentum, with slightly less cinematic drama: controlled builds, no huge trailer booms or aggressive industrial distortion. Leave space for narration. Never sparse slow solo piano, ambient meditation, sleepy lo-fi, cute whimsy or orchestral comedy; no vocals.';
 
 /** What a past reel used; built from stored provenance (or a title for older reels). */
-export interface HedgyHistoryEntry {title?:string;concept?:string;item?:string;music?:string;musicBrief?:string;setting?:string;summary?:string}
+export interface HedgyHistoryEntry {title?:string;concept?:string;conceptName?:string;topic?:string;topicKey?:string;item?:string;music?:string;musicBrief?:string;setting?:string;summary?:string}
 
 export const ideaSchema=z.object({
  concept:z.string(),
@@ -96,22 +101,6 @@ export const ideaSchema=z.object({
 }).strict();
 export type HedgyIdea=z.infer<typeof ideaSchema>;
 
-const shuffle=<T,>(list:readonly T[],random:()=>number)=>{const a=[...list];for(let i=a.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[a[i],a[j]]=[a[j]!,a[i]!];}return a;};
-
-/** Unused stories first. Move the last reel's lane down when there are other fresh stories. */
-export function conceptCandidates(history:HedgyHistoryEntry[],count=5,random=Math.random){
- const lastUse=(id:string)=>history.findIndex(h=>h.concept===id);
- const firstKnown=history.map(h=>HEDGY_CONCEPTS.find(c=>c.id===h.concept)).find(Boolean);
- const fresh=HEDGY_CONCEPTS.filter(c=>lastUse(c.id)<0);
- const pilotIds=new Set<string>(HEDGY_CONCEPTS.slice(0,3).map(c=>c.id));
- const freshOrdered=shuffle(fresh,random).sort((a,b)=>
-  Number(a.lane===firstKnown?.lane)-Number(b.lane===firstKnown?.lane)||
-  Number(pilotIds.has(b.id))-Number(pilotIds.has(a.id)));
- const primary=freshOrdered.filter((c,i)=>freshOrdered.findIndex(other=>other.lane===c.lane)===i);
- const alternatives=freshOrdered.filter(c=>!primary.includes(c));
- const old=HEDGY_CONCEPTS.filter(c=>lastUse(c.id)>=0).sort((a,b)=>lastUse(b.id)-lastUse(a.id));
- return [...primary,...alternatives,...old].slice(0,count);
-}
 /** Items and moods that the next reel must avoid. */
 export function recentlyUsed(history:HedgyHistoryEntry[]){
  const items=[...new Set(history.slice(0,10).map(h=>h.item).filter(Boolean) as string[])];
