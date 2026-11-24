@@ -69,3 +69,5 @@ The source studies are schematic. In the transit study, disk overlap drives the 
 Start with the [eight sourced research briefs](research.md). The [story workflow](story-pipeline.md) turns a sourced claim ledger into a shot handoff. The [worked transit brief](story-example-transit.md) is a preproduction example, with scientific and editorial review still pending.
 
 Titan narrates the explanations. [Professor Rowan Ellery](presenter/README.md) appears briefly as the interview expert. The story handoff assigns each line to its speaker.
+
+Episode title cards carry only the title. Measurement cards show the value and its unit on a single line. Let Titan explain the context. Give diagrams only the labels needed to read them and collect source attributions in the end credits.

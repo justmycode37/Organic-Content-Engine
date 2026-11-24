@@ -1,5 +1,7 @@
 # Mysteries of the Sky: source to story
 
+Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Time the finished edit to Titan’s natural delivery and reserve Rowan for brief interviews. The short transit example demonstrates the handoff format.
+
 This is a local preproduction pipeline for a short astrophysics explainer. It
 turns a source ledger and structured brief into evidence-linked narration beats
 and a shot handoff. It runs with Node 20+ and built-in modules only. No API keys,

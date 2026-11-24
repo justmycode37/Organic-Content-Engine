@@ -158,7 +158,7 @@ export function voicePlan(story) {
 export function createDraft() {
   return {
     version: 1, brand: 'Mysteries of the Sky', storyId: 'new-story', status: 'preproduction', updatedAt: new Date().toISOString().slice(0, 10),
-    brief: { title: 'TODO', centralQuestion: 'TODO', audience: 'Curious viewers without an astronomy background', oneSentenceAnswer: 'TODO', hook: 'TODO', payoff: 'TODO', targetDurationSeconds: 60, scope: 'One astrophysics mechanism grounded in primary evidence', exclusions: ['No unsupported discoveries or claims about habitability'] },
+    brief: { title: 'TODO', centralQuestion: 'TODO', audience: 'Curious viewers without an astronomy background', oneSentenceAnswer: 'TODO', hook: 'TODO', payoff: 'TODO', targetDurationSeconds: 720, scope: 'One astrophysics mechanism grounded in primary evidence', exclusions: ['No unsupported discoveries or claims about habitability'] },
     sources: [], claims: [], beats: [],
     reviews: reviewStages.map(stage => ({ stage, status: 'pending', reviewer: 'unassigned', evidence: 'pending', findings: [] }))
   };

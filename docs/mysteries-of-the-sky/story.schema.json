@@ -23,7 +23,7 @@
         "oneSentenceAnswer": { "$ref": "#/$defs/text" },
         "hook": { "$ref": "#/$defs/text" },
         "payoff": { "$ref": "#/$defs/text" },
-        "targetDurationSeconds": { "type": "number", "minimum": 15, "maximum": 180 },
+        "targetDurationSeconds": { "type": "number", "minimum": 15 },
         "scope": { "$ref": "#/$defs/text" },
         "exclusions": { "$ref": "#/$defs/textList" }
       }
