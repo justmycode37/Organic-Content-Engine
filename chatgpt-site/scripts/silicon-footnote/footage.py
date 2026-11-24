@@ -14,6 +14,14 @@ def reserve_footage(beats, lengths, clips, durations):
             start = shot['clipStart']
             if shot.get('originalSpeech') and start + seconds > durations[index] + .08:
                 raise ValueError('Interview picture falls outside its matched audio')
+            coverage = clips[index].get('coverage')
+            if coverage and not shot.get('originalSpeech') and not any(
+                window['start'] <= start and start + seconds <= min(window['end'], durations[index]) + .04
+                for window in coverage
+            ):
+                # Word timing can lengthen an explicit B-roll selection past a clean window.
+                del shot['clipStart']
+                continue
             occupied.setdefault(index, []).append((start, start + seconds))
 
     for shot, seconds in zip(beats, lengths, strict=True):

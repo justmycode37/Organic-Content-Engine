@@ -145,7 +145,21 @@ class Sequence:
         self.caption=self.a['caption']
     def image(self,idx,q,title=None):
         spec=self.pack['images'][idx]
-        im=camera(photo(self.root/f'image-{idx}.png'),(W,H),q,self.i%2==1)
+        source=photo(self.root/f'image-{idx}.png')
+        if spec.get('figure'):
+            # Preserve axes, uncertainty bars and legends throughout the camera move.
+            im=Image.new('RGB',(W,H),'#151618')
+            draw=ImageDraw.Draw(im)
+            typeblock(draw,60,42,title or self.head,1160,48,WHITE,'title',1)
+            available=(1156,489)
+            scale=min(available[0]/source.width,available[1]/source.height)
+            zoom=.95+.05*(1-q if self.i%2 else q)
+            width,height=(max(1,round(v*scale*zoom)) for v in source.size)
+            pos=((W-width)//2,115+(available[1]-height)//2)
+            im.paste(source.resize((width,height),Image.Resampling.LANCZOS),pos)
+            source_imprint(im,spec['credit'])
+            return im
+        im=camera(source,(W,H),q,self.i%2==1)
         im.paste(shade(W,H),(0,0),shade(W,H))
         d=ImageDraw.Draw(im)
         typeblock(d,56,515,title or self.head,1130,57,WHITE,'bold',2)
@@ -301,6 +315,30 @@ class Sequence:
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)
         return im
+    def subset(self,t):
+        chart=self.b['chart']
+        image=Image.new('RGB',(W,H),'#101114')
+        draw=ImageDraw.Draw(image)
+        typeblock(draw,70,54,self.head,1138,62,WHITE,'title',2)
+        typeblock(draw,70,192,format(chart['total'],','),520,88,WHITE,'title',1)
+        typeblock(draw,72,297,chart['totalLabel'],520,34,WHITE,lines=2)
+        left,right,top,bottom=73,1207,407,468
+        draw.rectangle((left,top,right,bottom),fill='#535660')
+        reveal=self.b.get('revealAt',1.2)
+        if t>=reveal:
+            fraction=chart['count']/chart['total']
+            travel=ease((t-reveal)/.72)
+            width=round((right-left)*fraction*travel)
+            if width:
+                draw.rectangle((left,top,left+width,bottom),fill=PALETTE[0])
+            typeblock(draw,688,192+round(12*(1-travel)),format(chart['count'],','),510,88,PALETTE[0],'title',1)
+            typeblock(draw,690,297,chart['countLabel'],512,34,WHITE,lines=2)
+            if travel>.95:
+                typeblock(draw,72,490,f"{fraction:.1%} of the sample",1120,34,WHITE,lines=1)
+        typeblock(draw,72,586,self.caption,1120,31,WHITE,lines=2)
+        typeblock(draw,72,666,publisher(self.source),1120,20,'#d4d6db',lines=1)
+        return image
+
     def response_window(self,t):
         chart=self.b['chart']
         image=Image.new('RGB',(W,H),'#101217')
@@ -363,6 +401,7 @@ class Sequence:
             layout=self.b['chart'].get('layout')
             if layout=='profile':drawing=self.profile(t,length)
             elif layout=='response-window':drawing=self.response_window(t)
+            elif layout=='subset':drawing=self.subset(t)
             else:drawing=self.plot(t)
             return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
         if self.kind in ('document','quote'):

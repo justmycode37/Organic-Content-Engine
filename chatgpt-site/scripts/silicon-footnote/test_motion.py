@@ -150,6 +150,19 @@ class DocumentaryTests(unittest.TestCase):
                 events=[at for at,index in events]
             self.assertEqual([at+times[0] for at in events],[line.index(cue)/4 for cue in cues])
 
+    def test_subset_reveals_true_proportion_on_cue(self):
+        from film import Sequence, PALETTE
+        from PIL import ImageColor
+        from pathlib import Path
+        beat={'kind':'chart','narration':'candidate count','source':0,'labels':['Signals'],'title':'Candidate catalog','revealAt':2,
+              'chart':{'layout':'subset','total':147568,'count':7330,'totalLabel':'Unlabeled signals','countLabel':'Candidate signals'},
+              'art':{'headline':'Candidate catalog','caption':'Two-minute survey'}}
+        seq=Sequence(Path('.'),beat,{'sources':[{'url':'https://example.org/study'}]},0)
+        rgb=ImageColor.getrgb(PALETTE[0])
+        for time,expected in [(1.9,0),(3,round(1134*7330/147568)+1)]:
+            row=np.asarray(seq.subset(time))[430]
+            self.assertEqual(int(np.all(row==rgb,axis=1).sum()),expected)
+
     def test_response_percentage_waits_for_narration(self):
         from film import Sequence
         from pathlib import Path
@@ -162,6 +175,14 @@ class DocumentaryTests(unittest.TestCase):
         after=np.asarray(seq.response_window(2.65).crop(area))
         self.assertEqual(len(np.unique(before.reshape(-1,3),axis=0)),1)
         self.assertGreater(len(np.unique(after.reshape(-1,3),axis=0)),2)
+
+    def test_broll_offsets_respect_logged_clean_ranges(self):
+        from footage import reserve_footage
+        beats=[{'kind':'footage','clip':0,'clipStart':0},
+               {'kind':'footage','clip':0,'clipStart':18},
+               {'kind':'footage','clip':0,'clipStart':2,'originalSpeech':True}]
+        reserve_footage(beats,[4,5,2],[{'coverage':[{'start':8,'end':20}]}],{0:30})
+        self.assertEqual([shot['clipStart'] for shot in beats],[8,12,2])
 
     def test_camera_moves_in_both_directions(self):
         from film import camera
