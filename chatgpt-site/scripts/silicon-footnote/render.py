@@ -4,7 +4,7 @@ import json
 from concurrent.futures import ThreadPoolExecutor
 from film import Sequence,lower
 from score import score
-from credits import write_credits
+from credits import write_credits,closing_cards
 from timeline import assemble
 from footage import place_footage, choose_title_position
 from captions import render_captions
@@ -25,12 +25,14 @@ def render(root):
     full_hd=plan.get('style')=='reported-footage' and not captioned
     if captioned:render_captions(root,plan,timing)
     plan,timing,voice=assemble(root,plan,timing,pack)
-    tail=4.5 if plan.get('style')=='reported-footage' else 0
+    cards=closing_cards(plan,pack) if plan.get('style')=='reported-footage' else []
+    tail=4.5*len(cards) if plan.get('style')=='reported-footage' else 0
     if tail:
         last_index=next(i for i in reversed(range(len(plan['beats']))) if plan['beats'][i]['kind']=='footage' and not plan['beats'][i].get('originalSpeech'))
         last=plan['beats'][last_index]
-        plan['beats'].append({**last,'closing':True,'originalSpeech':False,'clean':False,'clipStart':last.get('clipStart',0)+timing[last_index]})
-        timing.append(tail)
+        for i,card in enumerate(cards):
+            plan['beats'].append({**last,'closing':True,'creditCard':card,'titlePosition':'upper-left','originalSpeech':False,'clean':False,'clipStart':last.get('clipStart',0)+timing[last_index]+4.5*i})
+            timing.append(4.5)
     if plan.get('style')=='reported-footage':
         place_footage(root,plan['beats'],timing,pack['clips'])
         speakers=set()
@@ -57,7 +59,12 @@ def render(root):
         for view in [beat,beat.get('insert') or {},*(beat.get('comparison') or [])]:
             media=(root/f"image-{view['image']}.png" if view.get('image') is not None else None)
             if view is beat and beat['kind']=='footage':media=root/f"clip-{beat['clip']}.mp4"
-            if view is beat and beat['kind'] in ('document','quote') and modern:media=root/f"press-{beat['source']}.png"
+            if view is beat and beat['kind'] in ('document','quote') and modern:
+                phrase=beat.get('quote','') if beat['kind']=='quote' and '/status/' not in pack['sources'][beat['source']]['url'] else ''
+                suffix='-'+hashlib.sha256(phrase.encode()).hexdigest()[:10] if phrase else ''
+                media=root/f"press-{beat['source']}{suffix}.png"
+                meta=media.with_suffix('.png.json')
+                if meta.exists():signature.update(meta.read_bytes())
             if media and media.exists():signature.update(str(media.stat().st_mtime_ns).encode())
         path=root/f'edit-{i}-{signature.hexdigest()[:12]}.mp4'
         cuts.append(f"file '{path.name}'")
@@ -74,10 +81,14 @@ def render(root):
             duration=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',media]))
             offset=round(min(beat.get('clipStart',(i*7.31)%max(1,duration-length)),max(0,duration-length)),3)
             width,height=(1920,1080) if full_hd else (W,H)
-            graph=f'[0:v]fps={FPS},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[v]'
+            select=''
+            if beat.get('trimFlashes'):
+                windows='+'.join(f'between(t,{a:.6f},{b:.6f})' for a,b in beat['trimFlashes'])
+                select=f",select='not({windows})',setpts=N/({FPS}*TB)"
+            graph=f'[0:v]fps={FPS}{select},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[v]'
             layer=['-framerate',str(FPS),'-loop','1','-i',overlay]
             if modern:
-                hold=min(length,4.7 if beat.get('originalSpeech') else 4.0)
+                hold=length if beat.get('closing') else min(length,4.7 if beat.get('originalSpeech') else 4.0)
                 exit_start=max(.12,hold-.32)
                 graph+=f";[1:v]scale={width}:{height},format=rgba,fade=t=in:st=0:d=0.28:alpha=1,fade=t=out:st={exit_start}:d=0.30:alpha=1[tag]"
                 distance=16 if beat.get('originalSpeech') or beat.get('titlePosition','').startswith('lower') else -12

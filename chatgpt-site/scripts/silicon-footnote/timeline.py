@@ -1,12 +1,25 @@
 """Edit picture on speech cues and insert attributed original sound at native speed."""
 import json
 import subprocess
+import re
 import wave
+
+def speech_loudness(pcm,sr):
+    meter=subprocess.run(['ffmpeg','-hide_banner','-nostats','-f','s16le','-ar',str(sr),'-ac','1','-i','pipe:0','-af','ebur128','-f','null','-'],input=pcm,stderr=subprocess.PIPE,check=True)
+    matches=re.findall(rb'I:\s+(-?[\d.]+) LUFS',meter.stderr)
+    return float(matches[-1]) if matches else -70
+
+def match_interview(pcm,nearby,sr):
+    # Match the actual surrounding native take, then retain headroom for the handheld microphone.
+    source,target=speech_loudness(pcm,sr),speech_loudness(nearby,sr)
+    gain=max(-10,min(10,target-source)) if min(source,target)>-55 else 0
+    filt=f'volume={gain:.3f}dB,alimiter=limit=0.89:level=0:latency=1,afade=t=in:d=0.008,afade=t=out:st={max(0,len(pcm)/(sr*2)-.012):.6f}:d=0.012'
+    return subprocess.check_output(['ffmpeg','-v','error','-f','s16le','-ar',str(sr),'-ac','1','-i','pipe:0','-af',filt,'-f','s16le','-'],input=pcm)
 
 def assemble(root,plan,durations,pack):
     beats,times=[],[]
     original_voice=root/'voice.wav'
-    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') for b in plan['beats']):
+    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') or (b.get('chart') or {}).get('revealCue') for b in plan['beats']):
         return plan,durations,original_voice
     aligned=json.loads((root/'alignment.json').read_text()) if (root/'alignment.json').exists() else []
     have_sound=any(b.get('actuality') for b in plan['beats'])
@@ -24,6 +37,7 @@ def assemble(root,plan,durations,pack):
             if .35<t<duration-.35:
                 shot={**base,**cut,'art':{**base['art'],'headline':cut['title'],**cut.get('art',{})}}
                 shot.pop('comparison',None)
+                if cut.get('kind')!='chart':shot.pop('chart',None)
                 if 'process' not in cut:shot.pop('process',None)
                 if 'quote' not in cut:shot['quote']=''
                 if cut['kind']=='footage' and 'clipStart' not in cut:
@@ -48,6 +62,11 @@ def assemble(root,plan,durations,pack):
             shots=retained
         for j,(start,shot) in enumerate(shots):
             length=(shots[j+1][0] if j+1<len(shots) else duration)-start
+            if shot.get('kind')=='chart' and (cue:=(shot.get('chart') or {}).get('revealCue')):
+                a=aligned[i] if i<len(aligned) else {}
+                pos=a.get('text','').lower().find(cue.lower())
+                if pos<0:raise ValueError(f'Missing chart reveal cue: {cue}')
+                shot={**shot,'revealAt':max(0,a['starts'][pos]-start)}
             if length>=1/24:beats.append(shot);times.append(length)
         a=b.get('actuality')
         if a:
@@ -62,11 +81,13 @@ def assemble(root,plan,durations,pack):
             dest.setparams(src.getparams());sr=src.getframerate();elapsed=0
             for duration,a in positions:
                 elapsed+=duration;count=min(src.getnframes(),round(elapsed*sr))-src.tell()
-                dest.writeframes(src.readframes(count))
+                narration=src.readframes(count)
+                dest.writeframes(narration)
                 if a:
                     n=round((a['end']-a['start'])*sr)
-                    pcm=subprocess.check_output(['ffmpeg','-v','error','-ss',str(a['start']),'-i',root/f"clip-{a['clip']}.mp4",'-t',str(a['end']-a['start']),'-vn','-af','highpass=f=65,loudnorm=I=-19:TP=-2:LRA=10','-ar',str(sr),'-ac','1','-f','s16le','-'])
+                    pcm=subprocess.check_output(['ffmpeg','-v','error','-ss',str(a['start']),'-i',root/f"clip-{a['clip']}.mp4",'-t',str(a['end']-a['start']),'-vn','-af','highpass=f=65','-ar',str(sr),'-ac','1','-f','s16le','-'])
                     if abs(len(pcm)//2-n)>.08*sr:raise ValueError('Original-sound selection exceeds available media')
+                    pcm=match_interview(pcm,narration[-sr*2*8:],sr)
                     dest.writeframes(pcm[:n*2].ljust(n*2,b'\0'))
     edited={**plan,'beats':beats}
     return edited,times,voice

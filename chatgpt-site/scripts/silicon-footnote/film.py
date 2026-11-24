@@ -35,7 +35,7 @@ def face(size,style='sans'):
 
 def typeblock(draw,x,y,text,width,size,color=IVORY,style='sans',lines=3,leading=1.12):
     if not text:return y
-    if any(c in '₀₁₂₃₄₅₆₇₈₉' for c in text):
+    if any(c in '₀₁₂₃₄₅₆₇₈₉·×' for c in text) and style!='title':
         style='scientific'
     for pts in range(size,13,-1):
         f=face(pts,style);rows=wrap(text,f,width)
@@ -95,8 +95,9 @@ def lower(beat,credit):
         typeblock(d,x+26,524,person,boxw-52,53,WHITE,'title',1)
         typeblock(d,x+27,590,role,boxw-52,34,WHITE,'sans',1)
         return im
-    label='Sources & footage' if beat.get('closing') else (name.get('name') or beat['title'])
-    details=readable_credit(credit) if beat.get('closing') else '  ·  '.join(v for v in (name.get('date'),name.get('role')) if v)
+    card=beat.get('creditCard') or {}
+    label=card.get('title','Sources & footage') if beat.get('closing') else (name.get('name') or beat['title'])
+    details=card.get('text',readable_credit(credit)) if beat.get('closing') else '  ·  '.join(v for v in (name.get('date'),name.get('role')) if v)
     anchor=beat.get('titlePosition','upper-left')
     bottom=anchor.startswith('lower')
     right=anchor.endswith('right')
@@ -168,7 +169,8 @@ class Sequence:
             d.line((x0,y,x1,y),fill='#424550',width=1)
             d.text((x0-15,y),format(v,'.4g'),font=face(24),anchor='rm',fill='#cbd0d8')
         for i,label in enumerate(c['axis']):
-            x=x0+(x1-x0)*i/(len(c['axis'])-1)
+            fraction=c['axisIndices'][i]/(len(c['series'][0]['values'])-1) if c.get('axisIndices') else i/(len(c['axis'])-1)
+            x=x0+(x1-x0)*fraction
             d.text((x,y1+16),label,font=face(25),anchor='mt',fill='#eeeff3')
         stop=c.get('until',1)*ease(min(1,t/max(.8,min(length*.48,3))))
         for i,series in enumerate(c['series']):
@@ -183,11 +185,21 @@ class Sequence:
                 val=data[k] if c.get('steps') else data[k]+(end-k)*(data[k+1]-data[k])
                 points.append((x0+(x1-x0)*stop,y1-(y1-y0)*(val-lo)/(hi-lo)))
             if len(points)>1:d.line(points,fill=color,width=7,joint='curve')
-            x,y=points[-1];d.ellipse((x-6,y-6,x+6,y+6),fill=WHITE,outline=color,width=3)
+            if 'markerIndex' in c:
+                marker=c['markerIndex']
+                if end>=marker and t>=self.b.get('revealAt',0):
+                    x=x0+(x1-x0)*marker/(len(data)-1);y=y1-(y1-y0)*(data[marker]-lo)/(hi-lo)
+                    d.line((x,y+10,x,y1),fill='#818596',width=2)
+                    d.ellipse((x-10,y-10,x+10,y+10),fill=WHITE,outline=color,width=4)
+                    label=f'{data[marker]:.2f} {c.get("markerUnit","")}'.strip()
+                    where='rm' if x>x1-150 else 'lm'
+                    d.text((x+(-15 if where=='rm' else 15),y-17),label,font=face(25,'title'),fill=WHITE,stroke_width=2,stroke_fill='#101217',anchor=where)
+            else:
+                x,y=points[-1];d.ellipse((x-6,y-6,x+6,y+6),fill=WHITE,outline=color,width=3)
             d.line((70+i*395,218,108+i*395,218),fill=color,width=6)
             typeblock(d,119+i*395,205,series['label'],350,26,WHITE,lines=1)
-        typeblock(d,70,606,self.caption,1140,30,WHITE,'bold',2)
-        typeblock(d,70,675,publisher(self.source),1100,20,'#d4d6db',lines=1)
+        if t>=self.b.get('revealAt',0):typeblock(d,70,606,self.caption,1140,30,WHITE,'bold',2)
+        typeblock(d,70,675,'Illustration · hypothetical customers' if c.get('illustrative') else publisher(self.source),1100,20,'#d4d6db',lines=1)
         return im
 
     def plot(self,t):

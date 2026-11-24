@@ -48,7 +48,7 @@ export async function capturePress(root,sources,indices){
      console.log('Captured public X post '+post[1]);continue;
     }else await page.goto(url,{waitUntil:'domcontentloaded',timeout:50000});
     await page.waitForLoadState('networkidle',{timeout:12000}).catch(()=>{});
-    const cookies=page.getByRole('button',{name:/^essential only$|^reject all$|^reject optional cookies$/i}).first();
+    const cookies=page.getByRole('button',{name:/^essential only$|^reject all$|^reject optional cookies$|^no,? thanks$|^ok,? got it$/i}).first();
     if(await cookies.isVisible().catch(()=>false))await cookies.click({timeout:2500}).catch(()=>{});
     const title=await page.title();
     if(/access denied|please verify|just a moment|checking your browser/i.test(title))throw Error('Publisher interstitial');

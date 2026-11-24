@@ -24,17 +24,21 @@ def score(path,timing,beats,pack=None):
             events.append((moment+.08,'sweep'))
             if b['kind']=='chart':
                 reveal=max(.8,min(timing[i]*.48,3)) if b['chart'].get('layout')=='profile' else 1.05
-                if reveal<timing[i]-.2:events.append((moment+reveal,'settle'))
+                reveal=b.get('revealAt',reveal)
+                if .12<reveal<timing[i]-.2:events.append((moment+reveal,'settle'))
         if b.get('insert'):events.append((moment+timing[i]*b['insert']['at'],'air'))
     rooms={}
     ambience=[]
     for i,b in enumerate(beats):
-        if not pack or b['kind']!='footage' or not pack['clips'][b['clip']].get('ambientSound'):continue
+        if not pack or b['kind']!='footage' or b.get('originalSpeech') or b.get('trimFlashes'):continue
+        clip=pack['clips'][b['clip']]
+        offset=b.get('clipStart',0)
+        if not clip.get('ambientSound') or not any(w['start']<=offset and offset+timing[i]<=w['end'] for w in clip.get('ambientRanges',[])):continue
         idx=b['clip']
         if idx not in rooms:
             pcm=subprocess.check_output(['ffmpeg','-v','error','-i',path.parent/f'clip-{idx}.mp4','-vn','-af','highpass=f=56,lowpass=f=6600','-ar',str(SR),'-ac','1','-f','f32le','-'])
             rooms[idx]=np.frombuffer(pcm,dtype='<f4')
-        offset=b.get('clipStart',0);room=rooms[idx][round(offset*SR):round((offset+timing[i])*SR)]
+        room=rooms[idx][round(offset*SR):round((offset+timing[i])*SR)]
         if len(room):
             rms=np.sqrt(np.mean(room**2))
             ambience.append((starts[i],room*min(1.6,.030/max(.001,rms))))
