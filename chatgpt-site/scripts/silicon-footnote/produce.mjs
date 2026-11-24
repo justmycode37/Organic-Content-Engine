@@ -23,7 +23,6 @@ export async function produce(dir,{topic='',sourceFile,reuseVoice}={}){
   const key=process.env.ELEVENLABS_API_KEY;
   if(!key)throw Error('Set ELEVENLABS_API_KEY on the production machine');
   const plan=await prepare(dir,topic,sourceFile),timing=[],tracks=[];
-  const thumbnails=prepareThumbnails(dir);
   const continuous=plan.beats.every(beat=>beat.art);
   if(continuous){
    const pages=plan.beats.flatMap(b=>[b,...(b.cutaways??[]).map(c=>({...c,source:c.source??b.source}))]).filter(b=>['document','quote'].includes(b.kind)).map(b=>b.kind==='quote'&&b.quote&&!/\/status\/\d+/.test(read(join(dir,'sources.json')).sources[b.source].url)?{source:b.source,quote:b.quote}:b.source);
@@ -44,14 +43,20 @@ export async function produce(dir,{topic='',sourceFile,reuseVoice}={}){
    }
    timing.push(duration(file));tracks.push(`file 'voice-${i}.wav'`);
   }
-  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.closingHold??0)+(plan.style==='reported-footage'?4.5*(plan.closingCredits?.length||2):0)+plan.beats.reduce((s,b)=>s+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
+  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.closingHold??0)+(plan.style==='reported-footage'?4.5*(plan.closingCredits?.length||2):0)+plan.beats.reduce((s,b)=>s+(b.readingHold??0)+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
   if(seconds<600||seconds>900)throw Error(`Native narration measures ${seconds.toFixed(1)}s outside 600–900s. Takes are saved for editorial revision.`);
   if(!continuous){writeFileSync(join(dir,'voice.list'),tracks.join('\n'));
   execFileSync('ffmpeg',['-v','error','-y','-f','concat','-safe','1','-i',join(dir,'voice.list'),'-c','copy',join(dir,'voice.wav')]);}
   await new Promise((ok,fail)=>{const p=spawn('python3',[join(here,'render.py'),dir],{stdio:'inherit'});p.on('error',fail);p.on('close',c=>c===0?ok():fail(Error('Renderer exited '+c)))});
   const output=join(dir,'episode.mp4');
   if(Math.abs(duration(output)-seconds)>.15)throw Error('Final picture and narration duration differ');
-  return {output,title:plan.title,seconds,thumbnails,sources:read(join(dir,'sources.json'))};
+  let thumbnails,thumbnailError;
+  try{thumbnails=await prepareThumbnails(dir);}
+  catch(error){
+   writeFileSync(join(dir,'thumbnail-error.txt'),String(error.message));
+   thumbnailError='Thumbnail generation stopped. The episode is ready for review.';
+  }
+  return {output,title:thumbnails?.[0]?.title??plan.title,seconds,thumbnails,thumbnailError,sources:read(join(dir,'sources.json'))};
  }finally{unlinkSync(lock);}
 }
 if(import.meta.url===pathToFileURL(process.argv[1]??'').href){

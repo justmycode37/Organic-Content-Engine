@@ -271,13 +271,13 @@ export function createApp(): Hono<AppEnv> {
   });
   app.post('/api/jobs/accounts/silicon/:id/complete',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id'));
-   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100),thumbnails:thumbnailManifest.optional()}));
+   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100),thumbnails:thumbnailManifest.optional(),thumbnailError:validator.string().max(150).optional()}));
    if(v.thumbnails){
     const stored=await Promise.all(v.thumbnails.map(({id})=>c.env.BUCKET!.head(thumbnailKey(e.id,id))));
     if(stored.some(object=>!object))throw new AppError(409,'thumbnail_missing','Upload both thumbnails before completing the episode');
    }
    await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).complete(v.parts);
-   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources,thumbnails:v.thumbnails});return c.json({ok:true});
+   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources,thumbnails:v.thumbnails,thumbnailError:v.thumbnailError});return c.json({ok:true});
   });
   app.post('/api/jobs/accounts/silicon/:id/fail',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id')),v=await readBody(c,validator.object({error:validator.string().max(300),uploadId:validator.string().optional()}));

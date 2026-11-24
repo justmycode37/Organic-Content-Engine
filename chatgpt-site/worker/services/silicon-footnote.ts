@@ -26,11 +26,12 @@ function thumbnailEntry(id:z.infer<typeof thumbnailId>){
  return z.object({
   id:z.literal(id),
   line:z.string().trim().min(1).max(90),
+  title:z.string().trim().min(1).max(100).optional(),
   credit:z.object({label:z.string().min(1).max(300),url:z.url({protocol:/^https$/})}).optional(),
  });
 }
 export const thumbnailKey=(episodeId:string,id:z.infer<typeof thumbnailId>)=>`silicon/${episodeId}/thumbnail-${id}.jpg`;
-export interface Episode {mediaId?:string;revision?:{original:string;previous:string};id:string;topic:string;status:'queued'|'producing'|'ready'|'failed'|'cancelled';created:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[];thumbnails?:z.infer<typeof thumbnailManifest>}
+export interface Episode {mediaId?:string;revision?:{original:string;previous:string};id:string;topic:string;status:'queued'|'producing'|'ready'|'failed'|'cancelled';created:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;thumbnailError?:string;sources?:{title:string;url:string}[];thumbnails?:z.infer<typeof thumbnailManifest>}
 export async function episodes(db:Db){
  const rows=await db.prepare("SELECT last_result FROM job_state WHERE name GLOB 'silicon-episode:*' AND json_type(last_result,'$.revision') IS NULL ORDER BY last_run_at DESC LIMIT 25").all<{last_result:string}>();
  return rows.results.map(r=>JSON.parse(r.last_result) as Episode);

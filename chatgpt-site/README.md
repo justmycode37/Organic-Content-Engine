@@ -170,9 +170,11 @@ matching Site code too: its completion gate validates the model/review profile.
 Use the [editorial foundation](scripts/silicon-footnote/EDITORIAL-FOUNDATION.md)
 for YouTube references, episode selection, and source-backed reporting briefs.
 The [thumbnail research](scripts/silicon-footnote/THUMBNAIL-RESEARCH.md) explains
-the two separately designed covers available for preview and download under
-**Episodes → YouTube thumbnails**. Standalone runs save the same JPEGs and
-their credit manifest beside the video.
+the two independently generated covers and their matching titles. Preview and
+download them under **Episodes → YouTube titles and thumbnails**. The Mac
+producer uses the signed-in Codex image generation tool, and saves both art
+files and export JPEGs beside the video. An image failure leaves the episode
+available for review with the packaging error saved in its production folder.
 
 Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
 workspace binds a unique channel named Silicon Footnote or The Silicon Footnote
