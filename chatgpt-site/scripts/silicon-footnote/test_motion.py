@@ -111,6 +111,48 @@ class DocumentaryTests(unittest.TestCase):
         cues=caption_cues({'beats':beats},[2,3],alignment)
         self.assertEqual(cues,[(0,2,'Here.'),(2,4,'First phrase.'),(4,6,'Second phrase.'),(6,9,'Next.')])
 
+    def test_reading_hold_preserves_narration_and_delays_next_caption(self):
+        import wave
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from captions import caption_cues
+        from timeline import assemble
+        beats = [{'kind':'image', 'narration':'First.', 'readingHold':.5},
+                 {'kind':'image', 'narration':'Next.'}]
+        plan = {'beats':beats}
+        first, second = b'\x14\x00' * 300, b'\x25\x00' * 300
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            with wave.open(str(root/'voice.wav'),'wb') as original:
+                original.setparams((1,2,1000,0,'NONE','not compressed'))
+                original.writeframes(first + second)
+            _, durations, broadcast = assemble(root,plan,[.3,.3],{})
+            self.assertEqual(durations,[.8,.3])
+            with wave.open(str(broadcast)) as audio:
+                self.assertEqual(audio.readframes(audio.getnframes()), first + bytes(1000) + second)
+        alignment = [{'text':b['narration'],'starts':[0]*len(b['narration'])} for b in beats]
+        cues = caption_cues(plan,[.3,.3],alignment)
+        self.assertEqual(cues,[(0,.3,'First.'),(.8,1.1,'Next.')])
+
+    def test_panorama_tracks_detail_with_overview_in_frame(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from PIL import Image, ImageDraw
+        from film import Sequence
+        with TemporaryDirectory() as folder:
+            root = Path(folder)
+            plate = Image.new('RGB',(1200,100),'red')
+            ImageDraw.Draw(plate).rectangle((600,0,1199,99),fill='blue')
+            plate.save(root/'image-0.png')
+            scene = Sequence(root,{'kind':'image','source':0,'art':{'headline':'Manuscript',
+                'caption':''},'labels':[],'narration':''},
+                {'sources':[{}],'images':[{'panorama':True,'credit':'Archive'}]},0)
+            for progress, detail_color in [(0,(255,0,0)), (1,(0,0,255))]:
+                frame = scene.image(0,progress)
+                self.assertEqual(frame.getpixel((640,415)),detail_color)
+                self.assertEqual(frame.getpixel((110,155)),(255,0,0))
+                self.assertEqual(frame.getpixel((1170,155)),(0,0,255))
+
     def test_nearby_spoken_cues_leave_readable_shots(self):
         from timeline import assemble
         from pathlib import Path

@@ -147,6 +147,27 @@ class Sequence:
     def image(self,idx,q,title=None):
         spec=self.pack['images'][idx]
         source=photo(self.root/f'image-{idx}.png')
+        if spec.get('panorama') and source.width/source.height>4:
+            # Keep the entire scientific plate visible above its moving detail.
+            im=Image.new('RGB',(W,H),'#151618')
+            draw=ImageDraw.Draw(im)
+            typeblock(draw,60,42,title or self.head,1160,48,WHITE,'title',1)
+            width=1160
+            overview_w=min(width,round(115*source.width/source.height))
+            overview_h=max(1,round(overview_w*source.height/source.width))
+            overview_x=(W-overview_w)//2
+            im.paste(source.resize((overview_w,overview_h),Image.Resampling.LANCZOS),(overview_x,120))
+            detail_h=330
+            span=source.height*width/detail_h
+            start=(source.width-span)*q
+            detail=source.resize((width,detail_h),Image.Resampling.BICUBIC,
+                                 box=(start,0,min(source.width,start+span),source.height))
+            im.paste(detail,(60,268))
+            left=overview_x+start*overview_w/source.width
+            right=overview_x+(start+span)*overview_w/source.width
+            draw.rectangle((left,118,right,122+overview_h),outline=PALETTE[0],width=3)
+            source_imprint(im,spec['credit'])
+            return im
         if spec.get('figure'):
             # Preserve axes, uncertainty bars and legends throughout the camera move.
             im=Image.new('RGB',(W,H),'#151618')
