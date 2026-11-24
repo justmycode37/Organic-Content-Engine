@@ -2,6 +2,7 @@
 import {readFile, rename, writeFile} from 'node:fs/promises';
 import {createHash, randomUUID} from 'node:crypto';
 import {basename, join, resolve} from 'node:path';
+import {HEDGY_SERIES_IDS} from '../worker/hedgy-policy.ts';
 import {hedgyPostCaptionSchema} from '../worker/hedgy-caption.ts';
 import {siteRequest, workerConfig} from './render-worker.mjs';
 
@@ -35,7 +36,7 @@ if (checking) {
  console.log(JSON.stringify(status));
 } else {
  const spec = JSON.parse(await readFile(join(dir, 'spec.json'), 'utf8'));
- if (spec.series !== 'HEDGY / FINANCE') throw new Error('A finished Hedgy reel is required.');
+ if (!HEDGY_SERIES_IDS.includes(spec.series)) throw new Error('A finished Hedgy reel is required.');
  const caption = hedgyPostCaptionSchema.parse(spec.postCaption);
  const bytes = await readFile(join(dir, 'finished.mp4'));
  const digest = createHash('sha256').update(bytes).update(caption).digest('hex');

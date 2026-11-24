@@ -2,6 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {generateHedgyReel} from '../worker/hedgy-generation.ts';
 import {hedgyPostCaptionSchema} from '../worker/hedgy-caption.ts';
+import {HEDGY_TOPIC,HEDGY_SERIES} from '../worker/hedgy-policy.ts';
+import {HEDGY_CONCEPTS} from '../worker/hedgy-ideas.ts';
+import {SHOT_NAMES,SHOT_ITEMS} from '../src/motion/shots/catalog.ts';
+import {isWorld} from '../src/motion/kit/world-ids.ts';
 const postCaption='The cheapest choice can still cost you more.\n\nHedgy buys just enough lemons for his stand, but a busy afternoon leaves him with customers he cannot serve. Keeping extra stock ties up money and risks waste. Keeping too little means missing sales when demand surprises him. The tradeoff is between the cost of holding a buffer and the cost of running out.\n\nA buffer does not have to cover every possible rush. It needs to reflect how unpredictable demand is and how quickly you can restock. That is the useful question behind the story: what would running out actually cost?\n\n#InventoryRisk #RiskManagement #FinanceExplained';
 test('missing API key blocks without subscription fallback',async()=>{await assert.rejects(generateHedgyReel({},'diversification'),e=>e.code==='api_key_missing')});
 const idea=input=>({concept:/Choose concept from exactly these ids: ([a-z-]+)/.exec(input)[1],angle:'Hedgy runs a lemonade stand.',setting:'a lemonade stand',heroItem:'lemonade',supportingItems:[],cast:['hedgy'],hook:'Ever run out of lemons?',music:'drive',musicBrief:'Darksynth chase at 136 BPM: distorted bass, hard drums, guitar stabs, building to a hit on the reveal.'});
@@ -57,6 +61,7 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  // idea, idea pick, story, fact, listener, viral critic, takeaway, plan, 12 specialists, assembly, scenes, storyboard critic, copy.
  assert.equal(calls.length,24);
  assert.equal(result.spec.look,'viral');
+ assert.equal(result.spec.series,HEDGY_SERIES);
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
  assert.ok(peak()<=4);
  assert.equal(result.spec.musicBrief,result.provenance.idea.musicBrief);
@@ -195,12 +200,30 @@ test('a correct story keeps its best shareability draft when the critic never ap
  assert.equal(result.provenance.editorial.storyRounds.length,5);
  assert.ok(result.provenance.editorial.storyRounds.every(round=>round.correct));
 });
-test('a reel is produced even when every model call fails',async t=>{
+test('the three researched stories remain drawable and postable without model responses',async t=>{
  t.mock.method(globalThis,'fetch',async()=>{throw new Error('network down');});
- const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk');
- assert.equal(parseReelSpec(result.spec).ok,true);
- assert.ok(result.spec.scenes.length>=2);
- assert.equal(result.provenance.editorial.storyboardFallback,'deterministic act storyboard');
+ const expectedShots={
+  'phantom-traffic-jam':['trafficwave','trafficwave','trafficwave'],
+  'pufferfish-sand-nest':['sandnest','sandnest','sandnest'],
+  'unclaimed-luggage':['baggage','act','baggage'],
+ };
+ for(const concept of HEDGY_CONCEPTS){
+  assert.ok(SHOT_ITEMS.includes(concept.heroItem),concept.id);
+  assert.ok(isWorld(concept.world),concept.id);
+  const shots=expectedShots[concept.id];
+  if(!shots)continue;
+  const history=HEDGY_CONCEPTS.filter(other=>other!==concept).map(other=>({concept:other.id,item:other.heroItem}));
+  const result=await generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,history);
+  assert.equal(result.provenance.idea.concept,concept.id);
+  assert.equal(result.spec.series,HEDGY_SERIES);
+  assert.equal(parseReelSpec(result.spec).ok,true);
+  assert.equal(hedgyPostCaptionSchema.safeParse(result.spec.postCaption).success,true);
+  assert.equal(result.provenance.editorial.storyboardFallback,'deterministic topic storyboard');
+  assert.equal(result.provenance.editorial.storyUnresolved,true);
+  assert.deepEqual(result.spec.scenes.map(scene=>scene.shot),shots);
+  assert.ok(shots.every(shot=>SHOT_NAMES.includes(shot)));
+  assert.equal(result.spec.scenes.map(scene=>scene.say).join(' '),[concept.hook,...concept.beats].join(' '));
+ }
 });
 test('a storyboard that never matches the schema still ends in a postable act storyboard',async t=>{
  mockHedgy(t,format=>format==='hedgy_reel'?{version:1}:undefined);
@@ -226,7 +249,7 @@ import {listAccounts,addAccount,updateAccount,accountPatch,accountCreate} from '
 test('account migration seeds Hedgy and settings are isolated',async()=>{
  const sql=new DatabaseSync(':memory:');for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort())sql.exec(readFileSync(new URL('../drizzle/'+name,import.meta.url),'utf8'));
  const db={async batch(statements){return Promise.all(statements.map(s=>s.run()));},prepare(q){let args=[];return {bind(...v){args=v;return this},async all(){return {results:sql.prepare(q).all(...args)}},async first(){return sql.prepare(q).get(...args)},async run(){return sql.prepare(q).run(...args)}}}};
- try{let rows=await listAccounts(db);assert.equal(rows[0].id,'hedgy');assert.equal(rows[0].postsPerDay,1);assert.equal(rows[0].health.state,'blocked');const b=await addAccount(db,accountCreate.parse({name:'Second'}));await updateAccount(db,b.id,accountPatch.parse({postsPerDay:3}));rows=await listAccounts(db);assert.equal(rows.find(x=>x.id==='hedgy').postsPerDay,1);assert.equal(rows.find(x=>x.id===b.id).postsPerDay,3);assert.ok(rows.every(a=>a.schedule.every(s=>Date.parse(s.scheduledAt)>Date.now())));assert.equal(accountPatch.safeParse({timezone:'unknown'}).success,false);}finally{sql.close()}
+ try{let rows=await listAccounts(db);assert.equal(rows[0].id,'hedgy');assert.equal(rows[0].topic,HEDGY_TOPIC);sql.prepare("UPDATE accounts SET value=json_set(value,'$.topic','Simple finance and market explainers') WHERE id='hedgy'").run();assert.equal((await listAccounts(db))[0].topic,HEDGY_TOPIC);assert.equal(rows[0].postsPerDay,1);assert.equal(rows[0].health.state,'blocked');const b=await addAccount(db,accountCreate.parse({name:'Second'}));await updateAccount(db,b.id,accountPatch.parse({postsPerDay:3}));rows=await listAccounts(db);assert.equal(rows.find(x=>x.id==='hedgy').postsPerDay,1);assert.equal(rows.find(x=>x.id===b.id).postsPerDay,3);assert.ok(rows.every(a=>a.schedule.every(s=>Date.parse(s.scheduledAt)>Date.now())));assert.equal(accountPatch.safeParse({timezone:'unknown'}).success,false);}finally{sql.close()}
 });
 import {parseReelSpec} from '../src/motion/spec.ts';
 import {drawChrome} from '../src/motion/chrome.ts';
@@ -284,9 +307,9 @@ test('the viral payoff chime follows the last spoken word, before caption paddin
 });
 
 test('ideation avoids concepts, items and moods used by earlier reels',async()=>{
- const {conceptCandidates,recentlyUsed,ideaProblems,HEDGY_CONCEPTS}=await import('../worker/hedgy-ideas.ts');
+ const {conceptCandidates,recentlyUsed,ideaProblems}=await import('../worker/hedgy-ideas.ts');
  const history=[{concept:'short-selling',item:'ticket',music:'tense'},{concept:'recall-risk',item:'ticket',music:'tense'}];
- const picks=conceptCandidates(history,5,()=>0.5);assert.equal(picks.length,5);assert.ok(picks.every(c=>!['short-selling','recall-risk'].includes(c.id)));
+ const picks=conceptCandidates(history,5,()=>0.5);assert.equal(picks.length,5);assert.deepEqual(new Set(picks.slice(0,3).map(c=>c.id)),new Set(['phantom-traffic-jam','pufferfish-sand-nest','unclaimed-luggage']));
  const all=HEDGY_CONCEPTS.map(c=>({concept:c.id}));assert.equal(conceptCandidates(all,1)[0].id,HEDGY_CONCEPTS.at(-1).id);
  assert.deepEqual(recentlyUsed(history),{items:['ticket'],moods:['drive']});
  const base={concept:picks[0].id,angle:'a',setting:'s',heroItem:'ticket',supportingItems:[],cast:['hedgy'],hook:'h',music:'tense',musicBrief:'x'.repeat(40)};

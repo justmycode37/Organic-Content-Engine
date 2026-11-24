@@ -1,52 +1,81 @@
 import {z} from 'zod';
 import {SHOT_ITEMS} from '../src/motion/shots/catalog.ts';
 
-/** Distinct, non-obvious finance mechanisms. Each reel explains exactly one; the account rotates through them. */
+/** Each entry gives the writer a factual starting point and a drawable story. */
 export const HEDGY_CONCEPTS=[
- {id:'short-selling',name:'Short selling: selling something borrowed and buying it back later'},
- {id:'short-squeeze',name:'Short squeeze: rising prices force short sellers to buy back'},
- {id:'recall-risk',name:'Recall risk: a lender can demand a borrowed asset back early'},
- {id:'bid-ask-spread',name:'Bid-ask spread: the gap between the buying and selling price'},
- {id:'liquidity',name:'Liquidity: how fast something can be sold without dropping the price'},
- {id:'compound-interest',name:'Compound interest: earning returns on earlier returns'},
- {id:'inflation',name:'Inflation: the same money buys less over time'},
- {id:'opportunity-cost',name:'Opportunity cost: the value of the best option you gave up'},
- {id:'leverage',name:'Leverage: borrowed money magnifies both gains and losses'},
- {id:'margin-call',name:'Margin call: a falling price forces you to add cash or sell'},
- {id:'insurance-premium',name:'Insurance and premiums: paying a small certain cost to avoid a large uncertain one'},
- {id:'protective-put',name:'Protective put: paying for the right to sell at a set price'},
- {id:'call-option',name:'Call option: paying a small fee for the right, not the obligation, to buy later'},
- {id:'futures-contract',name:'Futures contract: locking in a price today for a trade in the future'},
- {id:'arbitrage',name:'Arbitrage: buying cheap in one place and selling dear in another until the gap closes'},
- {id:'supply-demand-price',name:'Price discovery: how many buyers and few sellers set a price'},
- {id:'bond-price-rates',name:'Why bond prices fall when interest rates rise'},
- {id:'credit-risk',name:'Credit risk: the borrower might not pay back'},
- {id:'collateral',name:'Collateral: something pledged that the lender keeps if you do not repay'},
- {id:'bank-run',name:'Bank run: banks lend out deposits, so everyone withdrawing at once breaks them'},
- {id:'fractional-reserve',name:'Fractional reserve banking: one deposit becomes several loans'},
- {id:'dollar-cost-averaging',name:'Dollar-cost averaging: buying a fixed amount regularly buys more when prices are low'},
- {id:'volatility-drag',name:'Volatility drag: losing half needs a doubling to recover'},
- {id:'survivorship-bias',name:'Survivorship bias: you only hear about the winners'},
- {id:'market-maker',name:'Market makers: someone always willing to buy and sell, for a small spread'},
- {id:'stock-dilution',name:'Dilution: new shares make each slice of the company smaller'},
- {id:'stock-split',name:'Stock split: more slices of the same pie does not create value'},
- {id:'dividends',name:'Dividends: a company paying part of its profit to owners'},
- {id:'buybacks',name:'Share buybacks: fewer shares, bigger slice for remaining owners'},
- {id:'ipo',name:'IPO: a private company selling slices to the public for the first time'},
- {id:'fees-drag',name:'Fees: a small yearly fee compounds into a large missing amount'},
- {id:'currency-exchange',name:'Exchange rates: the same item costs different amounts in different currencies'},
- {id:'price-elasticity',name:'Price elasticity: some things people buy no matter the price, others they skip'},
- {id:'moral-hazard',name:'Moral hazard: being protected from risk makes people take more of it'},
- {id:'adverse-selection',name:'Adverse selection: the riskiest people are most eager to buy insurance'},
- {id:'bubble',name:'Bubbles: prices rising only because people expect them to keep rising'},
- {id:'panic-selling',name:'Panic selling: everyone selling at once pushes prices below fair value'},
- {id:'time-value-of-money',name:'Time value of money: a coin today is worth more than a coin next year'},
- {id:'yield-chasing',name:'Chasing yield: higher promised returns come with hidden risk'},
- {id:'counterparty-risk',name:'Counterparty risk: your contract is only as good as the one who signed it'},
- {id:'hedging-cost',name:'The cost of hedging: protection gives up some upside'},
- {id:'correlation-crash',name:'Correlation: in a crash, things that usually move apart fall together'},
+ {
+  id:'phantom-traffic-jam',lane:'everyday mysteries',name:'The traffic jam that moves backward',
+  heroItem:'car',setting:'a closed test track',world:'testtrack',tag:'PhantomTraffic',
+  hook:'How can a traffic jam travel backward?',
+  payoff:'The jam moves backward',
+  context:'Researchers reproduced the effect on a circular track without a junction or an obstacle. Small speed changes grew as drivers reacted to one another.',
+  beats:[
+   'On a circular track, every driver starts out moving forward.',
+   'When traffic is packed together, one small slowdown makes the next driver slow more.',
+   'Soon, each car moves forward again, but the next car back is stopping. The jam itself travels backward.',
+  ],
+  reveal:'Use trafficwave on the test track. A small slowdown grows into a backward-moving wave in dense traffic. Keep the same circulation direction and car count across shots.',
+  source:'https://hdl.handle.net/11094/93262',
+ },
+ {
+  id:'pufferfish-sand-nest',lane:'animal behavior',name:'The tiny fish that builds a giant circle',
+  heroItem:'pufferfish',setting:'the sandy seabed',world:'seabed',tag:'Pufferfish',
+  hook:'Why is this tiny fish digging in circles?',
+  payoff:'The circle is a nest',
+  context:'Researchers found that the ridges and grooves help gather fine sand in the centre, where the nest is used for spawning.',
+  beats:[
+   'On the seabed, a tiny pufferfish starts digging lines in the sand.',
+   'Over days, his fins push sand aside, groove by groove, until the circle is about two metres wide.',
+   'A female can inspect the finished nest when choosing a mate. That’s why he dug the circle.',
+  ],
+  reveal:'Use sandnest to follow a male white-spotted pufferfish cutting radial grooves with its fins and reveal the finished courtship nest. Keep the fish present through the reveal, with visitor enabled when the female arrives.',
+  source:'https://pmc.ncbi.nlm.nih.gov/articles/PMC3696902/',
+ },
+ {
+  id:'unclaimed-luggage',lane:'hidden journeys',name:'The store that sells what was in lost luggage',
+  heroItem:'suitcase',setting:'an airport and a baggage reseller',world:'airport',tag:'LostLuggage',
+  hook:'Where can a lost suitcase end up?',
+  payoff:'Some contents get a second life',
+  context:'Suitcases that arrive late are usually returned through the airline. The reseller describes receiving bags after a much longer search for their owners.',
+  beats:[
+   'Hedgy’s suitcase is circling a baggage belt. Hedgy is waiting at a different airport.',
+   'The airline tries to match the suitcase to its owner. Most delayed bags arrive, but a few stay unclaimed.',
+   'A U.S. reseller buys some unclaimed bags. It opens them and sorts the contents to sell, donate, or recycle.',
+  ],
+  reveal:'Use baggage in ride mode at the airport and inspect mode at the reseller. Follow the same suitcase through the search, explicitly mark time passing, and distinguish a rare unclaimed bag from a routine delay. Keep any example of the contents drawable.',
+  source:'https://www.unclaimedbaggage.com/pages/how-it-works',
+ },
+ {
+  id:'apple-cold-storage',lane:'everyday mysteries',name:'How a crisp apple can be months old',
+  heroItem:'apple',setting:'an orchard, cold storage and a grocery shop',world:'shop',tag:'AppleStorage',
+  hook:'How can this crisp apple be months old?',
+  payoff:'Cold and low oxygen buy time',
+  context:'The storage conditions are controlled after harvest so that fruit can reach a shop well beyond the picking season.',
+  beats:[
+   'Hedgy picks a crisp apple long after harvest season.',
+   'Some growers keep apples refrigerated in sealed rooms with very little oxygen.',
+   'The cold and low oxygen slow how quickly the fruit uses up its stored sugars and ripens. That gives the same apple more time to reach the shop in good condition.',
+  ],
+  reveal:'Use the same apple at harvest, in cold storage, and at the shop. Show time passing and label the low-oxygen room. Avoid claiming the apple stops changing altogether.',
+  source:'https://www.ars.usda.gov/research/publications/publication/?seqNo115=169263',
+ },
+ {
+  id:'sneakers-at-sea',lane:'hidden journeys',name:'The lost sneakers that mapped ocean currents',
+  heroItem:'sneaker',setting:'a beach and the open ocean',world:'park',tag:'OceanCurrents',
+  hook:'Why did brand-new sneakers wash up on a beach?',
+  payoff:'Lost shoes traced ocean currents',
+  context:'The locations of the spill and the beach finds gave researchers real observations to compare with models of surface currents.',
+  beats:[
+   'After a ship lost containers in a Pacific storm, sneakers started washing up along the coast.',
+   'The shoes floated. Winds and surface currents carried them away from where the containers fell overboard.',
+   'Researchers used the spill and where shoes washed ashore to study that drift. A lost sneaker became a clue to how the ocean moves.',
+  ],
+  reveal:'Follow one representative sneaker from a shipping crate to the coast, then widen to show how the landing places became clues. Avoid inventing the route of any individual shoe.',
+  source:'https://sos.noaa.gov/catalog/live-programs/go-with-the-flow-the-hansa-carriers-lost-shoes/',
+ },
 ] as const;
-export type HedgyConceptId=(typeof HEDGY_CONCEPTS)[number]['id'];
+export type HedgyConcept=(typeof HEDGY_CONCEPTS)[number];
+export type HedgyConceptId=HedgyConcept['id'];
 /** Hedgy keeps action and forward motion, led by a clear melody rather than trailer drama. */
 export const HEDGY_MOODS=['drive','tense'] as const;
 export const HEDGY_MUSIC_STYLE='Energetic, melodic electronic / experimental indie instrumental with strong rhythmic drive and a clearly audible melodic hook. Favor fast, percussive piano-like or slightly gritty electric-keyboard patterns, answering synth phrases, syncopated accents, moving warm bass and tight supporting drums. Roughly 90–120 BPM with brisk double-time melodic motion; vary the lead, rhythm and harmony between stories. Keep plenty of action and forward momentum, with slightly less cinematic drama: controlled builds, no huge trailer booms or aggressive industrial distortion. Leave space for narration. Never sparse slow solo piano, ambient meditation, sleepy lo-fi, cute whimsy or orchestral comedy; no vocals.';
@@ -69,14 +98,19 @@ export type HedgyIdea=z.infer<typeof ideaSchema>;
 
 const shuffle=<T,>(list:readonly T[],random:()=>number)=>{const a=[...list];for(let i=a.length-1;i>0;i--){const j=Math.floor(random()*(i+1));[a[i],a[j]]=[a[j]!,a[i]!];}return a;};
 
-/** Concepts never used before come first (random order); otherwise the least recently used. */
+/** Unused stories first. Move the last reel's lane down when there are other fresh stories. */
 export function conceptCandidates(history:HedgyHistoryEntry[],count=5,random=Math.random){
- const used=history.map(h=>h.concept).filter(Boolean) as string[];
- const fresh=shuffle(HEDGY_CONCEPTS.filter(c=>!used.includes(c.id)),random);
- if(fresh.length>=count)return fresh.slice(0,count);
- const lastUse=(id:string)=>used.indexOf(id);// history is newest first; a larger index = longer ago
- const old=HEDGY_CONCEPTS.filter(c=>used.includes(c.id)).sort((a,b)=>lastUse(b.id)-lastUse(a.id));
- return [...fresh,...old].slice(0,count);
+ const lastUse=(id:string)=>history.findIndex(h=>h.concept===id);
+ const firstKnown=history.map(h=>HEDGY_CONCEPTS.find(c=>c.id===h.concept)).find(Boolean);
+ const fresh=HEDGY_CONCEPTS.filter(c=>lastUse(c.id)<0);
+ const pilotIds=new Set<string>(HEDGY_CONCEPTS.slice(0,3).map(c=>c.id));
+ const freshOrdered=shuffle(fresh,random).sort((a,b)=>
+  Number(a.lane===firstKnown?.lane)-Number(b.lane===firstKnown?.lane)||
+  Number(pilotIds.has(b.id))-Number(pilotIds.has(a.id)));
+ const primary=freshOrdered.filter((c,i)=>freshOrdered.findIndex(other=>other.lane===c.lane)===i);
+ const alternatives=freshOrdered.filter(c=>!primary.includes(c));
+ const old=HEDGY_CONCEPTS.filter(c=>lastUse(c.id)>=0).sort((a,b)=>lastUse(b.id)-lastUse(a.id));
+ return [...primary,...alternatives,...old].slice(0,count);
 }
 /** Items and moods that the next reel must avoid. */
 export function recentlyUsed(history:HedgyHistoryEntry[]){

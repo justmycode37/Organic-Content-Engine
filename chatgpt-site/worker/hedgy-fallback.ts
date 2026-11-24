@@ -3,22 +3,23 @@
 // unresolved in provenance so the shortfall stays visible; they never replace an approved result.
 import {SHOT_CATALOG} from '../src/motion/shots/catalog.ts';
 import {WORLDS,isWorld,type WorldId} from '../src/motion/kit/world-ids.ts';
-import {HEDGY_MUSIC_STYLE,type HedgyIdea} from './hedgy-ideas.ts';
+import {HEDGY_SERIES} from './hedgy-policy.ts';
+import {HEDGY_MUSIC_STYLE,type HedgyConcept,type HedgyIdea} from './hedgy-ideas.ts';
 
-const SAFE_ITEMS=['cash','coffeeCup','smartphone','bread','car','house','pizza','bike','laptop','sneaker'];
-
-/** An idea when ideation never produced a valid one: the first eligible concept with an unused everyday item. */
-export function fallbackIdea(concept:{id:string;name:string},usedItems:readonly string[],mood:'drive'|'tense'):HedgyIdea{
- const heroItem=(SAFE_ITEMS.find(i=>!usedItems.includes(i))??'cash') as HedgyIdea['heroItem'];
- const short=concept.name.split(':')[0]!.trim();
- return {concept:concept.id,angle:`Hedgy meets ${short.toLowerCase()} in an everyday purchase and finds out why it changes what he pays.`.slice(0,240),setting:'a neighbourhood shop',heroItem,supportingItems:['cash'] as HedgyIdea['supportingItems'],cast:['hedgy','clerk'],hook:`Why does ${short.toLowerCase()} cost Hedgy money?`.slice(0,160),music:mood,musicBrief:`Driving electronic score, about 110 BPM, with a bright keyboard hook and warm bass; builds into the reveal. ${HEDGY_MUSIC_STYLE}`.slice(0,400)};
+/** If ideation runs out of attempts, keep one complete, renderable premise. */
+export function fallbackIdea(concept:HedgyConcept,mood:'drive'|'tense'):HedgyIdea{
+ return {
+  concept:concept.id,angle:concept.beats.join(' ').slice(0,240),setting:concept.setting,
+  heroItem:concept.heroItem,supportingItems:[],cast:['hedgy'],hook:concept.hook,music:mood,
+  musicBrief:`Driving electronic score, about 110 BPM, with a bright keyboard hook and warm bass; builds into the reveal. ${HEDGY_MUSIC_STYLE}`.slice(0,400),
+ };
 }
 
 /** Pick the world the idea's setting names, otherwise a shop. */
-export function worldFor(setting:string):WorldId{
+export function worldFor(setting:string,fallback:WorldId='shop'):WorldId{
  const s=setting.toLowerCase();
  const hit=WORLDS.find(w=>s.includes(w))??(/(bakery|store|grocer|counter)/.test(s)?'shop':/(coffee|café)/.test(s)?'cafe':/(apartment|house|flat|room)/.test(s)?'home':/(car|dealer)/.test(s)?'carlot':/(stock|trading)/.test(s)?'exchange':/(street|town|city)/.test(s)?'street':undefined);
- return hit??'shop';
+ return hit??fallback;
 }
 
 /** Split narration into 8–12 phrase-sized lines without changing a single spoken word. */
@@ -37,27 +38,41 @@ export function splitNarration(narration:string,target=10){
  return lines.map(l=>l.join(' '));
 }
 
-const MOVES=[
- [{event:1,action:'walk-in',who:'left'},{event:2,action:'point',who:'left'}],
- [{event:1,action:'appear'},{event:2,action:'shock',who:'left'}],
- [{event:1,action:'give',who:'left'},{event:2,action:'celebrate',who:'right'}],
- [{event:1,action:'shake'},{event:2,action:'shock',who:'left'}],
- [{event:1,action:'grow'},{event:2,action:'point',who:'right'}],
- [{event:1,action:'take',who:'right'},{event:2,action:'shock',who:'left'}],
- [{event:1,action:'stamp',word:'WHY?'},{event:2,action:'jump',who:'left'}],
- [{event:1,action:'shrink'},{event:2,action:'point',who:'left'}],
-];
-/** A storyboard built only from the always-valid act shot, one phrase per shot. */
-export function fallbackStoryboard(o:{narration:string;idea:HedgyIdea;hook:string;payoff:string;title:string;postCaption:string;music:'drive'|'tense'|'chill'|'bright';musicBrief?:string}){
- const world=worldFor(o.idea.setting),lines=splitNarration(o.narration);
- const other=o.idea.cast.find(c=>c!=='hedgy')??'clerk';
+/** For prepared narration, the causal beats have fixed shot and event handoffs. */
+const topicShots:Partial<Record<HedgyConcept['id'],readonly {shot:string;mode:string;cues:readonly string[];world?:WorldId;visitor?:boolean;actor?:'clerk'}[]>>={
+ 'phantom-traffic-jam':[
+  {shot:'trafficwave',mode:'circulate',cues:[]},
+  {shot:'trafficwave',mode:'brake',cues:['slowdown']},
+  {shot:'trafficwave',mode:'wave',cues:['stopping']},
+ ],
+ 'pufferfish-sand-nest':[
+  {shot:'sandnest',mode:'trace',cues:['digging']},
+  {shot:'sandnest',mode:'build',cues:['groove']},
+  {shot:'sandnest',mode:'reveal',visitor:true,cues:['female','inspect']},
+ ],
+ 'unclaimed-luggage':[
+  {shot:'baggage',mode:'ride',cues:[]},
+  {shot:'act',mode:'',actor:'clerk',cues:['match']},
+  {shot:'baggage',mode:'inspect',world:'shop',cues:['opens']},
+ ],
+};
+
+/** Stage known beats directly, or preserve the reviewed narration with its visible anchor. */
+export function fallbackStoryboard(o:{narration:string;idea:HedgyIdea;concept:HedgyConcept;approvedBeats:string[];preparedStory:boolean;hook:string;payoff:string;title:string;postCaption:string;music:'drive'|'tense'|'chill'|'bright';musicBrief?:string}){
+ const prepared=o.preparedStory?topicShots[o.concept.id]:undefined;
+ const phrases=splitNarration(o.narration);
+ const lines=prepared||phrases.length<2?o.approvedBeats:phrases;
+ const world=prepared?o.concept.world:worldFor(o.idea.setting,o.concept.world);
  const scenes=lines.map((say,i)=>{
-  const keyword=say.split(/\s+/).map(w=>w.replace(/[^A-Za-z$0-9]/g,'')).filter(w=>w.length>3).slice(-2);
-  const moves=MOVES[i%MOVES.length]!.map(m=>m.action==='stamp'?{...m,word:(keyword.at(-1)??'WHY').toUpperCase().slice(0,12)}:m);
-  const leftItem=moves.some(m=>m.action==='give')?o.idea.heroItem:undefined;
-  return {type:'shot' as const,shot:'act',duration:2.5,transition:i?'cut' as const:undefined,params:{world:i===lines.length-1&&world!=='street'?world:world,left:'hedgy',right:other,item:leftItem?undefined:o.idea.heroItem,...(leftItem?{leftItem}:{}),moves},sync:keyword.map((word,k)=>({word,kind:`beat${k+1}`})),say};
+  const beat=prepared?.[i];
+  const cues=beat?.cues??say.split(/\s+/).map(w=>w.replace(/[^A-Za-z0-9]/g,'')).filter(w=>w.length>3).slice(-1);
+  const shot=beat?.shot??'act';
+  const params=shot==='act'
+   ?{world,left:beat?.actor??'hedgy',right:'none',item:o.idea.heroItem,moves:[{event:1,action:'point',who:'left'}]}
+   :{world:beat?.world??world,mode:beat?.mode,...(beat?.visitor?{visitor:true}:{})};
+  return {type:'shot' as const,shot,duration:3.5,transition:i?'cut' as const:undefined,params,sync:cues.map((word,k)=>({word,kind:`beat${k+1}`})),say};
  });
- return {version:1 as const,title:o.title.slice(0,90),postCaption:o.postCaption,series:'HEDGY / FINANCE' as const,mode:'dark' as const,accent:'mono' as const,music:o.music,...(o.musicBrief?{musicBrief:o.musicBrief}:{}),look:'viral' as const,hook:o.hook.slice(0,60),header:'HEDGY',payoff:o.payoff.slice(0,70),scenes};
+ return {version:1 as const,title:o.title.slice(0,90),postCaption:o.postCaption,series:HEDGY_SERIES,mode:'dark' as const,accent:'mono' as const,music:o.music,...(o.musicBrief?{musicBrief:o.musicBrief}:{}),look:'viral' as const,hook:o.hook.slice(0,60),header:o.concept.lane.toUpperCase(),payoff:o.payoff.slice(0,70),scenes};
 }
 
 /** Make a parsed-but-rejected storyboard renderable: drop params the shot never reads and fill missing fields. */
@@ -75,9 +90,14 @@ export function sanitizeStoryboard<T extends {scenes:{type:string;shot?:string;p
 }
 
 /** A valid post caption from the narration when copy generation never produced one. */
-export function fallbackCaption(narration:string,conceptName:string){
- const term=conceptName.split(':')[0]!.trim();
- const tag=`#${term.replace(/[^A-Za-z0-9]/g,'')}`;
- const body=`${narration}\n\n${term} in one line: ${conceptName.split(':').slice(1).join(':').trim()||term}. Watch for it the next time you pay, borrow or save, because it changes what the same money gets you. Share this with someone who would get caught by it.`;
- return `${body}\n\n${tag} #MoneyTips #PersonalFinance #FinanceExplained`;
+export function fallbackCaption(narration:string,concept:HedgyConcept){
+ const sentences=splitNarration(narration);
+ const first=sentences.shift()??concept.hook;
+ const rest=sentences.join(' ');
+ const paragraphs=[first,rest||concept.beats.join(' ')];
+ if(paragraphs.join(' ').split(/\s+/).length<60){
+  paragraphs.push(concept.context);
+  if(paragraphs.join(' ').split(/\s+/).length<60)paragraphs.push(concept.beats.join(' '));
+ }
+ return `${paragraphs.join('\n\n')}\n\n#${concept.tag} #AnimatedStories #HowItWorks`;
 }

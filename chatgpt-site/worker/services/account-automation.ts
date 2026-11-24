@@ -4,6 +4,7 @@ import {listAccounts,accountSlots,type Account} from './accounts.ts';
 import {Postiz} from './postiz.ts';
 import {accountNotice} from './account-notifications.ts';
 import {hasDefaultQuriozityProfile} from '../quriozity-model-policy.ts';
+import {HEDGY_SERIES_IDS,HEDGY_TOPIC} from '../hedgy-policy.ts';
 import {hedgyPostCaptionSchema} from '../hedgy-caption.ts';
 const now=()=>new Date().toISOString();
 const parse=(text:string|null)=>{try{return text?JSON.parse(text):{}}catch{return {}}};
@@ -82,7 +83,9 @@ export async function claimAccountJob(c:Container){
  const row=await c.db.prepare("UPDATE account_automation_jobs SET status='leased',lease_id=?,lease_until=?,attempts=attempts+1,updated_at=? WHERE id=(SELECT j.id FROM account_automation_jobs j JOIN accounts a ON a.id=j.account_id WHERE j.status='pending' AND j.scheduled_at<=? AND json_extract(a.value,'$.enabled')=1 AND a.id IN ('hedgy','quriozity') ORDER BY j.scheduled_at LIMIT 1) AND status='pending' RETURNING *").bind(lease,until,now(),now()).first<any>();
  if(!row)return {job:null};const a=await c.db.prepare('SELECT value FROM accounts WHERE id=?').bind(row.account_id).first<{value:string}>();
  const past=await c.db.prepare('SELECT spec,provenance FROM account_automation_jobs WHERE account_id=? AND id<>? AND spec IS NOT NULL ORDER BY scheduled_at DESC LIMIT 2000').bind(row.account_id,row.id).all<{spec:string;provenance:string|null}>();
- return {job:{id:row.id,lease,account:JSON.parse(a!.value),scheduledAt:row.scheduled_at,history:past.results.map(reelHistory)}};
+ const account=JSON.parse(a!.value) as Account;
+ if(account.id==='hedgy')account.topic=HEDGY_TOPIC;
+ return {job:{id:row.id,lease,account,scheduledAt:row.scheduled_at,history:past.results.map(reelHistory)}};
 }
 export async function accountLease(c:Container,id:string,lease:string){const row=await c.db.prepare("SELECT * FROM account_automation_jobs WHERE id=? AND lease_id=? AND status='leased' AND lease_until>?").bind(id,lease,now()).first<any>();if(!row)throw new AppError(409,'stale_lease','This job is no longer leased to this worker');return row;}
 export async function heartbeatAccountJob(c:Container,id:string,lease:string){await accountLease(c,id,lease);await c.db.prepare('UPDATE account_automation_jobs SET lease_until=?,updated_at=? WHERE id=? AND lease_id=?').bind(new Date(Date.now()+20*60000).toISOString(),now(),id,lease).run();await c.settings.setJob('account_worker',now(),{online:true});return {ok:true};}
@@ -93,7 +96,7 @@ export async function completeAccountJob(c:Container,id:string,lease:string,inpu
  const original=parse(row.provenance);
  if(original.hedgyEvaluationRound!==undefined){
   const spec=input.spec as {series?:string;postCaption?:string}|null;
-  if(spec?.series!=='HEDGY / FINANCE'||!hedgyPostCaptionSchema.safeParse(spec.postCaption).success)throw new AppError(422,'evaluation_spec_invalid','A finished Hedgy reel and its reviewed Instagram caption are required');
+  if(!spec||!HEDGY_SERIES_IDS.some(series=>series===spec.series)||!hedgyPostCaptionSchema.safeParse(spec.postCaption).success)throw new AppError(422,'evaluation_spec_invalid','A finished Hedgy reel and its reviewed Instagram caption are required');
  }
  if(row.account_id==='quriozity'){
   const p=input.provenance as any,stages=['visual-subject-review','visual-composition-review','visual-continuity-review','visual-style-reference-review','visual-final-review'];

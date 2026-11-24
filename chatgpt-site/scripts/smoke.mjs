@@ -910,8 +910,8 @@ test('account automation scopes connections, waits for Meta setup and enforces a
 
 test('account worker leases exclusively, persists one finished output and completes idempotently',async()=>{
  const token='account-worker-token-account-worker-token';const s=await start({ACCOUNT_WORKER_TOKEN:token},{persist:'account-leases'});const headers={authorization:`Bearer ${token}`};
- try{await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true')) WHERE id='hedgy'").run();const id=crypto.randomUUID(),date=new Date(Date.now()-1000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
- const first=await s.call('POST','/api/jobs/accounts/claim',{headers});assert.equal(first.status,200);const job=first.body.job;assert.equal(job.id,id);assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers})).body.job,null);
+ try{await s.call('GET','/api/accounts');await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabled',json('true'),'$.topic','Simple finance and market explainers') WHERE id='hedgy'").run();const id=crypto.randomUUID(),date=new Date(Date.now()-1000).toISOString();await s.db.prepare("INSERT INTO account_automation_jobs(id,account_id,scheduled_at,created_at,updated_at) VALUES(?,'hedgy',?,?,?)").bind(id,date,date,date).run();
+ const first=await s.call('POST','/api/jobs/accounts/claim',{headers});assert.equal(first.status,200);const job=first.body.job;assert.equal(job.id,id);assert.match(job.account.topic,/everyday mysteries.*animal behavior.*hidden journeys/);assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers})).body.job,null);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/wrong/heartbeat`,{headers})).status,409);
  assert.equal((await s.call('POST',`/api/jobs/accounts/${id}/${job.lease}/heartbeat`,{headers})).status,200);
  const bytes=new Uint8Array(256);const response=await s.mf.dispatchFetch(`https://site.example/api/jobs/accounts/${id}/${job.lease}/output`,{method:'PUT',headers:{...headers,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});assert.equal(response.status,200);const {materialId}=await response.json();
@@ -951,7 +951,7 @@ test('reviewed Hedgy rounds use the hosted Postiz key once and skip the generati
   assert.equal(uploaded.status,200);
   const {materialId}=await uploaded.json();
   const postCaption='Why does the cheapest deal cost more?\n\nHedgy needs apples for a busy market day. The lowest price is for a full crate, but he sells only part of it before closing and the rest goes to waste.\n\nThe price per apple sounds like a bargain. The price for the apples he actually uses tells a different story. Compare how much you will use before buying in bulk.\n\n#Finance #Shopping #EverydayMoney';
-  assert.equal((await s.call('POST',`${job}/complete`,{headers:accountHeaders,json:{materialId,spec:{series:'HEDGY / FINANCE',postCaption},provenance:{}}})).status,200);
+  assert.equal((await s.call('POST',`${job}/complete`,{headers:accountHeaders,json:{materialId,spec:{series:'HEDGY / STORIES',postCaption},provenance:{}}})).status,200);
   await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});
   assert.equal(creates,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
   await s.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(id).run();
