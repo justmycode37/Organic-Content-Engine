@@ -44,7 +44,7 @@ export async function produce(dir,{topic='',sourceFile,reuseVoice}={}){
    }
    timing.push(duration(file));tracks.push(`file 'voice-${i}.wav'`);
   }
-  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.style==='reported-footage'?4.5*(plan.closingCredits?.length||2):0)+plan.beats.reduce((s,b)=>s+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
+  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.closingHold??0)+(plan.style==='reported-footage'?4.5*(plan.closingCredits?.length||2):0)+plan.beats.reduce((s,b)=>s+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
   if(seconds<600||seconds>900)throw Error(`Native narration measures ${seconds.toFixed(1)}s outside 600–900s. Takes are saved for editorial revision.`);
   if(!continuous){writeFileSync(join(dir,'voice.list'),tracks.join('\n'));
   execFileSync('ffmpeg',['-v','error','-y','-f','concat','-safe','1','-i',join(dir,'voice.list'),'-c','copy',join(dir,'voice.wav')]);}
