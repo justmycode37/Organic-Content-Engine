@@ -7,6 +7,7 @@ import { poof, speedLines } from '../kit/fx.ts';
 import type { HedgyKey } from '../actor/hedgy.ts';
 import { ACTORS, STAGE, actorBounds, actorPaw, cue, cuesIn, drawActor, drawItem, itemParam, itemSize, pick, str, type ItemId } from './common.ts';
 import type { ShotDef } from './index.ts';
+import { activeWorld } from '../kit/worlds.ts';
 
 type Destination = 'booth' | 'bank' | 'exchange' | 'shop';
 type Mood = 'panic' | 'determined';
@@ -49,7 +50,7 @@ function timing(props: ShotProps, dur: number): { start: number; arrive: number 
 function plan(props: ShotProps, dur: number): RuntoPlan {
   const times = timing(props, dur);
   const rawCarry = str(props.params, 'carry', 'none');
-  const place = pick(props.params, 'place', placeIds, 'booth');
+  const place = activeWorld() ? 'booth' : pick(props.params, 'place', placeIds, 'booth'); // no miniature buildings in front of a world
   const facing: 1 | -1 = place === 'bank' || place === 'exchange' ? -1 : 1;
   const placeX = facing === 1 ? 460 : 360;
   const startX = facing === 1 ? 112 : 605, endX = facing === 1 ? 292 : 468;
