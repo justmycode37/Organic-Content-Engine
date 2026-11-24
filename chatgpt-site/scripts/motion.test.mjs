@@ -4,7 +4,7 @@ import smoke from '../motion-examples/smoke.json' with { type: 'json' };
 import { parseReelSpec, lintReel, reelSpecSchema } from '../src/motion/spec.ts';
 import { placeScenes, reelDuration, parseMarkup, markupWords } from '../src/motion/core.ts';
 import { reelCaptions } from '../src/motion/captions.ts';
-import { drawHookAndHeader, drawNumberPops, drawViralCaption } from '../src/motion/viral.ts';
+import { cardZone, drawHookAndHeader, drawNumberPops, drawViralCaption } from '../src/motion/viral.ts';
 
 test('smoke spec parses; strict schema rejects unknown keys and bad type',()=>{
  assert.equal(parseReelSpec(smoke).ok,true);
@@ -60,6 +60,23 @@ test('spoken words and amount overlays use white text',()=>{
  drawNumberPops(ctx,spec,.4,placeScenes(spec),[caption],false);
  assert.deepEqual(fills.map(f=>f.word),['Save','$20','$20']);
  assert.ok(fills.every(f=>f.color==='#FFFFFF'));
+});
+test('a printed comparison term does not get a second title over its cards',()=>{
+ const spec={version:1,look:'viral',term:'deductible',scenes:[
+  {type:'shot',shot:'versus',duration:3,params:{rightLabel:'Deductible'}},
+  {type:'shot',shot:'act',duration:3},
+ ]};
+ const captions=[{text:'the deductible',start:2.3,end:2.9,wordTimings:[{start:2.3,end:2.5},{start:2.5,end:2.9}]}];
+ const ctx={measureText(text){return {width:text.length*40}}};
+ const scenes=placeScenes(spec);
+ assert.equal(cardZone(ctx,spec,2.7,scenes,captions),undefined);
+ assert.equal(cardZone(ctx,spec,3.1,scenes,captions),undefined);
+ assert.ok(cardZone(ctx,spec,2.7,placeScenes({...spec,scenes:[{type:'shot',shot:'act',duration:6}]}),captions));
+});
+test('an amount printed on a flip tag does not also float as a number pop',()=>{
+ const spec={version:1,look:'viral',scenes:[{type:'shot',shot:'present',duration:2,params:{backTag:'FIRST $200'}}]};
+ const caption={text:'$200',start:.3,end:1,wordTimings:[{start:.3,end:1}]};
+ drawNumberPops({fillText(){assert.fail('duplicate amount')}},spec,.4,placeScenes(spec),[caption],false);
 });
 test('markup parsing exposes accent flags',()=>{
  assert.deepEqual(parseMarkup('hello *world*'),[{text:'hello ',accent:false},{text:'world',accent:true}]);

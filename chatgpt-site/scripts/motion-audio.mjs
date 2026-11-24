@@ -486,7 +486,8 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
   // Viral reels end right after the payoff lands (a short hold for the payoff card), never on a long freeze.
   const last=index===spec.scenes.length-1,viral=spec.look==='viral';
-  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
+  const payoffHold=spec.payoff?.trim()&&spec.series?.startsWith('HEDGY')?1.7:1.25;
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?payoffHold:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const normalizeToken=token=>token.toLowerCase().replace(/[^a-z0-9]/g,'');
@@ -691,6 +692,7 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    filters.push('[fxDry][fxWet]amix=inputs=2:normalize=0:dropout_transition=0,lowpass=f=7600,acompressor=threshold=0.18:ratio=1.7:attack=12:release=190:makeup=1.08,extrastereo=m=1.035,volume=2.5[fx]');
   }else filters.push('[fx_raw]acompressor=threshold=0.24:ratio=1.65:attack=6:release=130:makeup=1.2,extrastereo=m=1.08,volume=1.35[fx]');
   const buses=[];
+  const hedgyViral=spec.look==='viral'&&spec.series?.startsWith('HEDGY');
   if(bed){
    inputs.push('-i',bed);
    const musicCut=dropDuckExpression(cues),automationPoints=[
@@ -712,10 +714,12 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    const termWords=String(spec.term??'').toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,'')).filter(Boolean);
    let termAt;
    if(spec.look==='viral'&&termWords.length)for(const caption of spec.captions??[]){const words=caption.text.toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,''));const i=words.findIndex((_,k)=>termWords.every((w,j)=>words[k+j]===w));if(i>=0){termAt=caption.words?.[i]?.start??caption.start;break;}}
-   const termGap=termAt>1.5?`if(between(t,${(termAt-0.4).toFixed(3)},${(termAt+0.05).toFixed(3)}),0.2,1)`:null;
+   const termGap=!hedgyViral&&termAt>1.5?`if(between(t,${(termAt-0.4).toFixed(3)},${(termAt+0.05).toFixed(3)}),0.2,1)`:null;
    const cutExpression=[musicCut,termGap].filter(Boolean).join('*');
    const musicCutFilter=cutExpression?`volume='${cutExpression}':eval=frame,`:'';
-   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-(spec.look==='viral'?0.35:0.82)).toFixed(3)}:d=${spec.look==='viral'?'0.35':'0.82'},extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
+   // Hedgy keeps the groove through the closing card, with a short fade to de-click the edit.
+   const musicFade=hedgyViral?0.015:spec.look==='viral'?0.35:0.82;
+   filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-musicFade).toFixed(3)}:d=${musicFade},extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
    // Keep the low band grounded, then add a narrow body-band lift at the jump and pressure points.
    // Air and transient bands open at reveal/jump events; voice sidechain still ducks the full bed.
    filters.push('[musicSource]asplit=4[musicBodySource][musicBodyLiftSource][musicAirSource][musicPercSource]');
@@ -724,7 +728,8 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    filters.push(`[musicAirSource]highpass=f=1950,lowpass=f=${ACTIVE_STYLE==='cinematic'?'5200':'11500'},volume='${airExpression}':eval=frame[musicAir]`);
    filters.push(`[musicPercSource]highpass=f=3600,lowpass=f=${ACTIVE_STYLE==='cinematic'?'6200':'18000'},acompressor=threshold=0.025:ratio=7:attack=1:release=65,volume='${percussionExpression}':eval=frame[musicPerc]`);
    filters.push(`[musicBody][musicBodyLift][musicAir][musicPerc]amix=inputs=4:normalize=0:dropout_transition=0,volume='${pressureGain}':eval=frame,${pad}[bed]`);
-   filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[fx]asplit=2[fxVoiceSource][fxLowSource]',ACTIVE_STYLE==='cinematic'?'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.05:ratio=2:attack=3:release=160:makeup=1[fxduck]':'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]','[fxLowSource]lowpass=f=180,volume=0.3[fxLowKey]','[bed][keyMusic]sidechaincompress=threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2[musicVoiceDuck]','[musicVoiceDuck][fxLowKey]sidechaincompress=threshold=0.04:ratio=1.6:attack=8:release=125:makeup=1[ducked]');
+   const musicDucking=hedgyViral?'threshold=0.03:ratio=4:attack=8:release=210:makeup=1':'threshold=0.05:ratio=3:attack=12:release=200:makeup=1.2';
+   filters.push('[voice]asplit=3[say][keyMusic][keyFx]','[fx]asplit=2[fxVoiceSource][fxLowSource]',ACTIVE_STYLE==='cinematic'?'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.05:ratio=2:attack=3:release=160:makeup=1[fxduck]':'[fxVoiceSource][keyFx]sidechaincompress=threshold=0.1:ratio=2:attack=4:release=120:makeup=1[fxduck]','[fxLowSource]lowpass=f=180,volume=0.3[fxLowKey]',`[bed][keyMusic]sidechaincompress=${musicDucking}[musicVoiceDuck]`,'[musicVoiceDuck][fxLowKey]sidechaincompress=threshold=0.04:ratio=1.6:attack=8:release=125:makeup=1[ducked]');
    if(exportStems){filters.push('[say]asplit=2[sayMix][voiceStem]','[fxduck]asplit=2[fxMix][fxStem]','[ducked]asplit=2[musicMix][musicStem]');buses.push('[fxMix]','[sayMix]','[musicMix]');}
    else buses.push('[fxduck]','[say]','[ducked]');
   }else{

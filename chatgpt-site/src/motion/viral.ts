@@ -70,6 +70,18 @@ export function termTime(term: string | undefined, captions: readonly ActiveCapt
   return undefined;
 }
 
+function termCardTime(spec: ReelSpec, placed: PlacedScene[], captions: readonly ActiveCaption[]) {
+  const at = termTime(spec.term, captions);
+  const shot = at === undefined ? undefined : placed.find(scene => at >= scene.start && at < scene.end)?.spec;
+  if (shot?.type === 'shot' && shot.shot === 'versus') {
+    const term = titleWords(spec.term ?? '').join(' ');
+    const labels = [shot.params?.leftLabel, shot.params?.rightLabel];
+    // The comparison already titles the term on one card. Suppress the duplicate across this cut and the next.
+    if (labels.some(label => typeof label === 'string' && titleWords(label).join(' ') === term)) return undefined;
+  }
+  return at;
+}
+
 /** The device-space band covered by whichever overlay card (hook, concept term or payoff) is on screen. */
 export function cardZone(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []): { top: number; bottom: number } | undefined {
   const hook = spec.hook?.trim(), hookEnd = hookEndTime(spec, placed);
@@ -81,7 +93,7 @@ export function cardZone(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedS
   };
   if (hook && time < hookEnd) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 12, HOOK_Y);
   if (spec.payoff?.trim() && time >= payoffStart) return band(spec.payoff, PAYOFF_SIZES, PAYOFF_TEXT_WIDTH, 1.1, 12, PAYOFF_Y);
-  const termAt = termTime(spec.term, captions);
+  const termAt = termCardTime(spec, placed, captions);
   if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) return band(spec.term, [104, 96, 88, 80, 72, 64, 58], 940, 1.1, 12, HOOK_Y + 20);
   return undefined;
 }
@@ -129,7 +141,7 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
     return;
   }
   // The concept's name lands as a card the moment it is spoken (not over the hook or the payoff).
-  const termAt = termTime(spec.term, captions);
+  const termAt = termCardTime(spec, placed, captions);
   if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) {
     const out = clamp((termAt + 1.5 - time) / 0.15);
     drawCard(ctx, `*${spec.term.replace(/\*/g, '')}*`, Math.min(ease.outBack(clamp((time - termAt) / 0.25)), out), HOOK_Y + 20);
@@ -200,11 +212,14 @@ export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: P
   const scene = placed.find(p => time >= p.start && time < p.end);
   if (!scene) return;
   if (scene.spec.type === 'shot' && ['versus', 'statement'].includes(scene.spec.shot)) return;
-  const params = scene.spec.type === 'shot' ? scene.spec.params : undefined;
-  const printed = scene.spec.type === 'shot' && scene.spec.shot === 'act'
-    ? [params?.tag, ...(Array.isArray(params?.moves) ? params.moves.map((move: unknown) => move && typeof move === 'object' && 'word' in move ? move.word : '') : [])]
-        .flatMap(value => typeof value === 'string' ? value.split(/\s+/) : [])
-    : [];
+  const shot = scene.spec.type === 'shot' ? scene.spec : undefined;
+  const params = shot?.params;
+  const moves = shot?.shot === 'act' && Array.isArray(params?.moves) ? params.moves : [];
+  const tags = shot?.shot === 'present' ? [params?.tag, params?.backTag, params?.label]
+    : shot?.shot === 'act' ? [params?.tag] : [];
+  const printed = [...tags, ...moves.map((move: unknown) =>
+    move && typeof move === 'object' && 'word' in move ? move.word : ''
+  )].flatMap(value => typeof value === 'string' ? value.split(/\s+/) : []);
   let latest: { word: string; at: number } | undefined;
   for (const caption of captions) {
     if (caption.end < time - 1.4 || caption.start > time) continue;

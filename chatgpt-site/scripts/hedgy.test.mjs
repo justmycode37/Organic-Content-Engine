@@ -281,6 +281,9 @@ test('the viral payoff chime follows the last spoken word, before caption paddin
  assert.ok(Math.abs(chime.at-lastWord.end-0.06)<0.001);
  assert.ok(chime.at<arranged.spec.captions.at(-1).end);
  assert.equal(arrange({...spec,payoff:undefined},spoken).cues.some(cue=>cue.ending),false);
+ const hedgy={...spec,series:'HEDGY / FINANCE'};
+ const extraHold=arrange(hedgy,spoken).duration-arrange({...hedgy,payoff:undefined},spoken).duration;
+ assert.ok(Math.abs(extraHold-0.45)<1/30);
 });
 
 test('ideation avoids concepts, items and moods used by earlier reels',async()=>{
