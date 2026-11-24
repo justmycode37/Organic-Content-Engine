@@ -19,6 +19,9 @@ import * as chart from '../props/chart.ts';
 import * as buildings from '../props/buildings.ts';
 import * as symbols from '../props/symbols.ts';
 import * as everyday from '../props/everyday.ts';
+import { drawRingRoad, RING_SIZE } from '../props/traffic.ts';
+import { drawPufferfish, drawSandNest, PUFFER_SIZE, NEST_SIZE } from '../props/seabed.ts';
+import { drawConveyor, drawSuitcase, CONVEYOR_SIZE, SUITCASE_SIZE } from '../props/baggage.ts';
 
 export type Ctx = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D;
 export interface XY { x: number; y: number }
@@ -106,6 +109,9 @@ export const ITEMS = {
   burger: I(everyday.drawBurger, everyday.BURGER_SIZE.w, everyday.BURGER_SIZE.h), bike: I(everyday.drawBike, everyday.BIKE_SIZE.w, everyday.BIKE_SIZE.h),
   laptop: I(everyday.drawLaptop, everyday.LAPTOP_SIZE.w, everyday.LAPTOP_SIZE.h), sneaker: I(everyday.drawSneaker, everyday.SNEAKER_SIZE.w, everyday.SNEAKER_SIZE.h),
   watch: I(everyday.drawWatch, everyday.WATCH_SIZE.w, everyday.WATCH_SIZE.h), chocolateBar: I(everyday.drawChocolateBar, everyday.CHOCOLATE_BAR_SIZE.w, everyday.CHOCOLATE_BAR_SIZE.h), lemon: I(everyday.drawLemon, everyday.LEMON_SIZE.w, everyday.LEMON_SIZE.h),
+  ringRoad: I(drawRingRoad, RING_SIZE.w, RING_SIZE.h),
+  pufferfish: I(drawPufferfish, PUFFER_SIZE.w, PUFFER_SIZE.h), sandNest: I(drawSandNest, NEST_SIZE.w, NEST_SIZE.h),
+  suitcase: I(drawSuitcase, SUITCASE_SIZE.w, SUITCASE_SIZE.h), conveyor: I(drawConveyor, CONVEYOR_SIZE.w, CONVEYOR_SIZE.h),
 } satisfies Record<string, Item>;
 export type ItemId = keyof typeof ITEMS;
 export const ITEM_IDS = Object.keys(ITEMS) as ItemId[];

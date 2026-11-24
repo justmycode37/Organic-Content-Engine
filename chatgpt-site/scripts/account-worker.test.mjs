@@ -148,7 +148,8 @@ test('incomplete output is logged with stage, reason, request ID and usage; no r
    assert.ok(events.some(e=>e.status==='degraded-to-fallback'&&e.step==='idea-1'));
    const provenance=JSON.parse(await readFile(join(cacheRoot,job.id,'provenance.json'),'utf8'));
    assert.equal(provenance.editorial.modelFailure.step,'idea-1');
-   assert.equal(provenance.editorial.storyboardFallback,'deterministic act storyboard');
+   assert.equal(provenance.editorial.storyboardFallback,'deterministic topic storyboard');
+   assert.equal(provenance.editorial.storyUnresolved,true);
    assert.equal((await stat(join(cacheRoot,job.id))).mode&0o777,0o700);
   });
  }finally{globalThis.fetch=original;}

@@ -33,6 +33,14 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
     ]
   },
   {
+    "name": "baggage",
+    "describe": "The same blue, gold-strapped, tagged suitcase travels or opens. Ride circulates it around a moving slatted airport carousel. Open stops the belt at event 1, then hinges the lid back at event 2 to reveal the item inside. Inspect stages the stationary suitcase on a reseller counter in the shop, with event 1 opening it. params: mode (ride|open|inspect, default open), item (any drawable item inside the case, default sneaker). Use world airport for ride/open or shop for inspect.",
+    "params": [
+      "item",
+      "mode"
+    ]
+  },
+  {
     "name": "balance",
     "describe": "Two actors carry real items onto separate balance pans; each landing pulls that side down and the beam rocks into its final tilt. leverage moves the pivot so a short-arm item counters a long-arm item. params: left, right (item ids; defaults gold, coinStack), mode (balance|leverage, default balance), tilt (final low side left|right|level, default right), actors (up to two actor ids; defaults hedgy and mouse), who (legacy single actor or none), action (add|jump, jump adds a hop on each landing), actorSide (side for a single actor), labels (optional short pan tags). Events: 1 = left item lands; 2 = right item lands; later events add settling knocks.",
     "params": [
@@ -245,6 +253,15 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
     ]
   },
   {
+    "name": "sandnest",
+    "describe": "A small spotted pufferfish sculls over sand. Its swimming passes leave radial furrows with raised pale lips. Trace cuts the first two paths, build completes a partially carved sand nest in time lapse, reveal has the builder swim aside to show the finished pattern. params: mode (trace|build|reveal, default build), ridges (8–20, default 12), visitor (boolean, default false; in reveal a second pufferfish approaches the nest). Event 1 begins the pass or reveal, event 2 starts the visitor approach. Use world seabed.",
+    "params": [
+      "mode",
+      "ridges",
+      "visitor"
+    ]
+  },
+  {
     "name": "split",
     "describe": "One whole item stays visible while two to four recognizable portions travel into the reaching paws of their owners; pizza becomes crusted triangular slices and other items carry a small fraction tag. params: item (any library item, default share), parts (2–4, default 3), owners (2–4 actor ids, default hedgy, badger, owl, mouse; old who sets the first owner), who (first owner id, default hedgy), mode (split | merge, default split). Events: each event starts the next portion moving to its owner; merge events return portions to the whole; missing beats are spaced evenly.",
     "params": [
@@ -335,6 +352,14 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
     ]
   },
   {
+    "name": "trafficwave",
+    "describe": "Overhead ring-road traffic experiment. Cars move clockwise around an unobstructed single lane. Circulate shows equal spacing, brake isolates one brief tap, wave passes braking and bunching backward from driver to driver. params: mode (circulate|brake|wave, default wave), cars (6–12, default 9). Event 1 starts the brake tap; use world testtrack and a wide camera for the whole circuit.",
+    "params": [
+      "cars",
+      "mode"
+    ]
+  },
+  {
     "name": "versus",
     "describe": "Two big option cards slide in side by side, each with an item, a large price and a short when/label (e.g. $300 SATURDAY vs $240 TODAY); then the gap between them slams down as a huge number while the losing card is crossed out and the chosen card lifts; an actor below reacts. Use it for the comparison or reveal at the heart of a story. params: left/right (item ids, default cash), leftPrice/rightPrice (up to 8 characters, e.g. $300), leftLabel/rightLabel (up to 12 characters, e.g. SATURDAY, TODAY), gap (up to 14 characters with normal spaces, e.g. -$60 or SAVED $0.40), pick (left|right|none: the chosen card; the other is crossed out), who (actor id|none, default hedgy), mood (reaction). Events: 1 = left card slides in; 2 = right card slides in; 3 = the gap slams down.",
     "params": [
@@ -366,7 +391,7 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
 ];
 export const SHOT_NAMES = SHOT_CATALOG.map(entry => entry.name);
 /** Props a spec may name in item-type params. */
-export const SHOT_ITEMS = ["ticket","ticketStack","banknote","cash","cashPile","coin","coinStack","priceTag","iou","wallet","safe","padlock","clock","hourglass","booth","poster","megaphone","press","share","contract","bond","piggy","moneyBag","gold","card","calculator","percent","pie","barChart","candles","basket","umbrella","shield","lever","magnifier","calendar","dice","crypto","bank","exchange","house","factory","shop","taxOffice","bull","bear","crate","warning","check","cross","question","apple","appleCrate","lemonade","pizza","pizzaSlice","car","phone","smartphone","terminal","cart","gift","key","bulb","weather","tree","snowball","coffeeCup","bread","burger","bike","laptop","sneaker","watch","chocolateBar","lemon"] as const;
+export const SHOT_ITEMS = ["ticket","ticketStack","banknote","cash","cashPile","coin","coinStack","priceTag","iou","wallet","safe","padlock","clock","hourglass","booth","poster","megaphone","press","share","contract","bond","piggy","moneyBag","gold","card","calculator","percent","pie","barChart","candles","basket","umbrella","shield","lever","magnifier","calendar","dice","crypto","bank","exchange","house","factory","shop","taxOffice","bull","bear","crate","warning","check","cross","question","apple","appleCrate","lemonade","pizza","pizzaSlice","car","phone","smartphone","terminal","cart","gift","key","bulb","weather","tree","snowball","coffeeCup","bread","burger","bike","laptop","sneaker","watch","chocolateBar","lemon","ringRoad","pufferfish","sandNest","suitcase","conveyor"] as const;
 /** Cast: 'hedgy' (the mascot), role presets and species. */
 export const SHOT_ROLES = [{"role":"broker","species":"badger"},{"role":"banker","species":"badger"},{"role":"lender","species":"owl"},{"role":"buyer","species":"raccoon"},{"role":"trader","species":"fox"},{"role":"rival","species":"fox"},{"role":"clerk","species":"mouse"},{"role":"saver","species":"mouse"},{"role":"fan1","species":"rabbit"},{"role":"fan2","species":"rabbit2"},{"role":"fan3","species":"rabbit3"},{"role":"customer","species":"rabbit"},{"role":"seller1","species":"hedgehog"},{"role":"seller2","species":"hedgehog2"},{"role":"investor","species":"hedgehog"}] as const;
 export const SHOT_CAST = [{"id":"hedgy","looks":"the brown hedgehog mascot"},{"id":"hedgehog","looks":"grey hedgehog (others like Hedgy)"},{"id":"hedgehog2","looks":"russet hedgehog"},{"id":"fox","looks":"orange fox, bushy white-tipped tail"},{"id":"badger","looks":"stocky badger, striped face"},{"id":"owl","looks":"brown owl, big eyes, gold beak"},{"id":"raccoon","looks":"grey raccoon, black mask, ringed tail"},{"id":"rabbit","looks":"white rabbit, ears up"},{"id":"rabbit2","looks":"white rabbit, one ear flopped"},{"id":"rabbit3","looks":"white lop-eared rabbit"},{"id":"mouse","looks":"small grey mouse, pink ears"}] as const;

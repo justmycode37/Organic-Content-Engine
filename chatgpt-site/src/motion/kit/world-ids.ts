@@ -1,5 +1,5 @@
 // Pure data (worker-safe): the world backdrops a Hedgy shot can be staged in. Painted by kit/worlds.ts.
-export const WORLDS = ['shop', 'street', 'home', 'kitchen', 'bank', 'office', 'market', 'exchange', 'park', 'night', 'vault', 'farm', 'cafe', 'carlot'] as const;
+export const WORLDS = ['shop', 'street', 'home', 'kitchen', 'bank', 'office', 'market', 'exchange', 'park', 'night', 'vault', 'farm', 'cafe', 'carlot', 'testtrack', 'seabed', 'airport'] as const;
 export type WorldId = typeof WORLDS[number];
 export const isWorld = (v: unknown): v is WorldId => typeof v === 'string' && (WORLDS as readonly string[]).includes(v);
 export const WORLD_HINTS: Record<WorldId, string> = {
@@ -17,5 +17,8 @@ export const WORLD_HINTS: Record<WorldId, string> = {
   farm: 'farm with a red barn, a fence, fields and the sun',
   cafe: 'coffee shop with a counter, an espresso machine, a menu board and pendant lamps',
   carlot: 'car dealership lot with bunting flags, a showroom and a sky',
+  testtrack: 'aerial view of a grassy driving test ground with a perimeter fence, access pavement and marker cones',
+  seabed: 'underwater sand flat with blue water, low dunes, shells and seagrass at the edges',
+  airport: 'airport baggage claim hall with apron windows, a baggage sign, polished floor and distant aircraft',
 };
 

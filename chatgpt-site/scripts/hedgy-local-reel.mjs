@@ -21,7 +21,8 @@ if(!await exists(specFile)){
  const usage=[],started=Date.now();
  const save=()=>writeFile(join(out,'api-usage.json'),JSON.stringify({startedAt:new Date(started).toISOString(),elapsedSeconds:(Date.now()-started)/1000,calls:usage},null,2));
  const {generateHedgyReel}=await import('../worker/hedgy-generation.ts');
- const topic=process.env.HEDGY_TOPIC||'Non-obvious finance mechanisms with concrete everyday stakes';
+ const {HEDGY_TOPIC}=await import('../worker/hedgy-policy.ts');
+ const topic=process.env.HEDGY_TOPIC||HEDGY_TOPIC;
  const result=await generateHedgyReel({OPENAI_API_KEY:process.env.OPENAI_API_KEY},topic,async entry=>{usage.push({...entry,outputText:undefined});console.log(`[${((Date.now()-started)/1000).toFixed(0)}s] ${entry.step} ${entry.status} ${entry.billing??''}`);await save();},history,createReelSubscription(),{astraReview}).catch(async e=>{await writeFile(join(out,'failure.json'),JSON.stringify({message:e.message,code:e.code,details:e.details},null,2));return e;});
  await save();
  if(result instanceof Error)throw result;
