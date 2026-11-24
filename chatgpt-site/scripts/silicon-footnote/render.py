@@ -1,6 +1,7 @@
 """Render cuts against each measured Titan take, then stream-copy the picture edit."""
 import hashlib
 import os
+import re
 import json
 from concurrent.futures import ThreadPoolExecutor
 from film import Sequence,lower
@@ -17,6 +18,32 @@ from motion import W,H,FPS,Scene,lower_third
 
 def run(args):
     subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y',*map(str,args)],check=True)
+
+def compact_mux(root,mix,timing):
+    # Release consumed silent clips while assembling the film. The shot list and
+    # narration stay available to reproduce any clips needed after an interruption.
+    files=[]
+    for line in (root/'picture.list').read_text().splitlines():
+        name=re.fullmatch(r"file '(edit-[0-9]+-[0-9a-f]{12}\.mp4)'",line)
+        if not name:raise ValueError('Invalid generated shot filename')
+        files.append(root/name[1])
+    if len(files)!=len(timing):raise ValueError('Picture list does not match shot timing')
+    target=root/'episode.partial.mp4'
+    command=['ffmpeg','-v','error','-y','-stats_period','0.1','-progress','pipe:1','-f','concat','-safe','1',
+             '-i',root/'picture.list','-i',mix,'-map','0:v:0','-map','1:a:0','-c','copy','-movflags','+faststart',target]
+    with subprocess.Popen(command,stdout=subprocess.PIPE,text=True) as proc:
+        index,elapsed=0,0
+        for line in proc.stdout:
+            key,_,value=line.strip().partition('=')
+            if key!='out_time_us' or not value.isdigit():continue
+            muxed=int(value)/1_000_000
+            while index<len(files) and elapsed+timing[index]+3<muxed:
+                elapsed+=timing[index]
+                files[index].unlink(missing_ok=True)
+                index+=1
+        if proc.wait():raise RuntimeError('Unable to mux compact camera edit')
+    target.replace(root/'episode.mp4')
+    for path in files[index:]:path.unlink(missing_ok=True)
 
 def render(root):
     plan=json.loads((root/'episode.json').read_text())
@@ -127,8 +154,7 @@ def render(root):
             run(['-i',voice,'-i',root/'score.wav','-filter_complex',audio.replace('[1:a]','[0:a]').replace('[2:a]','[1:a]'),'-map','[a]','-c:a','aac','-b:a','160k',mix])
             (root/'score.wav').unlink()
             if voice!=root/'voice.wav':voice.unlink()
-            run(['-f','concat','-safe','1','-i',root/'picture.list','-i',mix,'-map','0:v:0','-map','1:a:0','-c','copy','-movflags','+faststart',root/'episode.partial.mp4'])
-            (root/'episode.partial.mp4').replace(root/'episode.mp4')
+            compact_mux(root,mix,timing)
             return
         else:args+=['-filter_complex',audio,'-map','0:v:0','-map','[a]','-c:v','copy']
     else:args+=['-map','0:v:0','-map','1:a:0','-c:v','copy']
