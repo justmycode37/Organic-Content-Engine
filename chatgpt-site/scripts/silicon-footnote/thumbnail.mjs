@@ -13,7 +13,8 @@ const concept=z.object({
  side:z.enum(['left','right']),
  accent:z.enum(['white','yellow','cyan','pink']),
 });
-const packageSchema=z.tuple([concept,concept]).refine(([a,b])=>a.title!==b.title&&a.line!==b.line&&a.art!==b.art);
+const variantsSchema=z.tuple([concept,concept]).refine(([a,b])=>a.title!==b.title&&a.line!==b.line&&a.art!==b.art);
+const packageSchema=z.object({variants:variantsSchema});
 const ask=createReelSubscription();
 
 const packagingPrompt=`Write two distinct YouTube title and thumbnail pairs for a long-form Silicon Footnote tech/AI episode.
@@ -22,7 +23,7 @@ Give each independently generated cover a different click motive and visual comp
 Specify a dark area on the chosen side of the artwork for type. Give the cover one to four short words that add a second idea to the title. Put the most important word last for optional accent. No numeric claims unless directly supported. DO NOT include lettering in the artwork prompt.`;
 
 export function artPrompt(variant){
- return `Use the built-in image generation tool exactly once to make this standalone 16:9  YouTube thumbnail artwork.
+ return `Use the built-in image generation tool exactly once to make this standalone 16:9 YouTube thumbnail artwork.
 Creative direction: ${variant.art}
 Design the artwork as a full-bleed wide poster. Put an unmistakable, oversized subject opposite a darker quiet text area on the ${variant.side}. Design for recognizability at 160 × 90. Dramatic color separation and strong directional light. Keep the subject and critical elements inside wide crop-safe margins. Generate the art only. No text, letter-like decoration, screenshots, captions, labels, logo, watermark, or frame. Return the generated image.`;
 }
@@ -35,14 +36,22 @@ export async function prepareThumbnails(dir,{request=ask}={}){
  }
  const planPath=join(dir,'thumbnail-plan-v2.json');
  let variants;
- if(existsSync(planPath))variants=packageSchema.parse(read(planPath));
+ if(existsSync(planPath))variants=variantsSchema.parse(read(planPath));
  else{
   const {title,beats}=read(join(dir,'episode.json'));
   const story=JSON.stringify({title,beats:beats.map(({narration})=>narration)});
-  const result=await request({provider:'openai',model:'gpt-6.2-sol',effort:'medium',step:'thumbnail package',
-   format:{schema:packageSchema},input:packagingPrompt+'\nEpisode evidence: '+story});
-  if(result.status!=='completed')throw Error('ChatGPT subscription unavailable for thumbnail planning: '+result.status);
-  variants=packageSchema.parse(JSON.parse(result.text));
+  for(let attempt=0;attempt<2;attempt++){
+   const result=await request({provider:'openai',model:'gpt-6.2-sol',effort:'medium',step:'thumbnail package',
+    format:{schema:packageSchema},input:packagingPrompt+'\nEpisode evidence: '+story+
+     (attempt?'\nThe prior response was invalid. Return the complete object with both variants and all required fields.':'')});
+   if(result.status!=='completed')throw Error('ChatGPT subscription unavailable for thumbnail planning: '+result.status);
+   try{
+    variants=packageSchema.parse(JSON.parse(result.text)).variants;
+    break;
+   }catch(error){
+    if(attempt)throw Error('Codex did not return two valid title and thumbnail concepts',{cause:error});
+   }
+  }
   save(planPath,variants);
  }
  const covers=[];
