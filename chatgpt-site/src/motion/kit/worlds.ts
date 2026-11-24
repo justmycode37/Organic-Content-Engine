@@ -197,6 +197,64 @@ const PAINT: Record<WorldId, (p: Paint) => void> = {
     pendant(p, 24, 8, '#2A5040'); pendant(p, 60, 6, '#2A5040'); pendant(p, 96, 8, '#2A5040');
     perspectiveFloor(p, 112, '#6E5240', '#5A4232', 'planks'); lightPool(p); vignette(p);
   },
+  testtrack(p) {
+    p.r(0, 0, COLS, ROWS, '#758A64');
+    for (let y = 0; y < ROWS; y += 14) p.r(0, y, COLS, 7, '#788E67');
+    for (let i = 0; i < 120; i++) p.r((i * 47) % COLS, (i * 29) % ROWS, 2, 1, '#657D58');
+    p.r(0, 18, COLS, 14, '#717786');
+    p.r(0, 31, COLS, 2, '#9CA2A3');
+    for (let x = 3; x < COLS; x += 13) p.r(x, 24, 6, 1, '#D6D1B6');
+    for (const x of [3, COLS - 5]) {
+      p.r(x, 36, 1, ROWS - 36, '#444E4A');
+      for (let y = 36; y < ROWS; y += 10) p.r(x - 1, y, 3, 2, '#C0C5BB');
+    }
+    for (const x of [16, 23, 92, 99]) {
+      p.r(x - 1, 35, 5, 3, '#544E45'); p.r(x, 34, 3, 3, '#DA8251'); p.px(x + 1, 34, '#F5DDBE');
+    }
+    vignette(p);
+  },
+  seabed(p) {
+    sky(p, 0, 51, ['#59A6B5', '#438E9B', '#347987', '#376F79']);
+    for (let x = 0; x < COLS; x++) {
+      const far = 45 + Math.round(2 * Math.sin(x * .07));
+      const near = 52 + Math.round(3 * Math.sin(x * .10));
+      p.r(x, far, 1, near - far + 1, '#91A298');
+      p.r(x, near, 1, ROWS - near, '#C4AE86');
+    }
+    for (let n = 0; n < 130; n++) {
+      const x = (n * 53) % COLS, y = 57 + (n * 31) % (ROWS - 57);
+      p.r(x, y, n % 3 + 1, 1, n % 3 ? '#B8A079' : '#DFCCAA');
+    }
+    for (const [x, y] of [[6, 63], [112, 70], [2, 110], [117, 104]]) {
+      for (let blade = 0; blade < 5; blade++) {
+        const h = 6 + blade * 3 % 8;
+        for (let j = 0; j < h; j++) p.r(x + blade - 2 + Math.round(Math.sin(blade + j * .22)), y - j, 1, 2, blade % 2 ? '#568F75' : '#416F66');
+      }
+    }
+    for (const [x,y] of [[15,77],[104,59],[17,139],[108,129]]) {
+      p.r(x,y,4,2,'#A58973'); p.r(x+1,y-1,3,2,'#D8C6AA'); p.px(x+2,y-1,'#EEE1CA');
+    }
+    vignette(p);
+  },
+  airport(p) {
+    p.r(0, 0, COLS, 90, '#788595');
+    p.r(0, 12, COLS, 6, '#4F5E70');
+    glassPane(p, 0, 23, COLS, 40, '#536171', ['#77A7C6', '#A2C4D5', '#B3CCD5'], false);
+    p.r(0, 53, COLS, 10, '#99A5A3');
+    p.r(0, 57, COLS, 2, '#7D8790');
+    // A parked jet beyond the windows; its wing and upright tail break the horizon.
+    p.r(76,47,29,3,'#E2E4DF'); p.r(78,46,23,1,'#F3F0E5'); p.r(104,48,4,1,'#D9DDDB');
+    for (let i = 0; i < 6; i++) p.r(77 + Math.floor(i / 2), 41 + i, 2 + Math.floor(i / 2), 1, '#6689AB');
+    for (let i = 0; i < 6; i++) p.r(91 - i, 49 + i, 6 - Math.floor(i / 2), 1, '#CDD3D4');
+    for (let x = 10; x < COLS; x += 23) p.r(x, 21, 2, 45, '#586572');
+    p.r(0, 65, COLS, 4, '#596675');
+    for (let x = 1; x < COLS; x += 18) p.r(x, 70, 16, 17, '#858F96');
+    p.r(11, 7, 1, 13, '#445260'); p.r(24, 7, 1, 13, '#445260');
+    p.r(7, 20, 23, 12, '#29415E'); p.r(13, 24, 11, 6, '#E2E6E7');
+    p.r(16, 22, 5, 2, '#E2E6E7'); p.r(17, 23, 3, 1, '#29415E');
+    perspectiveFloor(p, 90, '#8C979C', '#7C888F', 'stone');
+    vignette(p);
+  },
   carlot(p) {
     sky(p, 0, 80, ['#5B97DA', '#73A8E0', '#8DBAE6', '#A9CDF2']); cloud(p, 54, 10, 1);
     p.r(60, 34, 60, 66, '#E4E5EA'); glassPane(p, 64, 46, 52, 40, '#B9BBC6', ['#73A8E0', '#5B97DA'], true); p.r(60, 32, 60, 4, '#346AAE');

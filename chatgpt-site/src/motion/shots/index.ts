@@ -31,8 +31,11 @@ import { breaksShot } from './breaks.ts';
 import { versusShot } from './versus.ts';
 import { actShot } from './act.ts';
 import { statementShot } from './statement.ts';
+import { trafficwaveShot } from './trafficwave.ts';
+import { sandnestShot } from './sandnest.ts';
+import { baggageShot } from './baggage.ts';
 import { STAGE_ZOOM } from '../kit/sprite.ts';
-import { isWorld, setActiveWorld, worldTall, VIRAL_SHIFT } from '../kit/worlds.ts';
+import { isWorld, setActiveWorld, worldTall, VIRAL_SHIFT, type WorldId } from '../kit/worlds.ts';
 import { resetFaces } from '../kit/stage.ts';
 
 export interface ShotDef {
@@ -42,6 +45,7 @@ export interface ShotDef {
   render(frame: Frame, props: ShotProps): void;
   /** 'clean' = authored on the 720 x 860 stage (kit/sprite STAGE_ZOOM); the player zooms it to fill the frame. */
   stage?: 'clean';
+  defaultWorld?(props: ShotProps): WorldId;
   cues?(props: ShotProps, dur: number): Cue[];
 }
 
@@ -74,6 +78,9 @@ export const SHOTS: Record<string, ShotDef> = {
   [versusShot.name]: versusShot,
   [actShot.name]: actShot,
   [statementShot.name]: statementShot,
+  [trafficwaveShot.name]: trafficwaveShot,
+  [sandnestShot.name]: sandnestShot,
+  [baggageShot.name]: baggageShot,
   [hedgyDemoShot.name]: hedgyDemoShot,
 };
 
@@ -97,7 +104,7 @@ export const shotScene: SceneDef<ShotProps> = {
     }
     resetFaces(frame.index);
     const world = props.params?.world;
-    setActiveWorld(isWorld(world) ? world : undefined, frame.t + frame.index * 3.7, worldTall());
+    setActiveWorld(isWorld(world) ? world : shot.defaultWorld?.(props), frame.t + frame.index * 3.7, worldTall());
     try { shot.render(frame, props); } finally { setActiveWorld(undefined); }
     frame.ctx.restore();
   },
