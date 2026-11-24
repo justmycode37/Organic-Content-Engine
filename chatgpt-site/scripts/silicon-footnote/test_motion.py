@@ -28,5 +28,51 @@ class MotionTests(unittest.TestCase):
         self.assertTrue(np.array_equal(plate[:,:,0],plate[:,:,2]))
         self.assertGreater(np.sum(np.all(plate==255,axis=2)),100)
 
+class DocumentaryTests(unittest.TestCase):
+    def test_interview_captions_follow_the_source_trim(self):
+        from captions import caption_cues
+        beats=[{'narration':'Here.', 'actuality':{'start':6,'end':10,'captions':[
+            {'start':5,'end':8,'text':'First phrase.'},{'start':8,'end':11,'text':'Second phrase.'}]}},
+            {'narration':'Next.'}]
+        alignment=[{'text':b['narration'],'starts':[0]*5} for b in beats]
+        cues=caption_cues({'beats':beats},[2,3],alignment)
+        self.assertEqual(cues,[(0,2,'Here.'),(2,4,'First phrase.'),(4,6,'Second phrase.'),(6,9,'Next.')])
+
+    def test_nearby_spoken_cues_leave_readable_shots(self):
+        from timeline import assemble
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        base={'kind':'footage','art':{'headline':'Generator'},'narration':'Full power.',
+              'cutaways':[{'at':t,'kind':'image','image':0,'title':'Plant'} for t in (.1,.4,.48,.9)]}
+        with TemporaryDirectory() as tmp:
+            _,durations,_=assemble(Path(tmp),{'style':'reported-footage','beats':[base]},[10],{})
+        self.assertEqual(durations,[4,6])
+
+    def test_camera_moves_in_both_directions(self):
+        from film import camera
+        from PIL import Image
+        pixels=np.random.default_rng(7).integers(0,256,(190,340,3),dtype=np.uint8)
+        img=Image.fromarray(pixels)
+        opening=camera(img,(160,90),0)
+        midpoint=camera(img,(160,90),.5)
+        closing=camera(img,(160,90),1)
+        self.assertNotEqual(opening.tobytes(),midpoint.tobytes())
+        self.assertNotEqual(closing.tobytes(),midpoint.tobytes())
+        self.assertEqual(opening.tobytes(),camera(img,(160,90),1,True).tobytes())
+
+    def test_cut_lands_on_its_spoken_cue(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from timeline import assemble
+        b={'kind':'steps','art':{'headline':'Grid'},'narration':'See Iowa now.',
+           'cutaways':[{'kind':'image','image':0,'at':.75,'cue':'Iowa','title':'Iowa'}]}
+        with TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            (root/'alignment.json').write_text(json.dumps([{'text':b['narration'],'starts':[i/4 for i in range(len(b['narration']))]}]))
+            plan,timing,_=assemble(root,{'beats':[b]},[5],{})
+        self.assertEqual(timing,[1,4])
+        self.assertEqual(plan['beats'][1]['art']['headline'],'Iowa')
+
 if __name__=='__main__':
     unittest.main()
