@@ -45,13 +45,13 @@ def reserve_footage(beats, lengths, clips, durations):
 
 
 def source_flashes(media):
-    """Identify brief near-black cuts at the same frame rate as the edit."""
+    """Identify near-black transitions in archive footage at the edit frame rate."""
     result=subprocess.run([
         'ffmpeg','-hide_banner','-nostats','-i',media,'-map','0:v:0','-an',
-        '-vf','fps=24,scale=96:54,blackdetect=d=0.001:pix_th=0.07:pic_th=0.96',
+        '-vf','fps=24,scale=96:54,blackdetect=d=0.001:pix_th=0.095:pic_th=0.96',
         '-f','null','-'],capture_output=True,text=True,check=True)
     matches=re.findall(r'black_start:([\d.]+) black_end:([\d.]+) black_duration:([\d.]+)',result.stderr)
-    return [(float(start),float(end)) for start,end,duration in matches if 0<float(duration)<=.25]
+    return [(float(start),float(end)) for start,end,duration in matches if 0<float(duration)<=1.5]
 
 
 def trim_flashes(intervals, offset, length):
