@@ -6,7 +6,7 @@ import {equal,sign} from '../lib/crypto.ts';
 import {Postiz} from './postiz.ts';
 import {matchSilicon,thumbnailKey,thumbnailId,type Episode} from './silicon-footnote.ts';
 
-export const youtubeEdition=z.object({title:z.string().trim().min(1).max(100),description:z.string().max(5000),variant:thumbnailId});
+export const youtubeEdition=z.object({title:z.string().trim().min(1).max(100),description:z.string().max(5000),variant:z.union([thumbnailId,z.literal('automatic')]).default('automatic')});
 type Package=z.infer<typeof youtubeEdition>;
 type Media={id:string;path:string};
 type Publication={created:string;state:'sending'|'processing'|'published'|'error';postId?:string;url?:string;error?:string;target:string;description:string};
@@ -58,7 +58,7 @@ export async function uploadEditionAsset(db:Db,env:Env,id:string,rawKind:string,
 export async function editionStatus(db:Db,env:Env,id:string){
  const key='youtube-post:'+z.uuid().parse(id),p=await row<Publication>(db,key);
  if(!p)return {state:'ready'};
- if(p.state==='published')return {state:p.state,url:p.url,postId:p.postId};
+ if(p.state==='published')return {state:p.state,url:p.url,postId:p.postId,error:p.error};
  // Reconcile a lost create response by its unique description and verified integration.
  const service=new Postiz(env);
  const from=new Date(Date.parse(p.created)-86400000).toISOString();
@@ -69,7 +69,8 @@ export async function editionStatus(db:Db,env:Env,id:string){
   const found=matches[0];p.postId=found.id;
   if(found.state==='ERROR' && found.error)p.error=String(found.error).replace(/https?:\/\/[^ ]+/g,'[provider link]').slice(0,1000);
   if(found.releaseURL)p.url=found.releaseURL;
-  if(found.state==='PUBLISHED'&&found.releaseURL){p.state='published';p.url=found.releaseURL;}
+  const thumbnailWarning=found.state==='ERROR'&&/^Your video was uploaded to YouTube successfully, but we could not set the thumbnail:/i.test(String(found.error));
+  if((found.state==='PUBLISHED'||thumbnailWarning)&&found.releaseURL){p.state='published';p.url=found.releaseURL;}
   else p.state=found.state==='ERROR'?'error':'processing';
   await write(db,key,p);
  }
@@ -77,16 +78,18 @@ export async function editionStatus(db:Db,env:Env,id:string){
 }
 export async function publishEdition(db:Db,env:Env,id:string,pack:Package){
  const episode=await ready(db,id);
- if(!episode.thumbnails?.some(x=>x.id===pack.variant))throw new AppError(409,'thumbnail_missing','Episode does not have that cover');
+ const custom=pack.variant==='automatic'?undefined:pack.variant;
+ if(custom&&!episode.thumbnails?.some(x=>x.id===custom))throw new AppError(409,'thumbnail_missing','Episode does not have that cover');
  const service=new Postiz(env),target=matchSilicon(await service.integrations());
  if(!target)throw new AppError(409,'channel_missing','Expected one connected Silicon Footnote YouTube channel');
- const [video,thumb]=await Promise.all((['video',pack.variant] as const).map(k=>row<Media>(db,'youtube-media:'+keyFor(episode,k))));
- if(!video||!thumb)throw new AppError(409,'uploads_pending','Upload the chosen cover and film before publishing');
+ const asset=(kind:z.infer<typeof assets>)=>row<Media>(db,'youtube-media:'+keyFor(episode,kind));
+ const [video,thumb]=await Promise.all([asset('video'),custom?asset(custom):null]);
+ if(!video||(custom&&!thumb))throw new AppError(409,'uploads_pending','A required publication asset is missing');
  const key='youtube-post:'+id,created=new Date().toISOString();
  const p:Publication={created,state:'sending',target:target.id,description:pack.description};
  const reserve=await db.prepare('INSERT OR IGNORE INTO job_state(name,last_run_at,last_result) VALUES(?,?,?)').bind(key,created,JSON.stringify(p)).run();
  if(!reserve.meta.changes)return editionStatus(db,env,id);
- const result=await service.request('/posts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'now',date:created,shortLink:false,tags:[],posts:[{integration:{id:target.id},value:[{content:pack.description,image:[video]}],settings:{__type:'youtube',title:pack.title,type:'public',selfDeclaredMadeForKids:'no',made_with_ai:true,thumbnail:thumb}}]})});
+ const result=await service.request('/posts',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({type:'now',date:created,shortLink:false,tags:[],posts:[{integration:{id:target.id},value:[{content:pack.description,image:[video]}],settings:{__type:'youtube',title:pack.title,type:'public',selfDeclaredMadeForKids:'no',made_with_ai:true,...(thumb?{thumbnail:thumb}:{})}}]})});
  const postId=Array.isArray(result)?result.find(x=>x.integration===target.id)?.postId:null;
  if(typeof postId!=='string')return editionStatus(db,env,id);
  await write(db,key,{...p,postId,state:'processing'});

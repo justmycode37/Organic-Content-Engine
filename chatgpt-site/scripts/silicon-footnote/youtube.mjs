@@ -15,7 +15,8 @@ async function call(path,input){
 let state=await call('status');
 if(action==='publish'&&state.state==='ready'){
  const pack=JSON.parse(await readFile(join(dir,'publication.json'),'utf8'));
- for(const kind of ['video',pack.variant]){
+ const custom=pack.variant && pack.variant!=='automatic';
+ for(const kind of custom?['video',pack.variant]:['video']){
   await call('assets/'+kind,{});
   console.log('Postiz received '+kind);
  }
