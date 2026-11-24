@@ -4,10 +4,12 @@
   "name": "Professor Rowan Ellery",
   "role": "Fictional science presenter",
   "characterBackground": "PhD in physics, with a teaching focus on observational astrophysics.",
-  "masterVideo": "rowan-ellery-master.mp4",
   "referencePortrait": "rowan-ellery.png",
-  "monidMasterRunId": "01M875Y7PKRPTFTY4S3QQWPMMV",
-  "heygenMasterVideoId": "1c0da5cde1334a15973975641109e576",
-  "referenceDirection": "Return to the same seated speaker as <Video 1>. Match his auburn hair, square face, silver-tipped copper beard, plum overshirt, oatmeal T-shirt, walnut bookshelves, brass globe and lamp. Preserve the framing, natural skin detail, measured voice and subtle expressions of the reference. One locked eye-level shot. Keep the spoken line clean, with quiet room tone. No captions or music.",
-  "seed": 184711
+  "referenceDirection": "Professor Rowan Ellery is a clean-shaven physics teacher in his early sixties. Match his high receding hairline, short casually swept grey hair, lightly smudged rectangular glasses and single rumpled white shirt with open collar. Match the muted colours, bookshelf office and soft older-webcam capture. Use his mature, lightly grainy baritone and thoughtful, unhurried phrasing. One locked eye-level shot. Quiet room tone, no music or titles.",
+  "seed": 184711,
+  "speakingMasterStatus": "pending",
+  "portraitUrl": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/7dc5c344e114d808ba1c6bc4825327772c45c722/docs/mysteries-of-the-sky/presenter/rowan-ellery.png",
+  "voiceReference": "rowan-ellery-voice.m4a",
+  "voiceReferenceUrl": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/feat/mysteries-of-the-sky/docs/mysteries-of-the-sky/presenter/rowan-ellery-voice.m4a",
+  "voiceSourceMonidRunId": "01M876APXDSBSXHVHGZW0CTF5D"
 }

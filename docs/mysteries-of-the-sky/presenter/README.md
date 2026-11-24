@@ -1,12 +1,12 @@
 # Professor Rowan Ellery
 
-Rowan is the fictional on-camera physics professor for *Mysteries of the Sky*. His fictional PhD is in physics. He introduces a question from his study, then hands the explanation over to the diagrams. Use his character name for the speaker and credit the original researchers for scientific findings.
+Rowan is the fictional on-camera physics professor for *Mysteries of the Sky*. His fictional PhD is in physics. He is in his early sixties, clean-shaven, with a high, receding hairline and short, casually swept grey hair. His rectangular glasses have faint handling marks at the edges. He wears a lightly rumpled white shirt with an open collar in his bookshelf study.
 
-The [portrait](rowan-ellery.png) and [speaking master](rowan-ellery-master.mp4) anchor the face, voice, wardrobe, camera and room. The source master is 1890 × 1080 with audio. For a 1920 × 1080 composition, fill the stage proportionally with a slight vertical crop. Keep his face and all lower-third typography at native resolution.
+The [current portrait](rowan-ellery.png) is the visual identity. The [voice sample](rowan-ellery-voice.m4a) is from Rowan’s HeyGen take with the older voice direction. Use the mild softness and muted indoor colour of an older webcam for the interview footage. Add readable titles after scaling the footage. The earlier [speaking master](rowan-ellery-master.mp4) shows a superseded design. The white-shirt speaking take is pending.
 
-## Make another take with HeyGen through Monid
+## Generate a take
 
-From the repository root, write a request using the saved identity and your new dialogue. The helper fetches the reference URL from the original Monid run. It writes to a new file and leaves generation to the next command.
+From the repository root, prepare a HeyGen Video 1 reference-to-video request using the current portrait, voice sample and a new line. The default request uses a 480p landscape capture. The optional fourth argument supplies an alternative HTTPS speaking-master URL.
 
 ```sh
 node scripts/mysteries-presenter.mjs "A hidden planet can leave a trace in starlight." 6 /tmp/rowan-take.json
@@ -15,4 +15,4 @@ monid inspect -p heygen -e /v1/video/heygen-video-1-r2v
 monid run -p heygen -e /v1/video/heygen-video-1-r2v -f /tmp/rowan-take.json -w
 ```
 
-Monid also offered a promotional route during creation. Use the current catalog for availability and pricing. If the provider's original media URL expires, supply an HTTPS location for the checked-in master as the helper's fourth argument. A take uses the original video as its identity reference every time. The master-generation prompt is in [heygen-master.json](heygen-master.json). The run and video IDs in [profile.json](profile.json) identify that master. The reusable identity lives in these files.
+The saved [five-second introduction request](heygen-master.json) uses the current portrait with HeyGen Video 1 image-to-video. Its spoken line is “I'm Professor Rowan Ellery. Welcome to Mysteries of the Sky.” The promotional endpoint at preparation was `/promo/v1/video/heygen-video-1-i2v`. Check the Monid catalog for current pricing. [Profile and source references](profile.json).

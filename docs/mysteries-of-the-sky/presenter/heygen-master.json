@@ -1,8 +1,11 @@
 {
-  "resolution": "1080p",
-  "duration": 9,
-  "aspect_ratio": "16:9",
-  "seed": 184711,
+  "image": {
+    "type": "url",
+    "url": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/7dc5c344e114d808ba1c6bc4825327772c45c722/docs/mysteries-of-the-sky/presenter/rowan-ellery.png"
+  },
+  "resolution": "480p",
+  "duration": 5,
   "prompt_enhancement": "disabled",
-  "prompt": "One continuous locked-off eye-level documentary interview shot in landscape. Invent an original fictional astronomy presenter, Professor Rowan Ellery, PhD in Physics. A white man about 49 with a broad square face, strong nose, grey-green eyes, freckles, a full neatly trimmed copper beard silvering at the chin and thick brushed-back auburn hair with silver temples. No glasses. Deep plum brushed-cotton overshirt over an oatmeal crew-neck tee. He sits upright in his own quiet study, framed from mid chest up, small breathing room above his head, looking directly into the lens. Behind him: a lived-in wall of warm walnut bookshelves with worn astronomy books, a small brass celestial globe on the left, a shaded reading lamp on the right, muted indigo wall in the recess. Soft side daylight, realistic skin texture, subtle depth of field, understated editorial portrait, no titles or visible writing. Hands below frame. Begin with about three quarters of a second of silent relaxed eye contact, lips gently closed. In a warm, resonant mid-low English-speaking voice, measured and curious, with natural articulation, say exactly: \"I'm Professor Rowan Ellery. Welcome to Mysteries of the Sky. Even a hidden planet can leave a trace in starlight.\" Finish with relaxed eye contact, gently closed lips. Subtle natural blinks, one small nod, no cuts, no push-in, no music, just clean close-mic speech and faint room tone. Keep the face, camera, wardrobe and room consistent throughout."
+  "seed": 184711,
+  "prompt": "Use this exact portrait of Professor Rowan Ellery as the first frame. Keep him clean shaven, a high receding hairline with short loose grey hair, lightly smudged rectangular glasses and only a lightly rumpled white button-down shirt with its collar open, in the same bookshelf room. An ordinary slightly older webcam capture in muted indoor light, softened low-resolution detail, modest saturation and subdued whites. Keep the camera still and the framing consistent. He looks at the camera and says in a warm, mature baritone of a physicist in his early sixties, with a slight dry grain and the relaxed pace of an experienced teacher: \"I'm Professor Rowan Ellery. Welcome to Mysteries of the Sky.\" Natural lip sync and blinking, hands out of frame, calm smile on the last beat, no background music, graphics or captions."
 }
