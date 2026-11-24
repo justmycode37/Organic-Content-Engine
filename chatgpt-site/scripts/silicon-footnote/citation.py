@@ -37,7 +37,8 @@ def frame(path,t,length,variant):
     # Establish publisher/author, mark the evidence, then move close enough to read.
     move=ease((t-min(.86,length*.12))/max(.9,min(2.3,length*.38)))
     z=1+min(.59,max(.18,W/(w+145)-1))*move
-    z+=.008*min(1,t/max(.1,length))
+    travel=min(1,max(0,t)/max(.1,length-1/24))
+    z+=.07*(1-travel if variant%2 else travel)
     left=max(0,min(W-W/z,(x+w/2-W/(2*z))*move))
     top=max(0,min(H-H/z,(y+h/2-H/(2*z))*move))
     picture=Image.blend(wide,spot,move*.92) if variant%3!=1 else wide

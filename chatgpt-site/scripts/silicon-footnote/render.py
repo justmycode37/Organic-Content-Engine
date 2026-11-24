@@ -6,6 +6,7 @@ from film import Sequence,lower
 from score import score
 from credits import write_credits
 from timeline import assemble
+from footage import place_footage, choose_title_position
 from captions import render_captions
 from PIL import Image
 import subprocess
@@ -20,15 +21,26 @@ def render(root):
     plan=json.loads((root/'episode.json').read_text())
     pack=json.loads((root/'sources.json').read_text())
     timing=json.loads((root/'timing.json').read_text())
-    captioned=bool(plan.get('captions')) or bool(plan.get('style')=='reported-footage')
+    captioned=bool(plan.get('captions',False))
+    full_hd=plan.get('style')=='reported-footage' and not captioned
     if captioned:render_captions(root,plan,timing)
     plan,timing,voice=assemble(root,plan,timing,pack)
     tail=4.5 if plan.get('style')=='reported-footage' else 0
     if tail:
-        last_index=next(i for i in reversed(range(len(plan['beats']))) if plan['beats'][i]['kind']=='footage')
+        last_index=next(i for i in reversed(range(len(plan['beats']))) if plan['beats'][i]['kind']=='footage' and not plan['beats'][i].get('originalSpeech'))
         last=plan['beats'][last_index]
         plan['beats'].append({**last,'closing':True,'originalSpeech':False,'clean':False,'clipStart':last.get('clipStart',0)+timing[last_index]})
         timing.append(tail)
+    if plan.get('style')=='reported-footage':
+        place_footage(root,plan['beats'],timing,pack['clips'])
+        speakers=set()
+        for b in plan['beats']:
+            if b['kind']=='footage' and not b.get('originalSpeech') and not b.get('clean') and not b.get('titlePosition'):
+                b['titlePosition']=choose_title_position(root/f"clip-{b['clip']}.mp4",b.get('clipStart',0))
+            if b.get('originalSpeech'):
+                identity=b['nameplate']['name'].strip().casefold()
+                b['introduceSpeaker']=identity not in speakers
+                speakers.add(identity)
     (root/'picture-edit.json').write_text(json.dumps({'plan':plan,'seconds':timing},indent=2))
     write_credits(root,plan,pack)
     modern=all(beat.get('art') for beat in plan['beats'])
@@ -53,7 +65,7 @@ def render(root):
     def shot(job):
         i,beat,length,frames,path=job
         target=path.with_suffix('.partial.mp4')
-        codec=['-frames:v',frames,'-an','-c:v','libx264','-threads','2','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',target]
+        codec=(['-s','1920x1080'] if full_hd else [])+['-frames:v',frames,'-an','-c:v','libx264','-threads','2','-preset','veryfast','-crf','20','-pix_fmt','yuv420p',target]
         if beat['kind']=='footage' and not beat.get('comparison'):
             clip=pack['clips'][beat['clip']]
             overlay=root/f'field-{i}.png'
@@ -61,8 +73,18 @@ def render(root):
             media=root/f"clip-{beat['clip']}.mp4"
             duration=float(subprocess.check_output(['ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',media]))
             offset=round(min(beat.get('clipStart',(i*7.31)%max(1,duration-length)),max(0,duration-length)),3)
-            graph=f'[0:v]fps={FPS},scale={W}:{H}:force_original_aspect_ratio=increase,crop={W}:{H},setsar=1[v];[v][1:v]overlay'
-            run(['-stream_loop','-1','-ss',offset,'-protocol_whitelist','file','-format_whitelist','mov','-i',media,'-i',overlay,'-filter_complex',graph,*codec])
+            width,height=(1920,1080) if full_hd else (W,H)
+            graph=f'[0:v]fps={FPS},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[v]'
+            layer=['-framerate',str(FPS),'-loop','1','-i',overlay]
+            if modern:
+                hold=min(length,4.7 if beat.get('originalSpeech') else 4.0)
+                exit_start=max(.12,hold-.32)
+                graph+=f";[1:v]scale={width}:{height},format=rgba,fade=t=in:st=0:d=0.28:alpha=1,fade=t=out:st={exit_start}:d=0.30:alpha=1[tag]"
+                distance=16 if beat.get('originalSpeech') or beat.get('titlePosition','').startswith('lower') else -12
+                graph+=f";[v][tag]overlay=x=0:y='{distance}*pow(max(0,1-t/0.32),2)':shortest=1"
+            else:
+                graph+=';[v][1:v]overlay'
+            run(['-stream_loop','-1','-ss',offset,'-protocol_whitelist','file','-format_whitelist','mov','-i',media,*layer,'-filter_complex',graph,*codec])
         else:
             scene=Sequence(root,beat,pack,i) if modern else Scene(beat,pack['sources'][beat['source']],i,len(timing))
             if not modern and beat['kind']=='image':

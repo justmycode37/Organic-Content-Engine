@@ -4,7 +4,7 @@ import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {prepare,here,read,save} from './editor.mjs';
 import {capturePress} from './press.mjs';
-import {narrate} from './narration.mjs';
+import {narrate,TITAN_SETTINGS} from './narration.mjs';
 import {prepareThumbnails} from './thumbnail.mjs';
 
 export const TITAN='dtSEyYGNJqjrtBArPCVZ';
@@ -35,7 +35,7 @@ export async function produce(dir,{topic='',sourceFile}={}){
    if(!existsSync(file)){
     const audio=join(dir,`take-${i}.mp3`);
     if(!existsSync(audio)){
-     const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${TITAN}?output_format=mp3_44100_128`,{method:'POST',redirect:'error',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text:beat.narration,model_id:'eleven_flash_v2_5',previous_text:plan.beats[i-1]?.narration,next_text:plan.beats[i+1]?.narration}),signal:AbortSignal.timeout(120000)});
+     const res=await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${TITAN}?output_format=mp3_44100_128`,{method:'POST',redirect:'error',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text:beat.narration,model_id:'eleven_flash_v2_5',voice_settings:TITAN_SETTINGS,previous_text:plan.beats[i-1]?.narration,next_text:plan.beats[i+1]?.narration}),signal:AbortSignal.timeout(120000)});
      if(!res.ok)throw Error('Titan synthesis failed for beat '+(i+1)+' (HTTP '+res.status+')');
      writeFileSync(audio+'.tmp',Buffer.from(await res.arrayBuffer()));renameSync(audio+'.tmp',audio);
     }

@@ -20,6 +20,11 @@ def score(path,timing,beats,pack=None):
     for i,(moment,b) in enumerate(zip(starts,beats)):
         if i==0 or b['kind'] in ('chart','quote','document') and (i<2 or b['kind']!=beats[i-1]['kind']):
             events.append((moment+.15,'paper' if b['kind'] in ('quote','document') else 'key'))
+        if b['kind'] in ('chart','terrain'):
+            events.append((moment+.08,'sweep'))
+            if b['kind']=='chart':
+                reveal=max(.8,min(timing[i]*.48,3)) if b['chart'].get('layout')=='profile' else 1.05
+                if reveal<timing[i]-.2:events.append((moment+reveal,'settle'))
         if b.get('insert'):events.append((moment+timing[i]*b['insert']['at'],'air'))
     rooms={}
     ambience=[]
@@ -73,7 +78,14 @@ def score(path,timing,beats,pack=None):
             for moment,kind in events:
                 sec=moment-start/SR
                 if not 0<=sec<n/SR:continue
-                if kind=='key':
+                if kind=='sweep':
+                    def sweep(t):
+                        env=np.sin(np.pi*t/.29)**1.5
+                        return .085*env*(np.sin(2*np.pi*(150*t+630*t*t))+.16*np.sin(2*np.pi*1520*t))
+                    add(sec,.29,sweep,.58)
+                elif kind=='settle':
+                    add(sec,.24,lambda t:.082*(1-np.exp(-t/.003))*np.exp(-t/.047)*(np.sin(2*np.pi*760*t)+.37*np.sin(2*np.pi*1140*t)),.45)
+                elif kind=='key':
                     add(sec,.30,lambda t:.060*(1-np.exp(-t/.003))*np.exp(-t/.050)*(np.sin(2*np.pi*590*t)+.45*np.sin(2*np.pi*890*t)),.58)
                 else:
                     def rustle(t):
