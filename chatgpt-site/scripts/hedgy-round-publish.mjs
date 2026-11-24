@@ -1,4 +1,4 @@
-// Submit a reviewed even-numbered Hedgy round through the account worker's Postiz integration.
+// Submit a finished Hedgy evaluation round through the account worker's Postiz integration.
 import {readFile, rename, writeFile} from 'node:fs/promises';
 import {createHash, randomUUID} from 'node:crypto';
 import {basename, join, resolve} from 'node:path';
@@ -10,8 +10,8 @@ if (!roundArg || !integrationId) throw new Error('Usage: hedgy-round-publish.mjs
 const checking = roundArg === '--check';
 const dir = resolve(roundArg);
 const round = checking ? 12 : Number(/^r(\d+)$/.exec(basename(dir))?.[1]);
-if (!Number.isSafeInteger(round) || round < 12 || round % 2 || round > 10000) {
- throw new Error('Instagram publication starts at r12 and applies to even-numbered rounds only.');
+if (!Number.isSafeInteger(round) || round < 12 || round > 10000) {
+ throw new Error('Choose a numbered Hedgy round from r12 through r10000.');
 }
 
 const config = workerConfig();
@@ -45,12 +45,14 @@ if (checking) {
   const {materialId} = await request(`${job}/output`, {method:'PUT',headers:{'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});
   await request(`${job}/complete`, json({materialId,spec,provenance:{}}));
  }
- for (let attempt = 0; attempt < 8; attempt++) {
+ const maxChecks = 25;
+ for (let attempt = 0; attempt < maxChecks; attempt++) {
   const status = await request(route);
   await save(status);
-  if (['published','failed','needs_attention'].includes(status.status) || attempt === 7) {
+  if (['published','failed','needs_attention'].includes(status.status) || attempt === maxChecks - 1) {
    console.log(JSON.stringify(status));
    if (['failed','needs_attention'].includes(status.status)) process.exitCode = 1;
+   else if (status.status !== 'published') process.exitCode = 2;
    break;
   }
   await new Promise(resolve => setTimeout(resolve, 7500));

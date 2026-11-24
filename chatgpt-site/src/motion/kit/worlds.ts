@@ -214,7 +214,8 @@ export const VIRAL_SHIFT = 102;
 const VIRAL_SKY = 210;
 const EXTRA = VIRAL_SKY / ART;
 function worldSprite(id: WorldId, dim: number, tall: boolean): Sprite {
-  const rows = tall ? 214 : 144, extra = tall ? EXTRA : 0;
+  // Keep floor art in frame when the final title pushes the subject back.
+  const rows = tall ? 260 : 144, extra = tall ? EXTRA : 0;
   return makeSprite(`world:${id}:${dim}:${rows}`, COLS, rows + extra, ctx => {
     ROWS = rows; ctx.fillStyle = BG; ctx.fillRect(0, 0, COLS, rows + extra);
     ctx.save(); ctx.translate(0, extra); PAINT[id](painter(ctx, dim)); ctx.restore(); ROWS = 144;

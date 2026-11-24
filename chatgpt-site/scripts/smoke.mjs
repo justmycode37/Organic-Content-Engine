@@ -933,13 +933,14 @@ test('reviewed Hedgy rounds use the hosted Postiz key once and skip the generati
   if(request.method==='POST'){creates++;return Response.json([{postId:'evaluation-post',integration:postizTarget.id}]);}
   return Response.json({posts:[{id:'evaluation-post',state:'PUBLISHED',releaseURL:'https://www.instagram.com/reel/abc/',integration:{id:postizTarget.id}}]});
  }});
- const route='/api/jobs/accounts/hedgy/evaluation/12',input={digest:'a'.repeat(64),integrationId:postizTarget.id};
+ const route='/api/jobs/accounts/hedgy/evaluation/13',input={digest:'a'.repeat(64),integrationId:postizTarget.id};
  const request={headers:accountHeaders,json:input};
  try{
   await s.call('GET','/api/accounts');
   assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id}})).status,200);
   assert.equal((await s.call('GET',route,{headers:{}})).status,401);
-  assert.equal((await s.call('POST',route.replace(/12$/,'13'),request)).status,400);
+  assert.equal((await s.call('POST',route.replace(/13$/,'11'),request)).status,400);
+  assert.equal((await s.call('GET',route.replace(/13$/,'12'),{headers:accountHeaders})).body.destination.id,postizTarget.id);
   assert.equal((await s.call('GET',route,{headers:accountHeaders})).body.destination.id,postizTarget.id);
   const reserved=await s.call('POST',route,request);assert.equal(reserved.status,200,JSON.stringify(reserved.body));
   const {id,lease}=reserved.body;
