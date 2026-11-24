@@ -13,11 +13,11 @@ export function duration(path){
  if(!(seconds>0&&Number.isFinite(seconds)))throw Error('Invalid audio or video duration');
  return seconds;
 }
-export async function produce(dir,{topic='',sourceFile}={}){
+export async function produce(dir,{topic='',sourceFile,reuseVoice}={}){
  dir=resolve(dir);mkdirSync(dir,{recursive:true});
  const lock=join(dir,'production.lock'),fd=openSync(lock,'wx');closeSync(fd);
  try{
-  const request={topic,sourceFile:sourceFile?resolve(sourceFile):null},requestFile=join(dir,'request.json');
+  const request={topic,sourceFile:sourceFile?resolve(sourceFile):null,...(reuseVoice?{reuseVoice:resolve(reuseVoice)}:{})},requestFile=join(dir,'request.json');
   if(existsSync(requestFile)&&JSON.stringify(request)!==JSON.stringify(read(requestFile)))throw Error('Use a new output directory for a different episode');
   save(requestFile,request);
   const key=process.env.ELEVENLABS_API_KEY;
@@ -29,7 +29,7 @@ export async function produce(dir,{topic='',sourceFile}={}){
    const pages=plan.beats.flatMap(b=>[b,...(b.cutaways??[]).map(c=>({...c,source:c.source??b.source}))]).filter(b=>['document','quote'].includes(b.kind)).map(b=>b.kind==='quote'&&b.quote&&!/\/status\/\d+/.test(read(join(dir,'sources.json')).sources[b.source].url)?{source:b.source,quote:b.quote}:b.source);
    await capturePress(dir,read(join(dir,'sources.json')).sources,pages);
   }
-  if(continuous)timing.push(...await narrate(dir,plan.beats,TITAN,key));
+  if(continuous)timing.push(...await narrate(dir,plan.beats,TITAN,key,reuseVoice));
   else for(const [i,beat] of plan.beats.entries()){
    const file=join(dir,`voice-${i}.wav`);
    if(!existsSync(file)){
@@ -44,7 +44,7 @@ export async function produce(dir,{topic='',sourceFile}={}){
    }
    timing.push(duration(file));tracks.push(`file 'voice-${i}.wav'`);
   }
-  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.style==='reported-footage'?4.5:0)+plan.beats.reduce((s,b)=>s+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
+  const seconds=timing.reduce((a,b)=>a+b,0)+(plan.style==='reported-footage'?4.5*(plan.closingCredits?.length||2):0)+plan.beats.reduce((s,b)=>s+(b.actuality?b.actuality.end-b.actuality.start:0),0);save(join(dir,'timing.json'),timing);
   if(seconds<600||seconds>900)throw Error(`Native narration measures ${seconds.toFixed(1)}s outside 600–900s. Takes are saved for editorial revision.`);
   if(!continuous){writeFileSync(join(dir,'voice.list'),tracks.join('\n'));
   execFileSync('ffmpeg',['-v','error','-y','-f','concat','-safe','1','-i',join(dir,'voice.list'),'-c','copy',join(dir,'voice.wav')]);}
@@ -57,6 +57,9 @@ export async function produce(dir,{topic='',sourceFile}={}){
 if(import.meta.url===pathToFileURL(process.argv[1]??'').href){
  const [dir,...args]=process.argv.slice(2);
  if(!dir)throw Error('Usage: node produce.mjs OUTPUT_DIRECTORY [topic | --sources FILE]');
- const result=await produce(dir,args[0]==='--sources'?{sourceFile:args[1]}:{topic:args.join(' ')});
+ const index=args.indexOf('--reuse-voice');
+ let reuseVoice;
+ if(index>=0){reuseVoice=args[index+1];if(!reuseVoice)throw Error('Expected a prior voice directory');args.splice(index,2);}
+ const result=await produce(dir,{...(args[0]==='--sources'?{sourceFile:args[1]}:{topic:args.join(' ')}),reuseVoice});
  console.log(result.output);
 }

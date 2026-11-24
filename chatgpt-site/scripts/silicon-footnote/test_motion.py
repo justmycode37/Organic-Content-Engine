@@ -83,6 +83,29 @@ class DocumentaryTests(unittest.TestCase):
         self.assertAlmostEqual((x.min()+x.max())/2,1280*.72,delta=3)
         self.assertFalse(np.any(lower(dict(beat,originalSpeech=True,introduceSpeaker=False),'USACE')))
 
+    def test_flash_removal_includes_frames_consumed_by_prior_repairs(self):
+        from footage import trim_flashes
+        flashes=[(3.0,3.04),(5.0,5.08),(6.04,6.08),(15,15.04)]
+        trims=trim_flashes(flashes,4,2)
+        self.assertEqual(len(trims),2)
+        self.assertLess(trims[0][0],1)
+        self.assertGreater(trims[1][1],2)
+
+    def test_chart_answer_uses_narration_offset_within_its_own_shot(self):
+        import json
+        from tempfile import TemporaryDirectory
+        from pathlib import Path
+        from timeline import assemble
+        line='First compare them. Both use the same amount.'
+        b={'kind':'image','art':{'headline':'Comparison'},'narration':line,
+           'cutaways':[{'kind':'chart','at':.3,'title':'Customer demand',
+                        'chart':{'revealCue':'Both use'}}]}
+        with TemporaryDirectory() as tmp:
+            p=Path(tmp)
+            (p/'alignment.json').write_text(json.dumps([{'text':line,'starts':[i/4 for i in range(len(line))]}]))
+            plan,times,_=assemble(p,{'beats':[b]},[10],{})
+        self.assertAlmostEqual(times[0]+plan['beats'][1]['revealAt'],line.index('Both use')/4)
+
     def test_camera_moves_in_both_directions(self):
         from film import camera
         from PIL import Image

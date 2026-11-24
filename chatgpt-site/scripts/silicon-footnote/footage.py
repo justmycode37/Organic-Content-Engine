@@ -1,4 +1,5 @@
 """Select unused source seconds within editorially interchangeable camera coverage."""
+import re
 import subprocess
 import numpy as np
 
@@ -43,6 +44,30 @@ def reserve_footage(beats, lengths, clips, durations):
         selected.append((start, start + seconds))
 
 
+def source_flashes(media):
+    """Identify brief near-black cuts at the same frame rate as the edit."""
+    result=subprocess.run([
+        'ffmpeg','-hide_banner','-nostats','-i',media,'-map','0:v:0','-an',
+        '-vf','fps=24,scale=96:54,blackdetect=d=0.001:pix_th=0.07:pic_th=0.96',
+        '-f','null','-'],capture_output=True,text=True,check=True)
+    matches=re.findall(r'black_start:([\d.]+) black_end:([\d.]+) black_duration:([\d.]+)',result.stderr)
+    return [(float(start),float(end)) for start,end,duration in matches if 0<float(duration)<=.25]
+
+
+def trim_flashes(intervals, offset, length):
+    """Express source flashes in the shot's clock, including its replacement frames."""
+    trim=[]
+    end_time=length
+    for start,end in intervals:
+        first=max(0,start-offset-1/24)
+        last=end-offset+1/24
+        if last<=0 or first>=end_time:
+            continue
+        trim.append((first,last))
+        end_time+=last-first
+    return trim
+
+
 def place_footage(root, beats, lengths, clips):
     indices = {s['clip'] for s in beats if s['kind']=='footage' and not s.get('comparison')}
     durations = {}
@@ -51,6 +76,14 @@ def place_footage(root, beats, lengths, clips):
             'ffprobe','-v','error','-show_entries','format=duration','-of','csv=p=0',
             root/f'clip-{index}.mp4']))
     reserve_footage(beats, lengths, clips, durations)
+    broll_indices={s['clip'] for s in beats if s['kind']=='footage' and not s.get('originalSpeech') and not s.get('comparison')}
+    intervals={i:source_flashes(root/f'clip-{i}.mp4') for i in broll_indices}
+    for shot,seconds in zip(beats,lengths,strict=True):
+        if shot['kind']!='footage' or shot.get('originalSpeech') or shot.get('comparison'):continue
+        index=shot['clip']
+        offset=min(shot['clipStart'],max(0,durations[index]-seconds))
+        selected=trim_flashes(intervals[index],offset,seconds)
+        if selected:shot['trimFlashes']=selected
 
 def choose_title_position(media, start):
     """Place text in a quiet corner of the actual camera frame."""

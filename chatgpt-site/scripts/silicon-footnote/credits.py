@@ -1,6 +1,27 @@
 """Produce source and reuse credits next to each finished film."""
 import re
-from pathlib import Path
+
+def closing_cards(plan,pack):
+    if plan.get('closingCredits'):
+        return plan['closingCredits']
+    from film import publisher,readable_credit
+    reporting=[]
+    media=[]
+    for b in plan['beats']:
+        source=pack['sources'][b['source']]
+        name=publisher(source)
+        if name not in reporting:reporting.append(name)
+        if b['kind'] in ('footage','image'):
+            asset=pack['clips'][b['clip']] if b['kind']=='footage' else pack['images'][b['image']]
+            credit=readable_credit(asset['credit']).split(' · ')[0].strip()
+            if credit and credit not in media:media.append(credit)
+    def line(names):
+        selected=[]
+        for name in names:
+            if len('  /  '.join(selected+[name]))<=150:selected.append(name)
+        return '  /  '.join(selected)
+    return [{'title':'Reporting and data','text':line(reporting)},
+            {'title':'Footage and photography','text':line(media)}]
 
 def write_credits(root,plan,pack):
     lines=[plan['title'],'','Reporting and data','']

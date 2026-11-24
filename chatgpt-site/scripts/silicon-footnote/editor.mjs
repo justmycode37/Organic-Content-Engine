@@ -10,7 +10,7 @@ export const here=fileURLToPath(new URL('.',import.meta.url));
 export const save=(path,value)=>{writeFileSync(path+'.tmp',JSON.stringify(value,null,2));renameSync(path+'.tmp',path)};
 export const read=path=>JSON.parse(readFileSync(path,'utf8'));
 const string=z.string().min(1), url=z.url({protocol:/^https$/});
-export const pack=z.object({topic:string,sources:z.array(z.object({title:string,url,notes:string})).min(2),clips:z.array(z.object({title:string,url,credit:string,originalSound:z.boolean().optional(),ambientSound:z.boolean().optional(),coverage:z.array(z.object({start:z.number().nonnegative(),end:z.number().positive()})).optional(),endSeconds:z.number().positive().optional()})).min(1),images:z.array(z.object({title:string,url,credit:string,page:url})).max(32).optional()});
+export const pack=z.object({topic:string,sources:z.array(z.object({title:string,url,notes:string})).min(2),clips:z.array(z.object({title:string,url,credit:string,originalSound:z.boolean().optional(),ambientSound:z.boolean().optional(),ambientRanges:z.array(z.object({start:z.number().nonnegative(),end:z.number().positive()})).optional(),coverage:z.array(z.object({start:z.number().nonnegative(),end:z.number().positive()})).optional(),endSeconds:z.number().positive().optional()})).min(1),images:z.array(z.object({title:string,url,credit:string,page:url})).max(32).optional()});
 const art=z.object({
  subject:z.enum(['campus','server','powerline','generator','meter','wind','hydro','chip','network','sample','document','abstract']),
  headline:string.max(42),value:z.string().max(18),unit:z.string().max(28),
@@ -21,8 +21,8 @@ const comparison=z.array(z.object({image:z.number().int().nonnegative(),label:st
 const processDrawing=z.array(z.object({subject:z.enum(['campus','server','powerline','generator','meter','wind','hydro','chip']),label:string.max(32)})).min(2).max(4);
 const chartSpec=z.union([
  z.object({layout:z.literal('calculation'),unit:string,values:z.array(z.number()).length(2),active:z.number().int().min(0).max(1),answer:string.max(50)}),
- z.object({layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),steps:z.boolean().optional(),until:z.number().positive().max(1).optional(),
-  series:z.array(z.object({label:string,values:z.array(z.number().finite()).min(2).max(96)})).min(1).max(3)}).refine(c=>c.domain[0]<c.domain[1] && c.series.every(s=>s.values.length===c.series[0].values.length && s.values.every(v=>v>=c.domain[0]&&v<=c.domain[1]))),
+ z.object({layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),axisIndices:z.array(z.number().int().nonnegative()).optional(),markerUnit:string.max(14).optional(),markerIndex:z.number().int().nonnegative().optional(),revealCue:string.optional(),illustrative:z.boolean().optional(),steps:z.boolean().optional(),until:z.number().positive().max(1).optional(),
+  series:z.array(z.object({label:string,values:z.array(z.number().finite()).min(2).max(96)})).min(1).max(3)}).refine(c=>c.domain[0]<c.domain[1] && (c.markerIndex??0)<c.series[0].values.length && (!c.axisIndices || c.axisIndices.length===c.axis.length && c.axisIndices.every((v,i,a)=>v<c.series[0].values.length && (i===0||v>a[i-1]))) && c.series.every(s=>s.values.length===c.series[0].values.length && s.values.every(v=>v>=c.domain[0]&&v<=c.domain[1]))),
  z.object({layout:z.enum(['bars','paired','fixed']).optional(),constant:z.string().max(42).optional(),unit:string,values:z.array(z.number().nonnegative()).min(2).max(4)})
 ]);
 const titlePosition=z.enum(['upper-left','upper-right','lower-left','lower-right']);
@@ -36,10 +36,10 @@ const thumbnailPlan=z.object({
  still:z.number().int().nonnegative().nullable(),
  motif:z.enum(['chip','power','workflow','document']),
 });
-export const script=z.object({style:z.literal('reported-footage').optional(),captions:z.boolean().optional(),title:string.max(90),beats:z.array(beat).min(27).max(100),thumbnails:thumbnailPlan.optional()});
+export const script=z.object({closingCredits:z.array(z.object({title:string.max(64),text:string.max(170)})).min(1).max(4).optional(),style:z.literal('reported-footage').optional(),captions:z.boolean().optional(),title:string.max(90),beats:z.array(beat).min(27).max(100),thumbnails:thumbnailPlan.optional()});
 
 export function checkVideoCopy(plan,material){
- const contents=[plan.title,JSON.stringify(plan.beats)];
+ const contents=[plan.title,JSON.stringify(plan.beats),JSON.stringify(plan.closingCredits??[])];
  for(const b of plan.beats){
   const source=material.sources[b.source];
   if(!source)throw Error('Choose an existing reporting source for each shot');
