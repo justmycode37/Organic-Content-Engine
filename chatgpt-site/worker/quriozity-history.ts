@@ -36,10 +36,6 @@ export function findRepeat(candidate:{topic:string;topicKey?:string;title?:strin
  }
  return null;
 }
-/** Seed ideas that no earlier reel has covered yet. */
-export function freshSeeds(seeds:readonly string[],history:QuriozityHistoryEntry[]){
- return seeds.filter(s=>!findRepeat({topic:s},history,0.5));
-}
 /** Merge ledgers, newest first, one entry per topic key. */
 export function mergeHistory(...lists:QuriozityHistoryEntry[][]){
  const seen=new Set<string>(),out:QuriozityHistoryEntry[]=[];

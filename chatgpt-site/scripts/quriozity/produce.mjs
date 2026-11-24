@@ -19,6 +19,7 @@ import {referenceSheets} from './review-evidence.mjs';
 import {prepareStyleReference,candidateMotionEvidence} from './style-reference.mjs';
 import {runVisualReviewStage,runVoiceReviews,reviewFingerprint,bestReviewedVisual,REVIEW_LIMITS} from './quality-reviews.mjs';
 import {opusRepairBudget,solRepairBudget} from './repair-budget.mjs';
+import {researchTopics} from './topic-research.mjs';
 import {prepareMusicBed,MUSIC_LEVEL} from './music-level.mjs';
 import {VISUAL_REVIEW_STAGES,reviewVisuals,repairVisuals,reviewNarrationDelivery,reviewVoicePacing} from '../../worker/quriozity-quality.ts';
 import {sceneDuration,resolveAt} from '../../src/quriozity/spec.ts';
@@ -255,7 +256,11 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
   const sourcing={find:async needs=>{log(`sourcing real models: ${needs.map(n=>n.thing).join(', ')}`);const r=await measure('asset sourcing',()=>sourceAssets(ask,needs,{log,workdir:join(workdir,'sourcing'),hasModel:cat.has}));cat=await loadCatalog({fresh:true});provenance.sourcedAssets=[...(provenance.sourcedAssets??[]),...r.added.map(e=>({id:e.id,source:e.source,license:e.license,page:e.page}))];await save();return {cat,added:r.added.map(e=>e.id)};}};
   const {mergeHistory}=await import('../../worker/quriozity-history.ts');
   const all=mergeHistory(history,await readLedger());log(`history: ${all.length} earlier reels checked for repeats`);
-  const r=await measure('story generation total',()=>gen.generateQuriozityReel({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},topic,cat,usage,all,sourcing,ask));
+  if(!clients && (!provenance.topicResearch||provenance.topicResearch.requestedTopic!==topic)){
+   provenance.topicResearch=await measure('Monid topic research',()=>researchTopics(ask,topic,all));
+   await save();
+  }
+  const r=await measure('story generation total',()=>gen.generateQuriozityReel({OPENAI_API_KEY:openai,ANTHROPIC_API_KEY:process.env.ANTHROPIC_API_KEY},topic,cat,usage,all,sourcing,ask,provenance.topicResearch));
   Object.assign(provenance,r.provenance,{model:clientContext.generationModel,effort:clientContext.generationEffort??clientContext.effort});await save();await writeFile(draft,JSON.stringify(r.spec,null,1));
  }
  let spec=await readJson(draft);
