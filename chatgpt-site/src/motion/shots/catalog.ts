@@ -281,14 +281,16 @@ export const SHOT_CATALOG: readonly ShotCatalogEntry[] = [
   },
   {
     "name": "statement",
-    "describe": "A large paper statement with legible balances and a Hedgy reaction. params: view (\"offer\", \"accrue\", \"balance\", \"charge\" or \"question\"), title (short name on the paper), before (starting balance as text), change (signed amount as text), after (updated balance as text), rate (unchanged annual rate as text), months (2–12), monthly (dollars accruing each month), next (optional next interest charge attributable to change, as text). For loan-payment deferral: offer shows a car and a pause button, event 1 presses it and event 2 reveals the extra debt; accrue counts months and unpaid interest from event 1 to 2; balance shows the old balance, event 1 slides in unpaid interest and event 2 posts it to principal; charge holds the new balance and shows the next interest charge branching from that amount on event 2; question returns to the opening offer and leaves the pause button unpressed. Keep the amounts and timing consistent with narration and use consecutive views only when they advance the mechanism. The printed values already carry the result.",
+    "describe": "A large paper statement with legible balances and a Hedgy reaction. params: view (\"offer\", \"accrue\", \"balance\", \"charge\" or \"question\"), title (short name on the paper), before (starting balance as text), change (signed amount as text), after (updated balance as text), rate (unchanged annual rate as text), months (2–12), monthly (dollars accruing each month), monthlyRate (optional monthly rate as text), next (optional next interest charge attributable to change, as text), question (optional short borrower question). For loan-payment deferral: offer shows a car and a pause button, event 1 presses it and event 2 reveals the extra debt; accrue counts months and unpaid interest from event 1 to 2; balance shows the old balance, event 1 slides in unpaid interest and event 2 posts it to principal; charge shows the monthly rate on event 1 and the next interest charge branching from the amount on event 2; question returns to the opening offer and replaces the pause button with the borrower question on event 1. Keep amounts and timing consistent with narration. The printed values already carry the result.",
     "params": [
       "after",
       "before",
       "change",
       "monthly",
+      "monthlyRate",
       "months",
       "next",
+      "question",
       "rate",
       "title",
       "view"
