@@ -81,7 +81,7 @@ def main():
     ff(*inputs,"-filter_complex",";".join(stages),"-map","[voice]","-c:a","flac",work/"voice.flac")
     voice_lufs=loudness(work/"voice.flac")
     score_lufs=loudness(work/"score.caf")
-    target_music=voice_lufs-15.0
+    target_music=voice_lufs-18.0
     music_gain=target_music-score_lufs
     mix=(f"[1:a]aresample=48000,volume={music_gain:.2f}dB,atrim=duration={total:.7f},afade=t=out:st={total-4:.6f}:d=4[m];"
          "[0:a][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.84:level=false:latency=true[mix]")

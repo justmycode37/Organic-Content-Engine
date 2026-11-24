@@ -1,6 +1,6 @@
 # Mysteries of the Sky: source to story
 
-Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Open on a visible change or a piece of evidence. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Reserve Rowan for a brief explanation of how a measurement was made or what limits it. The short transit example demonstrates the handoff format.
+Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Make the first spoken sentence of every episode a question. Introduce the subject immediately after it, and write a later beat that answers that exact question using evidence the viewer has now seen. Check both beats in the finished cut, including any title or labels that could give the answer away. Show the first piece of evidence during or immediately after the introduction. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Reserve Rowan for a brief explanation of how a measurement was made or what limits it. The short transit example demonstrates the handoff format.
 
 This is a local preproduction pipeline for a short astrophysics explainer. It
 turns a source ledger and structured brief into evidence-linked narration beats

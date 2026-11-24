@@ -2,7 +2,7 @@
 
 Rowan is the fictional on-camera physics expert for *Mysteries of the Sky*. Titan narrates the main explanation. Bring Rowan into the edit for a short interview answer or question, then cut back to Titan over the evidence. His fictional PhD is in physics. He is in his early sixties, clean-shaven, with a high, receding hairline and short, casually swept grey hair. His rectangular glasses have faint handling marks at the edges. He wears a lightly rumpled white shirt with an open collar in his bookshelf study.
 
-Use the [current portrait](rowan-ellery.png) and ElevenLabs voice `PerZoH0r6nxBZXCoIPpv`. Write Rowan one specific observation about a measurement, a model assumption, or an uncertainty. He can explain a method in the first person without implying he participated in the research.
+Use the [current portrait](rowan-ellery.png) and ElevenLabs voice `PerZoH0r6nxBZXCoIPpv`. Use his slightly quicker 1.09× speaking pace. Write Rowan one specific observation about a measurement, a model assumption, or an uncertainty. Have him speak directly about a specific result or a limitation of the instrument. Give him room to think aloud: a brief “um,” a pause, or an occasional repeated word can make an interview answer feel spoken. Vary the delivery between appearances.
 
 ## Generate an interview
 

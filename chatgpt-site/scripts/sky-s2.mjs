@@ -8,7 +8,7 @@ const work = resolve(process.argv[2]),
   fps = 24;
 // Seconds refer to the recorded Titan takes. Archive entries carry a source in-point.
 const edit = [
-  '0 trail,6.6 d@4,10 card-speed,15 rush,19 g@4,24 ellipse,28 advance,32 card-title',
+  '0 c@3,3.6 card-title,7.1 c@44,10.8 g@5,15.7 e@2,18.7 d@5,22.7 rush,27 ellipse,31.8 dots,33.4 lines',
   '0 c@1,5 c@12,12 c@21,18 c@33,25 c@45,31 card-distance,35 e@1,42 mark',
   '0 e@2,4 follow,9 e@10,13 blend,21 mark,27 e@4,34 blend,38 trail',
   '0 mark,6 follow,10 mark,14 dots,20 card-period,25 c@3,31 g@10,39 trail',

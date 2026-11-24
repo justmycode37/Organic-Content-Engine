@@ -1,8 +1,8 @@
 # The Star That Weighed a Black Hole
 
-## 01 · The turn
+## 01 · How much does the black hole weigh?
 
-Watch the bright dot. It creeps in from the far end of a long loop, picks up speed, then whips around a spot that looks empty. That dot is a star called S two. In May twenty eighteen it rounded the bend at roughly seventy-six hundred kilometers a second. At that speed you could cover the distance from New York to London in less than a second. Now watch the bend again. Nothing hits the star. Nothing pulls a visible string. Yet the turn is sharp enough that astronomers can use it to weigh the object in the middle. They can even tell that the star will miss its old path the next time around. How do you get all of that out of a moving point of light?
+How much does the black hole at the center of the Milky Way weigh? Welcome to Mysteries of the Sky. To find the answer, astronomers spent decades following a single star. Its name is S two. Every sixteen years it swings around a patch of darkness and heads back out into the crowd. From Earth, all you see is a dot changing direction. Watch it now, coming into the bend. In May twenty eighteen it was moving at roughly seventy-six hundred kilometers a second. To turn that motion into a mass, we need two things the telescope sees very differently: the shape of the star's path, and the light coming from the star itself.
 
 ## 02 · Behind the dust
 
@@ -62,4 +62,4 @@ Watch one more circuit. Near the far end, the star barely seems to move. Collect
 
 ## Interview insert after chapter 06
 
-**Professor Rowan Ellery** — I'd fit the sky positions and the spectrum together. The orbit has to reproduce the line-of-sight velocity on the very same dates. That constrains the tilt.
+**Professor Rowan Ellery** — Um, if S two were moving straight across the sky, the ordinary Doppler shift would be zero. Even at thousands of kilometers a second. It's the, the sideways motion that shows up in the images.
