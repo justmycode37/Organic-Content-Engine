@@ -33,25 +33,26 @@ export async function finishHedgy(dir,spec,{env=process.env,onUsage,subscription
  const v1=await renderVersion(dir,'render-v1',spec,{runner});
  let selection={version:'render-v1',reason:'no visual review'};
  if(spec.look==='viral'){
-  const s1=await sheets(v1.kit);
-  const first=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},spec,s1.images,s1.timeline,onUsage,subscription).catch(error=>({error:String(error?.message??error)}));
-  await writeFile(join(dir,'visual-review-v1.json'),JSON.stringify(first,null,2));
-  selection={version:'render-v1',reason:first.review?`visual review score ${first.review.score}${first.review.approved?' (approved)':''}`:`visual review unavailable: ${first.error??'invalid'}`};
-  if(first.spec){
-   // A repair that cannot be rendered never costs the post: keep the reviewed first render.
-   const v2=await renderVersion(dir,'render-v2',first.spec,{runner}).catch(async error=>{await writeFile(join(dir,'render-v2-error.txt'),String(error?.message??error));return undefined;});
-   if(!v2){selection={version:'render-v1',reason:'repair render failed; kept the reviewed original'};}
-   else {
-   const s2=await sheets(v2.kit);
-   const second=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},first.spec,s2.images,s2.timeline,onUsage,subscription,{repair:false}).catch(error=>({error:String(error?.message??error)}));
-   const {spec:_ignored,...secondRecord}=second;
-   await writeFile(join(dir,'visual-review-v2.json'),JSON.stringify(secondRecord,null,2));
-   // Never discard a better earlier version merely because a repair was attempted.
-   const a=first.review?.score??0,b=second.review?.score??a;
-   if(b>=a){selection={version:'render-v2',reason:`repair scored ${b} vs ${a}`};spec=first.spec;}
-   else selection={version:'render-v1',reason:`repair scored ${b} vs ${a}; kept the original`};
-   }
+  // Up to MAX_REPAIRS review→repair→render cycles; every render is reviewed and the best-scored one is kept
+  // (never discard a better earlier version merely because a later repair was attempted).
+  const MAX_REPAIRS=Number(env.HEDGY_VISUAL_REPAIRS??2);
+  let current={version:'render-v1',spec,kit:v1.kit},best={version:'render-v1',spec,score:-1};
+  for(let round=1;;round++){
+   const s=await sheets(current.kit);
+   const canRepair=round<=MAX_REPAIRS;
+   const reviewed=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},current.spec,s.images,s.timeline,onUsage,subscription,{repair:canRepair}).catch(error=>({error:String(error?.message??error)}));
+   const {spec:repairedSpec,...record}=reviewed;
+   await writeFile(join(dir,`visual-review-v${round}.json`),JSON.stringify(record,null,2));
+   const score=reviewed.review?.score;
+   if(score!==undefined&&score>best.score)best={version:current.version,spec:current.spec,score};
+   if(best.score<0&&score===undefined&&round===1)selection={version:'render-v1',reason:`visual review unavailable: ${reviewed.error??'invalid'}`};
+   if(!canRepair||!repairedSpec||reviewed.review?.approved)break;
+   const name=`render-v${round+1}`;
+   const next=await renderVersion(dir,name,repairedSpec,{runner}).catch(async error=>{await writeFile(join(dir,`${name}-error.txt`),String(error?.message??error));return undefined;});
+   if(!next)break;
+   current={version:name,spec:repairedSpec,kit:next.kit};
   }
+  if(best.score>=0){selection={version:best.version,reason:`best reviewed render (score ${best.score})`};spec=best.spec;}
  }
  await copyFile(join(dir,`${selection.version}.mp4`),finished);
  await copyFile(join(dir,`${selection.version}.json`),join(dir,'spec.json'));
