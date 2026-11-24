@@ -3,8 +3,9 @@ import assert from 'node:assert/strict';
 import {mkdtemp,rm} from 'node:fs/promises';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
-import {findRepeat,freshSeeds,mergeHistory,historyLines,topicKey} from '../worker/quriozity-history.ts';
-import {generateQuriozityReel,QURIOZITY_TOPIC_SEEDS} from '../worker/quriozity-generation.ts';
+import {findRepeat,mergeHistory,historyLines,topicKey} from '../worker/quriozity-history.ts';
+import {generateQuriozityReel} from '../worker/quriozity-generation.ts';
+import {researchTopics} from './quriozity/topic-research.mjs';
 import {reelHistory} from '../worker/services/account-automation.ts';
 import {readLedger,recordReel} from './quriozity/produce.mjs';
 
@@ -23,10 +24,24 @@ test('repeats are caught by key, topic or title wording',()=>{
  assert.equal(findRepeat({topic:'Why red LEDs came first'},[blue]),null);
 });
 
-test('used seed topics are not offered again',()=>{
- const seeds=freshSeeds(QURIOZITY_TOPIC_SEEDS,[blue,{topic:'Why we yawn'}]);
- assert.ok(!seeds.some(s=>/blue LED|yawn/i.test(s)));
- assert.ok(seeds.includes('Why cats purr'));
+test('topic research compares both platforms and requires live evidence',async()=>{
+ const ask=async(step,prompt)=>{
+  assert.equal(step,'topic-search');assert.match(prompt,/blue-led-invention/);
+  return JSON.stringify({queries:['ocean depth','sleep paralysis','snapping shrimp']});
+ };
+ const post={title:'How deep is the ocean?',views:120000,url:'https://www.youtube.com/shorts/example'};
+ const research=await researchTopics(ask,'',[blue],async(platform,query)=>({platform,query,posts:[post]}));
+ assert.equal(research.searches.length,6);
+ assert.deepEqual(new Set(research.searches.map(s=>s.platform)),new Set(['tiktok','youtube']));
+ await assert.rejects(researchTopics(ask,'',[blue],async()=>{throw Error('offline')}),{code:'quriozity_research_unavailable'});
+ let plans=0;
+ const sol=fakeSol((step,steps)=>{
+  if(step!=='quriozity_plan')return {bad:true};
+  assert.match(steps.at(-1).text,/120000/);
+  return {...idea('The deepest point on Earth'),sourceUrl:++plans===1?'invented':post.url,selectionReason:'The depth comparison attracted 120000 views.'};
+ });
+ await assert.rejects(generateQuriozityReel({},'',cat,undefined,[],undefined,sol.ask,research),/Script failed/);
+ assert.equal(plans,2);
 });
 
 test('ledgers merge without duplicates and every reel reaches the prompt',()=>{
@@ -74,7 +89,6 @@ test('planning rejects a repeated subject and retries before any paid step',asyn
   assert.equal(ideations,2);
   assert.match(sol.steps[1].text,/Already rejected as repeats this run \(pick something else\): Why blue LEDs/);
   assert.match(sol.steps[0].text,/\[blue-led-invention\]/);// full ledger with keys
-  assert.ok(!/Unused seed ideas:[^\n]*blue LED/.test(sol.steps[0].text));
   assert.deepEqual(names.slice(0,3),['quriozity_plan','quriozity_plan','quriozity_novelty']);
  }finally{sol.restore();}
 });

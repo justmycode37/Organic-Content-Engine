@@ -1,7 +1,6 @@
 # QURIOZITY — pixel-style explainer reels (asset and model library contract)
 
-Separate account from Hedgy. Reels explain things people are curious about (why we dream, why the blue LED
-was so hard). Real subjects come from licensed photos, moving footage, scans or editable 3D and pass through
+Separate account from Hedgy. Each new reel opens on a concrete contradiction in one of five series: scale ladders, familiar body glitches, one-rule physics hypotheticals, surprising object histories and strange strategies in nature. Real subjects come from licensed photos, moving footage, scans or editable 3D and pass through
 the shared pixel renderer on white paper with black ink (see `chatgpt-site/src/quriozity/engine.ts`, post shader). Use
 `look.inkMode:"fixed"`: occupied dots have the same ink RGB in light and shadow; **contrast is a density
 difference**. Preserve sparse details, dense lit coverage and white paper openings without dimming individual dots. Legacy reference-recording studies keep their original blue-on-black polarity.
@@ -21,7 +20,7 @@ and `ELEVENLABS_API_KEY` in private runtime configuration. Loading defaults does
 not start generation. The CLI and account worker call the same `produce` function.
 The sequence is:
 
-1. Plan → script → factual accuracy and story coherence/clarity reviews.
+1. Sol topic research with Monid → evidence-backed plan → script → factual accuracy and story coherence/clarity reviews.
 2. Sol storyboard, subject/composition/text plan → Sol director findings and
    corrections → Opus visual realization, preserving narration, timing and text.
 3. Rendered subject review: recognition, anatomy, physical contact, source fidelity.
@@ -517,8 +516,9 @@ Every finished reel is remembered, and a new reel never covers a subject an earl
   topic and `topicKey`. `scripts/quriozity/produce.mjs` merges that with the local ledger
   `chatgpt-site/.quriozity-history.json` (override with `QURIOZITY_HISTORY_FILE`), which records every finished
   reel, including manual runs.
-- Ideation sees the full list and only the seed ideas not used yet, and returns a `topicKey` slug.
-- Each idea is checked before any paid step: same key or mostly the same subject words → rejected; otherwise a
+- Before a fresh CLI or scheduled production, Sol medium writes three keyword searches using the series brief, any requested topic and the full history. The producer queries TikTok and YouTube Shorts through the authenticated Monid CLI (set `MONID_BIN` if needed). Sol compares relevant view counts, available share/save rates and follower counts, and cites a returned post for the chosen original angle. Social engagement measures demand. The script still receives its own factual review.
+- The producer saves timestamped search results and run IDs in the job provenance, then records the selected URL and rationale with the finished plan. If all searches lack usable evidence, generation stops before scripting. A restart can reuse that job's research. A saved draft or supplied spec already has its topic.
+- Each plan is checked before scripting: same key or mostly the same subject words → rejected; otherwise a
   short Sol `novelty` call compares the question against every earlier reel. A rejected idea is retried (up to
   4 ideas); a requested `--topic` that repeats fails immediately.
 

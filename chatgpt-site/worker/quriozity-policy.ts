@@ -1,10 +1,10 @@
 import {QURIOZITY_MODELS,OPUS_STAGE_REPAIR_LIMIT,SOL_STAGE_REPAIR_LIMIT,STAGE_REPAIR_LIMIT} from './quriozity-model-policy.ts';
 /** QURIOZITY account rules. Separate from Hedgy in every way except the narrator voice. */
 export const QURIOZITY_POLICY={
- version:3,
+ version:4,
  account:'quriozity',
  series:'QURIOZITY',
- topic:'Curious explainers: things people are curious about but never thought about before (why we sleep and dream, why the blue LED was so hard to invent, why the sky is blue, why ice floats).',
+ topic:'Choose original, evidence-led short stories in five series: scale comparisons across distance, depth or time; familiar body glitches; what happens if one physical rule changes; documented accidents, inventions and mysteries behind everyday objects; and surprising strategies in nature. Open with a specific contradiction the viewer can picture. Follow one visible causal chain to a satisfying payoff in the same reel.',
  look:'Use style paper-ink: pure white paper, black fixed ink and black typography. Other colors are very rare, only when indispensable to the explanation; never color-code ordinary problems, scenes or categories. Preserve the owner reference’s rounded dot pitch, sparse shadows/dense illuminated coverage, fixed ink, grain activity, typography and purposeful motion, translated into the owner-requested white-paper/black-ink polarity. Recognisable licensed real subjects; source mattes may remain black or transparent internally. Use white knock-out letters inside black highlights. No colored backdrop, photographic greyscale fill, blanket solid silhouette or blue hero ink.',
  voice:'ElevenLabs Adam (s3TPKV1kjDlVtZbl4Ksh), at unchanged provider-default speed. Never send a speed override or time-stretch narration. Review punctuation, connected phrasing and natural thought boundaries; WPM is descriptive and never triggers a rate change. Scene cuts must not force staccato speech. Text/timing review does not certify audible naturalness.',
  comprehensibility:'The simplicity score measures comprehensibility, not vocabulary simplicity. Technical or complex words such as enzymes are allowed when their meaning or role is clear in context or briefly explained. Score the clarity of ideas, causal links, references and conceptual load on first listen. No technical-word quota or banned-word list; do not reduce scores solely for complex words or replace useful precise terms just to sound simpler.',
