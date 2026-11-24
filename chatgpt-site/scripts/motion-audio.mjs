@@ -324,9 +324,12 @@ export function captionsFromSpeech(say,words,offset,sceneEnd,{maxWords=6,maxChar
   if(/[.!?…:][”’"')\]]*$/.test(word.text)||(maxWords<6&&/[,;—–][”’"')\]]*$/.test(word.text)&&segment.length>=2))flush();
  });
  flush();
+ let firstIndex=0;const starts=groups.map(items=>{const i=firstIndex;firstIndex+=items.length;return i;});
  return groups.map((items,index)=>{
   const next=groups[index+1]?.[0];
-  const start=offset+items[0].start,end=Math.min(sceneEnd,next?offset+next.start:offset+items.at(-1).end+0.3);
+  // A caption that closes a shot ends with its last word, never lingering over the next shot.
+  const cutAfter=next&&breaks.has(starts[index+1]);
+  const start=offset+items[0].start,end=Math.min(sceneEnd,next?(cutAfter?Math.min(offset+next.start,offset+items.at(-1).end+0.15):offset+next.start):offset+items.at(-1).end+0.3);
   // Adjacent accent words merge into one span so the renderer sees a single marked phrase.
   return {text:items.map(item=>item.text).join(' ').replaceAll('* *',' ').replace(/[,;:]$/,''),start:Math.round(start*1000)/1000,end:Math.round(end*1000)/1000,words:items.map(item=>({start:Math.round((offset+item.start)*1000)/1000,end:Math.round((offset+item.end)*1000)/1000}))};
  }).filter(caption=>caption.end-caption.start>0.05);

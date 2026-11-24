@@ -192,6 +192,14 @@ export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number,
   ctx.restore();
 }
 
+const SMALL: Record<string, number> = { one: 1, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12, thirteen: 13, fourteen: 14, fifteen: 15, sixteen: 16, seventeen: 17, eighteen: 18, nineteen: 19, twenty: 20, thirty: 30, forty: 40, fifty: 50, sixty: 60, seventy: 70, eighty: 80, ninety: 90, hundred: 100, thousand: 1000 };
+/** "eight" -> 8, "twenty-five" -> 25; undefined for anything else. */
+function spokenNumber(word: string): number | undefined {
+  if (SMALL[word] !== undefined) return SMALL[word];
+  const [a, b] = word.split('-');
+  return a && b && SMALL[a] !== undefined && SMALL[b] !== undefined && SMALL[a]! >= 20 && SMALL[b]! < 10 ? SMALL[a]! + SMALL[b]! : undefined;
+}
+
 /**
  * Spoken amounts the current shot does not already show ("Hedgy has $50.") pop in as a big number near the top
  * of the action for ~1.2 s, so a viewer with sound off still sees every figure. Skipped while an overlay card is up.
@@ -206,8 +214,13 @@ export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: P
     if (caption.end < time - 1.4 || caption.start > time) continue;
     const words = String(caption.text).split(/\s+/);
     words.forEach((raw, i) => {
-      const word = raw.replace(/\*/g, '').replace(/[.,!?;:]+$/, '');
-      if (!/^\$\d[\d,.]*[kKmM]?$|^\d+(?:\.\d+)?%$/.test(word)) return;
+      const clean = (w: string | undefined) => (w ?? '').replace(/\*/g, '').replace(/[.,!?;:]+$/, '');
+      let word = clean(raw);
+      // Spelled-out amounts ("eight bucks", "forty cents") pop as figures too.
+      const spoken = spokenNumber(word.toLowerCase()), unit = clean(words[i + 1]).toLowerCase();
+      if (spoken !== undefined && /^(bucks?|dollars?)$/.test(unit)) word = `$${spoken}`;
+      else if (spoken !== undefined && /^cents?$/.test(unit)) word = `${spoken}¢`;
+      if (!/^\$\d[\d,.]*[kKmM]?$|^\d+(?:\.\d+)?%$|^\d+¢$/.test(word)) return;
       const at = caption.wordTimings?.[i]?.start ?? caption.start;
       if (time < at || time > at + 1.25 || at < scene.start - 0.05) return;
       const k = ease.outBack(clamp((time - at) / 0.22)), out = clamp((at + 1.25 - time) / 0.15);

@@ -39,7 +39,7 @@ function extendSmallCaptionGaps(captions: ActiveCaption[]): ActiveCaption[] {
   for (let index = 0; index < sorted.length - 1; index++) {
     const current = sorted[index]!, next = sorted[index + 1]!;
     const gap = next.start - current.end;
-    if (gap > 0 && gap < 0.6) current.end = next.start;
+    if (gap > 0 && gap < 0.25) current.end = next.start;
   }
   return sorted;
 }
