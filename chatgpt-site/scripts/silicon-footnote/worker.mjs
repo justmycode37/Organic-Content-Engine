@@ -39,7 +39,7 @@ async function finished(root){
 if(process.argv[2]==='--import'){
  const root=resolve(process.argv[3]),result=await finished(root),file=join(root,'site-id');
  let id;try{id=(await readFile(file,'utf8')).trim();}catch(e){if(e.code!=='ENOENT')throw e;id=crypto.randomUUID();await writeFile(file,id,{flag:'wx'});}
- const {job}=await (await post('/import',{id,title:result.title})).json();await run(job);
+ const {job}=await (await post('/import',{id,title:result.title,replace:process.argv.includes('--replace')})).json();await run(job);
 }
 else if(process.argv[2]==='--sync'){console.log(await (await post('/sync')).json());}
 else do{

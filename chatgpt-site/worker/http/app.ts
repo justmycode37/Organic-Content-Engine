@@ -1,3 +1,4 @@
+import {beginRevision,selectedVideo} from '../services/episode-revision.ts';
 import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,reportEpisode,siliconId} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
@@ -209,7 +210,8 @@ export function createApp(): Hono<AppEnv> {
    return c.json({matched:match?.name,channels:targets.filter(t=>t.identifier==='youtube').map(t=>t.name)});
   });
   app.post('/api/jobs/accounts/silicon/import',async c=>{
-   const {id,title}=await readBody(c,validator.object({id:validator.uuid(),title:validator.string().max(100)}));
+   const {id,title,replace}=await readBody(c,validator.object({id:validator.uuid(),title:validator.string().max(100),replace:validator.boolean().optional()}));
+   if(replace)return c.json({job:await beginRevision(c.get('container').db,id,title)});
    const created=new Date().toISOString(),job={id,topic:title,status:'producing',created},db=c.get('container').db;
    await db.prepare('INSERT OR IGNORE INTO job_state(name,last_run_at,last_result) VALUES(?,?,?)').bind('silicon-episode:'+id,created,JSON.stringify(job)).run();
    return c.json({job:await activeEpisode(db,id)});
@@ -278,7 +280,7 @@ export function createApp(): Hono<AppEnv> {
   api.get('/silicon/episodes',async c=>c.json({episodes:await episodes(c.get('container').db)}));
   api.post('/silicon/episodes',async c=>{const {topic}=await readBody(c,validator.object({topic:validator.string().trim().max(300).default('')}));return c.json(await queueEpisode(c.get('container').db,topic),201)});
   api.get('/silicon/episodes/:id/video',async c=>{
-   const id=validator.uuid().parse(c.req.param('id')),obj=await c.env.BUCKET!.get('silicon/'+id+'.mp4',{range:c.req.raw.headers});
+   const id=validator.uuid().parse(c.req.param('id')),obj=await c.env.BUCKET!.get(await selectedVideo(c.get('container').db,id),{range:c.req.raw.headers});
    if(!obj)throw notFound('Video',id);
    const range=obj.range as {offset:number;length:number}|undefined;
    const headers=new Headers({'Content-Type':'video/mp4','Cache-Control':'private, no-store','Accept-Ranges':'bytes','Content-Length':String(range?.length??obj.size)});

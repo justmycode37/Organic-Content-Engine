@@ -19,7 +19,9 @@ def render(root):
         start=round(clock*FPS)
         clock+=length
         frames=round(clock*FPS)-start
-        path=root/f'shot-{i}.mp4'
+        # The earlier graphic cache includes a persistent channel wordmark.
+        name='shot' if beat['kind']=='footage' else 'editorial-v2'
+        path=root/f'{name}-{i}.mp4'
         target=root/f'shot-{i}.partial.mp4'
         cuts.append(f"file '{path.name}'")
         if path.exists():

@@ -1,3 +1,4 @@
+import {selectRevision} from './episode-revision.ts';
 import type {Db} from '../db/database.ts';
 import type {PostizIntegration} from './postiz.ts';
 import {AppError} from '../errors.ts';
@@ -15,9 +16,9 @@ export async function bindSilicon(db:Db,targets:PostizIntegration[]){
 }
 
 const prefix='silicon-episode:';
-export interface Episode {id:string;topic:string;status:'queued'|'producing'|'ready'|'failed';created:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[]}
+export interface Episode {mediaId?:string;revision?:{original:string;previous:string};id:string;topic:string;status:'queued'|'producing'|'ready'|'failed';created:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[]}
 export async function episodes(db:Db){
- const rows=await db.prepare("SELECT last_result FROM job_state WHERE name GLOB 'silicon-episode:*' ORDER BY last_run_at DESC LIMIT 25").all<{last_result:string}>();
+ const rows=await db.prepare("SELECT last_result FROM job_state WHERE name GLOB 'silicon-episode:*' AND json_type(last_result,'$.revision') IS NULL ORDER BY last_run_at DESC LIMIT 25").all<{last_result:string}>();
  return rows.results.map(r=>JSON.parse(r.last_result) as Episode);
 }
 export async function queueEpisode(db:Db,topic:string){
@@ -38,6 +39,7 @@ export async function activeEpisode(db:Db,id:string){
  return JSON.parse(row.last_result) as Episode;
 }
 export async function reportEpisode(db:Db,episode:Episode){
+ if(episode.status==='ready'&&episode.revision)return selectRevision(db,episode,episode.revision);
  const result=await db.prepare("UPDATE job_state SET last_result=?,last_run_at=? WHERE name=? AND json_extract(last_result,'$.status')='producing'").bind(JSON.stringify(episode),new Date().toISOString(),prefix+episode.id).run();
  if(!result.meta.changes)throw new AppError(409,'episode_inactive','Episode is no longer running');
 }

@@ -1128,3 +1128,24 @@ test('Silicon Footnote binds only YouTube and delivers an on-demand private epis
  assert.equal(video.status,206);assert.equal(video.headers.get('content-range'),'bytes 0-9/200');
  await s.stop();
 });
+
+test('a finished episode can be revised in place while its previous cut remains available',async()=>{
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'silicon-revision'});
+ try{
+  const id=crypto.randomUUID(),created=new Date().toISOString(),base='/api/jobs/accounts/silicon',video='/api/silicon/episodes/'+id+'/video';
+  const episode={id,title:'Original',topic:'Mars',status:'ready',created};
+  await s.db.prepare('INSERT INTO job_state VALUES(?,?,?)').bind('silicon-episode:'+id,created,JSON.stringify(episode)).run();
+  const bucket=await s.mf.getR2Bucket('BUCKET');
+  await bucket.put('silicon/'+id+'.mp4','original');
+  const begin=await s.call('POST',base+'/import',{headers:accountHeaders,json:{id,title:'Mars',replace:true}});
+  assert.equal(begin.status,200);const path=base+'/'+begin.body.job.id;
+  assert.equal((await s.call('GET',video)).body,'original');
+  assert.equal((await s.call('GET','/api/silicon/episodes')).body.episodes.length,1);
+  const init=await s.call('POST',path+'/upload',{headers:accountHeaders}),uploadId=init.body.uploadId;
+  const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:'revised'});
+  const finish=await s.call('POST',path+'/complete',{headers:accountHeaders,json:{title:'Mars',seconds:670,sources:[],uploadId,parts:[await part.json()]}});
+  assert.equal(finish.status,200);assert.equal((await s.call('GET',video)).body,'revised');
+  const list=(await s.call('GET','/api/silicon/episodes')).body.episodes;
+  assert.equal(list.length,1);assert.equal(list[0].id,id);assert.equal(list[0].title,'Mars');
+ }finally{await s.stop();}
+});

@@ -1,5 +1,6 @@
 """Silicon Footnote's 16:9 motion vocabulary. All positions follow narration time."""
 import math
+import re
 from functools import lru_cache
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -7,7 +8,7 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 W, H, FPS = 1280, 720, 24
-WHITE, MUTED = '#ffffff', '#c8c8c8'
+WHITE, MUTED, ACCENT = '#ffffff', '#c8c8c8', '#ffbf58'
 def ease(x):
     x = max(0, min(1, x))
     return x*x*(3-2*x)
@@ -29,7 +30,7 @@ def wrap(text, face, width):
             lines.append(word)
     return lines
 
-def block(d, xy, text, width, size, color=WHITE, bold=False, max_lines=4):
+def block(d, xy, text, width, size, color=WHITE, bold=False, max_lines=4, accent_word=None):
     x,y = xy
     while size > 14:
         face = font(size,bold=bold)
@@ -39,6 +40,12 @@ def block(d, xy, text, width, size, color=WHITE, bold=False, max_lines=4):
         size -= 2
     for line in lines:
         d.text((x,y),line,font=face,fill=color)
+        if accent_word:
+            match=re.search(r'(?<!\w)'+re.escape(accent_word)+r'(?!\w)',line,re.IGNORECASE)
+            if match:
+                offset=face.getlength(line[:match.start()])
+                d.text((x+offset,y),match.group(),font=face,fill=ACCENT)
+                accent_word=None
         y += round(size*1.16)
     return y
 
@@ -79,7 +86,7 @@ class Scene:
         d.text((88,12),self.host,font=font(16,True),fill=MUTED)
         d.text((56,93),'SOURCE EXCERPT' if self.kind=='quote' else 'SOURCE DOCUMENT',font=font(16,True),fill=WHITE)
         title=self.b['quote'] if self.kind=='quote' else self.source['title']
-        block(d,(56,139),title,874,51,WHITE,True,3)
+        block(d,(56,139),title,874,51,WHITE,True,3,accent_word=self.b.get('accentWord'))
         subtitle=self.b['title'] if self.b['title']!=title else self.b['labels'][0]
         block(d,(56,337),subtitle,865,23,MUTED,max_lines=2)
         return panel
@@ -91,13 +98,6 @@ class Scene:
             p=ease(t/.72)
             scale=.92+.08*p+.026*ease(t/max(1,length))
             card=self.card.resize((round(1000*scale),round(410*scale)),Image.Resampling.BILINEAR)
-            # Selection travels across the source's opening words, as in an editorial screen capture.
-            width=min(475,card.width-100)*ease((t-.55)/1.1)
-            if width>0:
-                selection=Image.new('RGB',(int(width)+1,round(58*scale)),'#808080')
-                pos=(round(52*scale),round(142*scale))
-                crop=card.crop((*pos,pos[0]+selection.width,pos[1]+selection.height))
-                card.paste(Image.blend(crop,selection,.36),pos)
             im.paste(card,((W-card.width)//2,round(150+(1-p)*36)))
         elif self.kind=='image':
             w,h=self.figure.size
@@ -159,7 +159,6 @@ class Scene:
             items=self.b['labels']
             current=min(len(items)-1,int(t/max(length,.01)*len(items)))
             block(d,(72,244),items[current],1100,31,WHITE,max_lines=2)
-        d.text((68,43),'SILICON FOOTNOTE',font=font(18,True),fill=WHITE)
         d.text((1212,45),f'{self.index+1:02} / {self.count:02}',anchor='ra',font=font(16,True),fill=MUTED)
         d.line((68,652,1212,652),fill='#494949')
         d.line((68,652,68+1144*min(t/max(.01,length),1),652),fill=WHITE,width=2)

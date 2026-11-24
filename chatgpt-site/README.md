@@ -184,7 +184,7 @@ accessible sources and a decodable clip. Scripts cite sources per shot. Exact
 quote cards are checked against retrieved text. The local episode directory
 retains the evidence, editorial plan, audio takes and measured cut timings.
 
-The custom 1280 × 720, 24 fps library draws monochrome document highlights,
+The custom 1280 × 720, 24 fps library draws black-and-white source cards with selective amber word highlights,
 perspective text terrain, sequential diagrams, zero-based charts and white
 identification plates over source footage. Cut lengths follow native Titan
 takes (ElevenLabs Flash v2.5, voice dtSEyYGNJqjrtBArPCVZ). Finished episodes
