@@ -73,7 +73,7 @@ function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: nu
     // A slow push-in across the shot plus a short punch on every narration event keeps the frame alive.
     const events = (scene.spec.type === 'shot' ? scene.spec.events ?? [] : []).map(e => e.at);
     const punch = events.reduce((sum, at) => { const dt = frame.t - at; return dt >= 0 && dt < 0.3 ? Math.max(sum, Math.sin(dt / 0.3 * Math.PI) * 0.028) : sum; }, 0);
-    const zoom = 1.05 + 0.06 * Math.min(1, Math.max(0, frame.t / Math.max(0.5, frame.dur))) + punch;
+    const zoom = 1.1 + 0.05 * Math.min(1, Math.max(0, frame.t / Math.max(0.5, frame.dur))) + punch;
     ctx.translate(540, 1000); ctx.scale(zoom, zoom); ctx.translate(-540, -1000);
     // While the hook card is up, the opening shot sits smaller (anchored at the actors' feet) so its signs
     // are not hidden behind the card; it eases back to full size as the hook leaves.
