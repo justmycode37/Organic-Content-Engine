@@ -268,6 +268,20 @@ test('transition audio respects explicit silence and different authored cues',()
  assert.deepEqual(sfx.filter(c=>!c.ending).map(c=>c.sfx),['shimmer']);
  assert.deepEqual(sfx.filter(c=>c.ending).map(c=>c.sfx),['ding']);
 });
+test('the viral payoff chime follows the last spoken word, before caption padding ends',()=>{
+ const scenes=[
+  {type:'shot',shot:'act',duration:2,say:'Watch this.'},
+  {type:'shot',shot:'act',duration:2,say:'Cash vanished.'},
+ ];
+ const spoken=scenes.map((scene,i)=>({audio:`voice-${i}.mp3`,words:scene.say.split(' ').map((text,index)=>({text,start:index*.45,end:(index+1)*.4}))}));
+ const spec={version:1,look:'viral',payoff:'The cash is gone.',scenes};
+ const arranged=arrange(spec,spoken);
+ const lastWord=arranged.spec.captions.at(-1).words.at(-1);
+ const chime=arranged.cues.find(cue=>cue.ending);
+ assert.ok(Math.abs(chime.at-lastWord.end-0.06)<0.001);
+ assert.ok(chime.at<arranged.spec.captions.at(-1).end);
+ assert.equal(arrange({...spec,payoff:undefined},spoken).cues.some(cue=>cue.ending),false);
+});
 
 test('ideation avoids concepts, items and moods used by earlier reels',async()=>{
  const {conceptCandidates,recentlyUsed,ideaProblems,HEDGY_CONCEPTS}=await import('../worker/hedgy-ideas.ts');

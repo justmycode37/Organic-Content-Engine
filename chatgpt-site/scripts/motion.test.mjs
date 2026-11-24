@@ -4,6 +4,7 @@ import smoke from '../motion-examples/smoke.json' with { type: 'json' };
 import { parseReelSpec, lintReel, reelSpecSchema } from '../src/motion/spec.ts';
 import { placeScenes, reelDuration, parseMarkup, markupWords } from '../src/motion/core.ts';
 import { reelCaptions } from '../src/motion/captions.ts';
+import { drawHookAndHeader, drawNumberPops, drawViralCaption } from '../src/motion/viral.ts';
 
 test('smoke spec parses; strict schema rejects unknown keys and bad type',()=>{
  assert.equal(parseReelSpec(smoke).ok,true);
@@ -29,6 +30,36 @@ test('viral captions never extend a small pause into the next shot',()=>{
  const spec={version:1,scenes,captions};
  assert.equal(reelCaptions({...spec,look:'viral'})[0].end,2);
  assert.equal(reelCaptions(spec)[0].end,2.12);
+});
+test('viral titles render bold white text without strokes or decorative shapes',()=>{
+ const calls=[];
+ const ctx={
+  save(){},restore(){},translate(){},scale(){},rotate(){},
+  measureText(text){return {width:text.length*40}},
+  fillText(text){calls.push({text,fill:this.fillStyle,font:this.font})},
+  strokeText(){assert.fail('title outlines are disabled')},
+  fillRect(){assert.fail('title plates and rules are disabled')},
+ };
+ const spec={version:1,look:'viral',hook:'A *surprising* result',payoff:'A *better* choice.',scenes:[{type:'shot',shot:'act',duration:2},{type:'shot',shot:'act',duration:3}]};
+ const scenes=placeScenes(spec);
+ drawHookAndHeader(ctx,spec,0.3,scenes);
+ drawHookAndHeader(ctx,spec,4,scenes);
+ assert.match(calls.map(call=>call.text).join(' '),/A SURPRISING RESULT A BETTER CHOICE\./);
+ assert.ok(calls.every(call=>call.fill==='#FFFFFF'&&call.font.startsWith('900 ')));
+});
+test('spoken words and amount overlays use white text',()=>{
+ const fills=[];
+ const ctx={
+  save(){},restore(){},translate(){},scale(){},rotate(){},strokeText(){},
+  measureText(text){return {width:text.length*40}},
+  fillText(word){fills.push({word,color:this.fillStyle})},
+ };
+ const spec={version:1,look:'viral',scenes:[{type:'shot',shot:'act',duration:2}]};
+ const caption={text:'Save $20',start:0,end:1,wordTimings:[{start:0,end:.25},{start:.25,end:1}]};
+ drawViralCaption(ctx,caption,.4);
+ drawNumberPops(ctx,spec,.4,placeScenes(spec),[caption],false);
+ assert.deepEqual(fills.map(f=>f.word),['Save','$20','$20']);
+ assert.ok(fills.every(f=>f.color==='#FFFFFF'));
 });
 test('markup parsing exposes accent flags',()=>{
  assert.deepEqual(parseMarkup('hello *world*'),[{text:'hello ',accent:false},{text:'world',accent:true}]);

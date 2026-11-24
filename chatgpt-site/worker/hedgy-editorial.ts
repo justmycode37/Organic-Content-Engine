@@ -40,7 +40,9 @@ export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best sh
 - One "aha" turn where the mechanism clicks, shown by what happens to the anchor, and ONE plain spoken line that says why it happens (who gains and how), e.g. "the shop's machine converts at its own marked-up rate".
 - Stakes must feel worth a stranger's 30 seconds: use a realistic case where the money at stake is noticeable (a trip, rent, a car, a paycheck, a year of coffee), or scale the example up in one line ("on a $400 hotel that's $40").
 - The hook names the trap, the loss or the surprising result, not a neutral situation.
+- The opening words and the opening card should make the specific contradiction clear together. If a stranger could answer the opening with “buying things costs money” or another obvious explanation, make the unexpected part explicit.
 - The last line pays off the hook in a punchy, memorable way and leaves ONE practical rule or insight the viewer can use or repeat ("Always pay in the local currency."), ideally echoing the opening words so the reel loops.
+- Show one new consequence, choice or comparison at the end. Do not use the last line to repeat the loss or result already announced in the opener.
 - Say the concept's standard name once, right after the aha (e.g. "That's moral hazard."), so viewers learn the term they can search for.
 - Every number must agree exactly everywhere (narration, hookText, any on-screen figure); never round "40 cents" up to "dollars".
 - Brisk: 55–80 spoken words, no filler, no throat-clearing, no lecture tone. Talk like a sharp friend.

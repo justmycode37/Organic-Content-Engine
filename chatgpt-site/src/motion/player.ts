@@ -8,7 +8,7 @@ import { drawBackground } from './fx/background.ts';
 import { applyCamera, cameraFocus, drawImpact } from './fx/camera.ts';
 import { compositeTransition, cleanTransition, TRANSITION_DURATIONS } from './fx/transitions.ts';
 import { SCENES } from './scenes/index.ts';
-import { drawHookAndHeader, drawNumberPops, drawViralCaption, hookEndTime } from './viral.ts';
+import { drawHookAndHeader, drawNumberPops, drawViralCaption, hookEndTime, payoffStartTime } from './viral.ts';
 import { setWorldTall } from './kit/worlds.ts';
 import { setCardZone, setReelBase } from './kit/stage.ts';
 import { cardZone } from './viral.ts';
@@ -35,7 +35,7 @@ function transitionSurfaces(width = W, height = H) {
   return pair;
 }
 
-function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: number, theme: Theme, hedgy: boolean) {
+function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: number, theme: Theme, hedgy: boolean, closingScale: number) {
   ctx.save();
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = 'source-over';
@@ -51,6 +51,8 @@ function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: nu
   applyCamera(frame, hits, clipBottom, hedgy || isShot, spec.scenes[scene.index + 1]?.transition === 'zoom' || spec.scenes[scene.index + 1]?.transition === 'zoomthrough', isShot, hedgy);
   ctx.save();
   if (viral && isShot) {
+    // Leave a lane for the final title while keeping the characters and comparison readable above it.
+    ctx.translate(540, 200); ctx.scale(closingScale, closingScale); ctx.translate(-540, -200);
     // A slow push-in across the shot plus a short punch on every narration event keeps the frame alive.
     const events = (scene.spec.type === 'shot' ? scene.spec.events ?? [] : []).map(e => e.at);
     const punch = events.reduce((sum, at) => { const dt = frame.t - at; return dt >= 0 && dt < 0.3 ? Math.max(sum, Math.sin(dt / 0.3 * Math.PI) * 0.028) : sum; }, 0);
@@ -108,7 +110,14 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
   if (!scene) { ctx.restore(); return; }
   const activeFrame: Frame = { ctx, t: time - scene.start, dur: scene.end - scene.start, theme, seed: (scene.index + 1) * 7919, index: scene.index, time };
   const transition = activeTransition(placed, time, hedgy, spec.look === 'viral');
-  setCardZone(spec.look === 'viral' ? cardZone(ctx, spec, time, placed, reelCaptions(spec, placed)) : undefined);
+  const captions = reelCaptions(spec, placed);
+  const zone = spec.look === 'viral' ? cardZone(ctx, spec, time, placed, captions) : undefined;
+  const closingAt = spec.look === 'viral' && spec.payoff?.trim() ? payoffStartTime(spec, placed, captions) : Infinity;
+  const closing = time >= closingAt;
+  const closingScale = closing && zone
+    ? 1 - (1 - Math.min(1, (zone.top - 224) / 1260)) * ease.outCubic(Math.min(1, (time - closingAt) / 0.16))
+    : 1;
+  setCardZone(zone);
   const sceneCtx = ctx;
   if (transition) {
     const [outgoing, incoming] = transitionSurfaces(W, H);
@@ -120,8 +129,8 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
         t.accent = t.fg; t.accentSolid = t.fg; t.onAccent = t.bg; t.spectrum = [t.bg, t.fg];
       }
     }
-    renderSceneLayer(outgoing.ctx, transition.outgoing, spec, time, outgoingTheme, hedgy);
-    renderSceneLayer(incoming.ctx, transition.incoming, spec, time, incomingTheme, hedgy);
+    renderSceneLayer(outgoing.ctx, transition.outgoing, spec, time, outgoingTheme, hedgy, closingScale);
+    renderSceneLayer(incoming.ctx, transition.incoming, spec, time, incomingTheme, hedgy, closingScale);
     sceneCtx.imageSmoothingEnabled = false;
     sceneCtx.drawImage(outgoing.canvas, 0, 0, W, H);
     const isShot = transition.outgoing.spec.type === 'shot' || transition.incoming.spec.type === 'shot';
@@ -132,12 +141,11 @@ export function renderReel(ctx: Ctx, spec: ReelSpec, time: number) {
       height,
     });
   } else {
-    renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy);
+    renderSceneLayer(sceneCtx, scene, spec, time, theme, hedgy, closingScale);
   }
   drawChrome(activeFrame, spec, time, duration);
-  const captions = reelCaptions(spec, placed);
-  if (spec.look === 'viral') { drawNumberPops(ctx, spec, time, placed, captions, !!cardZone(ctx, spec, time, placed, captions)); drawHookAndHeader(ctx, spec, time, placed, captions); }
-  const caption = captions.find(item => time >= item.start && time < item.end);
+  if (spec.look === 'viral') { drawNumberPops(ctx, spec, time, placed, captions, !!zone); drawHookAndHeader(ctx, spec, time, placed, captions); }
+  const caption = closing ? undefined : captions.find(item => time >= item.start && time < item.end);
   if (caption) {
     ctx.save();
     if (spec.look === 'viral') drawViralCaption(ctx, caption, time);
