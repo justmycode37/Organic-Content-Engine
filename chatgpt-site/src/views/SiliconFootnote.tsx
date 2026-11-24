@@ -1,7 +1,8 @@
 import {useCallback,useEffect,useState} from 'react';
 import {Youtube,RefreshCw,ArrowUpRight} from 'lucide-react';
 import type {Account,PostizIntegration} from '../api/types';
-type Episode={id:string;topic:string;status:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[]};
+type Thumbnail={id:'subject'|'evidence';line:string;credit?:{label:string;url:string}};
+type Episode={id:string;topic:string;status:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[];thumbnails?:Thumbnail[]};
 export function SiliconFootnote({account,targets,ready,busy,save,refresh}:{account:Account;targets:PostizIntegration[];ready:boolean;busy:boolean;save:(patch:Partial<Account>)=>Promise<boolean>;refresh:()=>void}){
  const [topic,setTopic]=useState(''),[episodes,setEpisodes]=useState<Episode[]>([]),[error,setError]=useState(''),[sending,setSending]=useState(false);
  const reload=useCallback(async()=>{
@@ -29,6 +30,18 @@ export function SiliconFootnote({account,targets,ready,busy,save,refresh}:{accou
   <section className="activity-panel"><h2>Episodes</h2>{!episodes.length&&<p>Finished episodes and their sources appear here.</p>}
    {episodes.map(e=><article key={e.id}><h3>{e.title||e.topic||'AI news briefing'}</h3><p>{e.status}{e.seconds?` · ${Math.floor(e.seconds/60)}m ${Math.floor(e.seconds%60)}s`:''}{e.error&&' · '+e.error}</p>
     {e.status==='ready'&&<><video controls preload="none" style={{width:'100%',aspectRatio:'16/9'}} src={`/api/silicon/episodes/${e.id}/video`}/>
+     {e.thumbnails?.length?<details><summary>YouTube thumbnails ({e.thumbnails.length})</summary>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(min(100%,240px),1fr))',gap:16}}>
+       {e.thumbnails.map(cover=>{
+        const url=`/api/silicon/episodes/${e.id}/thumbnail/${cover.id}`;
+        return <div key={cover.id}>
+         <img src={url} loading="lazy" alt={cover.line} width={3840} height={2160} style={{width:'100%',height:'auto',display:'block'}}/>
+         <a href={url} download={`silicon-footnote-${cover.id}.jpg`}>Download {cover.id} thumbnail</a>
+         {cover.credit&&<p><a href={cover.credit.url} target="_blank" rel="noreferrer">{cover.credit.label} <ArrowUpRight size={12}/></a></p>}
+        </div>;
+       })}
+      </div>
+     </details>:null}
      <details><summary>Sources and footage</summary><ul>{e.sources?.map((s,i)=><li key={i}><a href={s.url} target="_blank" rel="noreferrer">{s.title} <ArrowUpRight size={12}/></a></li>)}</ul></details></>}
    </article>)}</section>
  </>;

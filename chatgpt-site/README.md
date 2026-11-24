@@ -169,6 +169,10 @@ matching Site code too: its completion gate validates the model/review profile.
 
 Use the [editorial foundation](scripts/silicon-footnote/EDITORIAL-FOUNDATION.md)
 for YouTube references, episode selection, and source-backed reporting briefs.
+The [thumbnail research](scripts/silicon-footnote/THUMBNAIL-RESEARCH.md) explains
+the two separately designed covers available for preview and download under
+**Episodes → YouTube thumbnails**. Standalone runs save the same JPEGs and
+their credit manifest beside the video.
 
 Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
 workspace binds a unique channel named Silicon Footnote or The Silicon Footnote

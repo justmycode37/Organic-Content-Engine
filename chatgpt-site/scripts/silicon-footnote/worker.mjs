@@ -2,6 +2,7 @@ import {open,stat,readFile,mkdir,writeFile} from 'node:fs/promises';
 import {join,resolve} from 'node:path';
 import {workerConfig,siteRequest} from '../render-worker.mjs';
 import {produce} from './produce.mjs';
+import {prepareThumbnails} from './thumbnail.mjs';
 const config=workerConfig();
 const jobs='/api/jobs/accounts/silicon';
 const post=(path,body={})=>siteRequest(config,jobs+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
@@ -24,7 +25,11 @@ async function run(job){
    }
   }finally{await file.close();}
   const sources=[...result.sources.sources,...(result.sources.images??[]).map(i=>({title:i.title+' · '+i.credit,url:i.page})),...result.sources.clips.map(c=>({title:c.title+' · '+c.credit,url:c.url}))].map(({title,url})=>({title,url}));
-  await post(path+'/complete',{title:result.title,seconds:result.seconds,sources,parts,uploadId});
+  for(const {id} of result.thumbnails){
+   const body=await readFile(join(root,`thumbnail-${id}.jpg`));
+   await siteRequest(config,jobs+path+'/thumbnail/'+id,{method:'PUT',headers:{'content-type':'image/jpeg'},body});
+  }
+  await post(path+'/complete',{title:result.title,seconds:result.seconds,sources,parts,uploadId,thumbnails:result.thumbnails});
  }catch(e){
   await mkdir(root,{recursive:true});await writeFile(join(root,'failure.txt'),String(e.stack||e));
   await post(path+'/fail',{error:'Production stopped. The worker saved its evidence and completed takes.',uploadId});
@@ -34,7 +39,7 @@ async function run(job){
 async function finished(root){
  const json=async name=>JSON.parse(await readFile(join(root,name),'utf8'));
  const output=join(root,'episode.mp4');await stat(output);
- return {title:(await json('episode.json')).title,seconds:(await json('timing.json')).reduce((a,b)=>a+b,0),sources:await json('sources.json'),output};
+ return {title:(await json('episode.json')).title,seconds:(await json('timing.json')).reduce((a,b)=>a+b,0),sources:await json('sources.json'),thumbnails:prepareThumbnails(root),output};
 }
 if(process.argv[2]==='--import'){
  const root=resolve(process.argv[3]),result=await finished(root),file=join(root,'site-id');

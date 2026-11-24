@@ -1,5 +1,5 @@
 import {beginRevision,selectedVideo} from '../services/episode-revision.ts';
-import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,reportEpisode,siliconId} from '../services/silicon-footnote.ts';
+import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,reportEpisode,siliconId,readyEpisodeThumbnail,thumbnailIds,thumbnailId,thumbnailKey,thumbnailManifest} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
@@ -33,6 +33,7 @@ import * as schemas from './schemas.ts';
 import { assertJobCaller, assertRenderCaller, assertWorkspaceAccess, assertSameOrigin, readUser, resolveAccess, type Access } from './security.ts';
 
 const MAX_BODY_BYTES = 1024 * 1024;
+const MAX_SILICON_THUMBNAIL_BYTES=2*1024*1024;
 const JOB_PATH = '/api/jobs/tick';
 const TICK_JOB = 'external_tick';
 
@@ -101,7 +102,7 @@ export function createApp(): Hono<AppEnv> {
     if (!/^\/api\/social\/(instagram|tiktok|youtube|x|linkedin)\/callback$/.test(c.req.path) && !c.req.path.startsWith('/api/media/')) assertSameOrigin(c);
     await next();
   });
-  app.use('/api/*', async (c,next)=>{if(/^\/api\/jobs\/accounts\/silicon\/[a-f0-9-]+\/part\/\d+$/.test(c.req.path))return bodyLimit({maxSize:9*1024*1024})(c,next);if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/(?:render|accounts)\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
+  app.use('/api/*', async (c,next)=>{if(/^\/api\/jobs\/accounts\/silicon\/[a-f0-9-]+\/part\/\d+$/.test(c.req.path))return bodyLimit({maxSize:9*1024*1024})(c,next);if(/^\/api\/jobs\/accounts\/silicon\/[a-f0-9-]+\/thumbnail\/(subject|evidence)$/.test(c.req.path))return bodyLimit({maxSize:MAX_SILICON_THUMBNAIL_BYTES})(c,next);if(/^\/api\/(materials\/[a-f0-9-]+\/content|jobs\/(?:render|accounts)\/[a-f0-9-]+\/[a-f0-9-]+\/output)$/.test(c.req.path))return bodyLimit({maxSize:100*1024*1024,onError:()=>{throw new AppError(413,'file_too_large','Maximum file size is 100 MB');}})(c,next);return bodyLimit({
     maxSize: MAX_BODY_BYTES,
     onError: () => {
       throw new AppError(413, 'payload_too_large', 'Request body too large');
@@ -233,16 +234,33 @@ export function createApp(): Hono<AppEnv> {
    if(!c.req.raw.body)throw new AppError(400,'file_missing','Missing video part');
    return c.json(await upload.uploadPart(n,await c.req.arrayBuffer()));
   });
+  app.put('/api/jobs/accounts/silicon/:id/thumbnail/:variant',async c=>{
+   const episode=await activeEpisode(c.get('container').db,c.req.param('id'));
+   const variant=thumbnailId.parse(c.req.param('variant'));
+   if(c.req.header('content-type')!=='image/jpeg')throw new AppError(415,'thumbnail_type','Expected a JPEG thumbnail');
+   const bytes=new Uint8Array(await c.req.arrayBuffer());
+   if(bytes.length<4||bytes.length>MAX_SILICON_THUMBNAIL_BYTES||bytes[0]!==255||bytes[1]!==216||bytes.at(-2)!==255||bytes.at(-1)!==217){
+    throw new AppError(400,'thumbnail_invalid','Expected a complete JPEG thumbnail under 2 MiB');
+   }
+   await c.env.BUCKET!.put(thumbnailKey(episode.id,variant),bytes,{httpMetadata:{contentType:'image/jpeg'}});
+   return c.json({ok:true});
+  });
   app.post('/api/jobs/accounts/silicon/:id/complete',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id'));
-   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100)}));
+   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100),thumbnails:thumbnailManifest.optional()}));
+   if(v.thumbnails){
+    const stored=await Promise.all(v.thumbnails.map(({id})=>c.env.BUCKET!.head(thumbnailKey(e.id,id))));
+    if(stored.some(object=>!object))throw new AppError(409,'thumbnail_missing','Upload both thumbnails before completing the episode');
+   }
    await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).complete(v.parts);
-   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources});return c.json({ok:true});
+   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources,thumbnails:v.thumbnails});return c.json({ok:true});
   });
   app.post('/api/jobs/accounts/silicon/:id/fail',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id')),v=await readBody(c,validator.object({error:validator.string().max(300),uploadId:validator.string().optional()}));
    if(v.uploadId)await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).abort().catch(()=>{});
-   await reportEpisode(db,{...e,status:'failed',error:v.error});return c.json({ok:true});
+   await reportEpisode(db,{...e,status:'failed',error:v.error});
+   await c.env.BUCKET!.delete(thumbnailIds.map(id=>thumbnailKey(e.id,id))).catch(()=>{});
+   return c.json({ok:true});
   });
   app.post('/api/jobs/accounts/tick',async c=>{const x=c.get('container');await x.settings.setJob('account_worker',new Date().toISOString(),{online:true});const publication=await publishAccountJobs(x,c.env);return c.json({...publication,...await tickAccounts(x,c.env)});});
   app.get('/api/jobs/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
@@ -279,6 +297,13 @@ export function createApp(): Hono<AppEnv> {
 
   api.get('/silicon/episodes',async c=>c.json({episodes:await episodes(c.get('container').db)}));
   api.post('/silicon/episodes',async c=>{const {topic}=await readBody(c,validator.object({topic:validator.string().trim().max(300).default('')}));return c.json(await queueEpisode(c.get('container').db,topic),201)});
+  api.get('/silicon/episodes/:id/thumbnail/:variant',async c=>{
+   const id=validator.uuid().parse(c.req.param('id')),variant=thumbnailId.parse(c.req.param('variant'));
+   const key=await readyEpisodeThumbnail(c.get('container').db,id,variant);
+   const object=await c.env.BUCKET!.get(key);
+   if(!object)throw notFound('Thumbnail',variant);
+   return new Response(object.body,{headers:{'Content-Type':'image/jpeg','Cache-Control':'private, no-store','X-Content-Type-Options':'nosniff'}});
+  });
   api.get('/silicon/episodes/:id/video',async c=>{
    const id=validator.uuid().parse(c.req.param('id')),obj=await c.env.BUCKET!.get(await selectedVideo(c.get('container').db,id),{range:c.req.raw.headers});
    if(!obj)throw notFound('Video',id);

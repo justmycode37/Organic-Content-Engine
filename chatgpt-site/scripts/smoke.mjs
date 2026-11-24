@@ -1122,8 +1122,28 @@ test('Silicon Footnote binds only YouTube and delivers an on-demand private epis
  const uploadId=init.body.uploadId;
  const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:new Uint8Array(200)});
  assert.equal(part.status,200);
- const done=await s.call('POST',path+'/complete',{...machine,json:{title:'Episode',seconds:700,sources:[],uploadId,parts:[await part.json()]}});
- assert.equal(done.status,200);assert.equal((await s.call('GET','/api/silicon/episodes')).body.episodes[0].status,'ready');
+ const thumbnails=[{id:'subject',line:'A Drive on Mars'},{id:'evidence',line:'Planned from Earth'}];
+ const body={title:'Episode',seconds:700,sources:[],uploadId,parts:[await part.json()],thumbnails};
+ const cover='/api/silicon/episodes/'+q.body.id+'/thumbnail/subject';
+ const request=(variant,body)=>s.mf.dispatchFetch('https://site.example'+path+'/thumbnail/'+variant,{
+  method:'PUT',headers:{...accountHeaders,'content-type':'image/jpeg'},body,
+ });
+ assert.equal((await s.call('POST',path+'/complete',{...machine,json:body})).status,409);
+ assert.equal((await request('subject',new Uint8Array(20))).status,400);
+ const jpeg=Uint8Array.from(Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAA//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AJ//Z','base64'));
+ for(const {id} of thumbnails)assert.equal((await request(id,jpeg)).status,200);
+ assert.equal((await s.call('GET',cover)).status,404);
+ const done=await s.call('POST',path+'/complete',{...machine,json:body});
+ assert.equal(done.status,200);
+ const episode=(await s.call('GET','/api/silicon/episodes')).body.episodes[0];
+ assert.equal(episode.status,'ready');
+ assert.deepEqual(episode.thumbnails,thumbnails);
+ const privateCover=await s.mf.dispatchFetch('https://site.example'+cover,{headers:{...OWNER,cookie:COOKIE}});
+ assert.equal(privateCover.status,200);
+ assert.equal(privateCover.headers.get('content-type'),'image/jpeg');
+ assert.deepEqual(new Uint8Array(await privateCover.arrayBuffer()),jpeg);
+ assert.notEqual((await s.mf.dispatchFetch('https://site.example'+cover)).status,200);
+ assert.equal((await request('subject',jpeg)).status,409);
  const video=await s.call('GET','/api/silicon/episodes/'+q.body.id+'/video',{headers:{...OWNER,range:'bytes=0-9'}});
  assert.equal(video.status,206);assert.equal(video.headers.get('content-range'),'bytes 0-9/200');
  await s.stop();
