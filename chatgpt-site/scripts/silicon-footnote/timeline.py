@@ -19,13 +19,13 @@ def match_interview(pcm,nearby,sr):
 def assemble(root,plan,durations,pack):
     beats,times=[],[]
     original_voice=root/'voice.wav'
-    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') or (b.get('chart') or {}).get('revealCue') for b in plan['beats']):
+    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') or b.get('readingHold') or any((b.get('chart') or {}).get(k) for k in ('revealCue','checkpoints','valueCues')) for b in plan['beats']):
         return plan,durations,original_voice
     aligned=json.loads((root/'alignment.json').read_text()) if (root/'alignment.json').exists() else []
-    have_sound=any(b.get('actuality') for b in plan['beats'])
+    have_sound=any(b.get('actuality') or b.get('readingHold') for b in plan['beats'])
     positions=[]
     for i,(b,duration) in enumerate(zip(plan['beats'],durations,strict=True)):
-        base={k:v for k,v in b.items() if k not in ('cutaways','actuality','insert')}
+        base={k:v for k,v in b.items() if k not in ('cutaways','actuality','insert','readingHold')}
         shots=[(0,base)]
         cutaways=list(b.get('cutaways',[]))
         if b.get('insert') and not cutaways:cutaways.append({**b['insert'],'kind':'image'})
@@ -67,22 +67,49 @@ def assemble(root,plan,durations,pack):
                 pos=a.get('text','').lower().find(cue.lower())
                 if pos<0:raise ValueError(f'Missing chart reveal cue: {cue}')
                 shot={**shot,'revealAt':max(0,a['starts'][pos]-start)}
+            if shot['kind']=='chart' and (checkpoints:=(shot.get('chart') or {}).get('checkpoints')):
+                a=aligned[i]
+                points=[]
+                for checkpoint in checkpoints:
+                    pos=a['text'].casefold().find(checkpoint['cue'].casefold())
+                    if pos<0:raise ValueError('Missing trace cue: '+checkpoint['cue'])
+                    at=a['starts'][pos]-start
+                    if not 0<at<length or (points and at<=points[-1][0]):raise ValueError('Trace cue falls outside its shot or out of order')
+                    points.append((at,checkpoint['index']))
+                shot={**shot,'traceCues':points}
+            if shot['kind']=='chart' and (words:=(shot.get('chart') or {}).get('valueCues')):
+                a=aligned[i]
+                cues=[]
+                for word in words:
+                    pos=a['text'].lower().find(word.lower())
+                    if pos<0:raise ValueError('Missing bar cue: '+word)
+                    at=a['starts'][pos]-start
+                    if not 0<=at<length or (cues and at<=cues[-1]):raise ValueError('Bar cues must fall within the shot, in order')
+                    cues.append(at)
+                shot={**shot,'barCues':cues}
             if length>=1/24:beats.append(shot);times.append(length)
+        hold=b.get('readingHold',0)
+        if not 0<=hold<=4:raise ValueError('Reading hold must be between zero and four seconds')
+        if hold:
+            if duration<1/24:raise ValueError('Reading hold needs a visible shot')
+            times[-1]+=hold
         a=b.get('actuality')
         if a:
             length=a['end']-a['start']
-            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'speakerX':a.get('speakerX',.5),'clean':False,'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
+            if not 0<=a.get('tagStart',0)<length:raise ValueError('Speaker tag begins outside the interview')
+            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'tagStart':a.get('tagStart',0),'speakerX':a.get('speakerX',.5),'clean':a.get('nativeNameplate',False),'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
             times.append(length)
-        positions.append((duration,a))
+        positions.append((duration,hold,a))
     voice=original_voice
     if have_sound:
         voice=root/'broadcast.wav'
         with wave.open(str(original_voice)) as src,wave.open(str(voice),'wb') as dest:
             dest.setparams(src.getparams());sr=src.getframerate();elapsed=0
-            for duration,a in positions:
+            for duration,hold,a in positions:
                 elapsed+=duration;count=min(src.getnframes(),round(elapsed*sr))-src.tell()
                 narration=src.readframes(count)
                 dest.writeframes(narration)
+                if hold:dest.writeframes(bytes(round(hold*sr)*src.getnchannels()*src.getsampwidth()))
                 if a:
                     n=round((a['end']-a['start'])*sr)
                     pcm=subprocess.check_output(['ffmpeg','-v','error','-ss',str(a['start']),'-i',root/f"clip-{a['clip']}.mp4",'-t',str(a['end']-a['start']),'-vn','-af','highpass=f=65','-ar',str(sr),'-ac','1','-f','s16le','-'])

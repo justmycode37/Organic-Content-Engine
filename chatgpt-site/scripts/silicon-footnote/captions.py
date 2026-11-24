@@ -26,7 +26,7 @@ def caption_cues(plan,durations,alignment):
             end=a['starts'][next_word.start()] if next_word else seconds
             if next_word and len(phrase)+len(next_word[0])<63 and end-start<3.4 and (not re.search(r'[.!?][”"]?$',w[0]) or end-start<.75):continue
             result.append((clock+start,clock+end,phrase));group=[]
-        clock+=seconds
+        clock+=seconds+b.get('readingHold',0)
         sound=b.get('actuality')
         if sound:
             if not sound.get('captions'):raise ValueError('Original speech needs timed source captions')
