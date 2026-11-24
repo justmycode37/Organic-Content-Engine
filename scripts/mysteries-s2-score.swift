@@ -11,10 +11,17 @@ let bank = URL(fileURLWithPath: "/System/Library/Components/CoreAudio.component/
 let verb = AVAudioUnitReverb()
 engine.attach(verb)
 verb.loadFactoryPreset(.mediumHall)
-verb.wetDryMix = 18
+verb.wetDryMix = 36
 let bus = AVAudioMixerNode()
 engine.attach(bus)
-engine.connect(bus, to: verb, format: format)
+let tone = AVAudioUnitEQ(numberOfBands: 1)
+engine.attach(tone)
+let highCut = tone.bands[0]
+highCut.filterType = .lowPass
+highCut.frequency = 2650
+highCut.bypass = false
+engine.connect(bus, to: tone, format: format)
+engine.connect(tone, to: verb, format: format)
 engine.connect(verb, to: engine.mainMixerNode, format: format)
 
 func instrument(_ patch: UInt8, _ gain: Float, _ pan: Float) throws -> AVAudioUnitSampler {
@@ -26,55 +33,64 @@ func instrument(_ patch: UInt8, _ gain: Float, _ pan: Float) throws -> AVAudioUn
     unit.pan = pan
     return unit
 }
-let firstViolin = try instrument(40, 0.62, -0.16)
-let secondViolin = try instrument(40, 0.35, 0.22)
-let cello = try instrument(42, 0.30, 0.04)
+// Two soft desks change bows independently. A distant solo occasionally
+// emerges above them, with time between phrases for the narration to breathe.
+let nearDesk = try instrument(49, 0.43, -0.34)
+let farDesk = try instrument(49, 0.32, 0.31)
+let solo = try instrument(40, 0.27, 0.08)
 
+enum Gesture {
+    case attack(UInt8, UInt8)
+    case expression(UInt8)
+    case release(UInt8)
+}
 struct Event {
     let sample: Int
     let unit: AVAudioUnitSampler
-    let note: UInt8
-    let velocity: UInt8
+    let gesture: Gesture
 }
 var events = [Event]()
-func note(_ unit:AVAudioUnitSampler, _ pitch:Int, _ time:Double, _ length:Double, _ velocity:Int) {
-    guard time < duration-1 else {return}
-    events.append(Event(sample:Int(time*rate),unit:unit,note:UInt8(pitch),velocity:UInt8(velocity)))
-    events.append(Event(sample:Int(min(duration-0.6,time+length)*rate),unit:unit,note:UInt8(pitch),velocity:0))
-}
-// Each phrase spans four bars. The second violin enters on the answer.
-let lead = [[71,69,66,62], [67,66,62,59], [69,66,64,62], [64,62,61,57],
-            [66,69,71,74], [74,71,69,67], [67,64,62,59], [61,64,66,69]]
-let bass = [47,43,50,45,47,43,40,42]
-let answers = [62,59,62,57,62,59,55,57]
-var t = 0.0, bar = 0
-while t < duration-2.0 {
-    let passage = (t > 405 && t < 462)
-    let beat = passage ? 0.36 : 0.43
-    let span = 6*beat
-    let chord = (bar/2)%8
-    let line = lead[chord]
-    let closing = duration-t < 10
-    let velocity = closing ? 36 : (passage ? 52 : 44)
-    if bar%2 == 0 {
-        note(cello,bass[chord],t+0.04,span*1.77,closing ? 28 : 38)
-        note(firstViolin,line[0],t,3.9*beat,velocity)
-        note(firstViolin,line[1],t+4*beat,1.93*beat,velocity-5)
-        if bar%4 == 2 {
-            note(secondViolin,answers[chord],t+0.15,span*1.5,velocity-8)
-        }
-    } else {
-        note(firstViolin,line[2],t,beat*(bar%4 == 3 ? 3.6 : 2.9),velocity-2)
-        if bar%4 == 1 {
-            note(firstViolin,line[3],t+3*beat,2.7*beat,velocity-6)
-            note(secondViolin,answers[chord]+7,t+3.1*beat,2.5*beat,velocity-11)
-        } else if passage {
-            note(secondViolin,answers[chord],t+4*beat,1.65*beat,velocity-9)
-        }
+func bow(_ unit: AVAudioUnitSampler, _ pitch: Int, at start: Double, for length: Double,
+         velocity: UInt8, shimmer: Bool = false) {
+    let end = min(start + length, duration - 0.7)
+    guard end - start > 0.8 else { return }
+    func cue(_ t: Double, _ gesture: Gesture) {
+        events.append(Event(sample: Int(t * rate), unit: unit, gesture: gesture))
     }
-    t+=span;bar+=1
+    cue(start, .expression(1))
+    cue(start, .attack(UInt8(pitch), velocity))
+    let attack = min(2.1, (end - start) / 4)
+    let release = min(2.8, (end - start) / 3)
+    for t in stride(from: start + 0.08, to: end, by: 0.08) {
+        let edge = min(1, (t - start) / attack, (end - t) / release)
+        let envelope = edge * edge * (3 - 2 * edge)
+        let bowNoise = shimmer ? 0.94 + 0.035 * sin(t * 21.3) + 0.018 * sin(t * 27.1) : 1
+        cue(t, .expression(UInt8(max(1, 96 * envelope * bowNoise))))
+    }
+    cue(end, .release(UInt8(pitch)))
 }
-events.sort{$0.sample==$1.sample ? $0.velocity<$1.velocity : $0.sample<$1.sample}
+
+// Open fifths gradually pick up a second or a sixth. The changing upper
+// pitches are staggered across the common tones, without a bass downbeat.
+let lower = [62, 62, 64, 62, 60, 62, 65, 64, 62]
+let upper = [69, 67, 69, 65, 67, 69, 72, 69, 67]
+let holds = [18.7, 15.9, 21.3, 17.2, 20.1, 16.5, 19.8]
+var t = 0.0
+var section = 0
+while t < duration {
+    let length = holds[section % holds.count]
+    let pitch = section % lower.count
+    bow(nearDesk, lower[pitch], at: t + 0.4, for: length - 0.7, velocity: 31, shimmer: true)
+    bow(farDesk, upper[pitch], at: t + 3.7, for: length - 0.4, velocity: 29, shimmer: true)
+    if section % 3 == 0 {
+        let phrase = [[76, 74], [72, 71], [77, 76], [74, 72]][(section / 3) % 4]
+        bow(solo, phrase[0], at: t + 6.8, for: 5.2, velocity: 32)
+        bow(solo, phrase[1], at: t + 12.1, for: 4.3, velocity: 29)
+    }
+    t += length
+    section += 1
+}
+events.sort { $0.sample < $1.sample }
 try engine.enableManualRenderingMode(.offline,format:format,maximumFrameCount:4096)
 try engine.start()
 let output=try AVAudioFile(forWriting:destination,settings:format.settings)
@@ -84,8 +100,11 @@ let end=Int(duration*rate)
 while position<end {
     while index<events.count && events[index].sample<=position {
         let e=events[index]
-        if e.velocity>0 {e.unit.startNote(e.note,withVelocity:e.velocity,onChannel:0)}
-        else {e.unit.stopNote(e.note,onChannel:0)}
+        switch e.gesture {
+        case let .attack(note, velocity): e.unit.startNote(note, withVelocity: velocity, onChannel: 0)
+        case let .expression(value): e.unit.sendController(11, withValue: value, onChannel: 0)
+        case let .release(note): e.unit.stopNote(note, onChannel: 0)
+        }
         index+=1
     }
     let next=index<events.count ? events[index].sample : end

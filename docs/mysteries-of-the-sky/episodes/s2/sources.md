@@ -16,4 +16,4 @@ The original diagrams solve Kepler’s equation to space positions at equal time
 
 ## Sound
 
-Titan narrates with the series Flash v2.5 preset. Rowan's interview uses ElevenLabs voice `PerZoH0r6nxBZXCoIPpv` with HeyGen Avatar 6 Turbo and the saved portrait. The revised interview explains transverse motion with a brief hesitation and a 1.09× delivery. Its new HeyGen take cost $0.70. The original score pairs two violin parts with sustained cello. The first violin introduces a four-bar phrase and the second violin answers. The pulse quickens around the close approach. The mix places the score 18 LU below dialogue.
+Titan narrates with the series Flash v2.5 preset. Rowan's interview uses ElevenLabs voice `PerZoH0r6nxBZXCoIPpv` with HeyGen Avatar 6 Turbo and the saved portrait. The revised interview explains transverse motion with a brief hesitation and a 1.09× delivery. The final shot uses a sideways hand sweep timed to the approved recorded line. HeyGen billed $0.70 for the gesture revision. The original score holds two soft string notes under the speech. A distant violin enters for two notes roughly once a minute. The mix places the music 28 LU below dialogue.

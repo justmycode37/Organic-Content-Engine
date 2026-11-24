@@ -26,8 +26,8 @@ export function interviewPlan(line) {
       resolution: '1080p',
       reference_images: [reference(profile.portraitUrl)],
       motion_prompt:
-        'A physicist explaining a measurement to a colleague over a webcam. Steady framing and a small, thoughtful head movement.',
-      motion_expressiveness: 'less',
+        'A physicist explaining a measurement to a colleague over a webcam. Locked framing. Bring a hand visibly into frame at chest height to illustrate the physical idea. Let it settle between points.',
+      motion_expressiveness: 'default',
     },
   };
 }

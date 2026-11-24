@@ -71,3 +71,7 @@ Start with the [eight sourced research briefs](research.md). The [story workflow
 Titan narrates the explanations. [Professor Rowan Ellery](presenter/README.md) appears briefly as the interview expert. The story handoff assigns each line to its speaker.
 
 Episode title cards carry only the title. Measurement cards show the value and its unit on a single line. Let Titan explain the context. Give diagrams only the labels needed to read them and collect source attributions in the end credits.
+
+## Posting folder
+
+Keep the latest full-quality, captioned MP4 for each finished episode in `~/Movies/Mysteries of the Sky/Ready to Post/`. Prefix filenames with the episode number. Keep work files and superseded edits in the episode workspace.

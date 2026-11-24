@@ -1,6 +1,6 @@
 # Mysteries of the Sky: source to story
 
-Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Make the first spoken sentence of every episode a question. Introduce the subject immediately after it, and write a later beat that answers that exact question using evidence the viewer has now seen. Check both beats in the finished cut, including any title or labels that could give the answer away. Show the first piece of evidence during or immediately after the introduction. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Reserve Rowan for a brief explanation of how a measurement was made or what limits it. The short transit example demonstrates the handoff format.
+Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Make the first spoken sentence of every episode a question. Introduce the subject immediately after it, and write a later beat that answers that exact question using evidence the viewer has now seen. Check both beats in the finished cut, including any title or labels that could give the answer away. Show the first piece of evidence during or immediately after the introduction. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Give Rowan two or three short appearances spread through a full episode. Each should explain a measurement, an uncertainty, or a prediction the viewer can test. The short transit example demonstrates the handoff format.
 
 This is a local preproduction pipeline for a short astrophysics explainer. It
 turns a source ledger and structured brief into evidence-linked narration beats
@@ -40,13 +40,15 @@ working directories when called by absolute path.
 
 ## Narration and interview cuts
 
-Titan tells the story over the animations, diagrams and source material. Rowan appears in brief interview inserts like the David Tong cutaways in the reference film. Give him one thought that benefits from seeing an expert say it: a question that changes how we read the evidence, an intuition, or a caveat. Cut directly back to Titan and the relevant visual. A standing presenter introduction is optional.
+Titan tells the story over the animations, diagrams and source material. Rowan appears in brief interview inserts like the David Tong cutaways in the reference film. Give him one thought that benefits from seeing an expert say it: a question that changes how we read the evidence, an intuition, or a caveat. Cut directly back to Titan and the relevant visual. Use a visible hand gesture when it helps explain the measurement.
 
 Set `shot.representation` to `presenter` for Rowan. The handoff assigns every other shot to Titan, including older stories without presenter shots. The transit example gives Rowan five seconds at 0:41 to ask what blocked the light. Titan uses the next diagram to answer. The planned split is 59 seconds for Titan and five for Rowan.
 
-Aim for Rowan’s avatar generation to average about **US$3 per published video** across the series. Count billed Rowan takes and retakes together, including videos with zero avatar spend in the average. Individual episodes can come in above or below the target. Titan narration is budgeted separately.
+Aim for Rowan’s avatar generation to average about **US$3 per published video** across the series. Count billed Rowan takes and retakes together, including videos with zero avatar spend in the average. A roughly $2 set of short scenes fits that budget. Individual episodes can come in above or below the target. Titan narration is budgeted separately.
 
 The `voice-plan` command writes ordered provider requests for later production. Titan uses ElevenLabs voice `dtSEyYGNJqjrtBArPCVZ`, model `eleven_flash_v2_5`, with stability and similarity boost each at 0.20. Rowan uses ElevenLabs voice `PerZoH0r6nxBZXCoIPpv`. Drive the saved HeyGen portrait with the actual recording as described in the [presenter guide](presenter/README.md).
+
+Keep the underscore light. In the S2 mix, quiet bowed notes overlap beneath speech and a solo violin enters only occasionally. Use that mix as the listening reference for how far the music sits behind both speakers.
 
 ## Authoring sequence
 
