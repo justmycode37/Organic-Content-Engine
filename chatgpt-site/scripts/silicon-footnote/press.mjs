@@ -52,7 +52,8 @@ export async function capturePress(root,sources,indices){
     if(await cookies.isVisible().catch(()=>false))await cookies.click({timeout:2500}).catch(()=>{});
     const title=await page.title();
     if(/access denied|please verify|just a moment|checking your browser/i.test(title))throw Error('Publisher interstitial');
-    let heading=page.locator('main h1,article h1,h1').filter({visible:true}).first();
+    let heading=page.locator('h1.title,article h1,[itemprop="headline"]').filter({visible:true}).first();
+    if(!await heading.count())heading=page.locator('main h1,h1').filter({visible:true}).first();
     if(!await heading.count())heading=page.locator('blockquote,[data-testid="tweetText"]').first();
     if(!await heading.count())throw Error('Page has no readable article or post');
     const headingText=(await heading.innerText()).trim();

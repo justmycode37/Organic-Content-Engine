@@ -74,6 +74,16 @@ def render(root):
     (root/'picture-edit.json').write_text(json.dumps({'plan':plan,'seconds':timing},indent=2))
     write_credits(root,plan,pack)
     modern=all(beat.get('art') for beat in plan['beats'])
+    compact=modern and not captioned and os.environ.get('NEWS_COMPACT_RENDER')=='1'
+    if modern:
+        audio=f'[1:a]apad=pad_dur={tail},loudnorm=I=-19:TP=-2:LRA=12,aresample=48000,pan=stereo|c0=c0|c1=c0[v];[2:a]volume=1.23[m];[v][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=0:latency=1[a]'
+    if compact:
+        # Render the mix before producing picture media, when PCM scratch has the most headroom.
+        score(root/'score.wav',timing,plan['beats'],pack)
+        mix=root/'mix.m4a'
+        run(['-i',voice,'-i',root/'score.wav','-filter_complex',audio.replace('[1:a]','[0:a]').replace('[2:a]','[1:a]'),'-map','[a]','-c:a','aac','-b:a','160k',mix])
+        (root/'score.wav').unlink()
+        if voice!=root/'voice.wav':voice.unlink()
     cuts,clock,jobs=[],0,[]
     code=hashlib.sha256()
     for name in ['render.py','film.py','citation.py','motion.py','us-states.json']:
@@ -139,23 +149,17 @@ def render(root):
     with ThreadPoolExecutor(max_workers=3) as pool:
         list(pool.map(shot,jobs))
     (root/'picture.list').write_text('\n'.join(cuts))
+    if compact:
+        compact_mux(root,mix,timing)
+        return
     args=['-f','concat','-safe','1','-i',root/'picture.list','-i',voice]
     if modern:
         score(root/'score.wav',timing,plan['beats'],pack)
         args+=['-i',root/'score.wav']
-        audio=f'[1:a]apad=pad_dur={tail},loudnorm=I=-19:TP=-2:LRA=12,aresample=48000,pan=stereo|c0=c0|c1=c0[v];[2:a]volume=1.23[m];[v][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=0:latency=1[a]'
         if captioned:
             args+=['-i',root/'captions.mov','-i',root/'captions.vtt','-filter_complex',
                    audio+';[0:v][3:v]overlay=0:H-h-24:eof_action=pass,scale=1920:1080:flags=lanczos[vout]','-map','[vout]','-map','[a]','-map','4:s',
                    '-c:v','libx264','-threads','4','-preset','veryfast','-crf','18','-c:s','mov_text','-metadata:s:s:0','language=eng','-disposition:s:0','0']
-        elif os.environ.get('NEWS_COMPACT_RENDER')=='1':
-            # Encode the completed mix first so temporary PCM never competes with the final MP4.
-            mix=root/'mix.m4a'
-            run(['-i',voice,'-i',root/'score.wav','-filter_complex',audio.replace('[1:a]','[0:a]').replace('[2:a]','[1:a]'),'-map','[a]','-c:a','aac','-b:a','160k',mix])
-            (root/'score.wav').unlink()
-            if voice!=root/'voice.wav':voice.unlink()
-            compact_mux(root,mix,timing)
-            return
         else:args+=['-filter_complex',audio,'-map','0:v:0','-map','[a]','-c:v','copy']
     else:args+=['-map','0:v:0','-map','1:a:0','-c:v','copy']
     run([*args,'-c:a','aac','-b:a','160k','-movflags','+faststart',root/'episode.partial.mp4'])

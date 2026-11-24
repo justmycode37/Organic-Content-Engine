@@ -103,6 +103,8 @@ def lower(beat,credit):
     bottom=anchor.startswith('lower')
     right=anchor.endswith('right')
     gradient=np.maximum(0,1-np.arange(H)/350)**1.55
+    if beat.get('closing'):
+        gradient=.75+.25*gradient
     if bottom:gradient=gradient[::-1]
     im.putalpha(Image.fromarray(np.broadcast_to(np.uint8(224*gradient[:,None]),(H,W)).copy()))
     lines=wrap(label,face(66,'title'),1160)
@@ -261,12 +263,17 @@ class Sequence:
         for i,(label,val) in enumerate(zip(labels,values)):
             at=b['barCues'][i] if b.get('barCues') else .1*i
             yy=int(y+i*gap);k=ease((t-at)/.73)
-            extent=round(595*val/max(values)*k)
+            extent=round(595*val/(100 if spec.get('floors') else max(values))*k)
             typeblock(d,75,yy+5,label,295,41,WHITE,'sans',2)
             d.rounded_rectangle((x,yy+5,x+595,yy+37),radius=4,fill='#292c30')
             if extent>1:
                 d.rounded_rectangle((x,yy+4,x+extent,yy+38),radius=min(4,extent//2),fill=PALETTE[i])
                 if k<1:d.line((x+extent,yy+4,x+extent,yy+38),fill=WHITE,width=3)
+            if spec.get('floors') and t>=at:
+                floor=spec['floors'][i]
+                marker=x+round(595*floor/100)
+                d.line((marker,yy,marker,yy+43),fill=WHITE,width=3)
+                d.text((marker,yy+48),f'{floor:g}% floor',font=face(20,'title'),fill=WHITE,anchor='mt')
             if k>.72:typeblock(d,x+extent+13,yy+2,format(val,',.5g'),167,46,WHITE,'bold',1)
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)
