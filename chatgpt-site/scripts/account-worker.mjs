@@ -4,6 +4,7 @@ import {spawn} from 'node:child_process';
 import {join} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {safeId as safe,jobEvidence,publicFailure,runAccountCommand,accountRedactor} from './account-worker-evidence.mjs';
+import {hedgyTopicResearch} from './hedgy-topic-research.mjs';
 import {createReelSubscription} from './reel-subscription.mjs';
 
 const ROOT=fileURLToPath(new URL('../',import.meta.url)), CACHE=process.env.OCE_ACCOUNT_CACHE||join(ROOT,'.account-cache');
@@ -26,7 +27,9 @@ async function make(job,evidence){
   await writeFile(guard,new Date().toISOString());
   const {generateHedgyReel}=await import('../worker/hedgy-generation.ts');
   evidence.stage='generation';
-  const result=await generateHedgyReel({OPENAI_API_KEY:evidence.env.OPENAI_API_KEY},job.account.topic,entry=>evidence.usage(entry),Array.isArray(job.history)?job.history:[],evidence.subscription);
+  const research=evidence.hedgyResearch;
+  const history=[...(Array.isArray(job.history)?job.history:[]),...await research.history()];
+  const result=await generateHedgyReel({OPENAI_API_KEY:evidence.env.OPENAI_API_KEY},job.account.topic,entry=>evidence.usage(entry),history,evidence.subscription,research);
   spec=result.spec;provenance=result.provenance;
   await writeFile(specFile,JSON.stringify(spec));await writeFile(provFile,JSON.stringify(provenance));
  }
@@ -54,11 +57,11 @@ const stamp=()=>new Date().toISOString();
 // A report sent while the network is still waking (DNS) must not be lost: heartbeats keep
 // the lease alive meanwhile, so retry within the 20-minute lease instead of failing once.
 export const FAILURE_REPORT_ATTEMPTS=30,FAILURE_REPORT_SPACING=30000;
-export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env}),keepAwake=keepAwakeDuringJob,sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
+export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env}),hedgyResearch=hedgyTopicResearch(env),keepAwake=keepAwakeDuringJob,sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
  const {job}=await (await fetchSite(config,'/api/jobs/accounts/claim',{method:'POST'})).json();if(!job)return false;
  const release=keepAwake();
  const evidence=jobEvidence(cacheRoot,job,env,config),heartbeat=setInterval(()=>fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/heartbeat`,{method:'POST'}).catch(()=>{}),30000);
- evidence.subscription=subscription;
+ evidence.subscription=subscription;evidence.hedgyResearch=hedgyResearch;
  log.log(`[${stamp()}] Account job ${safe(job.id)} (${safe(job.account?.id??'unknown')}) claimed`);
  try{
   await evidence.prepare();

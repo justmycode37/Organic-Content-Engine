@@ -44,7 +44,12 @@ if (checking) {
  if (state.lease) {
   const job = `/api/jobs/accounts/${state.id}/${state.lease}`;
   const {materialId} = await request(`${job}/output`, {method:'PUT',headers:{'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});
-  await request(`${job}/complete`, json({materialId,spec,provenance:{}}));
+  const {idea}=await readFile(join(dir,'provenance.json'),'utf8').then(JSON.parse).catch(error=>{
+   if(error.code==='ENOENT')return {};
+   throw error;
+  });
+  const provenance=idea?{idea}:{};
+  await request(`${job}/complete`, json({materialId,spec,provenance}));
  }
  const maxChecks = 25;
  for (let attempt = 0; attempt < maxChecks; attempt++) {

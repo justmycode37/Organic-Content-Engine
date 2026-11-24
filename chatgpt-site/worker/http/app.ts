@@ -1,8 +1,7 @@
-import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
+import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
 import {SocialAccounts,platformOf as scopedPlatformOf} from '../services/social.ts';
-import {generateHedgyReel} from '../hedgy-generation.ts';
 import {listAccounts,addAccount,updateAccount,accountCreate,accountPatch} from '../services/accounts.ts';
 import {videoPreflight} from '../services/video-preflight.ts';
 import {preparePlanCycle} from '../services/plan-cycle.ts';
@@ -206,6 +205,7 @@ export function createApp(): Hono<AppEnv> {
   app.post('/api/jobs/accounts/tick',async c=>{const x=c.get('container');await x.settings.setJob('account_worker',new Date().toISOString(),{online:true});const publication=await publishAccountJobs(x,c.env);return c.json({...publication,...await tickAccounts(x,c.env)});});
   app.get('/api/jobs/accounts/notifications',async c=>c.json({events:await accountNotices(c.get('container'))}));
   app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
+  app.get('/api/jobs/accounts/hedgy/history',async c=>c.json({history:await accountReelHistory(c.get('container'),'hedgy')}));
   app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
   app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
   const evaluationRound=validator.coerce.number().int().min(12).max(10000);
