@@ -4,7 +4,7 @@
 import { clamp, ease, font, markupWords, type Ctx, type PlacedScene, type ReelSpec } from './core.ts';
 import type { ActiveCaption } from './captions.ts';
 
-const YELLOW = '#FFD23F', INK = '#0B0B0D', WHITE = '#FFFFFF';
+const INK = '#0B0B0D', WHITE = '#FFFFFF';
 const HEADER_Y = 150, HOOK_Y = 330, PAYOFF_Y = 1270;
 const PAYOFF_X = 486, PAYOFF_TEXT_WIDTH = 752;
 const PAYOFF_SIZES = [78, 72, 66, 60, 54, 48];
@@ -147,7 +147,7 @@ export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed
 
 /**
  * Large word-pop captions for the viral look: 1–2 short lines of heavy white
- * sans with a thick dark stroke; the word being spoken turns yellow and pops.
+ * sans with a thick dark stroke. The currently spoken word briefly scales up.
  */
 export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number, centerY = 1440, centerX = 500) {
   const raw = String(caption.text ?? '').trim();
@@ -175,7 +175,7 @@ export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number,
       const pop = active ? 1 + 0.08 * (1 - clamp((time - start) / 0.18)) : 1;
       const cx = x + widths[c]! / 2;
       ctx.save(); ctx.translate(cx, y); ctx.scale(pop * (0.85 + 0.15 * appear), pop * (0.85 + 0.15 * appear));
-      strokedText(ctx, word, 0, 0, size, active ? YELLOW : spoken ? WHITE : 'rgba(255,255,255,0.92)', INK, size * 0.22);
+      strokedText(ctx, word, 0, 0, size, spoken ? WHITE : 'rgba(255,255,255,0.92)', INK, size * 0.22);
       ctx.restore();
       x += widths[c]! + space;
     });
@@ -229,6 +229,6 @@ export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: P
   ctx.save();
   ctx.globalAlpha = out;
   ctx.translate(540, 470); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); ctx.rotate(-0.04);
-  strokedText(ctx, word, 0, 0, 150, YELLOW, INK, 30);
+  strokedText(ctx, word, 0, 0, 150, WHITE, INK, 30);
   ctx.restore();
 }

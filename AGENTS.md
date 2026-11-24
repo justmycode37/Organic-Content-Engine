@@ -33,7 +33,8 @@ quotes and claims you can verify against the rendered reel as hallucinations.
 Identify the round and cite the relevant evidence. Carbon is for entertainment
 and has no bearing on edits, the 90/100 target, or publication.
 Use plain bold white text for Hedgy titles and title cards, with no strokes,
-underlines, or decorative rules.
+underlines, or decorative rules. Use white text for Hedgy captions and
+spoken-number overlays.
 
 ## Required Quriozity reviews
 
