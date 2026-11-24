@@ -99,7 +99,7 @@ async function codexRequest(request,settings,cwd,run){
  const binary=await executable(settings,'OCE_CODEX_BIN','codex',['/opt/homebrew/bin/codex','/usr/local/bin/codex']);
  const args=['exec','--json','--ephemeral','--ignore-user-config','--skip-git-repo-check','--sandbox','read-only',
   '--disable','shell_tool','--disable','unified_exec','--disable','multi_agent','--disable','plugins','--disable','skill_search',
-  '-m',request.model,'-c',`model_reasoning_effort="${request.effort}"`,'-c','forced_login_method="chatgpt"','-c','web_search="disabled"'];
+  '-m',request.model,'-c',`model_reasoning_effort="${request.effort}"`,'-c','forced_login_method="chatgpt"','-c',request.webSearch===true?'web_search="live"':'web_search="disabled"'];
  for(const [index,image] of (request.images??[]).entries()){
   const extension={'image/png':'png','image/jpeg':'jpg','image/webp':'webp','image/gif':'gif'}[image.mime];
   if(!extension)throw new Error(`Unsupported review image type: ${image.mime}`);

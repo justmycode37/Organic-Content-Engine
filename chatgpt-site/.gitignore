@@ -22,3 +22,5 @@
 .acryllex-history.json
 
 /.account-cache/
+
+/scripts/silicon-footnote/__pycache__/

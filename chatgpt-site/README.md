@@ -164,3 +164,54 @@ Merging source changes alone does not refresh that copy. Update the installed
 Quriozity sources and source-search index, retain its private configuration,
 history, assets and repair budgets, then restart the idle service. Deploy the
 matching Site code too: its completion gate validates the model/review profile.
+
+## Silicon Footnote
+
+Use the [editorial foundation](scripts/silicon-footnote/EDITORIAL-FOUNDATION.md)
+for YouTube references, episode selection, and source-backed reporting briefs.
+The [thumbnail research](scripts/silicon-footnote/THUMBNAIL-RESEARCH.md) explains
+the two separately designed covers available for preview and download under
+**Episodes → YouTube thumbnails**. Standalone runs save the same JPEGs and
+their credit manifest beside the video.
+
+Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
+workspace binds a unique channel named Silicon Footnote or The Silicon Footnote
+on first discovery. You can also choose a channel manually. **Research and
+produce** accepts an optional story focus. An empty focus asks the producer to
+find a current AI story. The finished private MP4 and its reporting and footage
+credits appear under **Episodes**.
+
+The Mac producer uses live web search through the signed-in Codex ChatGPT
+subscription. It downloads and reads public articles, first-party posts via X
+oEmbed when available, and direct MP4 footage. A story needs at least two
+accessible sources and a decodable clip. Scripts cite sources per shot. Exact
+quote cards are checked against retrieved text. The local episode directory
+retains the evidence, editorial plan, audio takes and measured cut timings.
+
+The custom 1280 × 720, 24 fps library draws black-and-white source cards with selective amber word highlights,
+perspective text terrain, sequential diagrams, zero-based charts and white
+identification plates over source footage. Cut lengths follow native Titan
+takes (ElevenLabs Flash v2.5, voice dtSEyYGNJqjrtBArPCVZ). Finished episodes
+must measure 600–900 seconds. Publication to YouTube is a separate editorial action.
+
+The independent Mac worker uses the existing account worker's Site URL,
+machine credential and ElevenLabs key, plus the local Codex ChatGPT login.
+It needs FFmpeg, ffprobe, curl and Python 3 with Pillow and NumPy.
+From this directory:
+
+```sh
+python3 scripts/silicon-footnote/test_motion.py
+python3 scripts/silicon-footnote/install.py
+```
+
+For standalone production, set ELEVENLABS_API_KEY in the environment:
+
+```sh
+node scripts/silicon-footnote/produce.mjs outputs/news-01
+node scripts/silicon-footnote/produce.mjs outputs/mars --sources scripts/silicon-footnote/pilot.json
+```
+
+Use a fresh directory per episode. Repeating a completed or interrupted run in
+the same directory reuses its saved script, completed takes and rendered shots.
+After a machine crash, confirm the process exited before removing its
+production.lock. Use a new directory if you change the source pack or script.

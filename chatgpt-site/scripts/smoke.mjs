@@ -1105,3 +1105,67 @@ test('reel notifications exclude old intermediate events and only report unackno
   assert.equal(JSON.parse((await s.db.prepare("SELECT last_result FROM job_state WHERE name='account_notice:fixture:generated'").first()).last_result).acknowledged,false);
  }finally{await s.stop();}
 });
+
+test('Silicon Footnote binds only YouTube and delivers an on-demand private episode',async()=>{
+ const yt={id:'silicon-yt',name:'The Silicon Footnote',identifier:'youtube'};
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken,POSTIZ_API_KEY:'test'},{persist:'silicon',outboundService:async()=>Response.json([yt,{...yt,id:'other',identifier:'instagram'}])});
+ const root='/api/jobs/accounts/silicon',machine={headers:accountHeaders};
+ const list=await s.call('GET','/api/accounts');
+ assert.equal(list.body.accounts.find(a=>a.id==='silicon-footnote').postizIntegrationId,yt.id);
+ assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:yt.id}})).status,409);
+ const q=await s.call('POST','/api/silicon/episodes',{json:{topic:'Mars'}});
+ assert.equal(q.status,201);assert.equal((await s.call('POST','/api/silicon/episodes',{json:{topic:'Duplicate'}})).status,409);
+ const claimed=await s.call('POST',root+'/claim',machine);assert.equal(claimed.body.job.id,q.body.id);
+ assert.equal((await s.call('POST',root+'/claim',machine)).body.job,null);
+ const path=root+'/'+q.body.id;
+ const init=await s.call('POST',path+'/upload',machine);assert.equal(init.status,200);
+ const uploadId=init.body.uploadId;
+ const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:new Uint8Array(200)});
+ assert.equal(part.status,200);
+ const thumbnails=[{id:'subject',line:'A Drive on Mars'},{id:'evidence',line:'Planned from Earth'}];
+ const body={title:'Episode',seconds:700,sources:[],uploadId,parts:[await part.json()],thumbnails};
+ const cover='/api/silicon/episodes/'+q.body.id+'/thumbnail/subject';
+ const request=(variant,body)=>s.mf.dispatchFetch('https://site.example'+path+'/thumbnail/'+variant,{
+  method:'PUT',headers:{...accountHeaders,'content-type':'image/jpeg'},body,
+ });
+ assert.equal((await s.call('POST',path+'/complete',{...machine,json:body})).status,409);
+ assert.equal((await request('subject',new Uint8Array(20))).status,400);
+ const jpeg=Uint8Array.from(Buffer.from('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAgGBgcGBQgHBwcJCQgKDBQNDAsLDBkSEw8UHRofHh0aHBwgJC4nICIsIxwcKDcpLDAxNDQ0Hyc5PTgyPC4zNDL/wAALCAABAAEBAREA/8QAFAABAAAAAAAAAAAAAAAAAAAAA//EABQQAQAAAAAAAAAAAAAAAAAAAAD/2gAIAQEAAD8AJ//Z','base64'));
+ for(const {id} of thumbnails)assert.equal((await request(id,jpeg)).status,200);
+ assert.equal((await s.call('GET',cover)).status,404);
+ const done=await s.call('POST',path+'/complete',{...machine,json:body});
+ assert.equal(done.status,200);
+ const episode=(await s.call('GET','/api/silicon/episodes')).body.episodes[0];
+ assert.equal(episode.status,'ready');
+ assert.deepEqual(episode.thumbnails,thumbnails);
+ const privateCover=await s.mf.dispatchFetch('https://site.example'+cover,{headers:{...OWNER,cookie:COOKIE}});
+ assert.equal(privateCover.status,200);
+ assert.equal(privateCover.headers.get('content-type'),'image/jpeg');
+ assert.deepEqual(new Uint8Array(await privateCover.arrayBuffer()),jpeg);
+ assert.notEqual((await s.mf.dispatchFetch('https://site.example'+cover)).status,200);
+ assert.equal((await request('subject',jpeg)).status,409);
+ const video=await s.call('GET','/api/silicon/episodes/'+q.body.id+'/video',{headers:{...OWNER,range:'bytes=0-9'}});
+ assert.equal(video.status,206);assert.equal(video.headers.get('content-range'),'bytes 0-9/200');
+ await s.stop();
+});
+
+test('a finished episode can be revised in place while its previous cut remains available',async()=>{
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'silicon-revision'});
+ try{
+  const id=crypto.randomUUID(),created=new Date().toISOString(),base='/api/jobs/accounts/silicon',video='/api/silicon/episodes/'+id+'/video';
+  const episode={id,title:'Original',topic:'Mars',status:'ready',created};
+  await s.db.prepare('INSERT INTO job_state VALUES(?,?,?)').bind('silicon-episode:'+id,created,JSON.stringify(episode)).run();
+  const bucket=await s.mf.getR2Bucket('BUCKET');
+  await bucket.put('silicon/'+id+'.mp4','original');
+  const begin=await s.call('POST',base+'/import',{headers:accountHeaders,json:{id,title:'Mars',replace:true}});
+  assert.equal(begin.status,200);const path=base+'/'+begin.body.job.id;
+  assert.equal((await s.call('GET',video)).body,'original');
+  assert.equal((await s.call('GET','/api/silicon/episodes')).body.episodes.length,1);
+  const init=await s.call('POST',path+'/upload',{headers:accountHeaders}),uploadId=init.body.uploadId;
+  const part=await s.mf.dispatchFetch('https://site.example'+path+'/part/1',{method:'PUT',headers:{...accountHeaders,'x-upload-id':uploadId},body:'revised'});
+  const finish=await s.call('POST',path+'/complete',{headers:accountHeaders,json:{title:'Mars',seconds:670,sources:[],uploadId,parts:[await part.json()]}});
+  assert.equal(finish.status,200);assert.equal((await s.call('GET',video)).body,'revised');
+  const list=(await s.call('GET','/api/silicon/episodes')).body.episodes;
+  assert.equal(list.length,1);assert.equal(list[0].id,id);assert.equal(list[0].title,'Mars');
+ }finally{await s.stop();}
+});
