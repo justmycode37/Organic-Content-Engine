@@ -67,3 +67,5 @@ The source studies are schematic. In the transit study, disk overlap drives the 
 ## Story development
 
 Start with the [eight sourced research briefs](research.md). The [story workflow](story-pipeline.md) turns a sourced claim ledger into a shot handoff. The [worked transit brief](story-example-transit.md) is a preproduction example, with scientific and editorial review still pending.
+
+The channel’s [recurring presenter, Professor Rowan Ellery](presenter/README.md), has a saved HeyGen speaking master, reference portrait and new-take workflow.

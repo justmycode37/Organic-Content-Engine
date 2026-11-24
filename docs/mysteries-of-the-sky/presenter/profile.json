@@ -1,0 +1,13 @@
+{
+  "id": "professor-rowan-ellery",
+  "channel": "Mysteries of the Sky",
+  "name": "Professor Rowan Ellery",
+  "role": "Fictional science presenter",
+  "characterBackground": "PhD in physics, with a teaching focus on observational astrophysics.",
+  "masterVideo": "rowan-ellery-master.mp4",
+  "referencePortrait": "rowan-ellery.png",
+  "monidMasterRunId": "01M875Y7PKRPTFTY4S3QQWPMMV",
+  "heygenMasterVideoId": "1c0da5cde1334a15973975641109e576",
+  "referenceDirection": "Return to the same seated speaker as <Video 1>. Match his auburn hair, square face, silver-tipped copper beard, plum overshirt, oatmeal T-shirt, walnut bookshelves, brass globe and lamp. Preserve the framing, natural skin detail, measured voice and subtle expressions of the reference. One locked eye-level shot. Keep the spoken line clean, with quiet room tone. No captions or music.",
+  "seed": 184711
+}
