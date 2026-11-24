@@ -50,6 +50,8 @@ The `voice-plan` command writes ordered provider requests for later production. 
 
 Keep the underscore light. In the S2 mix, quiet bowed notes overlap beneath speech and a solo violin enters only occasionally. Use that mix as the listening reference for how far the music sits behind both speakers.
 
+For each return to a familiar diagram, name what the viewer can now see or test. Keep one continuous view while a measurement changes. Cut when the narration needs a new observation, scale, or comparison. In the WASP-39 b edit, the opening moves from the large peak to its shoulder within one plot. A later return overlays the published model and separates the residuals.
+
 ## Authoring sequence
 
 1. Choose one question with a concrete, visual causal answer. Write the intended

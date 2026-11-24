@@ -2,6 +2,7 @@
 // atmosphere thickness, molecules and illustrative counting examples are schematic.
 import { atmosphericLimb, transmittedLight } from '../atmosphere.ts';
 import { drawMolecule, type Molecule } from '../molecules.ts';
+import { evidenceScenes } from './wasp39-sequences.ts';
 import data from './wasp39-data.json';
 import {
   canvas,
@@ -480,6 +481,7 @@ for (const k of ['data', 'peak', 'shoulder', 'bins', 'unknown', 'co2', 'sulfur']
 for (const k of ['curve', 'narrow', 'baseline']) scenes[k] = lightcurve;
 for (const k of ['carbon', 'sulfide', 'water', 'so2']) scenes[k] = molecule;
 for (const k of ['prism', 'photon', 'binsize']) scenes[k] = instrument;
+Object.assign(scenes, evidenceScenes);
 scenes.mid = compare;
 scenes.example = compare;
 scenes.credits = credits;
