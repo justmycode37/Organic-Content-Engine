@@ -42,6 +42,8 @@ Titan tells the story over the animations, diagrams and source material. Rowan a
 
 Set `shot.representation` to `presenter` for Rowan. The handoff assigns every other shot to Titan, including older stories without presenter shots. The transit example gives Rowan five seconds at 0:41 to ask what blocked the light. Titan uses the next diagram to answer. The planned split is 59 seconds for Titan and five for Rowan.
 
+Aim for Rowan’s avatar generation to average about **US$3 per published video** across the series. Count billed Rowan takes and retakes together, including videos with zero avatar spend in the average. Individual episodes can come in above or below the target. Titan narration is budgeted separately.
+
 The `voice-plan` command writes ordered provider requests for later production. Titan uses ElevenLabs voice `dtSEyYGNJqjrtBArPCVZ`, model `eleven_flash_v2_5`, with stability and similarity boost each at 0.20. Rowan uses the saved portrait and his own mature voice via HeyGen. If a cutaway plays for less than five seconds, generate the five-second minimum and trim the quiet handles to fit. Use the actual recorded speech to time the edit.
 
 ## Authoring sequence

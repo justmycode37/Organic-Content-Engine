@@ -4,6 +4,8 @@ Rowan is the fictional on-camera physics expert for *Mysteries of the Sky*. Tita
 
 The [current portrait](rowan-ellery.png) is the visual identity. The [voice sample](rowan-ellery-voice.m4a) is from Rowan’s HeyGen take with the older voice direction. Use the mild softness and muted indoor colour of an older webcam for the interview footage. Add readable titles after scaling the footage. The earlier [speaking master](rowan-ellery-master.mp4) shows a superseded design. The white-shirt speaking take is pending.
 
+Budget Rowan’s appearances using the channel’s [series-average spending target](../story-pipeline.md#narration-and-interview-cuts).
+
 ## Generate a take
 
 From the repository root, prepare a HeyGen Video 1 reference-to-video request using the current portrait, voice sample and a new line. The default request uses a 480p landscape capture. The optional fourth argument supplies an alternative HTTPS speaking-master URL.
