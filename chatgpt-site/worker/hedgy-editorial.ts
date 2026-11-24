@@ -38,7 +38,7 @@ export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best sh
 - The FIRST spoken sentence is the hook: at most 12 words, instantly clear, and it opens a curiosity gap or names a surprising, relatable tension (a question the viewer suddenly needs answered, or a claim that sounds wrong). No scene-setting before it.
 - Concrete stakes for one character the viewer recognises; the viewer should feel "wait, why?" within 3 seconds.
 - One "aha" turn where the mechanism clicks, shown by what happens to the anchor, and one plain spoken line that says why it happens.
-- Put the turn near the middle. Every line after the hook adds a cause, choice or consequence.
+- Put the turn near the middle. Every line after the hook adds a cause, choice or consequence. Cut lines that only restate the opening problem.
 - Stakes must feel worth a stranger's 30 seconds: give the viewer a concrete puzzle, surprising scale, visible change or meaningful outcome.
 - The hook names the trap, the loss or the surprising result, not a neutral situation.
 - The opening words and the opening card should make the specific contradiction clear together. If the answer seems obvious, name the specific detail that makes it surprising.

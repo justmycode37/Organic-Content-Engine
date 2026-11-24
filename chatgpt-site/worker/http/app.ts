@@ -208,7 +208,7 @@ export function createApp(): Hono<AppEnv> {
   app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
   app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
   app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
-  const evaluationRound=validator.coerce.number().int().min(12).max(10000).refine(round=>round%2===0,'Choose an even Hedgy evaluation round');
+  const evaluationRound=validator.coerce.number().int().min(12).max(10000);
   app.get('/api/jobs/accounts/hedgy/evaluation/:round',async c=>c.json(await hedgyEvaluationStatus(c.get('container'),c.env,evaluationRound.parse(c.req.param('round')))));
   app.post('/api/jobs/accounts/hedgy/evaluation/:round',async c=>{
    const round=evaluationRound.parse(c.req.param('round'));

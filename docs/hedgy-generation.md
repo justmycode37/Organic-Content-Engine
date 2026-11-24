@@ -112,12 +112,13 @@ through the Codex subscription. Sol (xhigh) still writes and repairs the reel.
 The account worker uses its usual model settings.
 
 For the local evaluation series, each numbered round produces a fresh topic.
-Publish the reviewed result of each even round starting at round 12. Use
+Publish one finished reel from every round starting at round 12. Use
 `node scripts/hedgy-round-publish.mjs <roundDir> <instagramIntegrationId>` with
 the Mac account worker's existing environment and Hedgy's Postiz destination.
 The Site uses its stored Postiz credential. The command saves a receipt beside
-the reel and checks the account job for the Instagram link. Run the same command
-to reconcile a submitted post. This cadence applies to the evaluation series.
+the reel and succeeds once Postiz confirms publication. If it exits with status 2,
+run the same command to reconcile the existing job. Keep the selected video and
+caption fixed once submitted. Record the confirmed post before closing the round.
 
 The `statement` shot stages an offer, unpaid interest accumulating, that amount
 moving into the loan balance, and the next charge becoming visible. Its figures

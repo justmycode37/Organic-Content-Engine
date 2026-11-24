@@ -111,6 +111,8 @@ The user has authorized this workflow; preserve unrelated work and satisfy the
 repository's checks/review requirements before merging.
 For the Hedgy evaluation series, create one PR for each completed numbered
 round and merge it into `main` after its checks and required reviews pass.
+Starting with r12, publish one selected reel from every evaluation round to
+Hedgy's Instagram via Postiz. A round is finished once Postiz confirms the post.
 
 ## Perfect style reference
 
