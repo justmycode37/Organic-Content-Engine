@@ -60,7 +60,7 @@ The reference is Quanta Magazine’s 16:24 film. The corrected video ID ends in 
 
 ## Paint and motion
 
-The five landscape swatches anchor the materials, from night `#040411` through plum `#2e1d2d`, wine `#63374a`, brick `#873f40` and coral `#c46d65`. Indigo and lilac come from the reference sky. Surfaces combine tonal ramps, directional shading and object-space grain. Shells feather toward the interior while retaining an irregular outer silhouette. At 1080p, a two-pixel raster mixed over the smooth frame at 42% gives silhouettes and letters a slight pixel edge. The single surprise hue is chartreuse, `#ddf65e`. The `signal` ramp reserves it for an active measurement or the head of an arriving wave.
+The five landscape swatches anchor the materials, from night `#040411` through plum `#2e1d2d`, wine `#63374a`, brick `#873f40` and coral `#c46d65`. Indigo and lilac come from the reference sky. Surfaces combine tonal ramps, directional shading and object-space grain. Shells feather toward the interior while retaining an irregular outer silhouette. At 1080p, a two-pixel raster mixed over the smooth frame at 42% gives the artwork a slight pixel edge. All typography, equations and charge symbols retain native-resolution antialiasing. The single surprise hue is chartreuse, `#ddf65e`. The `signal` ramp reserves it for an active measurement or the head of an arriving wave.
 
 The source studies are schematic. In the transit study, disk overlap drives the flux of an idealized uniform stellar disk. The chart and occultation use the same position and radius. The planet’s size, impact parameter and vertical chart scale are illustrative.
 

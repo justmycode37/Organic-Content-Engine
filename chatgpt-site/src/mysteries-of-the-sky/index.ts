@@ -1,4 +1,4 @@
-import { finePixelFinish } from './finish.ts';
+import { paintWithFinePixels } from './finish.ts';
 import { ramps, sky, surface, wash, type Material, type Surface } from './materials.ts';
 export { sky, ramps, type Material, type Surface } from './materials.ts';
 
@@ -173,8 +173,7 @@ export function renderFrame(ctx: Ctx, shots: readonly Shot[], seconds: number) {
     ctx.rect(0, 0, width, height);
     ctx.clip();
     backdrop(ctx);
-    shot.draw(ctx, Math.min(local, shot.duration));
-    finePixelFinish(ctx);
+    paintWithFinePixels(ctx, () => shot.draw(ctx, Math.min(local, shot.duration)));
   } finally {
     ctx.restore();
   }
