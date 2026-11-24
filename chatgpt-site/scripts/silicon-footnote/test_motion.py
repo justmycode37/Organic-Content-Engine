@@ -150,6 +150,19 @@ class DocumentaryTests(unittest.TestCase):
                 events=[at for at,index in events]
             self.assertEqual([at+times[0] for at in events],[line.index(cue)/4 for cue in cues])
 
+    def test_response_percentage_waits_for_narration(self):
+        from film import Sequence
+        from pathlib import Path
+        beat={'kind':'chart','narration':'The trial reported a reduction.','source':0,'labels':['Response'],'title':'Grid call','revealAt':2,
+              'chart':{'layout':'response-window','seconds':40,'reduction':30,'unit':'Emergency drill'},
+              'art':{'headline':'Grid call','caption':'London emergency trial'}}
+        seq=Sequence(Path('.'),beat,{'sources':[{'url':'https://example.org/study'}]},0)
+        area=(570,270,1170,480)
+        before=np.asarray(seq.response_window(1.95).crop(area))
+        after=np.asarray(seq.response_window(2.65).crop(area))
+        self.assertEqual(len(np.unique(before.reshape(-1,3),axis=0)),1)
+        self.assertGreater(len(np.unique(after.reshape(-1,3),axis=0)),2)
+
     def test_camera_moves_in_both_directions(self):
         from film import camera
         from PIL import Image

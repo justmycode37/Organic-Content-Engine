@@ -20,7 +20,11 @@ const insert=z.object({image:z.number().int().nonnegative(),at:z.number().min(.1
 const comparison=z.array(z.object({image:z.number().int().nonnegative(),label:string.max(32),detail:z.string().max(44)})).length(2);
 const processDrawing=z.array(z.object({subject:z.enum(['campus','server','powerline','generator','meter','wind','hydro','chip']),label:string.max(32)})).min(2).max(4);
 const contextTrace=z.object({label:string.max(55),domain:z.tuple([z.number(),z.number()]),values:z.array(z.number().finite()).min(2).max(96)}).refine(c=>c.domain[0]<c.domain[1] && c.values.every(v=>c.domain[0]<=v && v<=c.domain[1]));
-const chartSpec=z.union([
+const clockChart=z.object({
+ layout:z.literal('response-window'),seconds:z.number().positive(),reduction:z.number().positive().max(100),
+ revealCue:string,unit:string.max(55)
+});
+const chartSpec=z.union([clockChart,
  z.object({layout:z.literal('calculation'),unit:string,values:z.array(z.number()).length(2),active:z.number().int().min(0).max(1),answer:string.max(50)}),
  z.object({
   layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),
@@ -44,10 +48,12 @@ const chartSpec=z.union([
 ]);
 const titlePosition=z.enum(['upper-left','upper-right','lower-left','lower-right']);
 const state=z.enum(Object.keys(read(join(here,'us-states.json')).states));
+const place=z.object({name:string.max(32),lon:z.number().min(-125).max(-66),lat:z.number().min(24).max(50)});
+const routePlaces=z.tuple([place,place]);
 const route=z.tuple([state,state]).refine(([origin,destination])=>origin!==destination);
-const pickup=z.object({route:route.optional(),titlePosition:titlePosition.optional(),clean:z.boolean().optional(),process:processDrawing.optional(),at:z.number().min(.05).max(.95),cue:z.string().optional(),kind:z.enum(['image','footage','document','quote','chart','steps','terrain']),title:string.max(85),source:z.number().int().nonnegative().optional(),image:z.number().int().nonnegative().optional(),clip:z.number().int().nonnegative().optional(),clipStart:z.number().nonnegative().optional(),art:art.optional(),quote:z.string().optional(),labels:z.array(string).max(4).optional(),chart:chartSpec.optional(),nameplate:z.object({name:string,date:z.string(),role:z.string()}).optional()});
+const pickup=z.object({route:route.optional(),routePlaces:routePlaces.optional(),titlePosition:titlePosition.optional(),clean:z.boolean().optional(),process:processDrawing.optional(),at:z.number().min(.05).max(.95),cue:z.string().optional(),kind:z.enum(['image','footage','document','quote','chart','steps','terrain']),title:string.max(85),source:z.number().int().nonnegative().optional(),image:z.number().int().nonnegative().optional(),clip:z.number().int().nonnegative().optional(),clipStart:z.number().nonnegative().optional(),art:art.optional(),quote:z.string().optional(),labels:z.array(string).max(4).optional(),chart:chartSpec.optional(),nameplate:z.object({name:string,date:z.string(),role:z.string()}).optional()});
 const actuality=z.object({speakerX:z.number().min(0).max(1).optional(),clip:z.number().int().nonnegative(),source:z.number().int().nonnegative(),start:z.number().nonnegative(),end:z.number().positive(),name:string,date:string,role:string,captions:z.array(z.object({start:z.number(),end:z.number(),text:string})).optional()});
-const beat=z.object({route:route.optional(),titlePosition:titlePosition.optional(),clean:z.boolean().optional(),art:art.optional(),process:processDrawing.optional(),cutaways:z.array(pickup).max(4).optional(),actuality:actuality.optional(),insert:insert.optional(),comparison:comparison.optional(),clipStart:z.number().nonnegative().optional(),kind:z.enum(['document','terrain','steps','quote','footage','chart','image']),title:string.max(85),labels:z.array(string.max(90)).min(1).max(4),source:z.number().int().nonnegative(),clip:z.number().int().nonnegative(),image:z.number().int().nonnegative().optional(),focus:z.enum(['full','upper-right','center','lower-left']).optional(),accentWord:string.max(40).regex(/^\S+$/).optional(),quote:z.string().max(180),nameplate:z.object({name:string,date:z.string(),role:z.string()}).optional(),chart:chartSpec.optional(),narration:string});
+const beat=z.object({route:route.optional(),routePlaces:routePlaces.optional(),titlePosition:titlePosition.optional(),clean:z.boolean().optional(),art:art.optional(),process:processDrawing.optional(),cutaways:z.array(pickup).max(4).optional(),actuality:actuality.optional(),insert:insert.optional(),comparison:comparison.optional(),clipStart:z.number().nonnegative().optional(),kind:z.enum(['document','terrain','steps','quote','footage','chart','image']),title:string.max(85),labels:z.array(string.max(90)).min(1).max(4),source:z.number().int().nonnegative(),clip:z.number().int().nonnegative(),image:z.number().int().nonnegative().optional(),focus:z.enum(['full','upper-right','center','lower-left']).optional(),accentWord:string.max(40).regex(/^\S+$/).optional(),quote:z.string().max(180),nameplate:z.object({name:string,date:z.string(),role:z.string()}).optional(),chart:chartSpec.optional(),narration:string});
 const coverLine=string.trim().max(36).refine(value=>value.split(/\s+/).length<=5,'Use no more than five words');
 const thumbnailPlan=z.object({
  subjectLine:coverLine,
@@ -55,7 +61,7 @@ const thumbnailPlan=z.object({
  still:z.number().int().nonnegative().nullable(),
  motif:z.enum(['chip','power','workflow','document']),
 });
-export const script=z.object({closingCredits:z.array(z.object({title:string.max(64),text:string.max(170)})).min(1).max(4).optional(),style:z.literal('reported-footage').optional(),captions:z.boolean().optional(),title:string.max(90),beats:z.array(beat).min(27).max(100),thumbnails:thumbnailPlan.optional()});
+export const script=z.object({closingHold:z.number().min(0).max(6).optional(),closingCredits:z.array(z.object({title:string.max(64),text:string.max(170)})).min(1).max(4).optional(),style:z.literal('reported-footage').optional(),captions:z.boolean().optional(),title:string.max(90),beats:z.array(beat).min(27).max(100),thumbnails:thumbnailPlan.optional()});
 
 export function checkVideoCopy(plan,material){
  const contents=[plan.title,JSON.stringify(plan.beats),JSON.stringify(plan.closingCredits??[])];
@@ -68,7 +74,7 @@ export function checkVideoCopy(plan,material){
   if(b.kind==='footage')contents.push(material.clips[b.clip]?.credit??'');
   for(const cut of b.cutaways??[]){
    if(cut.kind==='image'&&!material.images?.[cut.image]||cut.kind==='footage'&&!material.clips[cut.clip]||cut.source!==undefined&&!material.sources[cut.source])throw Error('Invalid cutaway source');
-   if(cut.kind==='chart'&&cut.chart?.layout!=='profile'&&(!cut.chart||!Math.max(...cut.chart.values)||(cut.labels??b.labels).length!==cut.chart.values.length))throw Error('Invalid cutaway chart');
+   if(cut.kind==='chart'&&!['profile','response-window'].includes(cut.chart?.layout)&&(!cut.chart||!Math.max(...cut.chart.values)||(cut.labels??b.labels).length!==cut.chart.values.length))throw Error('Invalid cutaway chart');
    if(cut.kind==='footage')contents.push(material.clips[cut.clip].credit);
    if(cut.kind==='image')contents.push(material.images[cut.image].credit);
    if(['document','quote'].includes(cut.kind))contents.push(material.sources[cut.source??b.source].title);

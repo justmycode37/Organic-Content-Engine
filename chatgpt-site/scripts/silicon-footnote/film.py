@@ -119,7 +119,7 @@ def lower(beat,credit):
         y=typeblock(d,x,y,text,width,size,WHITE,style,2,1.02)+11
     return im
 
-def atlas(d,states,box,progress):
+def atlas(d,states,box,progress,places=None):
     x,y,w,h=box
     for name,paths in STATES.items():
         fill='#565b5a' if name not in states else PALETTE[states.index(name)%4]
@@ -131,6 +131,7 @@ def atlas(d,states,box,progress):
         ring=max(STATES[name],key=len)
         lon=(max(p[0] for p in ring)+min(p[0] for p in ring))/2
         lat=(max(p[1] for p in ring)+min(p[1] for p in ring))/2
+        if places:lon,lat=places[i]['lon'],places[i]['lat']
         cx=x+(lon+125)/59*w;cy=y+(50-lat)/26*h
         r=5+4*ease(progress*2-i*.4)
         d.ellipse((cx-r,cy-r,cx+r,cy+r),fill=IVORY,outline=BLACK,width=2)
@@ -300,17 +301,41 @@ class Sequence:
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)
         return im
+    def response_window(self,t):
+        chart=self.b['chart']
+        image=Image.new('RGB',(W,H),'#101217')
+        draw=ImageDraw.Draw(image)
+        typeblock(draw,68,45,self.head,1140,64,WHITE,'title',2)
+        typeblock(draw,70,164,chart['unit'],1120,32,'#e3e4e7',lines=1)
+        bounds=(130,231,452,553)
+        draw.ellipse(bounds,outline='#383c45',width=13)
+        reveal=self.b.get('revealAt',1.2)
+        sweep=ease(t/max(.15,reveal))
+        draw.arc(bounds,-90,-90+359*sweep,fill=PALETTE[0],width=14)
+        draw.text((291,384),f"{chart['seconds']:g} s",font=face(80,'title'),fill=WHITE,anchor='mm')
+        draw.text((291,454),'RESPONSE WINDOW',font=face(20,'title'),fill=WHITE,anchor='mm')
+        if t>=reveal:
+            offset=round(12*(1-ease((t-reveal)/.35)))
+            typeblock(draw,567,291+offset,f"{chart['reduction']:g}% less",600,97,PALETTE[1],'title',1)
+            typeblock(draw,570,413,'cluster power',565,48,WHITE,'title',1)
+        typeblock(draw,70,594,self.caption,1134,32,WHITE,lines=2)
+        typeblock(draw,70,671,publisher(self.source),1135,20,'#d4d6db',lines=1)
+        return image
+
     def map(self,t):
         im=Image.new('RGB',(W,H),'#191c1e');d=ImageDraw.Draw(im)
         typeblock(d,64,46,self.head,1148,62,WHITE,'bold',2)
         if route:=self.b.get('route'):
             origin,destination=route
-            atlas(d,route,(64,182,823,330),t)
+            atlas(d,route,(64,182,823,330),t,self.b.get('routePlaces'))
             anchors=[]
-            for state in route:
+            places=self.b.get('routePlaces')
+            for row,state in enumerate(route):
                 ring=max(STATES[state],key=len)
                 lon=(max(v[0] for v in ring)+min(v[0] for v in ring))/2
                 lat=(max(v[1] for v in ring)+min(v[1] for v in ring))/2
+                if places:
+                    lon,lat=places[row]['lon'],places[row]['lat']
                 anchors.append((64+(lon+125)/59*823,182+(50-lat)/26*330))
             (ax,ay),(bx,by)=anchors
             count=round(50*ease(t/1.45))
@@ -320,7 +345,8 @@ class Sequence:
                 x,y=points[-1];d.ellipse((x-6,y-6,x+6,y+6),fill=WHITE)
             for row,(label,state) in enumerate([('FROM',origin),('TO',destination)]):
                 d.text((883,220+row*111),label,font=face(25,'title'),fill=PALETTE[row])
-                typeblock(d,881,255+row*111,state,330,49,WHITE,'title',1)
+                typeblock(d,881,255+row*111,places[row]['name'] if places else state,330,49,WHITE,'title',1)
+                if places:typeblock(d,883,309+row*111,state,326,24,'#dbdee2',lines=1)
             typeblock(d,70,548,self.caption,1100,36,WHITE,'bold',2)
             typeblock(d,70,654,'Boundaries: U.S. Census Bureau   /   '+publisher(self.source),1120,20,'#d1d4d3',lines=1)
             return im
@@ -334,7 +360,10 @@ class Sequence:
         if self.b.get('comparison'):return self.split(q)
         if self.kind=='image':return self.image(self.b['image'],q)
         if self.kind=='chart':
-            drawing=self.profile(t,length) if self.b['chart'].get('layout')=='profile' else self.plot(t)
+            layout=self.b['chart'].get('layout')
+            if layout=='profile':drawing=self.profile(t,length)
+            elif layout=='response-window':drawing=self.response_window(t)
+            else:drawing=self.plot(t)
             return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
         if self.kind in ('document','quote'):
             phrase=self.b.get('quote','')

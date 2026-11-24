@@ -55,6 +55,11 @@ def render(root):
     plan,timing,voice=assemble(root,plan,timing,pack)
     cards=closing_cards(plan,pack) if plan.get('style')=='reported-footage' else []
     tail=4.5*len(cards) if plan.get('style')=='reported-footage' else 0
+    hold=plan.get('closingHold',0)
+    if hold:
+        if not 0<=hold<=6:raise ValueError('Final picture hold must fit within six seconds')
+        timing=list(timing)
+        timing[-1]+=hold
     if tail:
         last_index=next(i for i in reversed(range(len(plan['beats']))) if plan['beats'][i]['kind']=='footage' and not plan['beats'][i].get('originalSpeech'))
         last=plan['beats'][last_index]
@@ -76,7 +81,7 @@ def render(root):
     modern=all(beat.get('art') for beat in plan['beats'])
     compact=modern and not captioned and os.environ.get('NEWS_COMPACT_RENDER')=='1'
     if modern:
-        audio=f'[1:a]apad=pad_dur={tail},loudnorm=I=-19:TP=-2:LRA=12,aresample=48000,pan=stereo|c0=c0|c1=c0[v];[2:a]volume=1.23[m];[v][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=0:latency=1[a]'
+        audio=f'[1:a]apad=pad_dur={tail+hold},loudnorm=I=-19:TP=-2:LRA=12,aresample=48000,pan=stereo|c0=c0|c1=c0[v];[2:a]volume=1.23[m];[v][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.89:level=0:latency=1[a]'
     if compact:
         # Render the mix before producing picture media, when PCM scratch has the most headroom.
         score(root/'score.wav',timing,plan['beats'],pack)
