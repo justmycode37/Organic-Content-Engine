@@ -5,16 +5,18 @@ import {siteRequest,workerConfig} from '../render-worker.mjs';
 
 const [action,root]=process.argv.slice(2);
 if(!root||!['publish','status'].includes(action))throw Error('Usage: node youtube.mjs publish|status EDITION_DIRECTORY');
-const dir=resolve(root),id=(await readFile(join(dir,'site-id'),'utf8')).trim();
+const dir=resolve(root);
+const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.json'),'utf8')):null;
+if(action==='publish' && (/(?:^|[\\/])evaluation[\\/]r\d+(?:[\\/]|$)/.test(dir) || Object.hasOwn(pack,'round'))){
+ throw Error('Evaluation rounds are private');
+}
+const id=(await readFile(join(dir,'site-id'),'utf8')).trim();
 if(!/^[a-f\d-]{36}$/.test(id))throw Error('Invalid imported episode ID');
 const config=workerConfig(),base='/api/jobs/accounts/silicon/'+id+'/youtube/';
 async function call(path,input){
  const init=input===undefined?{}:{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(input)};
  return (await siteRequest(config,base+path,init)).json();
 }
-const editionRound=dir.match(/(?:^|[\\/])evaluation[\\/]r(\d+)(?:[\\/]|$)/)?.[1];
-const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.json'),'utf8')):null;
-if(action==='publish' && [editionRound,pack.round].some(round=>round!==undefined && (!Number.isSafeInteger(Number(round))||Number(round)<4)))throw Error('Public evaluation uploads start at Round 4');
 let state=await call('status');
 if(action==='publish'&&state.state==='ready'){
  const custom=pack.variant && pack.variant!=='automatic';
