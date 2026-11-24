@@ -175,10 +175,9 @@ function labelSprite(text: string, variant: LabelVariant, options: LabelOptions)
     if (bg) g.rect(bodyX, bodyY, bodyW, bodyH, bg);
     g.rect(bodyX, bodyY, bodyW, 1, color).rect(bodyX, bodyY + bodyH - 1, bodyW, 1, color)
       .rect(bodyX, bodyY, 1, bodyH, color).rect(bodyX + bodyW - 1, bodyY, 1, bodyH, color);
-    if (bodyW > 6 && bodyH > 6) {
-      g.rect(bodyX + 2, bodyY + 2, bodyW - 4, 1, color).rect(bodyX + 2, bodyY + bodyH - 3, bodyW - 4, 1, color)
-        .rect(bodyX + 2, bodyY + 2, 1, bodyH - 4, color).rect(bodyX + bodyW - 3, bodyY + 2, 1, bodyH - 4, color);
-    }
+    // A thicker single border (the old inner ring read as a ghosted double frame).
+    g.rect(bodyX + 1, bodyY + 1, bodyW - 2, 1, color).rect(bodyX + 1, bodyY + bodyH - 2, bodyW - 2, 1, color)
+      .rect(bodyX + 1, bodyY + 1, 1, bodyH - 2, color).rect(bodyX + bodyW - 2, bodyY + 1, 1, bodyH - 2, color);
   } else if (variant === 'tag') {
     const tag = [{ x: 0, y: bodyY }, { x: bodyW - 2, y: bodyY }, { x: bodyW, y: bodyY + 2 }, { x: bodyW, y: bodyY + bodyH }, { x: 0, y: bodyY + bodyH }];
     g.poly(tag, bg).outline(PAL.ink);

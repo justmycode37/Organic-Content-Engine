@@ -191,3 +191,31 @@ export function drawViralCaption(ctx: Ctx, caption: ActiveCaption, time: number,
   });
   ctx.restore();
 }
+
+/**
+ * Spoken amounts the current shot does not already show ("Hedgy has $50.") pop in as a big number near the top
+ * of the action for ~1.2 s, so a viewer with sound off still sees every figure. Skipped while an overlay card is up.
+ */
+export function drawNumberPops(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[], cardUp: boolean) {
+  if (cardUp) return;
+  const scene = placed.find(p => time >= p.start && time < p.end);
+  if (!scene) return;
+  // Versus cards already show their prices; everywhere else a spoken amount gets its own pop.
+  if (scene.spec.type === 'shot' && scene.spec.shot === 'versus') return;
+  for (const caption of captions) {
+    if (caption.end < time - 1.4 || caption.start > time) continue;
+    const words = String(caption.text).split(/\s+/);
+    words.forEach((raw, i) => {
+      const word = raw.replace(/\*/g, '').replace(/[.,!?;:]+$/, '');
+      if (!/^\$\d[\d,.]*[kKmM]?$|^\d+(?:\.\d+)?%$/.test(word)) return;
+      const at = caption.wordTimings?.[i]?.start ?? caption.start;
+      if (time < at || time > at + 1.25 || at < scene.start - 0.05) return;
+      const k = ease.outBack(clamp((time - at) / 0.22)), out = clamp((at + 1.25 - time) / 0.15);
+      ctx.save();
+      ctx.globalAlpha = out;
+      ctx.translate(540, 470); ctx.scale(0.6 + 0.4 * k, 0.6 + 0.4 * k); ctx.rotate(-0.04);
+      strokedText(ctx, word, 0, 0, 150, YELLOW, INK, 30);
+      ctx.restore();
+    });
+  }
+}

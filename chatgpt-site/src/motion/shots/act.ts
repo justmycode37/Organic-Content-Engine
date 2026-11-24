@@ -15,7 +15,7 @@ type Verb = typeof VERBS[number];
 type Side = 'left' | 'right';
 type Loc = 'hidden' | 'center' | 'left' | 'right' | 'top' | 'onCenter';
 const MOODS = ['happy', 'worried', 'shocked', 'smug', 'determined', 'sad', 'neutral'] as const;
-const X = { left: 128, right: 592, center: 360 } as const, PAW_Y = 600, FLOOR = STAGE.floor;
+const X = { left: 128, right: 592, center: 360 } as const, PAW_Y = 640, FLOOR = STAGE.floor;
 interface Move { at: number; verb: Verb; who: Side; item?: ItemId; word?: string }
 interface Segment { at: number; dur: number; from: Loc; to: Loc; verb: Verb }
 interface Plan { count: number; left: string; right: string; moods: Record<Side, typeof MOODS[number]>; moves: Move[]; items: Map<ItemId, { start: Loc; segments: Segment[]; tag?: string }>; dur: number }
@@ -58,7 +58,7 @@ function plan(props: ShotProps, dur: number): Plan {
 
 function sizeScale(id: ItemId, loc: Loc) {
   const s = itemSize(id), hand = loc === 'left' || loc === 'right' || loc === 'onCenter';
-  return hand ? Math.min(0.42, 130 / s.w, 130 / s.h) : Math.min(0.8, 250 / s.w, 300 / s.h);
+  return hand ? Math.min(0.38, 112 / s.w, 104 / s.h) : Math.min(0.8, 250 / s.w, 300 / s.h);
 }
 function place(id: ItemId, loc: Loc, s: Plan): { x: number; y: number; scale: number } {
   const scale = sizeScale(id, loc), h = itemSize(id, scale).h;
@@ -94,7 +94,8 @@ function itemState(id: ItemId, s: Plan, t: number) {
 function drawPile(ctx: Frame['ctx'], id: ItemId, count: number, t: number, st: { x: number; y: number; scale: number; alpha: number; sx: number; sy: number }, appearAt: number): number {
   const perRow = Math.max(2, Math.ceil(Math.sqrt(count * 1.2))), rows = Math.ceil(count / perRow);
   const base = itemSize(id), grow = Math.max(0.01, st.scale / Math.max(0.01, sizeScale(id, 'center')));
-  const scale = Math.min(0.6, 400 / (perRow * base.w * 0.92)) * grow;
+  // Cap the heap at ~260 stage units tall so it never buries the characters.
+  const rowsGuess = Math.ceil(count / perRow), scale = Math.min(0.6, 400 / (perRow * base.w * 0.92), 260 / (Math.max(1, rowsGuess) * base.h * 0.75)) * grow;
   const size = itemSize(id, scale), step = Math.max(size.h * 0.72, size.w * 0.42), floorY = st.y + itemSize(id, st.scale).h / 2;
   let n = 0;
   for (let r = rows - 1; r >= 0; r--) {

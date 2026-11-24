@@ -15,7 +15,7 @@ function plan(props: ShotProps, dur: number): Plan {
   return { dur, give: give!, back: Math.max(back!, give! + 0.35), from: str(p, 'from', 'lender'), to: str(p, 'to', 'hedgy'), item: itemParam(p, 'item', 'ticket'), backItem: isItem(backItem) ? backItem : undefined };
 }
 
-const FROM_X = 140, TO_X = 580, PAW_Y = 652, SHOW_Y = 392, TRAVEL = 0.42;
+const FROM_X = 140, TO_X = 580, PAW_Y = 676, SHOW_Y = 392, TRAVEL = 0.42;
 
 export const handoffShot: ShotDef = {
   name: 'handoff',
@@ -24,11 +24,13 @@ export const handoffShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), p = props.params;
     const rawSize = itemSize(s.item);
-    const itemScale = Math.min(0.5, 230 / rawSize.w, 230 / rawSize.h);
+    const itemScale = Math.min(0.45, 150 / rawSize.w, 150 / rawSize.h);
     const size = itemSize(s.item, itemScale);
     // Key positions: shown above the giver's head, lowered to the paw, passed paw to paw, lifted by the taker.
     // Held in the giver's paw at chest height (never floating overhead), passed, then held by the taker.
-    const show = { x: FROM_X + 122, y: PAW_Y - 26 }, give = { x: FROM_X + 138, y: PAW_Y }, take = { x: TO_X - 138, y: PAW_Y }, lift = { x: TO_X - 122, y: PAW_Y - 26 };
+    // Hedgy keeps the left side across shots: when he receives, the giver stands on the right and passes leftwards.
+    const flip = s.to === 'hedgy' && s.from !== 'hedgy', FX = flip ? TO_X : FROM_X, TX = flip ? FROM_X : TO_X, d: 1 | -1 = flip ? -1 : 1;
+    const show = { x: FX + d * 122, y: PAW_Y - 26 }, give = { x: FX + d * 138, y: PAW_Y }, take = { x: TX - d * 138, y: PAW_Y }, lift = { x: TX - d * 122, y: PAW_Y - 26 };
     const leave = s.give - 0.08, landed = leave + TRAVEL;
     const lower = ease.inOutCubic(phase(t, leave - 0.34, leave - 0.02)), u = tween(t, leave, TRAVEL, 0, 1, ease.inOutCubic), raise = ease.inOutCubic(phase(t, landed + 0.1, landed + 0.46));
     let pos = { x: show.x + (give.x - show.x) * lower, y: show.y + (give.y - show.y) * lower };
@@ -40,7 +42,7 @@ export const handoffShot: ShotDef = {
     // The return item goes back at paw height once the first item is on its way up.
     const backStart = Math.max(s.back - TRAVEL + 0.04, landed + 0.12), backU = s.backItem ? tween(t, backStart, TRAVEL, 0, 1, ease.inOutCubic) : 0;
     // The return item travels on a lower lane so the two items never stack into a clump mid-air.
-    const backPos = arc({ x: take.x + 6, y: PAW_Y + 70 }, { x: give.x - 6, y: PAW_Y + 70 }, -30, backU);
+    const backPos = arc({ x: take.x + 6 * d, y: PAW_Y + 70 }, { x: give.x - 6 * d, y: PAW_Y + 8 }, -30, backU);
     const backShown = s.backItem ? ease.outBack(phase(t, backStart - 0.16, backStart)) : 0;
     const backSquash = squash(t, backStart + TRAVEL, 0.14, 0.22);
 
@@ -48,15 +50,15 @@ export const handoffShot: ShotDef = {
 
     const giverHolds = 1 - phase(t, leave + 0.1, leave + 0.3), giverCatches = s.backItem ? phase(t, backStart + TRAVEL * 0.45, backStart + TRAVEL) : 0;
     drawActor(ctx, {
-      who: s.from, x: FROM_X, y: STAGE.floor, time: t, look: raise > 0 && !giverCatches ? 'up' : 'forward',
+      who: s.from, x: FX, y: STAGE.floor, facing: d, time: t, look: raise > 0 && !giverCatches ? 'up' : 'forward',
       keys: [{ at: 0, pose: 'hold' }, { at: leave - 0.12, pose: 'give' }, { at: leave + 0.26, pose: s.backItem ? 'idle' : 'wave-off' }, ...(s.backItem ? [{ at: backStart + TRAVEL * 0.4, pose: 'receive' as const }, { at: backStart + TRAVEL + 0.12, pose: 'celebrate' as const, expression: 'happy' as const }] : [])],
-      handTarget: giverCatches > 0 ? { x: backPos.x - 8, y: backPos.y + 16 } : { x: pos.x - 10, y: itemY + size.h * 0.32 }, reach: Math.max(giverHolds, giverCatches * (1 - phase(t, backStart + TRAVEL + 0.1, backStart + TRAVEL + 0.3))),
+      handTarget: giverCatches > 0 ? { x: backPos.x - 8 * d, y: backPos.y + 16 } : { x: pos.x - 10 * d, y: itemY + size.h * 0.32 }, reach: Math.max(giverHolds, giverCatches * (1 - phase(t, backStart + TRAVEL + 0.1, backStart + TRAVEL + 0.3))),
     });
     const takerHolds = phase(t, leave + TRAVEL * 0.4, landed);
     drawActor(ctx, {
-      who: s.to, x: TO_X, y: STAGE.floor, facing: -1, time: t, look: raise > 0.3 ? 'up' : 'forward',
+      who: s.to, x: TX, y: STAGE.floor, facing: (-d) as 1 | -1, time: t, look: raise > 0.3 ? 'up' : 'forward',
       keys: [{ at: 0, pose: 'idle' }, { at: leave - 0.12, pose: 'think' }, { at: leave + 0.04, pose: 'receive' }, { at: landed, pose: 'shock', expression: 'shocked' }, { at: landed + 0.14, pose: 'celebrate', expression: 'happy' }, { at: landed + 0.46, pose: 'hold', expression: 'happy' }],
-      handTarget: { x: pos.x + 10, y: itemY + size.h * 0.32 }, reach: takerHolds,
+      handTarget: { x: pos.x + 10 * d, y: itemY + size.h * 0.32 }, reach: takerHolds,
     });
 
     // carried things are drawn over the bodies but stay below the chins or above the heads
@@ -74,8 +76,8 @@ export const handoffShot: ShotDef = {
     }
 
     const fromLabel = str(p, 'fromLabel', '').toUpperCase(), toLabel = str(p, 'toLabel', '').toUpperCase();
-    if (fromLabel) label(ctx, fromLabel, Math.max(FROM_X, measure(fromLabel).w / 2 + 40), 812, { variant: 'sign', pop: ease.outBack(phase(t, 0.05, 0.3)) });
-    if (toLabel) label(ctx, toLabel, Math.min(TO_X, STAGE.w - measure(toLabel).w / 2 - 40), 812, { variant: 'sign', pop: ease.outBack(phase(t, 0.12, 0.38)) });
+    if (fromLabel) label(ctx, fromLabel, Math.max(Math.min(FX, STAGE.w - measure(fromLabel).w / 2 - 40), measure(fromLabel).w / 2 + 40), 812, { variant: 'sign', pop: ease.outBack(phase(t, 0.05, 0.3)) });
+    if (toLabel) label(ctx, toLabel, Math.max(Math.min(TX, STAGE.w - measure(toLabel).w / 2 - 40), measure(toLabel).w / 2 + 40), 812, { variant: 'sign', pop: ease.outBack(phase(t, 0.12, 0.38)) });
 
     ring(ctx, take.x, PAW_Y, landed, t, { r: 90 });
     sparks(ctx, take.x, PAW_Y - 30, landed, t, { count: 5, seed: frame.seed });

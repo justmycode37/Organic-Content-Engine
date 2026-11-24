@@ -37,7 +37,7 @@ function mockHedgy(t, respond = () => undefined) {
   await new Promise(resolve=>setTimeout(resolve,1));
   active--;
   const outputs = {
-   hedgy_idea:() => idea(body.input),hedgy_ideas:() => ({candidates:[idea(body.input),idea(body.input),idea(body.input)]}),hedgy_idea_pick:() => ({index:0,why:'Relatable stakes.',hook:'Ever run out of lemons?'}),hedgy_viral_review:() => ({approved:true,score:92,findings:[]}),hedgy_story:() => story,hedgy_fact_review:() => approved,
+   hedgy_idea:() => idea(body.input),hedgy_ideas:() => ({candidates:[idea(body.input),idea(body.input),idea(body.input)]}),hedgy_idea_pick:() => ({index:0,why:'Relatable stakes.',hook:'Ever run out of lemons?'}),hedgy_viral_review:() => ({approved:true,score:92,findings:[]}),hedgy_storyboard_review:() => ({approved:true,score:90,findings:[]}),hedgy_story:() => story,hedgy_fact_review:() => approved,
    hedgy_listener_review:() => listener,hedgy_takeaway_review:() => approved,hedgy_reel:() => spec,hedgy_scene_review:() => continuity,hedgy_copy_review:() => approved,
   };
   const text = respond(format,body) ?? outputs[format]?.();
@@ -54,8 +54,8 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.provenance.editorial.storyRounds.length,1);
  assert.equal(result.provenance.editorial.copyRounds.length,1);
  assert.equal(result.provenance.editorial.sceneRounds.length,1);
- // idea, idea pick, story, fact, listener, viral critic, takeaway, plan, 12 specialists, assembly, scenes, copy.
- assert.equal(calls.length,23);
+ // idea, idea pick, story, fact, listener, viral critic, takeaway, plan, 12 specialists, assembly, scenes, storyboard critic, copy.
+ assert.equal(calls.length,24);
  assert.equal(result.spec.look,'viral');
  assert.ok(calls.every(call=>call.model==='gpt-6.2-sol'&&call.store===false&&call.reasoning.effort==='xhigh'));
  assert.ok(peak()<=4);

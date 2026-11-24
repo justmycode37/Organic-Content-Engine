@@ -481,7 +481,7 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
   // Viral reels end right after the payoff lands (a short hold for the payoff card), never on a long freeze.
   const last=index===spec.scenes.length-1,viral=spec.look==='viral';
-  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.7:cinematicTail));
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
@@ -566,9 +566,11 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
  // Viral reels keep only purposeful hits: story beats, primary actions, transitions and their sub underlays.
  if(spec.look==='viral'){governed.cues=governed.cues.filter(cue=>cue.ending||cue._class!=='secondary'||cue.underlay||cueIsPrimary(cue));
   // At most ~1.3 audible effects per second: keep primary and story hits first, then transitions, earliest first.
-  const budget=Math.round(1.3*reelEnd),rank=cue=>cue.ending||cueIsPrimary(cue)?0:cue._class==='story'?1:cue._class==='transition'?2:3;
+  const budget=Math.round(1.1*reelEnd),rank=cue=>cue.ending||cueIsPrimary(cue)?0:cue._class==='story'?1:cue._class==='transition'?2:3;
   const audible=governed.cues.filter(cue=>!cue.underlay).sort((a,b)=>rank(a)-rank(b)||a.at-b.at),keep=new Set(audible.slice(0,budget));
-  governed.cues=governed.cues.filter(cue=>keep.has(cue)||(cue.underlay&&governed.cues.some(other=>keep.has(other)&&Math.abs(other.at-cue.at)<0.05)));governed.stats.after=governed.cues.length;governed.stats.densityPerSecond=governed.cues.length/Math.max(1,reelEnd);governed.stats.viralThinned=true;}
+  governed.cues=governed.cues.filter(cue=>keep.has(cue)||(cue.underlay&&governed.cues.some(other=>keep.has(other)&&Math.abs(other.at-cue.at)<0.05)));
+  // At most two audible effects at once: a later cue that would be the third voice is dropped.
+  const live=[];governed.cues=governed.cues.sort((a,b)=>a.at-b.at).filter(cue=>{if(cue.underlay||cue.ending)return true;const now=live.filter(c=>c.at+Math.min(0.6,cueDuration(c))>cue.at);live.length=0;live.push(...now);if(now.length>=2&&!cueIsPrimary(cue))return false;live.push(cue);return true;});governed.stats.after=governed.cues.length;governed.stats.densityPerSecond=governed.cues.length/Math.max(1,reelEnd);governed.stats.viralThinned=true;}
  cues.length=0;cues.push(...voiceCues,...governed.cues);cues.sort((a,b)=>a.at-b.at);
  const cutAt=new Set();if(spec.look==='viral'){let n=0;for(const item of speech){if(n)cutAt.add(n);n+=item.words.length;}}
  const captions=speech.length?captionsFromSpeech(speech.map(item=>item.say).join(' '),speech.flatMap(item=>item.words),0,reelEnd,spec.look==='viral'?{maxWords:4,maxChars:24,breaks:cutAt}:undefined):[];

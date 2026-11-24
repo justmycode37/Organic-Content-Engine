@@ -41,6 +41,7 @@ export const VIRAL_STORY_RULES = `Viral bar (this reel competes with the best sh
 - Stakes must feel worth a stranger's 30 seconds: use a realistic case where the money at stake is noticeable (a trip, rent, a car, a paycheck, a year of coffee), or scale the example up in one line ("on a $400 hotel that's $40").
 - The hook names the trap, the loss or the surprising result, not a neutral situation.
 - The last line pays off the hook in a punchy, memorable way and leaves ONE practical rule or insight the viewer can use or repeat ("Always pay in the local currency."), ideally echoing the opening words so the reel loops.
+- Say the concept's standard name once, right after the aha (e.g. "That's moral hazard."), so viewers learn the term they can search for.
 - Every number must agree exactly everywhere (narration, hookText, any on-screen figure); never round "40 cents" up to "dollars".
 - Brisk: 55–80 spoken words, no filler, no throat-clearing, no lecture tone. Talk like a sharp friend.
 - One or two simple round numbers are welcome when they make the surprise concrete; never ask the viewer to calculate.
