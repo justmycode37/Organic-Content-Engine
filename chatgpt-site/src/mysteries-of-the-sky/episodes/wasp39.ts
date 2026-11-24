@@ -1,5 +1,7 @@
 // Observed points are from the ERS PRISM public release. Orbital geometry,
 // atmosphere thickness, molecules and illustrative counting examples are schematic.
+import { atmosphericLimb, transmittedLight } from '../atmosphere.ts';
+import { drawMolecule, type Molecule } from '../molecules.ts';
 import data from './wasp39-data.json';
 import {
   canvas,
@@ -36,7 +38,7 @@ function noise(x: number, y: number) {
   );
 }
 function globe(star: boolean) {
-  const size = 720,
+  const size = star ? 720 : 1280,
     img = document.createElement('canvas');
   img.width = img.height = size;
   const ctx = img.getContext('2d')!,
@@ -60,10 +62,16 @@ function globe(star: boolean) {
       } else {
         const light = Math.pow(Math.max(0, -0.81 * x - 0.33 * y + 0.32 * z), 0.7);
         const rim = Math.pow(1 - z, 3.7) * (0.37 + 0.55 * light);
-        const v = light * (0.62 + 0.22 * bands + 0.18 * swirl + 0.045 * dust);
-        [14 + 199 * v + 116 * rim, 14 + 113 * v + 97 * rim, 29 + 88 * v + 166 * rim, 255].forEach(
-          (k, q) => (px.data[idx + q] = k),
-        );
+        const shear = 5 * lat + 0.48 * swirl + 0.1 * Math.sin(4 * lon + lat);
+        const wisps = noise(lon * 11 + 4, shear * 26) + 0.48 * noise(lon * 26, shear * 63);
+        const veils = Math.sin(shear * 56 + 3.6 * wisps) * 0.026;
+        const v = light * (0.53 + 0.21 * bands + 0.18 * swirl + 0.12 * wisps + veils + 0.04 * dust);
+        [
+          14 + 199 * v + 116 * rim,
+          14 + 113 * v + 97 * rim,
+          29 + 88 * v + 166 * rim,
+          255 * Math.min(1, (1 - Math.sqrt(r)) * size * 0.65),
+        ].forEach((k, q) => (px.data[idx + q] = k));
       }
     }
   ctx.putImageData(px, 0, 0);
@@ -128,8 +136,7 @@ function planet(t: number, k: string) {
       [370, rr],
       [867, 173],
     ]) {
-      ring(x, 409, r + 7 + (Math.sin(t * 0.6) + 1) * 3, ice, 0.68);
-      if (k === 'puff') ring(x, 409, r + 19, pink, 0.65);
+      atmosphericLimb(c, [x, 409], r, k === 'size' ? 3 : x === 370 ? 3 : 11);
     }
     if (k === 'size') {
       words('Jupiter', 370, 627, 22, 'mono', muted, 'center');
@@ -159,25 +166,24 @@ function planet(t: number, k: string) {
       );
     }
   } else {
-    for (let j = 0; j < 6; j++) {
-      ring(x, y, r + 3 + j * 3, j % 2 ? pink : ice, 0.68 - j * 0.095);
-    }
-    const yy = y - r - 8;
-    line(
-      [
-        [30, yy],
-        [1218, yy],
-      ],
-      grad(25, yy, 1180, 0, [ice, '#f5cfb0', pink]),
-      2,
+    const height = k === 'cloud' ? 12 : 8;
+    atmosphericLimb(c, [x, y], r, height, k === 'cloud');
+    const altitude = k === 'cloud' ? 3 : 10;
+    transmittedLight(
+      c,
+      {
+        start: [38, y - r - altitude],
+        end: [1210, y - r - altitude],
+        center: [x, y],
+        radius: r,
+        scaleHeight: height,
+        extinction: k === 'cloud' ? 0.048 : 0.008,
+        tint: '#f1c4ad',
+        period: 3.7,
+        phase: 0.24,
+      },
+      t,
     );
-    lensGlow(30 + ((t * 145) % 1170), yy, 18, lime, 0.9);
-    if (k === 'cloud') {
-      for (let j = 0; j < 45; j++) {
-        const a = Math.PI * 1.05 + j * 0.029;
-        lensGlow(x + (r - 7) * Math.cos(a), y + (r - 7) * Math.sin(a), 19, ice, 0.37);
-      }
-    }
   }
   heading(titles[k]);
 }
@@ -204,34 +210,59 @@ function crossing(t: number, k: string) {
   heading(k === 'ingress' ? 'First contact' : k === 'exit' ? 'Last contact' : 'A transit');
 }
 function rays(t: number, k: string) {
-  const radius = 718,
-    cx = 730,
-    cy = 1040;
-  body(cx, cy, radius);
-  for (let j = 0; j < 8; j++) {
-    ring(cx, cy, radius + j * 6, ice, 0.42 - j * 0.04);
-  }
-  const vertical = k === 'vertical';
-  const ys = [277, 300, 321, 351];
-  ys.forEach((y, i) => {
-    const stop = k === 'cloudray' ? 575 + i * 12 : i === 2 ? 612 : i === 3 ? 495 : 1225;
-    const x = vertical ? 580 + i * 42 : 0;
-    const start = vertical ? [x, 112] : [24, y],
-      end = vertical ? [x, 342] : [stop, y];
-    const color = [ice, pink, '#eed8b8', lime][i];
-    line(
-      [start, end],
-      grad(start[0], start[1], Math.max(1, end[0] - start[0]), Math.max(1, end[1] - start[1]), [
-        color + '22',
-        color,
-      ]),
-      2,
+  const vertical = k === 'vertical',
+    cloudy = k === 'cloudray';
+  const radius = 790,
+    center = [815, 1164] as const,
+    top = center[1] - radius;
+  const height = cloudy ? 22 : 16;
+  body(...center, radius);
+  atmosphericLimb(c, center, radius, height, cloudy);
+  const extinction = cloudy ? 0.046 : 0.012;
+  if (vertical) {
+    const x = 683;
+    transmittedLight(
+      c,
+      {
+        center,
+        radius,
+        scaleHeight: height,
+        extinction,
+        start: [x, 129],
+        end: [x, 470],
+        tint: '#f5ceb9',
+        period: 2.7,
+        phase: 0.15,
+      },
+      t,
     );
-    const f = (t * 0.24 + i * 0.19) % 1;
-    lensGlow(start[0] + (end[0] - start[0]) * f, start[1] + (end[1] - start[1]) * f, 13, color, 0.88);
-  });
-  heading(vertical ? 'Looking straight down' : k === 'cloudray' ? 'An opaque layer' : 'Grazing starlight');
+  } else {
+    // One reference beam passes above the haze; the lower beam samples the gas.
+    for (const [altitude, tint, phase] of [
+      [58, '#bec6f6', 0.55],
+      [cloudy ? 4 : 14, '#ffcaac', 0.19],
+    ] as const) {
+      const y = top - altitude;
+      transmittedLight(
+        c,
+        {
+          center,
+          radius,
+          scaleHeight: height,
+          extinction,
+          start: [48, y],
+          end: [1238, y],
+          tint,
+          period: 3.4,
+          phase,
+        },
+        t,
+      );
+    }
+  }
+  heading(vertical ? 'Looking straight down' : cloudy ? 'An opaque layer' : 'Grazing starlight');
 }
+
 const plotX = 139,
   plotW = 1010,
   yBottom = 591,
@@ -340,51 +371,16 @@ function lightcurve(t: number, k: string) {
     c.fill();
   });
 }
-function atom(x: number, y: number, r: number, color: string) {
-  const g = c.createRadialGradient(x - r * 0.32, y - r * 0.43, r * 0.06, x, y, r);
-  g.addColorStop(0, '#ffecd6');
-  g.addColorStop(0.39, color);
-  g.addColorStop(1, '#362640');
-  c.fillStyle = g;
-  c.beginPath();
-  c.arc(x, y, r, 0, tau);
-  c.fill();
-}
+const moleculeShots: Record<string, [Molecule, string]> = {
+  carbon: ['CO2', 'CO₂'],
+  water: ['H2O', 'Water vapor'],
+  sulfide: ['H2S', 'Hydrogen sulfide'],
+  so2: ['SO2', 'SO₂'],
+};
 function molecule(t: number, k: string) {
-  const x = 689,
-    y = 386,
-    d = 128 + 8 * Math.sin(t * 2.5),
-    ang = k === 'carbon' ? 0 : 0.55;
-  const points = [
-    [x - d, y + d * Math.sin(ang)],
-    [x + d, y + d * Math.sin(ang)],
-  ];
-  for (const p of points) {
-    line([[x, y], p], grad(x - 130, y, 260, 80, [ice, pink]), 13);
-    atom(
-      p[0],
-      p[1],
-      k === 'water' || k === 'sulfide' ? 29 : 47,
-      k === 'water' || k === 'sulfide' ? ice : pink,
-    );
-  }
-  atom(x, y, 52, k === 'carbon' ? '#8676a3' : k === 'water' ? pink : '#d6ad8c');
-  heading(
-    (
-      { carbon: 'CO₂', water: 'Water vapor', sulfide: 'Hydrogen sulfide', so2: 'SO₂' } as Record<
-        string,
-        string
-      >
-    )[k],
-  );
-  if (k === 'water') {
-    const start = 150 + ((t * 72) % 320);
-    line(
-      path((f) => [start + f * 160, 244 + f * 85 + 10 * Math.sin(f * 26 - t * 4)]),
-      ice,
-      3,
-    );
-  }
+  const [species, title] = moleculeShots[k];
+  drawMolecule(c, species, [666, 389], 1.34, t, species === 'H2O');
+  heading(title);
 }
 function instrument(t: number, k: string) {
   heading(k === 'photon' ? 'Counting photons' : k === 'binsize' ? 'Wavelength bins' : 'Splitting starlight');

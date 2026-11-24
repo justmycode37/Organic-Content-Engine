@@ -15,6 +15,8 @@ node --test chatgpt-site/scripts/sky-study.test.mjs
 
 Default movie output is silent 1080p H.264 at 30 fps. `SKY_WIDTH` changes output resolution while preserving the composition. Each study name in the table below can replace `electron`. The `sampler` plays every study in registration order.
 
+The `grazing-starlight`, `molecular-stretch`, and `water-photolysis` studies demonstrate the atmosphere and molecule primitives. Set the planet center, radius and scale height on a light path to make its brightness follow the density it traverses. The molecular renderer supports CO₂, SO₂, water and hydrogen sulfide. Its motion is slowed for the illustration.
+
 ## Compose a shot
 
 This example draws one wave and keeps the moving highlight exactly on its advancing tip. Add shots to the array in playback order. Pass the canvas context and the current playhead time in seconds from a browser or the local renderer.

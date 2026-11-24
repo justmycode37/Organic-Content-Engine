@@ -1,4 +1,7 @@
 import {
+  atmosphericLimb,
+  transmittedLight,
+  drawMolecule,
   body,
   camera,
   charge,
@@ -140,5 +143,47 @@ export const studies = {
   ...interactionStudies,
   ...plasmaStudies,
   ...diagramStudies,
+  'grazing-starlight': {
+    duration: 7,
+    draw(ctx, t) {
+      const center: Point = [1060, 1430],
+        radius = 890;
+      body(ctx, 'sphere', center, radius, 'ember', 17);
+      atmosphericLimb(ctx, center, radius, 26);
+      for (const [offset, tint, phase] of [
+        [72, '#bec6f6', 0.55],
+        [15, '#ffcaac', 0.19],
+      ] as const) {
+        const y = center[1] - radius - offset;
+        transmittedLight(
+          ctx,
+          {
+            center,
+            radius,
+            scaleHeight: 26,
+            extinction: 0.009,
+            start: [60, y],
+            end: [1860, y],
+            tint,
+            period: 4,
+            phase,
+          },
+          t,
+        );
+      }
+    },
+  },
+  'molecular-stretch': {
+    duration: 8,
+    draw(ctx, t) {
+      drawMolecule(ctx, 'CO2', [960, 540], 2.25, t);
+    },
+  },
+  'water-photolysis': {
+    duration: 7,
+    draw(ctx, t) {
+      drawMolecule(ctx, 'H2O', [960, 540], 2.25, t, true);
+    },
+  },
 } satisfies Record<string, Shot>;
 export const sampler = Object.values(studies);

@@ -178,3 +178,6 @@ export function renderFrame(ctx: Ctx, shots: readonly Shot[], seconds: number) {
     ctx.restore();
   }
 }
+
+export { atmosphericLimb, transmittedLight, type LightPath } from './atmosphere.ts';
+export { drawMolecule, type Molecule } from './molecules.ts';

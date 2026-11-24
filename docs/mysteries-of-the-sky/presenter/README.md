@@ -4,6 +4,8 @@ Rowan is the fictional on-camera physics expert for *Mysteries of the Sky*. Tita
 
 Use the [current portrait](rowan-ellery.png) and ElevenLabs voice `PerZoH0r6nxBZXCoIPpv`. Use his slightly quicker 1.09× speaking pace. Write Rowan one specific observation about a measurement, a model assumption, or an uncertainty. Have him speak directly about a specific result or a limitation of the instrument. Give him room to think aloud: a brief “um,” a pause, or an occasional repeated word can make an interview answer feel spoken. Vary the delivery between appearances.
 
+Use the three interviews in *The Bump Beside the Peak* as the approved performance reference for future episodes. At 3:48 Rowan illustrates apparent radius with his hand. At 5:41 he distinguishes a single point from a pattern. At 8:51 he explains what makes a prediction testable. Match his voice, pace, small hesitations, webcam framing, and gestures to the idea in each new line.
+
 ## Generate an interview
 
 Create the episode’s voice plan with the [story pipeline](../story-pipeline.md). Submit the Rowan cue’s `speech.body` to ElevenLabs through Monid. Put its returned MP3 URL into `body.audio` as `{"type":"url","url":"<MP3 URL>"}`, then submit the completed body to the cue’s HeyGen endpoint. The avatar performs the supplied recording. Keep the exact ElevenLabs track for the final mix.
