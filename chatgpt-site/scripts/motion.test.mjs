@@ -3,6 +3,7 @@ import { test } from 'node:test';
 import smoke from '../motion-examples/smoke.json' with { type: 'json' };
 import { parseReelSpec, lintReel, reelSpecSchema } from '../src/motion/spec.ts';
 import { placeScenes, reelDuration, parseMarkup, markupWords } from '../src/motion/core.ts';
+import { reelCaptions } from '../src/motion/captions.ts';
 
 test('smoke spec parses; strict schema rejects unknown keys and bad type',()=>{
  assert.equal(parseReelSpec(smoke).ok,true);
@@ -21,6 +22,13 @@ test('lint catches weak hook, missing outro and captions',()=>{
 test('scene placement snaps to frames',()=>{
  const s={version:1,scenes:[{type:'title',duration:1.01,text:'X'},{type:'outro',duration:1.01,cta:'X'}]};
  assert.deepEqual(placeScenes(s).map(x=>[x.start,x.end]),[[0,1],[1,2]]);assert.equal(reelDuration(s),2);
+});
+test('viral captions never extend a small pause into the next shot',()=>{
+ const scenes=[{type:'shot',duration:2,shot:'statement'},{type:'shot',duration:2,shot:'statement'}];
+ const captions=[{text:'old balance',start:1.55,end:1.94},{text:'new balance',start:2.12,end:2.6}];
+ const spec={version:1,scenes,captions};
+ assert.equal(reelCaptions({...spec,look:'viral'})[0].end,2);
+ assert.equal(reelCaptions(spec)[0].end,2.12);
 });
 test('markup parsing exposes accent flags',()=>{
  assert.deepEqual(parseMarkup('hello *world*'),[{text:'hello ',accent:false},{text:'world',accent:true}]);

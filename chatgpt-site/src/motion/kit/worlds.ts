@@ -210,14 +210,16 @@ const PAINT: Record<WorldId, (p: Paint) => void> = {
 
 /** Viral layout: the stage sits this many stage units lower, and worlds extend upward to cover it. */
 export const VIRAL_SHIFT = 102;
-const EXTRA = VIRAL_SHIFT / ART;
+// Keep sky and ceiling visible while the opening camera pulls back around the actors' feet.
+const VIRAL_SKY = 210;
+const EXTRA = VIRAL_SKY / ART;
 function worldSprite(id: WorldId, dim: number, tall: boolean): Sprite {
   const rows = tall ? 214 : 144, extra = tall ? EXTRA : 0;
   return makeSprite(`world:${id}:${dim}:${rows}`, COLS, rows + extra, ctx => {
     ROWS = rows; ctx.fillStyle = BG; ctx.fillRect(0, 0, COLS, rows + extra);
     ctx.save(); ctx.translate(0, extra); PAINT[id](painter(ctx, dim)); ctx.restore(); ROWS = 144;
     // Continue the top row (sky or ceiling) upward, then darken it in steps behind the header.
-    if (extra) { ctx.drawImage(ctx.canvas as CanvasImageSource, 0, extra + 2, COLS, 1, 0, 0, COLS, extra); const p = painter(ctx, 0); for (let y = 0; y < extra; y += 3) p.shade(0, y, COLS, 3, 0.55 - y * 0.025); }
+    if (extra) { ctx.drawImage(ctx.canvas as CanvasImageSource, 0, extra + 2, COLS, 1, 0, 0, COLS, extra); const p = painter(ctx, 0); for (let y = 0; y < extra; y += 3) p.shade(0, y, COLS, 3, 0.55 - 0.43 * y / extra); }
   });
 }
 
@@ -244,7 +246,7 @@ function ambient(ctx: Ctx, id: WorldId, t: number) {
 export function drawWorld(ctx: Ctx, id: WorldId, t = 0, dim = 0.42, tall = false) {
   ctx.save();
   ctx.fillStyle = BG; ctx.fillRect(-200, -300, 1200, 1800);
-  const sprite = worldSprite(id, dim, tall), top = tall ? -VIRAL_SHIFT : 0;
+  const sprite = worldSprite(id, dim, tall), top = tall ? -VIRAL_SKY : 0;
   drawSprite(ctx, sprite, 0, top, { anchor: [0, 0] });
   // Mirrored copies either side: zooms and the hook-time framing never reveal an empty border.
   drawSprite(ctx, sprite, 0, top, { anchor: [0, 0], flip: true });

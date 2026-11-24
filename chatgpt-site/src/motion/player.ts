@@ -1,7 +1,7 @@
 // Renders one frame of a reel. Overlapping transitions render their two pure-time scene layers
 // into cached canvases, then composite those images before chrome and captions.
 import { ease, H, W, placeScenes, reelDuration, type Ctx, type Frame, type PlacedScene, type ReelSpec, type SceneDef, type Theme, type TransitionName } from './core.ts';
-import { drawCaption, type ActiveCaption } from './captions.ts';
+import { drawCaption, reelCaptions } from './captions.ts';
 import { frameTheme } from './pix.ts';
 import { drawChrome } from './chrome.ts';
 import { drawBackground } from './fx/background.ts';
@@ -12,6 +12,7 @@ import { drawHookAndHeader, drawNumberPops, drawViralCaption, hookEndTime } from
 import { setWorldTall } from './kit/worlds.ts';
 import { setCardZone, setReelBase } from './kit/stage.ts';
 import { cardZone } from './viral.ts';
+export { reelCaptions } from './captions.ts';
 
 interface Surface { canvas: OffscreenCanvas | HTMLCanvasElement; ctx: Ctx }
 const surfacesBySize = new Map<string, [Surface, Surface]>();
@@ -32,26 +33,6 @@ function transitionSurfaces(width = W, height = H) {
   let pair = surfacesBySize.get(key);
   if (!pair) { pair = [makeSurface(width, height), makeSurface(width, height)]; surfacesBySize.set(key, pair); }
   return pair;
-}
-
-function extendSmallCaptionGaps(captions: ActiveCaption[]): ActiveCaption[] {
-  const sorted = captions.sort((a, b) => a.start - b.start);
-  for (let index = 0; index < sorted.length - 1; index++) {
-    const current = sorted[index]!, next = sorted[index + 1]!;
-    const gap = next.start - current.end;
-    if (gap > 0 && gap < 0.25) current.end = next.start;
-  }
-  return sorted;
-}
-
-/** Per-scene captions laid on the reel timeline; explicit `spec.captions` win when present. */
-export function reelCaptions(spec: ReelSpec, placed: PlacedScene[] = placeScenes(spec)): ActiveCaption[] {
-  if (spec.captions?.length) return extendSmallCaptionGaps(spec.captions.map(c => ({ text: c.text, start: c.start, end: c.end, ...(c.words ? { wordTimings: c.words } : {}) })));
-  return extendSmallCaptionGaps(placed.flatMap(scene => {
-    const lines = (Array.isArray(scene.spec.caption) ? scene.spec.caption : scene.spec.caption ? [scene.spec.caption] : []).filter(line => line.trim());
-    const span = (scene.end - scene.start) / Math.max(1, lines.length);
-    return lines.map((text, index) => ({ text, start: scene.start + index * span, end: scene.start + (index + 1) * span }));
-  }));
 }
 
 function renderSceneLayer(ctx: Ctx, scene: PlacedScene, spec: ReelSpec, time: number, theme: Theme, hedgy: boolean) {
