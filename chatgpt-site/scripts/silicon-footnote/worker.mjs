@@ -2,7 +2,7 @@ import {open,stat,readFile,mkdir,writeFile} from 'node:fs/promises';
 import {spawnSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {workerConfig,siteRequest} from '../render-worker.mjs';
-import {produce} from './produce.mjs';
+import {produce,duration} from './produce.mjs';
 import {prepareThumbnails} from './thumbnail.mjs';
 const config=workerConfig();
 const jobs='/api/jobs/accounts/silicon';
@@ -48,7 +48,7 @@ async function run(job){
 async function finished(root){
  const json=async name=>JSON.parse(await readFile(join(root,name),'utf8'));
  const output=join(root,'episode.mp4');await stat(output);
- return {title:(await json('episode.json')).title,seconds:(await json('timing.json')).reduce((a,b)=>a+b,0),sources:await json('sources.json'),thumbnails:prepareThumbnails(root),output};
+ return {title:(await json('episode.json')).title,seconds:duration(output),sources:await json('sources.json'),thumbnails:prepareThumbnails(root),output};
 }
 if(process.argv[2]==='--import'){
  const root=resolve(process.argv[3]),result=await finished(root),file=join(root,'site-id');
