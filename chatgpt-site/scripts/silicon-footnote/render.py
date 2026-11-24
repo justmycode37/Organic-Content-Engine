@@ -1,5 +1,6 @@
 """Render cuts against each measured Titan take, then stream-copy the picture edit."""
 import hashlib
+import os
 import json
 from concurrent.futures import ThreadPoolExecutor
 from film import Sequence,lower
@@ -120,6 +121,15 @@ def render(root):
             args+=['-i',root/'captions.mov','-i',root/'captions.vtt','-filter_complex',
                    audio+';[0:v][3:v]overlay=0:H-h-24:eof_action=pass,scale=1920:1080:flags=lanczos[vout]','-map','[vout]','-map','[a]','-map','4:s',
                    '-c:v','libx264','-threads','4','-preset','veryfast','-crf','18','-c:s','mov_text','-metadata:s:s:0','language=eng','-disposition:s:0','0']
+        elif os.environ.get('NEWS_COMPACT_RENDER')=='1':
+            # Encode the completed mix first so temporary PCM never competes with the final MP4.
+            mix=root/'mix.m4a'
+            run(['-i',voice,'-i',root/'score.wav','-filter_complex',audio.replace('[1:a]','[0:a]').replace('[2:a]','[1:a]'),'-map','[a]','-c:a','aac','-b:a','160k',mix])
+            (root/'score.wav').unlink()
+            if voice!=root/'voice.wav':voice.unlink()
+            run(['-f','concat','-safe','1','-i',root/'picture.list','-i',mix,'-map','0:v:0','-map','1:a:0','-c','copy','-movflags','+faststart',root/'episode.partial.mp4'])
+            (root/'episode.partial.mp4').replace(root/'episode.mp4')
+            return
         else:args+=['-filter_complex',audio,'-map','0:v:0','-map','[a]','-c:v','copy']
     else:args+=['-map','0:v:0','-map','1:a:0','-c:v','copy']
     run([*args,'-c:a','aac','-b:a','160k','-movflags','+faststart',root/'episode.partial.mp4'])

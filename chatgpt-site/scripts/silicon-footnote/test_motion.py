@@ -106,6 +106,27 @@ class DocumentaryTests(unittest.TestCase):
             plan,times,_=assemble(p,{'beats':[b]},[10],{})
         self.assertAlmostEqual(times[0]+plan['beats'][1]['revealAt'],line.index('Both use')/4)
 
+    def test_graph_events_follow_named_words_in_their_own_shot(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from timeline import assemble
+        line='At first the load fell and then returned.'
+        cues=['fell','returned']
+        for chart,key in [({'checkpoints':[{'index':3,'cue':cues[0]},{'index':8,'cue':cues[1]}]},'traceCues'),
+                          ({'valueCues':cues},'barCues')]:
+            shot={'kind':'document','art':{'headline':'Original study'},'narration':line,
+                  'cutaways':[{'at':.2,'cue':'the load','kind':'chart','title':'Power','chart':chart}]}
+            with TemporaryDirectory() as tmp:
+                p=Path(tmp)
+                (p/'alignment.json').write_text(json.dumps([{'text':line,'starts':[i/4 for i in range(len(line))]}]))
+                plan,times,_=assemble(p,{'beats':[shot]},[11],{})
+            events=plan['beats'][1][key]
+            if key=='traceCues':
+                self.assertEqual([index for at,index in events],[3,8])
+                events=[at for at,index in events]
+            self.assertEqual([at+times[0] for at in events],[line.index(cue)/4 for cue in cues])
+
     def test_camera_moves_in_both_directions(self):
         from film import camera
         from PIL import Image

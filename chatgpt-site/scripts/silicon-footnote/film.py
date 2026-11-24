@@ -19,7 +19,7 @@ IVORY='#fff6e4'
 GOLD='#f9ee49'
 BLACK='#182b30'
 WHITE='#ffffff'
-PALETTE=['#438bff','#ff459a','#f9ee49','#a69aff']
+PALETTE=['#00dcff','#ff287c','#eaff38','#ae77ff']
 DIRECTORY=Path(__file__).resolve().parent
 STATES=json.loads((DIRECTORY/'us-states.json').read_text())['states']
 
@@ -48,6 +48,7 @@ def typeblock(draw,x,y,text,width,size,color=IVORY,style='sans',lines=3,leading=
 def publisher(source):
     host=urlsplit(source['url']).hostname.removeprefix('www.')
     common={'hsph.harvard.edu':'Harvard T.H. Chan School of Public Health','raw.githubusercontent.com':'Research team  /  public data','github.com':'GitHub','epa.gov':'U.S. Environmental Protection Agency','eia.gov':'U.S. Energy Information Administration · Hourly Electric Grid Monitor','x.com':'X','pbs.org':'PBS NewsHour','cbsnews.com':'CBS News'}
+    if '/ai-emerald/' in source['url']:return 'Phoenix field trial  /  Colangelo and colleagues  /  published data'
     return common.get(host,host)
 
 @lru_cache(16)
@@ -172,7 +173,22 @@ class Sequence:
             fraction=c['axisIndices'][i]/(len(c['series'][0]['values'])-1) if c.get('axisIndices') else i/(len(c['axis'])-1)
             x=x0+(x1-x0)*fraction
             d.text((x,y1+16),label,font=face(25),anchor='mt',fill='#eeeff3')
-        stop=c.get('until',1)*ease(min(1,t/max(.8,min(length*.48,3))))
+        last=len(c['series'][0]['values'])-1
+        cues=self.b.get('traceCues',[])
+        if cues:
+            positions=[(0,0),*[(at,k/last) for at,k in cues]]
+            finish=max(positions[-1][0]+.35,length-.7)
+            positions.append((finish,c.get('until',1)))
+            stop=float(np.interp(t,*zip(*positions)))
+        else:stop=c.get('until',1)*ease(min(1,t/max(.8,min(length*.52,4.5))))
+        # The band grows only as measured samples are exposed.
+        if span:=c.get('eventWindow'):
+            left=x0+(x1-x0)*span[0]/last
+            right=x0+(x1-x0)*min(stop,span[1]/last)
+            if right>left:
+                d.rectangle((left,y0,right,y1),fill='#26313a')
+                d.line((left,y0,left,y1),fill='#78939c',width=2)
+                d.line((left,y0,right,y0),fill=PALETTE[2],width=3)
         for i,series in enumerate(c['series']):
             color=PALETTE[i];data=series['values'];end=(len(data)-1)*stop
             points=[]
@@ -184,12 +200,26 @@ class Sequence:
             if k<len(data)-1 and end>k:
                 val=data[k] if c.get('steps') else data[k]+(end-k)*(data[k+1]-data[k])
                 points.append((x0+(x1-x0)*stop,y1-(y1-y0)*(val-lo)/(hi-lo)))
-            if len(points)>1:d.line(points,fill=color,width=7,joint='curve')
+            if len(points)>1:
+                if len(c['series'])==1:
+                    ink=tuple(int(color[j:j+2],16) for j in (1,3,5))
+                    ImageDraw.Draw(im,'RGBA').polygon([(points[0][0],y1),*points,(points[-1][0],y1)],fill=(*ink,39))
+                d.line(points,fill=color,width=7,joint='curve')
+            # Track the head of the measured line, including before the pinned value is revealed.
+            if end<last:
+                x,y=points[-1]
+                d.line((x,y0,x,y1),fill='#626a76',width=1)
+                d.ellipse((x-8,y-8,x+8,y+8),fill=WHITE,outline=color,width=4)
             if 'markerIndex' in c:
                 marker=c['markerIndex']
                 if end>=marker and t>=self.b.get('revealAt',0):
                     x=x0+(x1-x0)*marker/(len(data)-1);y=y1-(y1-y0)*(data[marker]-lo)/(hi-lo)
                     d.line((x,y+10,x,y1),fill='#818596',width=2)
+                    arrival=next((at for at,index in cues if index==marker),self.b.get('revealAt',0))
+                    phase=t-arrival
+                    if 0<=phase<.75:
+                        radius=12+22*phase/.75
+                        ImageDraw.Draw(im,'RGBA').ellipse((x-radius,y-radius,x+radius,y+radius),outline=(255,255,255,round(190*(1-phase/.75))),width=3)
                     d.ellipse((x-10,y-10,x+10,y+10),fill=WHITE,outline=color,width=4)
                     label=f'{data[marker]:.2f} {c.get("markerUnit","")}'.strip()
                     where='rm' if x>x1-150 else 'lm'
@@ -229,10 +259,14 @@ class Sequence:
         y=246;gap=min(104,340/len(values));x=385
         d.line((x,y-7,x,y+len(values)*gap-10),fill='#afc1b7',width=2)
         for i,(label,val) in enumerate(zip(labels,values)):
-            yy=int(y+i*gap);k=ease((t-.1*i)/.73)
+            at=b['barCues'][i] if b.get('barCues') else .1*i
+            yy=int(y+i*gap);k=ease((t-at)/.73)
             extent=round(595*val/max(values)*k)
             typeblock(d,75,yy+5,label,295,41,WHITE,'sans',2)
-            if extent:d.rectangle((x,yy+3,x+extent,yy+39),fill=PALETTE[i])
+            d.rounded_rectangle((x,yy+5,x+595,yy+37),radius=4,fill='#292c30')
+            if extent>1:
+                d.rounded_rectangle((x,yy+4,x+extent,yy+38),radius=min(4,extent//2),fill=PALETTE[i])
+                if k<1:d.line((x+extent,yy+4,x+extent,yy+38),fill=WHITE,width=3)
             if k>.72:typeblock(d,x+extent+13,yy+2,format(val,',.5g'),167,46,WHITE,'bold',1)
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)

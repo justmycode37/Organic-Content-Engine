@@ -19,7 +19,7 @@ def match_interview(pcm,nearby,sr):
 def assemble(root,plan,durations,pack):
     beats,times=[],[]
     original_voice=root/'voice.wav'
-    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') or (b.get('chart') or {}).get('revealCue') for b in plan['beats']):
+    if not any(b.get('cutaways') or b.get('actuality') or b.get('insert') or any((b.get('chart') or {}).get(k) for k in ('revealCue','checkpoints','valueCues')) for b in plan['beats']):
         return plan,durations,original_voice
     aligned=json.loads((root/'alignment.json').read_text()) if (root/'alignment.json').exists() else []
     have_sound=any(b.get('actuality') for b in plan['beats'])
@@ -67,6 +67,26 @@ def assemble(root,plan,durations,pack):
                 pos=a.get('text','').lower().find(cue.lower())
                 if pos<0:raise ValueError(f'Missing chart reveal cue: {cue}')
                 shot={**shot,'revealAt':max(0,a['starts'][pos]-start)}
+            if shot['kind']=='chart' and (checkpoints:=(shot.get('chart') or {}).get('checkpoints')):
+                a=aligned[i]
+                points=[]
+                for checkpoint in checkpoints:
+                    pos=a['text'].casefold().find(checkpoint['cue'].casefold())
+                    if pos<0:raise ValueError('Missing trace cue: '+checkpoint['cue'])
+                    at=a['starts'][pos]-start
+                    if not 0<at<length or (points and at<=points[-1][0]):raise ValueError('Trace cue falls outside its shot or out of order')
+                    points.append((at,checkpoint['index']))
+                shot={**shot,'traceCues':points}
+            if shot['kind']=='chart' and (words:=(shot.get('chart') or {}).get('valueCues')):
+                a=aligned[i]
+                cues=[]
+                for word in words:
+                    pos=a['text'].lower().find(word.lower())
+                    if pos<0:raise ValueError('Missing bar cue: '+word)
+                    at=a['starts'][pos]-start
+                    if not 0<=at<length or (cues and at<=cues[-1]):raise ValueError('Bar cues must fall within the shot, in order')
+                    cues.append(at)
+                shot={**shot,'barCues':cues}
             if length>=1/24:beats.append(shot);times.append(length)
         a=b.get('actuality')
         if a:

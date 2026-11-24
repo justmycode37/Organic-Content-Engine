@@ -25,7 +25,10 @@ def score(path,timing,beats,pack=None):
             if b['kind']=='chart':
                 reveal=max(.8,min(timing[i]*.48,3)) if b['chart'].get('layout')=='profile' else 1.05
                 reveal=b.get('revealAt',reveal)
-                if .12<reveal<timing[i]-.2:events.append((moment+reveal,'settle'))
+                accents=[at for at,_ in b.get('traceCues',[])]+b.get('barCues',[])
+                if not any(abs(at-reveal)<.35 for at in accents):accents.append(reveal)
+                for at in accents:
+                    if .12<at<timing[i]-.2:events.append((moment+at,'settle'))
         if b.get('insert'):events.append((moment+timing[i]*b['insert']['at'],'air'))
     rooms={}
     ambience=[]

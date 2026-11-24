@@ -21,9 +21,25 @@ const comparison=z.array(z.object({image:z.number().int().nonnegative(),label:st
 const processDrawing=z.array(z.object({subject:z.enum(['campus','server','powerline','generator','meter','wind','hydro','chip']),label:string.max(32)})).min(2).max(4);
 const chartSpec=z.union([
  z.object({layout:z.literal('calculation'),unit:string,values:z.array(z.number()).length(2),active:z.number().int().min(0).max(1),answer:string.max(50)}),
- z.object({layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),axisIndices:z.array(z.number().int().nonnegative()).optional(),markerUnit:string.max(14).optional(),markerIndex:z.number().int().nonnegative().optional(),revealCue:string.optional(),illustrative:z.boolean().optional(),steps:z.boolean().optional(),until:z.number().positive().max(1).optional(),
-  series:z.array(z.object({label:string,values:z.array(z.number().finite()).min(2).max(96)})).min(1).max(3)}).refine(c=>c.domain[0]<c.domain[1] && (c.markerIndex??0)<c.series[0].values.length && (!c.axisIndices || c.axisIndices.length===c.axis.length && c.axisIndices.every((v,i,a)=>v<c.series[0].values.length && (i===0||v>a[i-1]))) && c.series.every(s=>s.values.length===c.series[0].values.length && s.values.every(v=>v>=c.domain[0]&&v<=c.domain[1]))),
- z.object({layout:z.enum(['bars','paired','fixed']).optional(),constant:z.string().max(42).optional(),unit:string,values:z.array(z.number().nonnegative()).min(2).max(4)})
+ z.object({
+  layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),
+  checkpoints:z.array(z.object({index:z.number().int().nonnegative(),cue:string.min(1)})).min(1).max(8).optional(),
+  eventWindow:z.tuple([z.number().int().nonnegative(),z.number().int().positive()]).optional(),
+  axisIndices:z.array(z.number().int().nonnegative()).optional(),markerUnit:string.max(14).optional(),
+  markerIndex:z.number().int().nonnegative().optional(),revealCue:string.optional(),illustrative:z.boolean().optional(),
+  steps:z.boolean().optional(),until:z.number().positive().max(1).optional(),
+  series:z.array(z.object({label:string,values:z.array(z.number().finite()).min(2).max(96)})).min(1).max(3)
+ }).refine(c=>{
+  const last=c.series[0].values.length-1,visibleThrough=last*(c.until??1);
+  const ordered=(value,i,indices)=>value<=last && (i===0 || value>indices[i-1]);
+  const indices=c.checkpoints?.map(p=>p.index);
+  return c.domain[0]<c.domain[1] && (c.markerIndex??0)<=last
+   && (!c.eventWindow || (c.eventWindow[0]<c.eventWindow[1] && c.eventWindow[1]<=last))
+   && (!indices || (indices.every(ordered) && indices.at(-1)<=visibleThrough))
+   && (!c.axisIndices || (c.axisIndices.length===c.axis.length && c.axisIndices.every(ordered)))
+   && c.series.every(s=>s.values.length===last+1 && s.values.every(v=>v>=c.domain[0]&&v<=c.domain[1]));
+ }),
+ z.object({layout:z.enum(['bars','paired','fixed']).optional(),constant:z.string().max(42).optional(),valueCues:z.array(string.min(1)).min(2).max(4).optional(),unit:string,values:z.array(z.number().nonnegative()).min(2).max(4)}).refine(c=>!c.valueCues || ((c.layout??'bars')==='bars' && c.valueCues.length===c.values.length))
 ]);
 const titlePosition=z.enum(['upper-left','upper-right','lower-left','lower-right']);
 const pickup=z.object({titlePosition:titlePosition.optional(),clean:z.boolean().optional(),process:processDrawing.optional(),at:z.number().min(.05).max(.95),cue:z.string().optional(),kind:z.enum(['image','footage','document','quote','chart','steps','terrain']),title:string.max(85),source:z.number().int().nonnegative().optional(),image:z.number().int().nonnegative().optional(),clip:z.number().int().nonnegative().optional(),clipStart:z.number().nonnegative().optional(),art:art.optional(),quote:z.string().optional(),labels:z.array(string).max(4).optional(),chart:chartSpec.optional(),nameplate:z.object({name:string,date:z.string(),role:z.string()}).optional()});
