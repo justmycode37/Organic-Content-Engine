@@ -17,10 +17,11 @@ def source_text_regions(root, shots):
     with tempfile.TemporaryDirectory() as folder:
         paths, owners = [], []
         for index, beat, duration in shots:
-            hold = min(duration, 4.7 if beat.get('originalSpeech') else 4.0)
+            start = beat.get('tagStart', 0)
+            hold = min(duration-start, 4.7 if beat.get('originalSpeech') else 4.0)
             for moment in (hold * .15, hold * .58, hold * .88):
                 frame = Path(folder) / f'{len(paths)}.jpg'
-                subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(beat['clipStart'] + moment),
+                subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(beat['clipStart'] + start + moment),
                                 '-i', root / f"clip-{beat['clip']}.mp4", '-frames:v', '1',
                                 '-vf', 'scale=960:540:force_original_aspect_ratio=increase,crop=960:540',
                                 '-y', frame], check=True)

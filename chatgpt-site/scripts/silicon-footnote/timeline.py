@@ -96,7 +96,8 @@ def assemble(root,plan,durations,pack):
         a=b.get('actuality')
         if a:
             length=a['end']-a['start']
-            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'speakerX':a.get('speakerX',.5),'clean':False,'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
+            if not 0<=a.get('tagStart',0)<length:raise ValueError('Speaker tag begins outside the interview')
+            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'tagStart':a.get('tagStart',0),'speakerX':a.get('speakerX',.5),'clean':False,'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
             times.append(length)
         positions.append((duration,hold,a))
     voice=original_voice

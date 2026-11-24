@@ -157,11 +157,12 @@ def render(root):
             graph=f'[0:v]fps={FPS}{select},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[v]'
             layer=['-framerate',str(FPS),'-loop','1','-i',overlay]
             if modern:
-                hold=length if beat.get('closing') else min(length,4.7 if beat.get('originalSpeech') else 4.0)
-                exit_start=max(.12,hold-.32)
-                graph+=f";[1:v]scale={width}:{height},format=rgba,fade=t=in:st=0:d=0.28:alpha=1,fade=t=out:st={exit_start}:d=0.30:alpha=1[tag]"
+                tag_start=beat.get('tagStart',0)
+                hold=length if beat.get('closing') else min(length-tag_start,4.7 if beat.get('originalSpeech') else 4.0)
+                exit_start=tag_start+max(.12,hold-.32)
+                graph+=f";[1:v]scale={width}:{height},format=rgba,fade=t=in:st={tag_start}:d=0.28:alpha=1,fade=t=out:st={exit_start}:d=0.30:alpha=1[tag]"
                 distance=16 if beat.get('originalSpeech') or beat.get('titlePosition','').startswith('lower') else -12
-                graph+=f";[v][tag]overlay=x=0:y='{distance}*pow(max(0,1-t/0.32),2)':shortest=1"
+                graph+=f";[v][tag]overlay=x=0:y='{distance}*pow(max(0,1-max(0,t-{tag_start})/0.32),2)':shortest=1"
             else:
                 graph+=';[v][1:v]overlay'
             run(['-stream_loop','-1','-ss',offset,'-protocol_whitelist','file','-format_whitelist','mov','-i',media,*layer,'-filter_complex',graph,*codec])
