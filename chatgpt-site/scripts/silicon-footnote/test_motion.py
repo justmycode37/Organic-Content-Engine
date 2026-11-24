@@ -29,6 +29,20 @@ class MotionTests(unittest.TestCase):
         self.assertGreater(np.sum(np.all(plate==255,axis=2)),100)
 
 class DocumentaryTests(unittest.TestCase):
+    def test_rank_chart_reveals_the_second_order_on_its_spoken_cue(self):
+        from film import Sequence
+        rows=[dict(label='A',start=1,end=2),dict(label='B',start=2,end=1)]
+        beat=dict(kind='chart',source=0,art=dict(headline='Race order',caption='Official results'),
+                  narration='',labels=[],revealAt=2,chart=dict(layout='rank-change',fromLabel='Grid',toLabel='Finish',rows=rows))
+        scene=Sequence(None,beat,{'sources':[{'url':'https://example.org'}]},0)
+        def finish_labels(t):
+            return np.asarray(scene.rank_change(t))[220:590,875:1200]
+        self.assertFalse(np.any(finish_labels(1.9)>100))
+        self.assertTrue(np.any(finish_labels(3.2)>100))
+        rows[1]['end']=2
+        with self.assertRaises(ValueError):
+            scene.rank_change(2)
+
     def test_archival_header_and_interview_chyron_stay_readable(self):
         from title_layout import avoid_source_text
         title = {'title':'Mission control', 'titlePosition':'upper-left'}

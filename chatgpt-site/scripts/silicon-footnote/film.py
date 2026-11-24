@@ -200,6 +200,34 @@ class Sequence:
             typeblock(d,x+43,588,side.get('detail',''),530,29,WHITE,'sans',1)
             typeblock(d,x+42,675,readable_credit(self.pack['images'][side['image']]['credit']),558,15,WHITE,lines=1)
         return im
+    def rank_change(self,t):
+        chart=self.b['chart']
+        rows=chart['rows']
+        n=len(rows)
+        ranks=list(range(1,n+1))
+        if not 2<=n<=6 or any(sorted(row[key] for row in rows)!=ranks for key in ('start','end')):
+            raise ValueError('Rank chart needs two complete, untied rankings of two to six entries')
+        im=Image.new('RGB',(W,H),'#101217')
+        draw=ImageDraw.Draw(im)
+        typeblock(draw,68,48,self.head,1144,60,WHITE,'title',1)
+        typeblock(draw,72,157,chart['fromLabel'],320,32,WHITE,'bold',1)
+        typeblock(draw,877,157,chart['toLabel'],339,32,WHITE,'bold',1)
+        progress=ease((t-self.b.get('revealAt',.65))/1.1)
+        for row in rows:
+            left,right=354,844
+            y0=239+(row['start']-1)*325/(n-1)
+            y1=239+(row['end']-1)*325/(n-1)
+            color=row.get('color','#b7bac0')
+            x=left+(right-left)*progress
+            y=y0+(y1-y0)*progress
+            draw.text((70,y0),str(row['start'])+'   '+row['label'],font=face(33,'title'),fill=color,anchor='lm')
+            draw.line((left,y0,x,y),fill=color,width=5)
+            draw.ellipse((x-8,y-8,x+8,y+8),fill=color)
+            if progress>=.98:
+                draw.text((877,y1),str(row['end'])+'   '+row['label'],font=face(33,'title'),fill=color,anchor='lm')
+        typeblock(draw,70,630,self.caption,1150,25,'#eceef1',lines=1)
+        return im
+
     def profile(self,t,length):
         c=self.b['chart'];im=Image.new('RGB',(W,H),'#101217');d=ImageDraw.Draw(im)
         typeblock(d,67,44,self.head,1143,60,WHITE,'title',2)
@@ -467,6 +495,7 @@ class Sequence:
             if layout=='profile':drawing=self.profile(t,length)
             elif layout=='response-window':drawing=self.response_window(t)
             elif layout=='subset':drawing=self.subset(t)
+            elif layout=='rank-change':return self.rank_change(t)
             elif layout=='track-map':return self.track_map(t)
             else:drawing=self.plot(t)
             return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
