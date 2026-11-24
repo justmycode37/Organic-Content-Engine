@@ -1,6 +1,6 @@
 # Mysteries of the Sky: source to story
 
-Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Time the finished edit to Titan’s natural delivery and reserve Rowan for brief interviews. The short transit example demonstrates the handoff format.
+Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Open on a visible change or a piece of evidence. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Reserve Rowan for a brief explanation of how a measurement was made or what limits it. The short transit example demonstrates the handoff format.
 
 This is a local preproduction pipeline for a short astrophysics explainer. It
 turns a source ledger and structured brief into evidence-linked narration beats
@@ -46,7 +46,7 @@ Set `shot.representation` to `presenter` for Rowan. The handoff assigns every ot
 
 Aim for Rowan’s avatar generation to average about **US$3 per published video** across the series. Count billed Rowan takes and retakes together, including videos with zero avatar spend in the average. Individual episodes can come in above or below the target. Titan narration is budgeted separately.
 
-The `voice-plan` command writes ordered provider requests for later production. Titan uses ElevenLabs voice `dtSEyYGNJqjrtBArPCVZ`, model `eleven_flash_v2_5`, with stability and similarity boost each at 0.20. Rowan uses the saved portrait and his own mature voice via HeyGen. If a cutaway plays for less than five seconds, generate the five-second minimum and trim the quiet handles to fit. Use the actual recorded speech to time the edit.
+The `voice-plan` command writes ordered provider requests for later production. Titan uses ElevenLabs voice `dtSEyYGNJqjrtBArPCVZ`, model `eleven_flash_v2_5`, with stability and similarity boost each at 0.20. Rowan uses ElevenLabs voice `PerZoH0r6nxBZXCoIPpv`. Drive the saved HeyGen portrait with the actual recording as described in the [presenter guide](presenter/README.md).
 
 ## Authoring sequence
 

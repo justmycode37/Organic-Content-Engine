@@ -3,7 +3,7 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-import { presenterRequest } from './mysteries-presenter.mjs';
+import { interviewPlan } from './mysteries-presenter.mjs';
 
 // Matches the verified Silicon Footnote Titan preset (39b666e).
 const titan = {voiceId: 'dtSEyYGNJqjrtBArPCVZ', model: 'eleven_flash_v2_5', settings: {stability: 0.2, similarity_boost: 0.2}};
@@ -129,7 +129,6 @@ export function validateStory(story) {
   if (rowanSeconds * 2 >= durationSeconds) errors.push('beats: Titan must carry the majority of the narration; use Rowan for brief expert cutaways');
   for (const [index, beat] of story.beats.entries()) {
     if (!onCamera(beat)) continue;
-    if (beat.durationSeconds > 15) errors.push(`beats.${beat.id}: a single HeyGen presenter take supports at most 15 seconds`);
     if (beat.durationSeconds > 7 || (index > 0 && onCamera(story.beats[index - 1]))) warnings.push(`beats.${beat.id}: review the interview cut for brevity; aim for a single short thought before returning to Titan`);
   }
   const narrationWords = story.beats.reduce((total, beat) => total + beat.narration.trim().split(/\s+/u).length, 0);
@@ -145,8 +144,7 @@ export function voicePlan(story) {
   return story.beats.map((beat, i, beats) => {
     const cue = {beatId: beat.id, speaker: speaker(beat), plannedSeconds: beat.durationSeconds};
     if (onCamera(beat)) {
-      return {...cue, provider: 'heygen', endpoint: '/v1/video/heygen-video-1-r2v',
-        body: presenterRequest(beat.narration, Math.max(5, Math.ceil(beat.durationSeconds)))};
+      return {...cue, ...interviewPlan(beat.narration)};
     }
     return {...cue, provider: 'elevenlabs', endpoint: `/v1/text-to-speech/${titan.voiceId}/with-timestamps?output_format=mp3_44100_128`,
       body: {text: beat.narration, model_id: titan.model, voice_settings: {...titan.settings},

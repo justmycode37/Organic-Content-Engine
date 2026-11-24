@@ -141,8 +141,10 @@ test('route only the expert cutaway to Rowan and all other beats to the saved Ti
   for (const [i, cue] of plan.entries()) {
     assert.equal(cue.beatId, example.beats[i].id);
     if (cue.provider === 'heygen') {
-      assert.equal(cue.body.duration, 5);
-      assert.ok(cue.body.reference_audio.length && cue.body.prompt.includes(example.beats[i].narration));
+      assert.equal(cue.speech.body.voice_id, 'PerZoH0r6nxBZXCoIPpv');
+      assert.equal(cue.speech.body.text, example.beats[i].narration);
+      assert.equal(cue.audioUrlFrom, 'speech.output.audio.download_link');
+      assert.equal(cue.body.reference_images.length, 1);
       assert.equal(plan[i - 1].body.next_text, undefined);
       assert.equal(plan[i + 1].body.previous_text, undefined);
     } else {

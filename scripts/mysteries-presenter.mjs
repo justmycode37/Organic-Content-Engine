@@ -11,6 +11,26 @@ function reference(value) {
   if (url.protocol !== 'https:') throw new Error('HeyGen needs an HTTPS reference URL');
   return { type: 'url', url: url.href };
 }
+export function interviewPlan(line) {
+  return {
+    provider: 'heygen',
+    endpoint: '/v1/video/heygen-avatar-6-i2v',
+    speech: {
+      provider: 'elevenlabs',
+      endpoint: '/text-to-speech',
+      body: { ...profile.elevenLabsVoice, text: line.trim() },
+    },
+    audioUrlFrom: 'speech.output.audio.download_link',
+    body: {
+      model: 'heygen-avatar-6-turbo',
+      resolution: '1080p',
+      reference_images: [reference(profile.portraitUrl)],
+      motion_prompt:
+        'A physicist explaining a measurement to a colleague over a webcam. Steady framing and a small, thoughtful head movement.',
+      motion_expressiveness: 'less',
+    },
+  };
+}
 export function presenterRequest(line, duration, uploadedMaster) {
   return {
     prompt:

@@ -2,7 +2,7 @@
 
 ## 01 · The appointment
 
-Suppose I gave you a photograph of a distant galaxy and circled a spot where absolutely nothing seems to be happening. Then I told you to point a telescope at that spot next winter, because a star was going to explode there. You'd have every reason to be suspicious. Stars rarely give us an appointment. But in twenty fifteen, astronomers actually did arrange to watch a supernova appear in a place they had picked in advance. The trick was that they had already seen this star explode. Four times, in fact. And the reason they could see it again is hiding in the dark patch between galaxies in this photograph. To find it, we have to take the photograph apart, from the telescope all the way back to the star.
+October thirtieth. Look inside that circle. Nothing. December eleventh. Same telescope, same patch of sky. Now there's a point of light. Here's the strange part. Astronomers had circled that spot before the point appeared. See these four lights around a galaxy? All four are images of one exploding star. So is the new dot, eight arcseconds away. Nobody predicted when the star would die. They predicted when another image of its death would reach Earth. How do you get a date out of a photograph?
 
 ## 02 · Four points in a cross
 
@@ -22,7 +22,7 @@ There's a curious limitation to doing this experiment with an ordinary galaxy. S
 
 **Professor Rowan Ellery, on camera**
 
-A photograph gives you a position. An explosion gives you a clock.
+I’d fit the two light curves together. Let the brightness scale change, then shift one curve in time. That shift is the delay between the images.
 
 ## 06 · Unequal journeys
 

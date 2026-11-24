@@ -7,9 +7,17 @@
   "referencePortrait": "rowan-ellery.png",
   "referenceDirection": "Professor Rowan Ellery is a clean-shaven physics teacher in his early sixties. Match his high receding hairline, short casually swept grey hair, lightly smudged rectangular glasses and single rumpled white shirt with open collar. Match the muted colours, bookshelf office and soft older-webcam capture. Use his mature, lightly grainy baritone and thoughtful, unhurried phrasing. One locked eye-level shot. Quiet room tone, no music or titles.",
   "seed": 184711,
-  "speakingMasterStatus": "pending",
+  "speakingMasterStatus": "Audio-driven takes use the current portrait",
   "portraitUrl": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/7dc5c344e114d808ba1c6bc4825327772c45c722/docs/mysteries-of-the-sky/presenter/rowan-ellery.png",
   "voiceReference": "rowan-ellery-voice.m4a",
   "voiceReferenceUrl": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/feat/mysteries-of-the-sky/docs/mysteries-of-the-sky/presenter/rowan-ellery-voice.m4a",
-  "voiceSourceMonidRunId": "01M876APXDSBSXHVHGZW0CTF5D"
+  "voiceSourceMonidRunId": "01M876APXDSBSXHVHGZW0CTF5D",
+  "elevenLabsVoice": {
+    "voice_id": "PerZoH0r6nxBZXCoIPpv",
+    "model_id": "eleven_multilingual_v2",
+    "voice_settings": {
+      "stability": 0.53,
+      "similarity_boost": 0.82
+    }
+  }
 }

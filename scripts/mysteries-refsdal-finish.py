@@ -10,12 +10,12 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFont
 
 WORK = Path(sys.argv[1]).resolve()
-OUT = WORK.parent / "The Star That Kept Its Appointment.mp4"
+OUT = WORK.parent / "The Star That Kept Its Appointment - Revised Cut.mp4"
 FPS = 24
 RATE = 48000
 ORDER = [1, 2, 3, 4, 5, 0, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
 FONT = Path("/System/Library/Fonts/Supplemental")
-CAMEO_IN = 1.75
+CAMEO_IN = 0
 
 
 def ff(*args):
@@ -53,7 +53,7 @@ def video_edits():
              "-color_primaries","bt709","-video_track_timescale","24000"]
     ff("-ss", str(CAMEO_IN), "-i", WORK/"rowan.mp4", "-i", WORK/"rowan-title.png",
        "-filter_complex", "[0:v]fps=24,scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1[cam];[cam][1:v]overlay", "-an",
-       "-frames:v","115",*codec,WORK/"video-00.mp4")
+       *codec,WORK/"video-00.mp4")
     n = video_frames(WORK/"video-15.mp4")
     archive_n = 194
     graph = (f"[0:v]trim=end_frame={n-archive_n},setpts=PTS-STARTPTS,setsar=1[prev];"
@@ -79,12 +79,16 @@ def combine_audio(durations):
         if ch==16:
             voice=np.zeros(samples,np.float32)
         else:
-            name="rowan.mp4" if ch==0 else f"{ch:02}.mp3"
+            name=f"{ch:02}.mp3"
             seek=["-ss",str(CAMEO_IN)] if ch==0 else []
             raw=subprocess.check_output(["ffmpeg","-v","error",*seek,"-i",WORK/name,"-vn","-ac","1",
                  "-ar",str(RATE),"-f","f32le","-"])
             v=np.frombuffer(raw,dtype="<f4")[:samples]
-            voice=np.pad(v,(0,samples-len(v))) * (0.53 if ch==0 else .87)
+            voice=np.pad(v,(0,samples-len(v))) * (1.65 if ch==0 else .87)
+            if ch==0:
+                # Tame occasional consonant peaks after matching interview loudness.
+                peak=np.abs(voice)
+                voice=np.sign(voice)*(np.minimum(peak,.74)+.13*np.tanh(np.maximum(peak-.74,0)/.13))
         for start in range(0,samples,RATE):
             v=voice[start:start+RATE]
             t=(cursor+start+np.arange(len(v)))/RATE
@@ -135,7 +139,6 @@ def captions(durations):
     for i,(a,b,text) in enumerate(entries):
         text=re.sub(r"\b(?:SSX|S X)\b","SX",text,flags=re.I)
         text=re.sub(r"\bRe[fv]s?d[ae]ll?\b","Refsdal",text,flags=re.I)
-        if i and text[0].islower() and text.startswith("a photograph gives"):text="A"+text[1:]
         next_time=entries[i+1][0] if i+1<len(entries) else b+.35
         blocks.append(f"{i+1}\n{srt_time(a)} --> {srt_time(min(b+.16,next_time-.01))}\n"+
                       "\n".join(textwrap.wrap(text,width=42,break_long_words=False)))
