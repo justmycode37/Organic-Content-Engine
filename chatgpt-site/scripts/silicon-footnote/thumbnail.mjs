@@ -27,11 +27,12 @@ Creative direction: ${variant.art}
 Design the artwork as a full-bleed wide poster. Put an unmistakable, oversized subject opposite a darker quiet text area on the ${variant.side}. Design for recognizability at 160 × 90. Dramatic color separation and strong directional light. Keep the subject and critical elements inside wide crop-safe margins. Generate the art only. No text, letter-like decoration, screenshots, captions, labels, logo, watermark, or frame. Return the generated image.`;
 }
 
-export async function prepareThumbnails(dir,{request=ask}={}){
+export async function prepareThumbnails(dir,{request=ask,reuseExisting=false}={}){
  const manifest=join(dir,'thumbnails-v4.json');
- if(existsSync(manifest)){
-  const saved=read(manifest);
-  if(saved.every(({id})=>existsSync(join(dir,`thumbnail-${id}.jpg`))))return saved;
+ for(const path of [manifest,...(reuseExisting?[join(dir,'thumbnails.json')]:[])]){
+  if(!existsSync(path))continue;
+  const saved=read(path);
+  if(Array.isArray(saved)&&saved.length===ids.length&&ids.every((id,i)=>saved[i]?.id===id&&existsSync(join(dir,`thumbnail-${id}.jpg`))))return saved;
  }
  const planPath=join(dir,'thumbnail-plan-v2.json');
  let variants;

@@ -1,3 +1,4 @@
+import {downloadEdition,uploadEditionAsset,publishEdition,editionStatus,youtubeEdition} from '../services/youtube-editions.ts';
 import {beginRevision,selectedVideo} from '../services/episode-revision.ts';
 import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,queueScheduledEpisodes,reportEpisode,siliconId,siliconWorker,readyEpisodeThumbnail,thumbnailIds,thumbnailId,thumbnailKey,thumbnailManifest} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
@@ -205,6 +206,10 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.use('/api/jobs/accounts/*',async(c,next)=>{await assertRenderCaller(c,{...c.get('container').config,renderWorkerToken:typeof c.env.ACCOUNT_WORKER_TOKEN==='string'?c.env.ACCOUNT_WORKER_TOKEN:null},c.get('access'));await next();});
+  app.get('/api/media/editions/:id/:file',c=>downloadEdition(c.get('container').db,c.env,c.req.param('id'),c.req.param('file'),c.req.query('expires')??'',c.req.query('signature')??''));
+  app.post('/api/jobs/accounts/silicon/:id/youtube/assets/:kind',async c=>c.json(await uploadEditionAsset(c.get('container').db,c.env,c.req.param('id'),c.req.param('kind'),String(c.env.PUBLIC_BASE_URL||new URL(c.req.url).origin))));
+  app.post('/api/jobs/accounts/silicon/:id/youtube/publish',async c=>c.json(await publishEdition(c.get('container').db,c.env,c.req.param('id'),await readBody(c,youtubeEdition))));
+  app.get('/api/jobs/accounts/silicon/:id/youtube/status',async c=>c.json(await editionStatus(c.get('container').db,c.env,c.req.param('id'))));
   app.post('/api/jobs/accounts/silicon/sync',async c=>{
    const db=c.get('container').db;await listAccounts(db);
    const targets=await new Postiz(c.env).integrations();const match=await bindSilicon(db,targets);

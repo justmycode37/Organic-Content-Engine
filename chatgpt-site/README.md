@@ -194,6 +194,9 @@ oEmbed when available, and direct MP4 footage. A story needs at least two
 accessible sources and a decodable clip. Scripts cite sources per shot. Exact
 quote cards are checked against retrieved text. The local episode directory
 retains the evidence, editorial plan, audio takes and measured cut timings.
+Numbered evaluation rounds also save their finished MP4 at
+`videos/round-NN.mp4` in the project root. New scripts open with a question.
+Before narration is recorded, the editor identifies the later passage that answers it.
 
 The custom 1280 × 720, 24 fps library draws black-and-white source cards with selective amber word highlights,
 perspective text terrain, sequential diagrams, zero-based charts and white

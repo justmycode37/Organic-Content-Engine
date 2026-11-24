@@ -42,7 +42,7 @@ def retrieve(url, output, limit):
                 '--resolve', f'{u.hostname}:443:{ip}', '-D', str(headers), '-o', output,
                 '-w', '%{response_code}', '--', url], text=True)
             if result == '200':
-                return
+                return next((line.partition(':')[2].strip() for line in headers.read_text('latin1').splitlines() if line.lower().startswith('content-type:')), '')
             location = next((line.partition(':')[2].strip() for line in headers.read_text('latin1').splitlines()
                              if line.lower().startswith('location:')), '')
             if not result.startswith('3') or not location:
@@ -52,7 +52,9 @@ def retrieve(url, output, limit):
 
 if __name__ == '__main__':
     url, path, kind = sys.argv[1:]
-    retrieve(url, path, 160_000_000 if kind == 'media' else 18_000_000 if kind == 'image' else 5_000_000)
+    content_type = retrieve(url, path, 320_000_000 if kind == 'media' else 18_000_000 if kind == 'image' else 5_000_000)
+    if kind == 'press':
+        print(content_type)
     if kind == 'article':
         parser = Article()
         parser.feed(Path(path).read_text(errors='replace'))
