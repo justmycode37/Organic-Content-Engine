@@ -481,7 +481,7 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const cinematicTail=ACTIVE_STYLE==='cinematic'&&index===spec.scenes.length-1?0.72:0;
   // Viral reels end right after the payoff lands (a short hold for the payoff card), never on a long freeze.
   const last=index===spec.scenes.length-1,viral=spec.look==='viral';
-  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.7:cinematicTail));
+  const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
   const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
