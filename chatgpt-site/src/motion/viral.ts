@@ -42,7 +42,7 @@ function richLine(ctx: Ctx, words: { text: string; accent: boolean }[], cx: numb
 }
 
 /** When the hook card leaves the screen (reel seconds); 0 without a hook. */
-export function hookEndTime(spec: ReelSpec, placed: PlacedScene[]) { return spec.hook?.trim() ? Math.min(Math.max(1.6, placed[0]?.end ?? 0), 3.2) : 0; }
+export function hookEndTime(spec: ReelSpec, placed: PlacedScene[]) { return spec.hook?.trim() ? Math.min(placed[0]?.end ?? 0, 3.2) : 0; }
 
 /** When the narration first says the concept's name: the start of its first word on the reel timeline. */
 export function termTime(term: string | undefined, captions: readonly ActiveCaption[]): number | undefined {
@@ -61,14 +61,14 @@ export function termTime(term: string | undefined, captions: readonly ActiveCapt
 function cardText(text: string) { return joinPunctuation(markupWords(text.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent }))); }
 /** The device-space band covered by whichever overlay card (hook, concept term or payoff) is on screen. */
 export function cardZone(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []): { top: number; bottom: number } | undefined {
-  const hook = spec.hook?.trim(), firstEnd = placed[0]?.end ?? 0, hookEnd = hook ? Math.min(Math.max(1.6, firstEnd), 3.2) : 0;
+  const hook = spec.hook?.trim(), hookEnd = hookEndTime(spec, placed);
   const end = placed.at(-1)?.end ?? 0, payoffStart = payoffAt(captions, end, hookEnd);
   const band = (text: string, sizes: number[], max: number, lineK: number, pad: number, center: number) => {
     const { size, lines } = fit(ctx, cardText(text).map(w => w.text).join(' '), sizes, max, 3);
     const h = lines.length * size * lineK + pad;
     return { top: center - h / 2 - 12, bottom: center + h / 2 + 12 };
   };
-  if (hook && time < hookEnd + 0.25) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 56, HOOK_Y);
+  if (hook && time < hookEnd) return band(hook, [104, 96, 88, 80, 72, 64], 960, 1.08, 56, HOOK_Y);
   if (spec.payoff?.trim() && time >= payoffStart) return band(spec.payoff, [96, 88, 80, 72, 64, 58], 940, 1.1, 60, PAYOFF_Y);
   const termAt = termTime(spec.term, captions);
   if (spec.term && termAt !== undefined && termAt > hookEnd && time >= termAt && time < Math.min(termAt + 1.5, payoffStart - 0.1)) return band(spec.term, [104, 96, 88, 80, 72, 64, 58], 940, 1.1, 60, HOOK_Y + 20);
@@ -92,11 +92,10 @@ function drawCard(ctx: Ctx, text: string, k: number, centerY: number) {
 
 export function drawHookAndHeader(ctx: Ctx, spec: ReelSpec, time: number, placed: PlacedScene[], captions: readonly ActiveCaption[] = []) {
   const hook = spec.hook?.trim(), header = (spec.header ?? '').trim();
-  const firstEnd = placed[0]?.end ?? 0;
-  const hookEnd = hook ? Math.min(Math.max(1.6, firstEnd), 3.2) : 0;
+  const hookEnd = hookEndTime(spec, placed);
   ctx.save();
-  if (hook && time < hookEnd + 0.25) {
-    const exit = clamp((hookEnd + 0.25 - time) / 0.25);
+  if (hook && time < hookEnd) {
+    const exit = clamp((hookEnd - time) / 0.22);
     const parsed = joinPunctuation(markupWords(hook.toUpperCase()).map(w => ({ text: w.text, accent: !!w.accent })));
     const { size, lines } = fit(ctx, parsed.map(w => w.text).join(' '), [104, 96, 88, 80, 72, 64], 960, 3);
     let index = 0;
