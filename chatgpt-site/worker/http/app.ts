@@ -1,5 +1,5 @@
 import {beginRevision,selectedVideo} from '../services/episode-revision.ts';
-import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,reportEpisode,siliconId,readyEpisodeThumbnail,thumbnailIds,thumbnailId,thumbnailKey,thumbnailManifest} from '../services/silicon-footnote.ts';
+import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,queueScheduledEpisodes,reportEpisode,siliconId,siliconWorker,readyEpisodeThumbnail,thumbnailIds,thumbnailId,thumbnailKey,thumbnailManifest} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
@@ -217,10 +217,29 @@ export function createApp(): Hono<AppEnv> {
    await db.prepare('INSERT OR IGNORE INTO job_state(name,last_run_at,last_result) VALUES(?,?,?)').bind('silicon-episode:'+id,created,JSON.stringify(job)).run();
    return c.json({job:await activeEpisode(db,id)});
   });
-  app.post('/api/jobs/accounts/silicon/claim',async c=>c.json({job:await claimEpisode(c.get('container').db)}));
+  app.post('/api/jobs/accounts/silicon/claim',async c=>{
+   const x=c.get('container');
+   const {subscription}=c.req.raw.body?await readBody(c,validator.object({subscription:validator.enum(['ready','login_required','voice_required']).optional()})):{};
+   if(subscription){
+    await x.settings.setJob(siliconWorker,new Date().toISOString(),{subscription});
+    if(subscription!=='ready')return c.json({job:null});
+    await queueScheduledEpisodes(x.db);
+   }
+   return c.json({job:await claimEpisode(x.db,{scheduled:subscription==='ready'})});
+  });
   app.post('/api/jobs/accounts/silicon/:id/heartbeat',async c=>{
-   const db=c.get('container').db;
-   await db.prepare("UPDATE job_state SET last_run_at=? WHERE name=? AND json_extract(last_result,'$.status')='producing'").bind(new Date().toISOString(),'silicon-episode:'+c.req.param('id')).run();return c.json({ok:true});
+   const {db,settings}=c.get('container');
+   const stamp=new Date().toISOString();
+   const heartbeat=await db.prepare("UPDATE job_state SET last_run_at=? WHERE name=? AND json_extract(last_result,'$.status')='producing'")
+    .bind(stamp,'silicon-episode:'+c.req.param('id')).run();
+   if(heartbeat.meta.changes){
+    const worker=await settings.getJob(siliconWorker);
+    if((worker.lastResult as {subscription?:string}|null)?.subscription==='ready'){
+     await settings.setJob(siliconWorker,stamp,worker.lastResult);
+     await queueScheduledEpisodes(db);
+    }
+   }
+   return c.json({ok:true});
   });
   app.post('/api/jobs/accounts/silicon/:id/upload',async c=>{
    const e=await activeEpisode(c.get('container').db,c.req.param('id'));
@@ -319,14 +338,19 @@ export function createApp(): Hono<AppEnv> {
    const x=c.get('container'),accounts=await listAccounts(x.db),heartbeat=await x.settings.getJob('account_worker'),postiz=new Postiz(c.env);
    let targets:Awaited<ReturnType<Postiz['integrations']>>=[],postizError='';
    if(postiz.configured)try{targets=await postiz.integrations();}catch{postizError='Postiz connection unavailable';}
-   const silicon=accounts.find(a=>a.id===siliconId);
+   const silicon=accounts.find(a=>a.id===siliconId),siliconHeartbeat=await x.settings.getJob(siliconWorker);
    if(silicon&&!silicon.postizIntegrationId){
     const match=await bindSilicon(x.db,targets);
     if(match){const row=await x.db.prepare("SELECT json_extract(value,'$.postizIntegrationId') AS dest FROM accounts WHERE id=?").bind(siliconId).first<{dest:string|null}>();silicon.postizIntegrationId=row?.dest??null;}
    }
+   const siliconSubscription=(siliconHeartbeat.lastResult as {subscription?:string}|null)?.subscription;
    for(const a of accounts){
     const target=targets.find(t=>t.id===a.postizIntegrationId&&!t.disabled);
-    const issues=a.id===siliconId?(target?[]:[postizError||'Choose a connected Postiz YouTube channel']):[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','quriozity'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Quriozity and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
+    const issues=a.id===siliconId?(
+     !siliconHeartbeat.lastRunAt||Date.now()-Date.parse(siliconHeartbeat.lastRunAt)>120000?['Silicon Footnote worker offline']:
+     siliconSubscription==='login_required'?['Sign in to Codex with ChatGPT on the producer Mac']:
+     siliconSubscription==='voice_required'?['Set the ElevenLabs key on the producer Mac']:[]
+    ):[...(!postiz.configured?['Postiz API key missing']:[]),...(postizError?[postizError]:[]),...(!target?['Choose a connected Postiz Instagram account']:[]),...(!['hedgy','quriozity'].includes(a.id)||a.platform!=='instagram'?['Automatic reel production is available for Quriozity and Hedgy on Instagram']:[]),...(x.config.publishMode!=='live'?['Live publishing is disabled']:[]),...(!heartbeat.lastRunAt||Date.now()-Date.parse(heartbeat.lastRunAt)>120000?['Automation worker offline']:[])];
     (a as any).connectionStatus={connected:!!target,setupRequired:postiz.configured?[]:['POSTIZ_API_KEY'],provider:'postiz',profile:target?.profile};
     (a as any).health={state:!a.enabled?'paused':issues.length?'blocked':'running',issues};
     const runs=await x.db.prepare('SELECT id,scheduled_at,status,error,external_url FROM account_automation_jobs WHERE account_id=? ORDER BY scheduled_at DESC LIMIT 30').bind(a.id).all<any>();
@@ -339,8 +363,9 @@ export function createApp(): Hono<AppEnv> {
    const x=c.get('container'),patch=await readBody(c,accountPatch),row=await x.db.prepare('SELECT value FROM accounts WHERE id=?').bind(c.req.param('id')).first<{value:string}>();
    if(!row)throw notFound('Account',c.req.param('id'));const next={...JSON.parse(row.value),...patch};
    if(patch.postizIntegrationId)await new Postiz(c.env).target(patch.postizIntegrationId,next.platform);
-   if(patch.enabled===true){
-    if(!['hedgy','quriozity'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','Automatic reel production supports Quriozity and Hedgy on Instagram');
+   if(patch.enabled===true&&next.id===siliconId&&!next.week?.some((d:{times:string[]})=>d.times.length))throw new AppError(409,'schedule_empty','Choose at least one day and generation time');
+   if(patch.enabled===true&&next.id!==siliconId){
+    if(!['hedgy','quriozity'].includes(next.id)||next.platform!=='instagram')throw new AppError(409,'pipeline_unavailable','This account has no generation pipeline');
     if(!next.week?.some((d:{times:string[]})=>d.times.length)&&next.week)throw new AppError(409,'schedule_empty','Choose at least one day and generation time');
     if(!next.postizIntegrationId)throw new AppError(409,'account_missing','Choose a Postiz Instagram account first');
     await new Postiz(c.env).target(next.postizIntegrationId);

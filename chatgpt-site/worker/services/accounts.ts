@@ -3,12 +3,13 @@ import {QURIOZITY_POLICY} from '../quriozity-policy.ts';
 import {z} from 'zod';
 import type {Db} from '../db/database.ts';
 import {AppError} from '../errors.ts';
+export const siliconId='silicon-footnote';
 const time=z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/);
 export const weekSchema=z.array(z.object({day:z.number().int().min(0).max(6),times:z.array(time).max(6).refine(v=>new Set(v).size===v.length,'Choose different start times')}).strict()).length(7).refine(v=>new Set(v.map(d=>d.day)).size===7,'Include each weekday once');
 export const accountPatch=z.object({name:z.string().trim().min(1).max(80).optional(),postsPerDay:z.number().int().min(1).max(6).optional(),postingTime:time.optional(),timezone:z.string().max(80).refine(v=>{try{new Intl.DateTimeFormat('en',{timeZone:v});return true;}catch{return false;}}).optional(),enabled:z.boolean().optional(),week:weekSchema.optional(),postizIntegrationId:z.string().min(1).max(200).nullable().optional(),notifyResults:z.boolean().optional()}).strict();
 export const accountCreate=z.object({name:z.string().trim().min(1).max(80),platform:z.enum(['instagram','tiktok','youtube','x','linkedin']).default('instagram'),topic:z.string().max(1000).default('')}).strict();
 export interface Account {id:string;name:string;platform:string;topic:string;postsPerDay:number;postingTime:string;timezone:string;enabled:boolean;enabledSince?:string;week?:z.infer<typeof weekSchema>;postizIntegrationId?:string|null;notifyResults?:boolean;brand?:unknown}
-export function accountWeek(a:Account){return a.week??Array.from({length:7},(_,day)=>({day,times:Array.from({length:a.postsPerDay},(_,i)=>{const [h=18,m=0]=a.postingTime.split(':').map(Number),n=(h*60+m+i*120)%1440;return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;}).sort()}));}
+export function accountWeek(a:Account){return a.week??Array.from({length:7},(_,day)=>({day,times:a.id===siliconId?[]:Array.from({length:a.postsPerDay},(_,i)=>{const [h=18,m=0]=a.postingTime.split(':').map(Number),n=(h*60+m+i*120)%1440;return `${String(Math.floor(n/60)).padStart(2,'0')}:${String(n%60).padStart(2,'0')}`;}).sort()}));}
 const parts=(d:Date,tz:string)=>Object.fromEntries(new Intl.DateTimeFormat('en-CA',{timeZone:tz,year:'numeric',month:'2-digit',day:'2-digit',hour:'2-digit',minute:'2-digit',second:'2-digit',hourCycle:'h23'}).formatToParts(d).map(p=>[p.type,p.value]));
 /** One occurrence per wall time. Skip spring DST gaps; choose one fall overlap. */
 export function accountSlots(a:Account,at=new Date(),startDay=0,days=8){
@@ -50,9 +51,15 @@ export async function addAccount(db:Db,input:z.infer<typeof accountCreate>){cons
 export async function updateAccount(db:Db,id:string,patch:z.infer<typeof accountPatch>){
  const row=await db.prepare('SELECT value FROM accounts WHERE id=?').bind(id).first<{value:string}>();if(!row)throw new AppError(404,'not_found','Account not found');
  const old=JSON.parse(row.value),a={...old,...patch,id} as Account;
- if(patch.enabled===true&&!old.enabled)a.enabledSince=new Date().toISOString();
+ const scheduleChanged=patch.week!==undefined||patch.timezone!==undefined;
+ if((patch.enabled===true&&!old.enabled)||(id===siliconId&&a.enabled&&scheduleChanged))a.enabledSince=new Date().toISOString();
  const reset=patch.enabled===false||patch.week!==undefined||patch.timezone!==undefined||patch.postizIntegrationId!==undefined;
  const statements=[db.prepare('UPDATE accounts SET value=?,updated_at=? WHERE id=?').bind(JSON.stringify(a),new Date().toISOString(),id)];
  if(reset)statements.push(db.prepare("UPDATE account_automation_jobs SET status='cancelled',error='Stopped or schedule changed',updated_at=? WHERE account_id=? AND status='pending'").bind(new Date().toISOString(),id));
+ if(id===siliconId&&(patch.enabled===false||scheduleChanged)){
+  statements.push(db.prepare(`UPDATE job_state SET last_result=json_set(last_result,'$.status','cancelled')
+   WHERE name GLOB 'silicon-episode:*' AND json_extract(last_result,'$.status')='queued'
+   AND json_type(last_result,'$.scheduledAt') IS NOT NULL`));
+ }
  await db.batch(statements);return presentAccount(a);
 }

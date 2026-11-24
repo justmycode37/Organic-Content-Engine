@@ -1169,3 +1169,45 @@ test('a finished episode can be revised in place while its previous cut remains 
   assert.equal(list.length,1);assert.equal(list[0].id,id);assert.equal(list[0].title,'Mars');
  }finally{await s.stop();}
 });
+
+
+test('Silicon Footnote schedules subscription starts exclusively and stops queued weekly work',async()=>{
+ const s=await start({ACCOUNT_WORKER_TOKEN:accountToken},{persist:'silicon-schedule'});
+ const path='/api/accounts/silicon-footnote',episodes='/api/silicon/episodes',root='/api/jobs/accounts/silicon';
+ const machine=(subscription)=>({headers:accountHeaders,json:{subscription}});
+ const status=async()=>(await s.call('GET','/api/accounts')).body.accounts.find(a=>a.id==='silicon-footnote');
+ try{
+  assert.equal((await status()).schedule.length,0);
+  assert.equal((await s.call('PATCH',path,{json:{enabled:true}})).status,409);
+  const now=Date.now(),times=[now-120000,now-60000,now+60000];
+  const week=Array.from({length:7},(_,day)=>({day,times:times.map(t=>new Date(t))
+   .filter(d=>(d.getUTCDay()+6)%7===day).map(d=>d.toISOString().slice(11,16))}));
+  assert.equal((await s.call('PATCH',path,{json:{week,timezone:'UTC'}})).status,200);
+  assert.equal((await s.call('PATCH',path,{json:{enabled:true}})).status,200);
+  assert.equal((await status()).health.state,'blocked');
+  await s.db.prepare("UPDATE accounts SET value=json_set(value,'$.enabledSince',?) WHERE id='silicon-footnote'")
+   .bind(new Date(now-300000).toISOString()).run();
+  assert.equal((await s.call('POST',root+'/claim',machine('login_required'))).body.job,null);
+  assert.match((await status()).health.issues[0],/ChatGPT/);
+  assert.equal((await s.call('POST',root+'/claim',{headers:accountHeaders})).body.job,null);
+  const claimed=await Promise.all([0,1].map(()=>s.call('POST',root+'/claim',machine('ready'))));
+  const active=claimed.map(r=>r.body.job).filter(Boolean);
+  assert.equal(active.length,1);
+  assert.equal(active[0].topic,'');
+  assert.equal((await status()).health.state,'running');
+  const initial=(await s.call('GET',episodes)).body.episodes;
+  assert.deepEqual(initial.map(e=>e.status).sort(),['producing','queued']);
+  assert.equal(new Set(initial.map(e=>e.scheduledAt)).size,2);
+  assert.equal((await s.call('POST',root+'/'+active[0].id+'/heartbeat',{headers:accountHeaders})).status,200);
+  assert.equal((await s.call('PATCH',path,{json:{enabled:false}})).status,200);
+  const stopped=(await s.call('GET',episodes)).body.episodes;
+  assert.deepEqual(stopped.map(e=>e.status).sort(),['cancelled','producing']);
+  assert.equal((await s.call('POST',root+'/'+active[0].id+'/fail',{headers:accountHeaders,json:{error:'Test completion'}})).status,200);
+  assert.equal((await s.call('POST',root+'/claim',machine('ready'))).body.job,null);
+  const manual=await s.call('POST',episodes,{json:{topic:'A manual topic'}});
+  assert.equal(manual.status,201);
+  const next=await s.call('POST',root+'/claim',machine('ready'));
+  assert.equal(next.body.job.id,manual.body.id);
+  assert.equal(next.body.job.topic,'A manual topic');
+ }finally{await s.stop();}
+});
