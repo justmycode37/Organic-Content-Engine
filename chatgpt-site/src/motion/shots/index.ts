@@ -30,6 +30,7 @@ import { revealShot } from './reveal.ts';
 import { breaksShot } from './breaks.ts';
 import { versusShot } from './versus.ts';
 import { actShot } from './act.ts';
+import { statementShot } from './statement.ts';
 import { STAGE_ZOOM } from '../kit/sprite.ts';
 import { isWorld, setActiveWorld, worldTall, VIRAL_SHIFT } from '../kit/worlds.ts';
 import { resetFaces } from '../kit/stage.ts';
@@ -72,6 +73,7 @@ export const SHOTS: Record<string, ShotDef> = {
   [breaksShot.name]: breaksShot,
   [versusShot.name]: versusShot,
   [actShot.name]: actShot,
+  [statementShot.name]: statementShot,
   [hedgyDemoShot.name]: hedgyDemoShot,
 };
 

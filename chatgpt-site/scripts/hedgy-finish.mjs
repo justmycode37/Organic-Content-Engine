@@ -40,7 +40,7 @@ export async function finishHedgy(dir,spec,{env=process.env,onUsage,subscription
   for(let round=1;;round++){
    const s=await sheets(current.kit);
    const canRepair=round<=MAX_REPAIRS;
-   const reviewed=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},current.spec,s.images,s.timeline,onUsage,subscription,{repair:canRepair}).catch(error=>({error:String(error?.message??error)}));
+   const reviewed=await hedgyRenderedReview({OPENAI_API_KEY:env.OPENAI_API_KEY},current.spec,s.images,s.timeline,onUsage,subscription,{repair:canRepair,astraReview:env.HEDGY_LOCAL_ASTRA_REVIEW==='1'}).catch(error=>({error:String(error?.message??error)}));
    const {spec:repairedSpec,...record}=reviewed;
    await writeFile(join(dir,`visual-review-v${round}.json`),JSON.stringify(record,null,2));
    const score=reviewed.review?.score;

@@ -63,6 +63,37 @@ test('Sol xhigh reviews content and coordinates twelve Sol xhigh specialists',as
  assert.equal(result.spec.postCaption,postCaption);
  assert.equal(parseReelSpec(result.spec).ok,true);
 });
+
+test('local Astra review mode leaves the script and storyboard with Sol',async t=>{
+ const {calls}=mockHedgy(t);
+ const reviews={
+  'idea-pick':{index:0,why:'Relatable stakes.',hook:'Ever run out of lemons?'},
+  'story-fact-check':approved,
+  'story-first-listen':listener,
+  'story-takeaway-match':approved,
+  'story-viral-review':{...approved,score:92},
+  'scene-continuity-review':continuity,
+  'storyboard-review':{...approved,score:90},
+  'post-copy-review':approved,
+ };
+ const seen=[];
+ const subscription=async request=>{
+  if(!Object.hasOwn(reviews,request.step)){
+   assert.equal(request.model,'gpt-6.2-sol');
+   assert.equal(request.effort,'xhigh');
+   return {status:'subscription_exhausted'};
+  }
+  seen.push(request.step);
+  assert.equal(request.model,'gpt-6.2-astra');
+  assert.equal(request.effort,'high');
+  return {status:'completed',text:JSON.stringify(reviews[request.step])};
+ };
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},'inventory risk',undefined,[],subscription,{astraReview:true});
+ assert.deepEqual([...seen].sort(),Object.keys(reviews).sort());
+ assert.equal(result.provenance.critic,'gpt-6.2-astra');
+ assert.equal(result.provenance.editorial.unresolvedContinuity,false);
+ assert.ok(calls.every(call=>['hedgy_ideas','hedgy_story','hedgy_reel',undefined].includes(call.text?.format?.name)));
+});
 test('post captions require useful paragraphs and a small set of distinct hashtags',()=>{
  assert.equal(hedgyPostCaptionSchema.safeParse(postCaption).success,true);
  for(const invalid of [undefined,'Risk remains. #Finance #Money #Learning',postCaption.replace(/\n\n/g,' '),postCaption.replace(/#[A-Za-z]+/g,''),postCaption.replace('#InventoryRisk','#FinanceExplained'),postCaption+' #Money #Learning #Investing','x'.repeat(2201)]){
@@ -221,6 +252,14 @@ test('financial animation actions follow actual narrated word timestamps',()=>{
  const spec={version:1,series:'HEDGY / FINANCE',accent:'mono',scenes:[{type:'hedgy',duration:4,beat:'drop',action:'expiry',headline:'Price drops',say:'Stock crashes now',sync:[{word:'crashes',kind:'crash'}]}]};
  const r=arrange(spec,[{audio:'test.mp3',words:[{text:'Stock',start:0,end:.3},{text:'crashes',start:.7,end:1},{text:'now',start:1.1,end:1.3}]}]);
  assert.equal(r.spec.scenes[0].events[0].kind,'crash');assert.ok(Math.abs(r.spec.scenes[0].events[0].at-.82)<.001);
+});
+test('currency and multiword sync cues retain their order and match full words first',()=>{
+ const scene={type:'shot',shot:'statement',duration:3,say:'He added $300 to the loan balance.',
+  sync:[{word:'$300',kind:'paper slide'},{word:'loan balance',kind:'statement post'}]};
+ const words=scene.say.split(' ').map((text,index)=>({text,start:index*.25,end:(index+1)*.25}));
+ const r=arrange({version:1,scenes:[scene]},[{audio:'test.mp3',words}]);
+ assert.deepEqual(r.spec.scenes[0].events.map(event=>event.kind),['paper slide','statement post']);
+ assert.ok(Math.abs(r.spec.scenes[0].events[1].at-r.spec.scenes[0].events[0].at-0.75)<0.001);
 });
 test('transition audio respects explicit silence and different authored cues',()=>{
  const scenes=[{type:'hedgy',beat:'risk',headline:'First',duration:2,transition:'cut',transitionSound:'none'},{type:'hedgy',beat:'hedge',headline:'Second',duration:2,transition:'wipe',transitionSound:'shimmer'},{type:'hedgy',beat:'lesson',headline:'Third',duration:2,transition:'zoom',transitionSound:'none'}];

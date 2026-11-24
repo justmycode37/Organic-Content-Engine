@@ -324,9 +324,12 @@ export function captionsFromSpeech(say,words,offset,sceneEnd,{maxWords=6,maxChar
   if(/[.!?…:][”’"')\]]*$/.test(word.text)||(maxWords<6&&/[,;—–][”’"')\]]*$/.test(word.text)&&segment.length>=2))flush();
  });
  flush();
+ let firstIndex=0;const starts=groups.map(items=>{const i=firstIndex;firstIndex+=items.length;return i;});
  return groups.map((items,index)=>{
   const next=groups[index+1]?.[0];
-  const start=offset+items[0].start,end=Math.min(sceneEnd,next?offset+next.start:offset+items.at(-1).end+0.3);
+  // A caption that closes a shot ends with its last word, never lingering over the next shot.
+  const cutAfter=next&&breaks.has(starts[index+1]);
+  const start=offset+items[0].start,end=Math.min(sceneEnd,next?(cutAfter?Math.min(offset+next.start,offset+items.at(-1).end+0.15):offset+next.start):offset+items.at(-1).end+0.3);
   // Adjacent accent words merge into one span so the renderer sees a single marked phrase.
   return {text:items.map(item=>item.text).join(' ').replaceAll('* *',' ').replace(/[,;:]$/,''),start:Math.round(start*1000)/1000,end:Math.round(end*1000)/1000,words:items.map(item=>({start:Math.round((offset+item.start)*1000)/1000,end:Math.round((offset+item.end)*1000)/1000}))};
  }).filter(caption=>caption.end-caption.start>0.05);
@@ -484,7 +487,16 @@ export function arrange(spec,spoken,defs=sceneDefs,options={}){
   const duration=Math.min(8,Math.max(CONTINUOUS?0.5:1.2,needed,last&&!viral?scene.duration:0)+(last&&viral?1.25:cinematicTail));
   const {say:_say,caption:_caption,...rest}=scene;
   // Hits keep their relative position in the scene.
-  const events=scene.sync?.flatMap(cue=>{const match=voice.words.find(w=>w.text.toLowerCase().replace(/[^a-z0-9]/g,'').includes(cue.word.toLowerCase()));return match?[{kind:cue.kind,at:LEAD+match.start}]:[]});
+  const normalizeToken=token=>token.toLowerCase().replace(/[^a-z0-9]/g,'');
+  const tokens=voice.words.map(word=>normalizeToken(word.text));
+  const events=scene.sync?.flatMap(cue=>{
+   const phrase=cue.word.trim().split(/\s+/).map(normalizeToken).filter(Boolean);
+   if(!phrase.length)return [];
+   let index=tokens.findIndex((_,i)=>phrase.every((word,j)=>word===tokens[i+j]));
+   // Legacy cues sometimes name a word stem. A whole word or phrase always wins.
+   if(index<0&&phrase.length===1)index=tokens.findIndex(word=>word.includes(phrase[0]));
+   return index<0?[]:[{kind:cue.kind,at:LEAD+voice.words[index].start}];
+  });
   return {...rest,duration,...(events?{events}:{}),...(scene.hits?{hits:scene.hits.map(hit=>Math.round(Math.min(duration-0.05,hit*duration/scene.duration)*100)/100)}:{})};
  });
  const timed={...spec,scenes};
@@ -694,7 +706,12 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    // Viral reels: the bed drops out for a beat before the payoff line so the punchline lands in the gap.
    const payoffAt=spec.look==='viral'?placeScenes(spec).at(-1)?.start:undefined;
    const payoffGap=payoffAt>1?`if(between(t,${(payoffAt-0.5).toFixed(3)},${(payoffAt+0.12).toFixed(3)}),0.16,1)`:null;
-   const cutExpression=[musicCut,payoffGap].filter(Boolean).join('*');
+   // ...and for a beat right before the concept's name is spoken (the reveal).
+   const termWords=String(spec.term??'').toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,'')).filter(Boolean);
+   let termAt;
+   if(spec.look==='viral'&&termWords.length)for(const caption of spec.captions??[]){const words=caption.text.toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,''));const i=words.findIndex((_,k)=>termWords.every((w,j)=>words[k+j]===w));if(i>=0){termAt=caption.words?.[i]?.start??caption.start;break;}}
+   const termGap=termAt>1.5?`if(between(t,${(termAt-0.4).toFixed(3)},${(termAt+0.05).toFixed(3)}),0.2,1)`:null;
+   const cutExpression=[musicCut,payoffGap,termGap].filter(Boolean).join('*');
    const musicCutFilter=cutExpression?`volume='${cutExpression}':eval=frame,`:'';
    filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-(spec.look==='viral'?0.35:0.82)).toFixed(3)}:d=${spec.look==='viral'?'0.35':'0.82'},extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
    // Keep the low band grounded, then add a narrow body-band lift at the jump and pressure points.
