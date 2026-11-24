@@ -1,4 +1,4 @@
-import { CAPTION_Y, clamp, ease, font, markupWords, type Frame, type Span } from './core.ts';
+import { CAPTION_Y, clamp, ease, font, markupWords, placeScenes, type Frame, type PlacedScene, type ReelSpec, type Span } from './core.ts';
 import { textWidth } from './prim.ts';
 
 export interface CaptionWordTiming { text?: string; start: number; end: number }
@@ -9,6 +9,28 @@ export interface ActiveCaption {
   /** Optional absolute reel-time word timings. Existing audio-generated captions work without this field. */
   wordTimings?: readonly CaptionWordTiming[];
 }
+function extendSmallCaptionGaps(captions: ActiveCaption[], cuts: number[]): ActiveCaption[] {
+  const sorted = captions.sort((a, b) => a.start - b.start);
+  for (const [index, current] of sorted.entries()) {
+    const next = sorted[index + 1];
+    if (next && next.start > current.end && next.start - current.end < 0.25) current.end = next.start;
+    const cut = cuts.find(at => at > current.start);
+    if (cut !== undefined) current.end = Math.min(current.end, cut);
+  }
+  return sorted;
+}
+
+/** Per-scene captions laid on the reel timeline; explicit `spec.captions` win when present. */
+export function reelCaptions(spec: ReelSpec, placed: PlacedScene[] = placeScenes(spec)): ActiveCaption[] {
+  const cuts = spec.look === 'viral' ? placed.slice(1).map(scene => scene.start) : [];
+  if (spec.captions?.length) return extendSmallCaptionGaps(spec.captions.map(c => ({ text: c.text, start: c.start, end: c.end, ...(c.words ? { wordTimings: c.words } : {}) })), cuts);
+  return extendSmallCaptionGaps(placed.flatMap(scene => {
+    const lines = (Array.isArray(scene.spec.caption) ? scene.spec.caption : scene.spec.caption ? [scene.spec.caption] : []).filter(line => line.trim());
+    const span = (scene.end - scene.start) / Math.max(1, lines.length);
+    return lines.map((text, index) => ({ text, start: scene.start + index * span, end: scene.start + (index + 1) * span }));
+  }), cuts);
+}
+
 type CaptionWord = Span & { joinPrevious?: boolean; start?: number; end?: number; semantic?: 'gain' | 'loss' };
 
 const MAX_WIDTH = 960;

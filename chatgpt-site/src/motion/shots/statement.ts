@@ -22,6 +22,8 @@ function plan(props: ShotProps, dur: number) {
     next: str(p, 'next', ''),
     monthlyRate: str(p, 'monthlyRate', ''),
     question: str(p, 'question', ''),
+    offerText: str(p, 'offerText', ''),
+    chargeDetail: str(p, 'chargeDetail', ''),
   };
 }
 
@@ -36,7 +38,7 @@ function text(ctx: Frame['ctx'], value: string, y: number, size: number, fill = 
 export const statementShot: ShotDef = {
   name: 'statement',
   stage: 'clean',
-  describe: 'A large paper statement with legible balances and a Hedgy reaction. params: view ("offer", "accrue", "balance", "charge" or "question"), title (short name on the paper), before (starting balance as text), change (signed amount as text), after (updated balance as text), rate (unchanged annual rate as text), months (2–12), monthly (dollars accruing each month), monthlyRate (optional monthly rate as text), next (optional next interest charge attributable to change, as text), question (optional short borrower question). For loan-payment deferral: offer shows a car and a pause button, event 1 presses it and event 2 reveals the extra debt; accrue counts months and unpaid interest from event 1 to 2; balance shows the old balance, event 1 slides in unpaid interest and event 2 posts it to principal; charge shows the monthly rate on event 1 and the next interest charge branching from the amount on event 2; question returns to the opening offer and replaces the pause button with the borrower question on event 1. Keep amounts and timing consistent with narration. The printed values already carry the result.',
+  describe: 'A large paper statement with legible balances and a Hedgy reaction. params: view ("offer", "accrue", "balance", "charge" or "question"), title (short name on the paper), before (starting balance as text), change (signed amount as text), after (updated balance as text), rate (unchanged annual rate as text), months (2–12), monthly (dollars accruing each month), monthlyRate (optional monthly rate as text), next (optional next interest charge attributable to change, as text), question (optional short borrower question), offerText (optional approved offer text instead of a debt reveal in the hook), chargeDetail (optional duration and rate text for the next-charge calculation). For loan-payment deferral: offer shows a car and a pause button, event 1 presses it and event 2 reveals the extra debt; accrue counts months and unpaid interest from event 1 to 2; balance shows the old balance, event 1 slides in unpaid interest and event 2 posts it to principal; charge shows the monthly rate on event 1 and the next interest charge branching from the amount on event 2; question returns to the opening offer and replaces the pause button with the borrower question on event 1. Keep amounts and timing consistent with narration. The printed values already carry the result.',
   render(frame, props) {
     const { ctx, t, dur } = frame, s = plan(props, dur);
     const reveal = ease.outCubic(phase(t, s.first, s.first + 0.26));
@@ -46,6 +48,13 @@ export const statementShot: ShotDef = {
     drawStage(ctx, { line: true });
     if (car) drawItem(ctx, 'car', { x: 451, y: 674, t, scale: 0.62 });
 
+    ctx.save();
+    if (s.view === 'charge') {
+      const zoom = 1 + 0.1 * ease.outCubic(phase(t, 0, 0.45));
+      ctx.translate(X, TOP + 131);
+      ctx.scale(zoom, zoom);
+      ctx.translate(-X, -TOP - 131);
+    }
     ctx.fillStyle = 'rgba(0,0,0,0.45)';
     ctx.fillRect(X - W / 2 + 9, TOP + 12, W, 262);
     ctx.fillStyle = PAPER;
@@ -66,9 +75,9 @@ export const statementShot: ShotDef = {
       text(ctx, pressed ? 'PAYMENTS PAUSED' : 'PAUSE PAYMENTS?', TOP + 103, 37);
       const extraDebt = pressed && post > 0;
       const buttonY = TOP + 141 + reveal * (pressed && !extraDebt ? 5 : 0);
-      ctx.fillStyle = extraDebt ? LOSS : INK;
+      ctx.fillStyle = extraDebt && !s.offerText ? LOSS : INK;
       ctx.fillRect(X - 165, buttonY, 330, 84);
-      text(ctx, extraDebt ? s.change : pressed ? 'INTEREST: ON' : 'Ⅱ  PAUSE', buttonY + 44, extraDebt ? 59 : 31, PAPER, 290);
+      text(ctx, extraDebt ? (s.offerText || s.change) : pressed ? 'INTEREST: ON' : 'Ⅱ  PAUSE', buttonY + 44, extraDebt && !s.offerText ? 59 : 31, PAPER, 290);
     } else if (s.view === 'accrue') {
       const step = Math.min(s.months, Math.floor(phase(t, s.first, Math.max(s.first + 0.1, s.second)) * (s.months + 1)));
       const width = (W - 72) / s.months, start = X - (W - 72) / 2;
@@ -77,21 +86,41 @@ export const statementShot: ShotDef = {
         ctx.fillRect(start + i * width, TOP + 65, width - 5, 19);
       }
       const sum = usd.format(step * s.monthly).replace(/\.00$/, '');
-      text(ctx, `MONTH ${step} / ${s.months}`, TOP + 109, 26);
+      text(ctx, `MONTH ${step} / ${s.months}   •   ${s.before} AT ${s.rate}`, TOP + 113, 21);
       text(ctx, sum, TOP + 169, 62, LOSS);
       text(ctx, 'UNPAID INTEREST', TOP + 229, 25, LOSS);
     } else if (s.view === 'balance') {
-      text(ctx, `BALANCE   •   ${s.rate} / YEAR`, TOP + 79, 24);
-      text(ctx, post >= 0.65 ? s.after : s.before, TOP + 138, 63, post >= 0.65 ? LOSS : INK);
-      ctx.globalAlpha *= reveal * (1 - post);
-      text(ctx, `${s.change} UNPAID INTEREST`, TOP + 226 + (1 - reveal) * 20 - post * 92, 28, LOSS);
+      const posted = post >= 0.65;
+      text(ctx, posted ? `WAS ${s.before}   •   ${s.rate} / YEAR` : `BALANCE   •   ${s.rate} / YEAR`, TOP + 79, 24);
+      text(ctx, posted ? s.after : s.before, TOP + 135, 63, posted ? LOSS : INK);
+      if (!posted) {
+        ctx.globalAlpha *= reveal;
+        const chipY = TOP + 231 + (1 - reveal) * 18 - post * 95;
+        const chipX = X + (1 - post) * 112;
+        ctx.translate(chipX - X, 0);
+        ctx.fillStyle = LOSS;
+        ctx.fillRect(X - 90, chipY - 20, 180, 40);
+        text(ctx, s.change, chipY, 29, PAPER, 164);
+        if (post < 0.14) {
+          ctx.translate(X - chipX, 0);
+          text(ctx, 'UNPAID INTEREST', TOP + 191, 21, LOSS, 215);
+        }
+      } else {
+        text(ctx, 'NEW BALANCE', TOP + 186, 22, LOSS);
+        text(ctx, `INCLUDES ${s.change.replace(/^\+/, '')} UNPAID INTEREST`, TOP + 233, 22, LOSS);
+      }
     } else {
-      text(ctx, `FROM THE PAUSE: ${s.change.replace(/^\+/, '')}`, TOP + 84, 28);
-      if (s.monthlyRate && t >= s.first) text(ctx, `× ${s.monthlyRate} THIS MONTH`, TOP + 122, 25);
+      const chipY = TOP + 85 + (1 - ease.outCubic(phase(t, 0, 0.44))) * 72;
+      ctx.fillStyle = LOSS;
+      ctx.fillRect(X - 87, chipY - 21, 174, 42);
+      text(ctx, s.change.replace(/^\+/, ''), chipY, 32, PAPER, 153);
+      if (s.chargeDetail && t >= s.first) text(ctx, s.chargeDetail, TOP + 131, 24);
+      else if (s.monthlyRate && t >= s.first) text(ctx, `× ${s.monthlyRate} THIS MONTH`, TOP + 132, 26);
       ctx.globalAlpha *= post;
       text(ctx, s.next || '↓', TOP + 180, 65, LOSS);
-      text(ctx, 'NEW INTEREST', TOP + 231, 28, LOSS);
+      text(ctx, 'INTEREST ON INTEREST', TOP + 231, 25, LOSS);
     }
+    ctx.restore();
     ctx.restore();
     drawActor(ctx, { who: 'hedgy', x: car ? 166 : 220, y: 776, scale: 0.65, facing: 1, time: t, pose: owed ? 'shock' : 'lookup', expression: owed ? 'shocked' : 'worried', look: 'up' });
   },

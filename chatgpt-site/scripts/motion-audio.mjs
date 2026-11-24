@@ -703,15 +703,12 @@ if(process.argv[1]&&fileURLToPath(import.meta.url)===process.argv[1]){
    ].sort((a,b)=>a.at-b.at);
    const bodyLiftExpression=steppedVolumeExpression(bodyLiftPoints,0);
    const pressureGain=musicAutomation.pressure?`if(between(t,${Math.max(0,musicAutomation.pressure.at-0.1).toFixed(3)},${Math.min(duration,musicAutomation.pressure.at+0.3).toFixed(3)}),1.584893,1)`:'1';
-   // Viral reels: the bed drops out for a beat before the payoff line so the punchline lands in the gap.
-   const payoffAt=spec.look==='viral'?placeScenes(spec).at(-1)?.start:undefined;
-   const payoffGap=payoffAt>1?`if(between(t,${(payoffAt-0.5).toFixed(3)},${(payoffAt+0.12).toFixed(3)}),0.16,1)`:null;
-   // ...and for a beat right before the concept's name is spoken (the reveal).
+   // Emphasize a named concept on its spoken cue. A shot cut on its own does not interrupt the score.
    const termWords=String(spec.term??'').toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,'')).filter(Boolean);
    let termAt;
    if(spec.look==='viral'&&termWords.length)for(const caption of spec.captions??[]){const words=caption.text.toLowerCase().split(/\s+/).map(w=>w.replace(/[^a-z0-9$%]/g,''));const i=words.findIndex((_,k)=>termWords.every((w,j)=>words[k+j]===w));if(i>=0){termAt=caption.words?.[i]?.start??caption.start;break;}}
    const termGap=termAt>1.5?`if(between(t,${(termAt-0.4).toFixed(3)},${(termAt+0.05).toFixed(3)}),0.2,1)`:null;
-   const cutExpression=[musicCut,payoffGap,termGap].filter(Boolean).join('*');
+   const cutExpression=[musicCut,termGap].filter(Boolean).join('*');
    const musicCutFilter=cutExpression?`volume='${cutExpression}':eval=frame,`:'';
    filters.push(`[${cues.length}:a]aresample=48000,aformat=channel_layouts=stereo,atrim=0:${total},loudnorm=I=-20:TP=-1:LRA=11,${musicCutFilter}volume=${ACTIVE_STYLE==='cinematic'?'0.52':'0.4'},afade=t=out:st=${Math.max(0,duration-(spec.look==='viral'?0.35:0.82)).toFixed(3)}:d=${spec.look==='viral'?'0.35':'0.82'},extrastereo=m=${ACTIVE_STYLE==='cinematic'?'1.035':'1.07'},${pad}[musicSource]`);
    // Keep the low band grounded, then add a narrow body-band lift at the jump and pressure points.

@@ -1,4 +1,4 @@
-import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun} from '../services/account-automation.ts';
+import {tickAccounts,claimAccountJob,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
 import {Postiz} from '../services/postiz.ts';
 import {accountNotices,acknowledgeNotices} from '../services/account-notifications.ts';
 import {SocialAccounts,platformOf as scopedPlatformOf} from '../services/social.ts';
@@ -208,6 +208,13 @@ export function createApp(): Hono<AppEnv> {
   app.post('/api/jobs/accounts/notifications/ack',async c=>{const input=await readBody(c,validator.object({ids:validator.array(validator.string().max(200)).max(50)}).strict());return c.json(await acknowledgeNotices(c.get('container'),input.ids));});
   app.post('/api/jobs/accounts/claim',async c=>{const x=c.get('container');await publishAccountJobs(x,c.env);await tickAccounts(x,c.env);return c.json(await claimAccountJob(x));});
   app.get('/api/jobs/accounts/health',async c=>c.json({ok:true,apiConfigured:!!c.env.OPENAI_API_KEY,audioConfigured:!!c.env.ELEVENLABS_API_KEY,accounts:await listAccounts(c.get('container').db)}));
+  const evaluationRound=validator.coerce.number().int().min(12).max(10000).refine(round=>round%2===0,'Choose an even Hedgy evaluation round');
+  app.get('/api/jobs/accounts/hedgy/evaluation/:round',async c=>c.json(await hedgyEvaluationStatus(c.get('container'),c.env,evaluationRound.parse(c.req.param('round')))));
+  app.post('/api/jobs/accounts/hedgy/evaluation/:round',async c=>{
+   const round=evaluationRound.parse(c.req.param('round'));
+   const input=await readBody(c,validator.object({digest:validator.string().regex(/^[0-9a-f]{64}$/),integrationId:validator.string().min(1).max(200)}).strict());
+   return c.json(await reserveHedgyEvaluation(c.get('container'),c.env,round,input.digest,input.integrationId));
+  });
   app.post('/api/jobs/accounts/quriozity/schedule',async c=>{const input=await readBody(c,validator.object({scheduledAt:validator.string().datetime()}).strict());return c.json(await scheduleQuriozityRun(c.get('container'),c.env,input.scheduledAt));});
   app.post('/api/jobs/accounts/:id/:lease/heartbeat',async c=>c.json(await heartbeatAccountJob(c.get('container'),c.req.param('id'),c.req.param('lease'))));
   app.put('/api/jobs/accounts/:id/:lease/output',async c=>{

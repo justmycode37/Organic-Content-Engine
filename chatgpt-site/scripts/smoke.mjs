@@ -924,6 +924,43 @@ test('account worker leases exclusively, persists one finished output and comple
 const postizTarget={id:'ig-postiz-1',name:'Test brand',identifier:'instagram-standalone',profile:'test_brand',disabled:false};
 const accountToken='account-worker-token-account-worker-token';
 const accountHeaders={authorization:`Bearer ${accountToken}`};
+test('reviewed Hedgy rounds use the hosted Postiz key once and skip the generation queue',async()=>{
+ let creates=0;
+ const s=await start({POSTIZ_API_KEY:'test',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'hedgy-evaluation-publish',outboundService:async request=>{
+  const path=new URL(request.url).pathname;
+  if(path.endsWith('/integrations'))return Response.json([postizTarget]);
+  if(path.endsWith('/upload')){await request.arrayBuffer();return Response.json({id:'evaluation-media',path:'https://uploads.postiz.com/evaluation.mp4'});}
+  if(request.method==='POST'){creates++;return Response.json([{postId:'evaluation-post',integration:postizTarget.id}]);}
+  return Response.json({posts:[{id:'evaluation-post',state:'PUBLISHED',releaseURL:'https://www.instagram.com/reel/abc/',integration:{id:postizTarget.id}}]});
+ }});
+ const route='/api/jobs/accounts/hedgy/evaluation/12',input={digest:'a'.repeat(64),integrationId:postizTarget.id};
+ const request={headers:accountHeaders,json:input};
+ try{
+  await s.call('GET','/api/accounts');
+  assert.equal((await s.call('PATCH','/api/accounts/hedgy',{json:{postizIntegrationId:postizTarget.id}})).status,200);
+  assert.equal((await s.call('GET',route,{headers:{}})).status,401);
+  assert.equal((await s.call('POST',route.replace(/12$/,'13'),request)).status,400);
+  assert.equal((await s.call('GET',route,{headers:accountHeaders})).body.destination.id,postizTarget.id);
+  const reserved=await s.call('POST',route,request);assert.equal(reserved.status,200,JSON.stringify(reserved.body));
+  const {id,lease}=reserved.body;
+  assert.equal((await s.call('POST',route,request)).body.lease,lease);
+  assert.equal((await s.call('POST',route,{...request,json:{...input,digest:'b'.repeat(64)}})).status,409);
+  assert.equal((await s.call('POST','/api/jobs/accounts/claim',{headers:accountHeaders})).body.job,null);
+  const bytes=new Uint8Array(1024*1024+1),job=`/api/jobs/accounts/${id}/${lease}`;
+  const uploaded=await s.mf.dispatchFetch(`https://site.example${job}/output`,{method:'PUT',headers:{...accountHeaders,'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes});
+  assert.equal(uploaded.status,200);
+  const {materialId}=await uploaded.json();
+  const postCaption='Why does the cheapest deal cost more?\n\nHedgy needs apples for a busy market day. The lowest price is for a full crate, but he sells only part of it before closing and the rest goes to waste.\n\nThe price per apple sounds like a bargain. The price for the apples he actually uses tells a different story. Compare how much you will use before buying in bulk.\n\n#Finance #Shopping #EverydayMoney';
+  assert.equal((await s.call('POST',`${job}/complete`,{headers:accountHeaders,json:{materialId,spec:{series:'HEDGY / FINANCE',postCaption},provenance:{}}})).status,200);
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});
+  assert.equal(creates,1,JSON.stringify(await s.db.prepare('SELECT status,error FROM account_automation_jobs WHERE id=?').bind(id).first()));
+  await s.db.prepare('UPDATE account_automation_jobs SET publish_until=NULL WHERE id=?').bind(id).run();
+  await s.call('POST','/api/jobs/accounts/tick',{headers:accountHeaders});
+  assert.equal((await s.call('GET',route,{headers:accountHeaders})).body.status,'published');
+  assert.equal((await s.call('POST',route,request)).body.status,'published');
+  assert.equal(creates,1);
+ }finally{await s.stop();}
+});
 test('weekly account schedules validate, bind a Postiz account, and require an explicit start',async()=>{
  const s=await start({POSTIZ_API_KEY:'postiz-private-key',ACCOUNT_WORKER_TOKEN:accountToken,PUBLISH_MODE:'live'},{persist:'postiz-settings',outboundService:async()=>Response.json([postizTarget])});
  try{
