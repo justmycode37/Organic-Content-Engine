@@ -111,6 +111,23 @@ class DocumentaryTests(unittest.TestCase):
         cues=caption_cues({'beats':beats},[2,3],alignment)
         self.assertEqual(cues,[(0,2,'Here.'),(2,4,'First phrase.'),(4,6,'Second phrase.'),(6,9,'Next.')])
 
+    def test_original_interview_has_a_quiet_score_and_the_theme_returns_afterward(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        import wave
+        from score import score, SR
+        beats=[{'kind':'footage','musicTheme':'pulse'},
+               {'kind':'footage','originalSpeech':True},
+               {'kind':'footage','musicTheme':'resolution'}]
+        with TemporaryDirectory() as folder:
+            path=Path(folder)/'score.wav'
+            score(path,[3,2,4],beats)
+            with wave.open(str(path)) as stream:
+                samples=np.frombuffer(stream.readframes(stream.getnframes()),dtype='<i2').reshape(-1,2)
+        self.assertGreater(np.max(np.abs(samples[SR:2*SR])),0)
+        self.assertFalse(np.any(samples[3*SR:5*SR]))
+        self.assertGreater(np.max(np.abs(samples[6*SR:8*SR])),0)
+
     def test_reading_hold_preserves_narration_and_delays_next_caption(self):
         import wave
         from pathlib import Path

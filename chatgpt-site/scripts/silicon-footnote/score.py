@@ -1,5 +1,6 @@
 """Write a quiet original instrumental bed and picture-synchronous Foley in stereo."""
 import math
+from bisect import bisect_right
 import wave
 import subprocess
 from pathlib import Path
@@ -16,6 +17,13 @@ def hz(note):return 440*2**((note-69)/12)
 def score(path,timing,beats,pack=None):
     frames=round(sum(timing)*SR)
     starts=np.r_[0,np.cumsum(timing)[:-1]]
+    themes={'pulse':0,'field':1,'sparse':2,'resolution':3}
+    theme_changes=[]
+    for onset,beat in zip(starts,beats):
+        theme=beat.get('musicTheme')
+        if theme and (not theme_changes or theme_changes[-1][1]!=themes[theme]):
+            theme_changes.append((onset,themes[theme]))
+    theme_times=[onset for onset,_ in theme_changes]
     events=[]
     for i,(moment,b) in enumerate(zip(starts,beats)):
         if i==0 or b['kind'] in ('chart','quote','document') and (i<2 or b['kind']!=beats[i-1]['kind']):
@@ -56,6 +64,8 @@ def score(path,timing,beats,pack=None):
             raw=np.zeros((n+SR*3,2));raw[:len(tail)]+=tail
             position=start/frames
             movement=0 if position<.24 else 1 if position<.44 else 2 if position<.73 else 3
+            section=bisect_right(theme_times,start/SR)-1
+            if section>=0:movement=theme_changes[section][1]
             chord=CHORDS[((bar//(3 if movement in (0,3) else 2))+[0,3,5,0][movement])%len(CHORDS)]
             def add(at,dur,signal,pan):
                 j=round(at*SR);count=min(round(dur*SR),len(raw)-j)
@@ -107,7 +117,7 @@ def score(path,timing,beats,pack=None):
             for onset,end in interviews:
                 if clock[-1]<onset-.85 or clock[0]>end+.85:continue
                 distance=np.maximum(onset-clock,clock-end)
-                music*= (.36+.64*np.clip(distance/.85,0,1))[:,None]
+                music*=np.clip(distance/.85,0,1)[:,None]
             for onset,room in ambience:
                 offset=round(onset*SR);a=max(start,offset);b=min(start+n,offset+len(room))
                 if a>=b:continue

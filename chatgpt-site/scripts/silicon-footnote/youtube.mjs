@@ -7,8 +7,13 @@ const [action,root]=process.argv.slice(2);
 if(!root||!['publish','status'].includes(action))throw Error('Usage: node youtube.mjs publish|status EDITION_DIRECTORY');
 const dir=resolve(root);
 const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.json'),'utf8')):null;
-if(action==='publish' && (/(?:^|[\\/])evaluation[\\/]r\d+(?:[\\/]|$)/.test(dir) || Object.hasOwn(pack,'round'))){
- throw Error('Evaluation rounds are private');
+if(action==='publish'){
+ const directoryRound=dir.match(/(?:^|[\/])evaluation[\/]r(\d+)(?:[\/]|$)/)?.[1];
+ if(directoryRound||Object.hasOwn(pack,'round')){
+  if(!Number.isInteger(pack.round)||pack.round<11||(directoryRound&&Number(directoryRound)!==pack.round)){
+   throw Error('Round publication resumed with round 11. Check the edition number.');
+  }
+ }
 }
 const id=(await readFile(join(dir,'site-id'),'utf8')).trim();
 if(!/^[a-f\d-]{36}$/.test(id))throw Error('Invalid imported episode ID');
