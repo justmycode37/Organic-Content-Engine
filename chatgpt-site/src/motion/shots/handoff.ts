@@ -15,7 +15,7 @@ function plan(props: ShotProps, dur: number): Plan {
   return { dur, give: give!, back: Math.max(back!, give! + 0.35), from: str(p, 'from', 'lender'), to: str(p, 'to', 'hedgy'), item: itemParam(p, 'item', 'ticket'), backItem: isItem(backItem) ? backItem : undefined };
 }
 
-const FROM_X = 140, TO_X = 580, PAW_Y = 652, SHOW_Y = 392, TRAVEL = 0.42;
+const FROM_X = 140, TO_X = 580, PAW_Y = 676, SHOW_Y = 392, TRAVEL = 0.42;
 
 export const handoffShot: ShotDef = {
   name: 'handoff',
@@ -24,7 +24,7 @@ export const handoffShot: ShotDef = {
   render(frame: Frame, props: ShotProps) {
     const { ctx } = frame, dur = Math.max(0.05, frame.dur), t = clamp(frame.t, 0, dur), s = plan(props, dur), p = props.params;
     const rawSize = itemSize(s.item);
-    const itemScale = Math.min(0.5, 180 / rawSize.w, 190 / rawSize.h);
+    const itemScale = Math.min(0.45, 150 / rawSize.w, 150 / rawSize.h);
     const size = itemSize(s.item, itemScale);
     // Key positions: shown above the giver's head, lowered to the paw, passed paw to paw, lifted by the taker.
     // Held in the giver's paw at chest height (never floating overhead), passed, then held by the taker.
