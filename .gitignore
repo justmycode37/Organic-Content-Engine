@@ -17,6 +17,7 @@ chatgpt-credentials.json.*.tmp
 
 # Local reel renders, provider traces and previews
 artifacts/
+/videos/*.mp4
 
 # Local Python analysis bytecode
 __pycache__/

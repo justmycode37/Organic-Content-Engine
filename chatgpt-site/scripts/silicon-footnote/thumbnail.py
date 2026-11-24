@@ -1,26 +1,22 @@
 """Compose original YouTube covers from a script and independently sourced stills."""
+import io
 import json
+import subprocess
 import sys
 from pathlib import Path
 
-from PIL import Image, ImageDraw, ImageOps
+from PIL import Image, ImageDraw, ImageFilter, ImageOps, ImageStat
 
 from motion import font, wrap
 
 SCALE = 3
 W, H = 1280, 720
-AMBER = '#ffcc70'
-INK = '#10151a'
 PAPER = '#f4f0e7'
 MAX_BYTES = 2 * 1024 * 1024
 
 
 def xy(x, y):
     return x * SCALE, y * SCALE
-
-
-def rect(draw, box, **style):
-    draw.rectangle(tuple(value * SCALE for value in box), **style)
 
 
 def label(draw, x, y, words, size, color, *, mono=False):
@@ -37,58 +33,6 @@ def headline(draw, x, y, words, width, color):
                 label(draw, x, y + index * (size + 9), line, size, color)
             return
     raise ValueError('Cover line is too long to render')
-
-
-def document(draw, x, y, width, height, source_title):
-    rect(draw, (x + 20, y + 20, x + width + 20, y + height + 20), fill='#6d5030')
-    rect(draw, (x, y, x + width, y + height), fill=PAPER)
-    label(draw, x + 35, y + 32, 'SOURCE', 23, INK, mono=True)
-    face = font(44 * SCALE, bold=True)
-    limit = (width - 70) * SCALE
-    lines = wrap(source_title, face, limit)
-    for index, line in enumerate(lines[:3]):
-        if index == 2 and len(lines) > 3:
-            line += '…'
-        if face.getlength(line) > limit:
-            line = line.rstrip('…')
-            while face.getlength(line + '…') > limit:
-                line = line[:-1]
-            line += '…'
-        label(draw, x + 35, y + 89 + 52 * index, line, 44, INK)
-    rect(draw, (x + 35, y + height - 103, x + width - 42, y + height - 65), fill=AMBER)
-
-
-def subject_illustration(draw, motif):
-    rect(draw, (558, 0, W, H), fill='#292621')
-    # A single large symbol stays legible at feed size.
-    points = {
-        'power': [(932, 130), (745, 393), (882, 393), (849, 589),
-                  (1058, 311), (920, 311), (932, 130)],
-        'document': [(752, 149), (981, 149), (1063, 231), (1063, 571),
-                     (752, 571), (752, 149)],
-    }
-    if motif in points:
-        draw.line([xy(x, y) for x, y in points[motif]], fill=AMBER,
-                  width=17 * SCALE, joint='curve')
-    if motif == 'document':
-        draw.line([xy(981, 149), xy(981, 231), xy(1063, 231)],
-                  fill=AMBER, width=17 * SCALE)
-        for y in (300, 373, 446):
-            rect(draw, (811, y, 999, y + 18), fill=PAPER)
-    elif motif == 'chip':
-        rect(draw, (757, 200, 1057, 500), fill=AMBER)
-        rect(draw, (810, 253, 1004, 447), outline=INK, width=14 * SCALE)
-        for offset in range(0, 241, 60):
-            rect(draw, (775 + offset, 149, 798 + offset, 200), fill=PAPER)
-            rect(draw, (775 + offset, 500, 798 + offset, 551), fill=PAPER)
-            rect(draw, (706, 218 + offset, 757, 241 + offset), fill=PAPER)
-            rect(draw, (1057, 218 + offset, 1108, 241 + offset), fill=PAPER)
-    elif motif == 'workflow':
-        path = [xy(702, 488), xy(854, 488), xy(854, 355),
-                xy(961, 355), xy(961, 222), xy(1105, 222)]
-        draw.line(path, fill=AMBER, width=16 * SCALE, joint='curve')
-        for x, y in ((702, 488), (904, 355), (1105, 222)):
-            draw.ellipse((*xy(x - 33, y - 33), *xy(x + 33, y + 33)), fill=PAPER)
 
 
 def write_jpeg(image, path):
@@ -108,48 +52,51 @@ def render(root):
     plan = json.loads((root / 'episode.json').read_text())
     pack = json.loads((root / 'sources.json').read_text())
     opening = plan['beats'][0]
-    source = pack['sources'][opening['source']]
     concept = plan.get('thumbnails') or {}
-    subject = concept.get('subjectLine') or plan['title']
-    evidence = concept.get('evidenceLine') or opening['title'] or plan['title']
     still = concept.get('still')
-    images = pack.get('images', [])
-    asset = images[still] if isinstance(still, int) and 0 <= still < len(images) else None
-    credit = None
+    shots = [s for beat in plan['beats'] for s in (beat, *beat.get('cutaways', []))
+             if s.get('kind') == 'footage' and not s.get('originalSpeech')]
+    if not shots:
+        shots = [{'clip': 0}]
 
-    # Cover A gives the title a single concrete subject.
-    image = Image.new('RGB', xy(W, H), INK)
-    if asset:
-        try:
-            with Image.open(root / f'image-{still}.png') as original:
-                photo = ImageOps.fit(ImageOps.exif_transpose(original).convert('RGB'),
-                                     xy(724, H), method=Image.Resampling.LANCZOS)
-                image.paste(photo, xy(556, 0))
-            credit = {'label': asset['credit'], 'url': asset['page']}
-        except (OSError, Image.DecompressionBombError):
-            pass
-    draw = ImageDraw.Draw(image)
-    if not credit:
-        subject_illustration(draw, concept.get('motif', 'document'))
-    rect(draw, (0, 0, 557, H), fill=INK)
-    label(draw, 65, 73, 'SILICON FOOTNOTE', 22, AMBER, mono=True)
-    headline(draw, 65, 240, subject, 444, PAPER)
-    write_jpeg(image, root / 'thumbnail-subject.jpg')
+    def camera_frame(shot):
+        index = shot.get('clip', 0)
+        clip = pack['clips'][index]
+        windows = clip.get('coverage') or []
+        at = shot.get('clipStart', windows[0]['start'] if windows else 0) + .35
+        raw = subprocess.check_output(['ffmpeg', '-v', 'error', '-ss', str(at),
+            '-i', str(root / f'clip-{index}.mp4'), '-frames:v', '1',
+            '-f', 'image2pipe', '-c:v', 'png', '-'])
+        return Image.open(io.BytesIO(raw)).convert('RGB'), {'label': clip['credit'], 'url': clip['url']}
 
-    # Cover B uses typography and the opening source as its visual evidence.
-    image = Image.new('RGB', xy(W, H), PAPER)
-    draw = ImageDraw.Draw(image)
-    rect(draw, (747, 0, W, H), fill=INK)
-    rect(draw, (747, 0, 754, H), fill=AMBER)
-    label(draw, 73, 73, 'SILICON FOOTNOTE', 22, INK, mono=True)
-    headline(draw, 73, 230, evidence, 610, INK)
-    document(draw, 785, 153, 434, 371, source['title'])
-    write_jpeg(image, root / 'thumbnail-evidence.jpg')
-
-    return [
-        {'id': 'subject', 'line': subject, **({'credit': credit} if credit else {})},
-        {'id': 'evidence', 'line': evidence},
-    ]
+    variants = [('subject', concept.get('subjectLine') or plan['title']),
+                ('evidence', concept.get('evidenceLine') or opening['title'])]
+    entries = []
+    for variant, line in variants:
+        source = None
+        if variant == 'subject' and isinstance(still, int) and 0 <= still < len(pack.get('images', [])):
+            try:
+                with Image.open(root / f'image-{still}.png') as original:
+                    source = ImageOps.exif_transpose(original).convert('RGB')
+                asset = pack['images'][still]
+                credit = {'label': asset['credit'], 'url': asset['page']}
+            except (OSError, Image.DecompressionBombError):
+                pass
+        if source is None:
+            source, credit = camera_frame(shots[0 if variant == 'subject' else len(shots)//2])
+        image = ImageOps.fit(source, xy(W, H), method=Image.Resampling.LANCZOS)
+        edges = image.resize((96, 54)).convert('L').filter(ImageFilter.FIND_EDGES)
+        left = ImageStat.Stat(edges.crop((2, 2, 42, 52))).mean[0]
+        right = ImageStat.Stat(edges.crop((54, 2, 94, 52))).mean[0]
+        dark = Image.new('L', (W, 1))
+        dark.putdata([round(215 * max(0, min(1, (970-x)/670))) for x in range(W)])
+        if right < left:
+            dark = ImageOps.mirror(dark)
+        image.paste((8, 10, 13), (0, 0, *image.size), dark.resize(image.size))
+        headline(ImageDraw.Draw(image), 660 if right < left else 56, 223, line, 566, PAPER)
+        write_jpeg(image, root / f'thumbnail-{variant}.jpg')
+        entries.append({'id': variant, 'line': line, 'credit': credit})
+    return entries
 
 
 if __name__ == '__main__':
