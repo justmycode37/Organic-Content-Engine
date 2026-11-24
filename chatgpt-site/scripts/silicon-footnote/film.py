@@ -248,7 +248,7 @@ class Sequence:
             d.line((70+i*395,218,108+i*395,218),fill=color,width=6)
             typeblock(d,119+i*395,205,series['label'],350,26,WHITE,lines=1)
         if t>=self.b.get('revealAt',0):typeblock(d,70,606,self.caption,1140,30,WHITE,'bold',2)
-        typeblock(d,70,675,'Illustration · hypothetical customers' if c.get('illustrative') else publisher(self.source),1100,20,'#d4d6db',lines=1)
+        typeblock(d,70,675,'Illustrative model' if c.get('illustrative') else publisher(self.source),1100,20,'#d4d6db',lines=1)
         return im
 
     def plot(self,t):
@@ -315,6 +315,49 @@ class Sequence:
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)
         return im
+    def track_map(self,t):
+        c=self.b['chart']
+        left,top,width,height=70,182,1140,390
+        west,south,east,north=c['bounds']
+        cosine=math.cos(math.radians((north+south)/2))
+        scale=min(width/((east-west)*cosine),height/(north-south))
+        def project(lon,lat):
+            return (width/2+(lon-(east+west)/2)*cosine*scale,
+                    height/2-(lat-(south+north)/2)*scale)
+        if not hasattr(self,'map_base'):
+            base=Image.new('RGB',(width,height),'#161a1d')
+            brush=ImageDraw.Draw(base)
+            for ring in c['land']:
+                brush.polygon([project(*point) for point in ring],fill='#3e4448',outline='#959d9f',width=2)
+            for place in c['places']:
+                x,y=project(*place['point'])
+                brush.text((x,y),place['label'],font=face(25,'title'),fill='#f3f4f4',anchor='mm')
+            self.map_base=base
+        board=self.map_base.copy()
+        brush=ImageDraw.Draw(board)
+        image=Image.new('RGB',(W,H),'#101215')
+        draw=ImageDraw.Draw(image)
+        typeblock(draw,68,47,self.head,1144,62,WHITE,'title',1)
+        for i,route in enumerate(c['routes']):
+            at=self.b.get('revealAt',1.8) if i else 0
+            if t<at:continue
+            pts=[project(*point) for point in route['points']]
+            limit=(len(pts)-1)*ease((t-at)/1.15)
+            full=int(limit)
+            visible=pts[:full+1]
+            if full<len(pts)-1:
+                x,y=pts[full];nx,ny=pts[full+1]
+                visible.append((x+(nx-x)*(limit-full),y+(ny-y)*(limit-full)))
+            color=PALETTE[i]
+            if len(visible)>1:brush.line(visible,fill=color,width=5,joint='curve')
+            x,y=visible[-1];brush.ellipse((x-6,y-6,x+6,y+6),fill=WHITE,outline=color,width=3)
+            xx=72+552*i;draw.line((xx,145,xx+43,145),fill=color,width=6)
+            typeblock(draw,xx+55,130,route['label'],480,30,WHITE,lines=1)
+        image.paste(board,(left,top))
+        typeblock(draw,70,594,self.caption,1135,33,WHITE,lines=2)
+        typeblock(draw,70,674,publisher(self.source),1135,19,'#d5d7da',lines=1)
+        return image
+
     def subset(self,t):
         chart=self.b['chart']
         image=Image.new('RGB',(W,H),'#101114')
@@ -402,6 +445,7 @@ class Sequence:
             if layout=='profile':drawing=self.profile(t,length)
             elif layout=='response-window':drawing=self.response_window(t)
             elif layout=='subset':drawing=self.subset(t)
+            elif layout=='track-map':return self.track_map(t)
             else:drawing=self.plot(t)
             return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
         if self.kind in ('document','quote'):

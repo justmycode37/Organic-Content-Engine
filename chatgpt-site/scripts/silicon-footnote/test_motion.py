@@ -29,6 +29,43 @@ class MotionTests(unittest.TestCase):
         self.assertGreater(np.sum(np.all(plate==255,axis=2)),100)
 
 class DocumentaryTests(unittest.TestCase):
+    def test_archive_keeps_round_when_working_file_is_replaced_or_removed(self):
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from render import archive_round
+        with TemporaryDirectory() as directory:
+            project = Path(directory)
+            work = project / 'chatgpt-site' / 'outputs' / 'evaluation' / 'r10'
+            work.mkdir(parents=True)
+            source = work / 'episode.mp4'
+            archived = project / 'videos' / 'round-10.mp4'
+            source.write_bytes(b'first complete cut')
+            archive_round(work)
+            archive_round(work)
+            self.assertTrue(archived.samefile(source))
+            source.unlink()
+            self.assertEqual(archived.read_bytes(), b'first complete cut')
+            source.write_bytes(b'revised complete cut')
+            archive_round(work)
+            self.assertEqual(archived.read_bytes(), b'revised complete cut')
+
+    def test_observed_track_appears_only_after_the_spoken_cue(self):
+        from film import Sequence, PALETTE
+        from PIL import ImageColor
+        beat = {'art': {'headline': 'Where the storm turned', 'caption': 'Matched forecast hour'},
+                'labels': [], 'narration': '', 'kind': 'chart', 'source': 0, 'revealAt': 4,
+                'chart': {'layout': 'track-map', 'bounds': [-80, 15, -74, 20],
+                          'land': [[[-79, 18], [-77, 18], [-76, 19]]], 'places': [],
+                          'routes': [{'label': 'Forecast', 'points': [[-76, 16], [-77, 17]]},
+                                     {'label': 'Observed', 'points': [[-76, 16], [-78, 16]]}]}}
+        scene = Sequence(None, beat, {'sources': [{'url': 'https://www.nhc.noaa.gov'}]}, 0)
+        accent = ImageColor.getrgb(PALETTE[1])
+        def observed_pixels(t):
+            map_area = np.asarray(scene.track_map(t))[182:572, 70:1210]
+            return np.sum(np.all(map_area == accent, axis=2))
+        self.assertEqual(observed_pixels(3.9), 0)
+        self.assertGreater(observed_pixels(5.2), observed_pixels(4.2))
+
     def test_reading_hold_keeps_both_ends_of_a_full_width_headline(self):
         import json
         from pathlib import Path

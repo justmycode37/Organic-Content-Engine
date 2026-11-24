@@ -105,9 +105,9 @@ def score(path,timing,beats,pack=None):
             fade=np.minimum(1,np.maximum(0,(frames/SR-clock)/1.9))*np.minimum(1,clock/.22)
             music=raw[:n].copy()
             for onset,end in interviews:
-                if clock[-1]<onset-.4 or clock[0]>end+.4:continue
+                if clock[-1]<onset-.85 or clock[0]>end+.85:continue
                 distance=np.maximum(onset-clock,clock-end)
-                music*= (.12+.88*np.clip(distance/.4,0,1))[:,None]
+                music*= (.36+.64*np.clip(distance/.85,0,1))[:,None]
             for onset,room in ambience:
                 offset=round(onset*SR);a=max(start,offset);b=min(start+n,offset+len(room))
                 if a>=b:continue

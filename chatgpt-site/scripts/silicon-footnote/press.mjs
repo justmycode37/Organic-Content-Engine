@@ -55,6 +55,7 @@ export async function capturePress(root,sources,indices){
     let heading=page.locator('h1.title,article h1,[itemprop="headline"]').filter({visible:true}).first();
     if(!await heading.count())heading=page.locator('main h1,h1').filter({visible:true}).first();
     if(!await heading.count())heading=page.locator('blockquote,[data-testid="tweetText"]').first();
+    if(!await heading.count())heading=page.locator('pre').filter({visible:true}).first();
     if(!await heading.count())throw Error('Page has no readable article or post');
     const headingText=(await heading.innerText()).trim();
     if(!headingText||/access denied|enable javascript|something went wrong/i.test(headingText))throw Error('Page did not yield source content');

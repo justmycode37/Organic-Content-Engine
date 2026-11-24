@@ -1,8 +1,11 @@
 """Render cuts against each measured Titan take, then stream-copy the picture edit."""
 import hashlib
+import errno
 import os
 import re
 import json
+import shutil
+import tempfile
 from concurrent.futures import ThreadPoolExecutor
 from film import Sequence,lower
 from score import score
@@ -18,6 +21,29 @@ from motion import W,H,FPS,Scene,lower_third
 
 def run(args):
     subprocess.run(['ffmpeg','-hide_banner','-loglevel','error','-y',*map(str,args)],check=True)
+
+def archive_round(root):
+    """Keep the finished cut at a stable path outside the round's working files."""
+    if not re.fullmatch(r'r[0-9]+', root.name):
+        return
+    if tuple(parent.name for parent in root.parents[:3]) == ('evaluation', 'outputs', 'chatgpt-site'):
+        archive = root.parents[3] / 'videos'
+    else:
+        archive = Path(__file__).resolve().parents[3] / 'videos'
+    archive.mkdir(exist_ok=True)
+    source = root / 'episode.mp4'
+    destination = archive / f'round-{root.name[1:]}.mp4'
+    if destination.exists() and source.samefile(destination):
+        return
+    with tempfile.TemporaryDirectory(dir=archive) as staging:
+        candidate = Path(staging) / destination.name
+        try:
+            os.link(source, candidate)
+        except OSError as error:
+            if error.errno != errno.EXDEV:
+                raise
+            shutil.copyfile(source, candidate)
+        candidate.replace(destination)
 
 def compact_mux(root,mix,timing):
     # Release consumed silent clips while assembling the film. The shot list and
@@ -156,6 +182,7 @@ def render(root):
     (root/'picture.list').write_text('\n'.join(cuts))
     if compact:
         compact_mux(root,mix,timing)
+        archive_round(root)
         return
     args=['-f','concat','-safe','1','-i',root/'picture.list','-i',voice]
     if modern:
@@ -169,6 +196,7 @@ def render(root):
     else:args+=['-map','0:v:0','-map','1:a:0','-c:v','copy']
     run([*args,'-c:a','aac','-b:a','160k','-movflags','+faststart',root/'episode.partial.mp4'])
     (root/'episode.partial.mp4').replace(root/'episode.mp4')
+    archive_round(root)
 
 if __name__=='__main__':
     render(Path(sys.argv[1]).resolve())

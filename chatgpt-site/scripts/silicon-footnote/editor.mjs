@@ -1,6 +1,6 @@
 import {z} from 'zod';
 import {earlierTopics,overlappingRound} from './round-topics.mjs';
-import {draftEpisode} from './storyboard.mjs';
+import {draftEpisode,checkOpening} from './storyboard.mjs';
 import {createReelSubscription} from '../reel-subscription.mjs';
 import {execFileSync} from 'node:child_process';
 import {readFileSync,writeFileSync,renameSync,existsSync} from 'node:fs';
@@ -29,7 +29,13 @@ const subsetChart=z.object({
  layout:z.literal('subset'),total:z.number().int().positive(),count:z.number().int().nonnegative(),
  totalLabel:string.max(42),countLabel:string.max(42),revealCue:string
 }).refine(c=>c.count<=c.total);
-const chartSpec=z.union([clockChart,subsetChart,
+const mapPoint=z.tuple([z.number().min(-180).max(180),z.number().min(-90).max(90)]);
+const trackMap=z.object({
+ layout:z.literal('track-map'),bounds:z.tuple([z.number().min(-180).max(180),z.number().gt(-90).lt(90),z.number().min(-180).max(180),z.number().gt(-90).lt(90)]),
+ land:z.array(z.array(mapPoint).min(3)).min(1),places:z.array(z.object({point:mapPoint,label:string.max(38)})),
+ routes:z.array(z.object({points:z.array(mapPoint).min(2),label:string.max(46)})).min(1).max(2),revealCue:string.optional()
+}).refine(c=>c.bounds[0]<c.bounds[2] && c.bounds[1]<c.bounds[3]);
+const chartSpec=z.union([clockChart,subsetChart,trackMap,
  z.object({layout:z.literal('calculation'),unit:string,values:z.array(z.number()).length(2),active:z.number().int().min(0).max(1),answer:string.max(50)}),
  z.object({
   layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),
@@ -79,7 +85,7 @@ export function checkVideoCopy(plan,material){
   if(b.kind==='footage')contents.push(material.clips[b.clip]?.credit??'');
   for(const cut of b.cutaways??[]){
    if(cut.kind==='image'&&!material.images?.[cut.image]||cut.kind==='footage'&&!material.clips[cut.clip]||cut.source!==undefined&&!material.sources[cut.source])throw Error('Invalid cutaway source');
-   if(cut.kind==='chart'&&!['profile','response-window','subset'].includes(cut.chart?.layout)&&(!cut.chart||!Math.max(...cut.chart.values)||(cut.labels??b.labels).length!==cut.chart.values.length))throw Error('Invalid cutaway chart');
+   if(cut.kind==='chart'&&!['profile','response-window','subset','track-map'].includes(cut.chart?.layout)&&(!cut.chart||!Math.max(...cut.chart.values)||(cut.labels??b.labels).length!==cut.chart.values.length))throw Error('Invalid cutaway chart');
    if(cut.kind==='footage')contents.push(material.clips[cut.clip].credit);
    if(cut.kind==='image')contents.push(material.images[cut.image].credit);
    if(['document','quote'].includes(cut.kind))contents.push(material.sources[cut.source??b.source].title);
@@ -135,7 +141,10 @@ export async function prepare(dir,topic,sourceFile){
   }
   const overlap=await checkTopic(material);
   if(overlap)throw Error('This subject was covered in '+overlap+'. Choose a completely different topic for this round.');
-  if(existsSync(planFile)){const plan=script.parse(read(planFile));checkVideoCopy(plan,material);return plan;}
+  if(existsSync(planFile)){
+   const plan=script.parse(read(planFile));checkVideoCopy(plan,material);
+   if(!await checkOpening(dir,plan.beats.map(b=>b.narration)))return plan;
+  }
  }
  else{
   let rejected='';
