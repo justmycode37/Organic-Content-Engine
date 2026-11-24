@@ -1,5 +1,5 @@
 import {open,stat,readFile,mkdir,writeFile} from 'node:fs/promises';
-import {execFileSync} from 'node:child_process';
+import {spawnSync} from 'node:child_process';
 import {join,resolve} from 'node:path';
 import {workerConfig,siteRequest} from '../render-worker.mjs';
 import {produce} from './produce.mjs';
@@ -9,12 +9,11 @@ const jobs='/api/jobs/accounts/silicon';
 const post=(path,body={})=>siteRequest(config,jobs+path,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify(body)});
 function subscriptionStatus(){
  if(!process.env.ELEVENLABS_API_KEY)return 'voice_required';
- try{
-  const login=execFileSync(process.env.OCE_CODEX_BIN||'codex',['login','status'],{
-   encoding:'utf8',timeout:5000,stdio:['ignore','pipe','pipe'],
-  });
-  return /logged in using chatgpt/i.test(login)?'ready':'login_required';
- }catch{return 'login_required';}
+ const login=spawnSync(process.env.OCE_CODEX_BIN||'codex',['login','status'],{
+  encoding:'utf8',timeout:5000,stdio:['ignore','pipe','pipe'],
+ });
+ const chatgpt=/^logged in using chatgpt\s*$/im.test((login.stdout??'')+'\n'+(login.stderr??''));
+ return login.status===0&&chatgpt?'ready':'login_required';
 }
 async function run(job){
  const imported=process.argv[2]==='--import';
