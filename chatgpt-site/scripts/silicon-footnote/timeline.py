@@ -26,6 +26,8 @@ def assemble(root,plan,durations,pack):
                 shot.pop('comparison',None)
                 if 'process' not in cut:shot.pop('process',None)
                 if 'quote' not in cut:shot['quote']=''
+                if cut['kind']=='footage' and 'clipStart' not in cut:
+                    shot.pop('clipStart',None)
                 if cut['kind']=='footage' and 'nameplate' not in cut:
                     shot['nameplate']={'name':cut['title'],'date':'','role':''}
                 shots.append((t,shot))
@@ -34,7 +36,14 @@ def assemble(root,plan,durations,pack):
             # Nearby word cues can otherwise turn the end of a paragraph into a flash cut.
             retained=[shots[0]]
             for t,shot in shots[1:]:
-                if t-retained[-1][0]>=1.8 and duration-t>=1.8:
+                if len(retained)>1 and duration-t>=1.8:
+                    prev,previous_shot=retained[-1]
+                    advance=prev+1.8-t
+                    if 0<advance<=.5 and t-1.8-retained[-2][0]>=1.8:
+                        # Lead the previous cue by a few frames to keep the new
+                        # exhibit on the spoken fact it explains.
+                        retained[-1]=(t-1.8,previous_shot)
+                if t-retained[-1][0]>=1.8-1e-6 and duration-t>=1.8:
                     retained.append((t,shot))
             shots=retained
         for j,(start,shot) in enumerate(shots):
@@ -43,7 +52,7 @@ def assemble(root,plan,durations,pack):
         a=b.get('actuality')
         if a:
             length=a['end']-a['start']
-            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'clean':False,'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
+            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'speakerX':a.get('speakerX',.5),'clean':False,'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
             times.append(length)
         positions.append((duration,a))
     voice=original_voice

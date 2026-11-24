@@ -5,6 +5,8 @@ import {existsSync,renameSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {save,read} from './editor.mjs';
 
+export const TITAN_SETTINGS=Object.freeze({stability:0.2,similarity_boost:0.2});
+
 export async function narrate(dir,beats,voice,key){
  const groups=[];
  let group=[];
@@ -16,14 +18,14 @@ export async function narrate(dir,beats,voice,key){
  const timing=[],tracks=[],alignment=[];
  for(const [index,lines] of groups.entries()){
   const text=lines.join(' '),model='eleven_flash_v2_5';
-  const id=createHash('sha256').update(JSON.stringify([voice,model,text])).digest('hex').slice(0,20);
+  const id=createHash('sha256').update(JSON.stringify([voice,model,TITAN_SETTINGS,text])).digest('hex').slice(0,20);
   const stem='passage-'+id,path=join(dir,stem),cache=path+'.json';
   if(!existsSync(cache)){
-   const resp=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+voice+'/with-timestamps?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text,model_id:model,previous_text:groups[index-1]?.at(-1),next_text:groups[index+1]?.[0]}),signal:AbortSignal.timeout(120000)});
+   const resp=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+voice+'/with-timestamps?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text,model_id:model,voice_settings:TITAN_SETTINGS,previous_text:groups[index-1]?.at(-1),next_text:groups[index+1]?.[0]}),signal:AbortSignal.timeout(120000)});
    if(!resp.ok)throw Error('Titan passage '+(index+1)+' HTTP '+resp.status);
    const result=await resp.json();
    if(!result.audio_base64||!result.alignment)throw Error('Titan returned incomplete timed narration');
-   save(cache,result);
+   save(cache,{...result,voice,model,voice_settings:TITAN_SETTINGS});
   }
   const result=read(cache),a=result.alignment;
   if(a.characters.join('')!==text)throw Error('Titan character alignment differs from the submitted passage');

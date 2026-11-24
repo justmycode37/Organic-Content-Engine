@@ -16,10 +16,10 @@ from citation import frame as citation_frame
 
 W,H,FPS=1280,720,24
 IVORY='#fff6e4'
-GOLD='#f0c37c'
+GOLD='#f9ee49'
 BLACK='#182b30'
 WHITE='#ffffff'
-PALETTE=['#66c4ac','#e99a69','#e0ded7','#999eaa']
+PALETTE=['#438bff','#ff459a','#f9ee49','#a69aff']
 DIRECTORY=Path(__file__).resolve().parent
 STATES=json.loads((DIRECTORY/'us-states.json').read_text())['states']
 
@@ -28,7 +28,7 @@ def face(size,style='sans'):
     names={'sans':('GillSans.ttc','DejaVuSans.ttf'),'bold':('DIN Alternate Bold.ttf','DejaVuSans-Bold.ttf'),
            'serif':('Georgia.ttf','DejaVuSerif.ttf'),'italic':('Georgia Italic.ttf','DejaVuSerif-Italic.ttf'),
            'narrow':('DIN Condensed Bold.ttf','DejaVuSansCondensed-Bold.ttf'),
-           'scientific':('Arial Unicode.ttf','DejaVuSans.ttf')}
+           'scientific':('Arial Unicode.ttf','DejaVuSans.ttf'),'title':('Arial Bold.ttf','DejaVuSans-Bold.ttf')}
     mac,linux=names[style]
     paths=[Path('/System/Library/Fonts/Supplemental')/mac,Path('/usr/share/fonts/truetype/dejavu')/linux]
     return ImageFont.truetype(str(next(p for p in paths if p.exists())),size)
@@ -47,7 +47,7 @@ def typeblock(draw,x,y,text,width,size,color=IVORY,style='sans',lines=3,leading=
 
 def publisher(source):
     host=urlsplit(source['url']).hostname.removeprefix('www.')
-    common={'hsph.harvard.edu':'Harvard T.H. Chan School of Public Health','raw.githubusercontent.com':'Research team  /  public data','github.com':'GitHub','epa.gov':'U.S. Environmental Protection Agency','x.com':'X','pbs.org':'PBS NewsHour','cbsnews.com':'CBS News'}
+    common={'hsph.harvard.edu':'Harvard T.H. Chan School of Public Health','raw.githubusercontent.com':'Research team  /  public data','github.com':'GitHub','epa.gov':'U.S. Environmental Protection Agency','eia.gov':'U.S. Energy Information Administration · Hourly Electric Grid Monitor','x.com':'X','pbs.org':'PBS NewsHour','cbsnews.com':'CBS News'}
     return common.get(host,host)
 
 @lru_cache(16)
@@ -82,22 +82,35 @@ def source_imprint(im,credit):
 def lower(beat,credit):
     im=Image.new('RGBA',(W,H),(0,0,0,0))
     d=ImageDraw.Draw(im)
-    if beat.get('closing'):
-        d.rounded_rectangle((55,427,832,632),8,fill=(7,9,10,205))
-        typeblock(d,81,451,'Sources & footage',720,48,WHITE,'bold',1)
-        typeblock(d,83,522,readable_credit(credit),706,29,WHITE,lines=2)
-        return im
     name=beat.get('nameplate') or {}
-    line=name.get('name') or beat['title']
-    if not beat.get('clean'):
-        f=face(42,'bold');size=min(1040,round(f.getlength(line))+38)
-        d.rounded_rectangle((39,38,39+size,100),7,fill=(0,0,0,152))
-        typeblock(d,56,50,line,1020,42,WHITE,'bold',1)
-        details='  ·  '.join(x for x in (name.get('date'),name.get('role')) if x)
-        if details:
-            size=min(1000,round(face(25).getlength(details))+32)
-            d.rounded_rectangle((40,104,40+size,147),5,fill=(0,0,0,155))
-            typeblock(d,55,111,details,970,25,WHITE,lines=1)
+    if beat.get('clean'):return im
+    if beat.get('originalSpeech'):
+        if not beat.get('introduceSpeaker',True):return im
+        person=name.get('name') or beat['title']
+        role=name.get('role','')
+        boxw=min(1130,max(face(53,'title').getlength(person),face(34).getlength(role))+68)
+        center=W*beat.get('speakerX',.5)
+        x=round(max(48,min(W-48-boxw,center-boxw/2)))
+        d.rounded_rectangle((x,505,x+boxw,649),radius=12,fill=(18,20,22,223))
+        typeblock(d,x+26,524,person,boxw-52,53,WHITE,'title',1)
+        typeblock(d,x+27,590,role,boxw-52,34,WHITE,'sans',1)
+        return im
+    label='Sources & footage' if beat.get('closing') else (name.get('name') or beat['title'])
+    details=readable_credit(credit) if beat.get('closing') else '  ·  '.join(v for v in (name.get('date'),name.get('role')) if v)
+    anchor=beat.get('titlePosition','upper-left')
+    bottom=anchor.startswith('lower')
+    right=anchor.endswith('right')
+    gradient=np.maximum(0,1-np.arange(H)/350)**1.55
+    if bottom:gradient=gradient[::-1]
+    im.putalpha(Image.fromarray(np.broadcast_to(np.uint8(224*gradient[:,None]),(H,W)).copy()))
+    lines=wrap(label,face(66,'title'),1160)
+    y=(H-49-68*min(2,len(lines))-(47 if details else 0)) if bottom else 45
+    for text,size,style in [(label,66,'title'),(details,31,'sans')]:
+        if not text:continue
+        rows=wrap(text,face(size,style),1160)
+        width=1160 if len(rows)>1 else min(1160,round(face(size,style).getlength(text))+2)
+        x=W-55-width if right else 55
+        y=typeblock(d,x,y,text,width,size,WHITE,style,2,1.02)+11
     return im
 
 def atlas(d,states,box,progress):
@@ -144,11 +157,52 @@ class Sequence:
             typeblock(d,x+43,588,side.get('detail',''),530,29,WHITE,'sans',1)
             typeblock(d,x+42,675,readable_credit(self.pack['images'][side['image']]['credit']),558,15,WHITE,lines=1)
         return im
+    def profile(self,t,length):
+        c=self.b['chart'];im=Image.new('RGB',(W,H),'#101217');d=ImageDraw.Draw(im)
+        typeblock(d,67,44,self.head,1143,60,WHITE,'title',2)
+        typeblock(d,70,166,c['unit'],1138,32,'#e8ebef',lines=1)
+        x0,x1,y0,y1=143,1176,252,539
+        lo,hi=c['domain']
+        for i in range(5):
+            v=lo+(hi-lo)*i/4;y=y1-(y1-y0)*i/4
+            d.line((x0,y,x1,y),fill='#424550',width=1)
+            d.text((x0-15,y),format(v,'.4g'),font=face(24),anchor='rm',fill='#cbd0d8')
+        for i,label in enumerate(c['axis']):
+            x=x0+(x1-x0)*i/(len(c['axis'])-1)
+            d.text((x,y1+16),label,font=face(25),anchor='mt',fill='#eeeff3')
+        stop=c.get('until',1)*ease(min(1,t/max(.8,min(length*.48,3))))
+        for i,series in enumerate(c['series']):
+            color=PALETTE[i];data=series['values'];end=(len(data)-1)*stop
+            points=[]
+            for k in range(math.floor(end)+1):
+                x=x0+(x1-x0)*k/(len(data)-1);y=y1-(y1-y0)*(data[k]-lo)/(hi-lo)
+                if points and c.get('steps'):points.append((x,points[-1][1]))
+                points.append((x,y))
+            k=int(end)
+            if k<len(data)-1 and end>k:
+                val=data[k] if c.get('steps') else data[k]+(end-k)*(data[k+1]-data[k])
+                points.append((x0+(x1-x0)*stop,y1-(y1-y0)*(val-lo)/(hi-lo)))
+            if len(points)>1:d.line(points,fill=color,width=7,joint='curve')
+            x,y=points[-1];d.ellipse((x-6,y-6,x+6,y+6),fill=WHITE,outline=color,width=3)
+            d.line((70+i*395,218,108+i*395,218),fill=color,width=6)
+            typeblock(d,119+i*395,205,series['label'],350,26,WHITE,lines=1)
+        typeblock(d,70,606,self.caption,1140,30,WHITE,'bold',2)
+        typeblock(d,70,675,publisher(self.source),1100,20,'#d4d6db',lines=1)
+        return im
+
     def plot(self,t):
         b=self.b;spec=b['chart'];values=spec['values'];labels=b['labels']
         im=Image.new('RGB',(W,H),'#17191a');d=ImageDraw.Draw(im)
         typeblock(d,72,66,self.head,1135,66,WHITE,'bold',2)
         typeblock(d,75,185,spec['unit'],1100,30,'#d9dddb',lines=1)
+        if spec.get('layout')=='calculation':
+            typeblock(d,74,280,b['labels'][spec['active']],1120,51,WHITE,'title',1)
+            # The cut arrives on the spoken result, so the answer is readable immediately.
+            typeblock(d,73,371,spec['answer'],1130,85,PALETTE[spec['active']],'title',1)
+            bar=ease(t/.65)
+            d.rectangle((76,509,76+int(550*bar),515),fill=PALETTE[spec['active']])
+            typeblock(d,73,630,publisher(self.source),1120,21,'#d4d6db',lines=1)
+            return im
         if spec.get('layout') in ('paired','fixed') and len(values)==2:
             fixed=spec['layout']=='fixed'
             if fixed:typeblock(d,74,232,spec.get('constant',''),1120,38,GOLD,'bold',1)
@@ -183,10 +237,12 @@ class Sequence:
         q=min(1,t/max(length-1/FPS,.01))
         if self.b.get('comparison'):return self.split(q)
         if self.kind=='image':return self.image(self.b['image'],q)
-        if self.kind=='chart':return self.plot(t)
+        if self.kind=='chart':
+            drawing=self.profile(t,length) if self.b['chart'].get('layout')=='profile' else self.plot(t)
+            return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
         if self.kind in ('document','quote'):
             phrase=self.b.get('quote','')
             suffix='-'+hashlib.sha256(phrase.encode()).hexdigest()[:10] if self.kind=='quote' and phrase and '/status/' not in self.source['url'] else ''
             return citation_frame(self.root/f"press-{self.b['source']}{suffix}.png",t,length,self.i)
-        if self.kind=='terrain' and self.states:return self.map(t)
+        if self.kind=='terrain' and self.states:return camera(self.map(t),(W,H),q,self.i%2==0,amount=.045)
         raise ValueError('Select verified footage, a photograph, a publisher capture, a chart or a geographic map for '+self.head)

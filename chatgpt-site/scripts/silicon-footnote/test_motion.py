@@ -48,6 +48,41 @@ class DocumentaryTests(unittest.TestCase):
             _,durations,_=assemble(Path(tmp),{'style':'reported-footage','beats':[base]},[10],{})
         self.assertEqual(durations,[4,6])
 
+    def test_footage_reserves_interviews_and_uses_distinct_camera_ranges(self):
+        from footage import reserve_footage
+        shots=[{'kind':'footage','clip':0} for _ in range(4)]
+        shots[2].update(clipStart=4,originalSpeech=True)
+        clips=[{'coverage':[{'start':4,'end':16},{'start':21,'end':26}]}]
+        reserve_footage(shots,[4,4,4,4],clips,{0:26})
+        self.assertEqual([s['clipStart'] for s in shots],[8,12,4,21])
+
+    def test_close_numeric_cues_keep_both_charts_readable(self):
+        from timeline import assemble
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        shot={'kind':'footage','narration':'','art':{'headline':'Two rates'},'cutaways':[
+            {'at':.5,'kind':'chart','title':'Energy'}, {'at':.64,'kind':'chart','title':'Carbon intensity'}]}
+        with TemporaryDirectory() as tmp:
+            plan,durations,_=assemble(Path(tmp),{'style':'reported-footage','beats':[shot]},[10],{})
+        self.assertEqual([b['kind'] for b in plan['beats']],['footage','chart','chart'])
+        self.assertAlmostEqual(sum(durations[:2]),6.4)
+        self.assertGreaterEqual(min(durations),1.8-1e-6)
+
+    def test_title_gradient_and_speaker_tag_follow_the_shot(self):
+        from film import lower
+        beat={'title':'Winter storm preparations','nameplate':{'name':'Tom Henry','role':'Powerhouse manager'}}
+        top=np.asarray(lower(dict(beat,titlePosition='upper-right'),'USACE'))
+        self.assertGreater(top[2,0,3],190)
+        self.assertEqual(top[500,0,3],0)
+        bottom=np.asarray(lower(dict(beat,titlePosition='lower-left'),'USACE'))
+        self.assertGreater(bottom[-2,0,3],190)
+        self.assertEqual(bottom[2,0,3],0)
+        person=np.asarray(lower(dict(beat,originalSpeech=True,speakerX=.72),'USACE'))
+        y,x=np.where(person[:,:,3]>0)
+        self.assertGreater(y.min(),480)
+        self.assertAlmostEqual((x.min()+x.max())/2,1280*.72,delta=3)
+        self.assertFalse(np.any(lower(dict(beat,originalSpeech=True,introduceSpeaker=False),'USACE')))
+
     def test_camera_moves_in_both_directions(self):
         from film import camera
         from PIL import Image

@@ -23,7 +23,7 @@ export async function capturePress(root,sources,indices){
    const spec=JSON.parse(item),i=typeof spec==='number'?spec:spec.source,phrase=spec.quote??'';
    const suffix=phrase?'-'+createHash('sha256').update(phrase).digest('hex').slice(0,10):'';
    const src=sources[i],path=join(root,'press-'+i+suffix+'.png'),meta=path+'.json';
-   if(await exists(path)&&await exists(meta)&&JSON.parse(await readFile(meta)).revision>=3 && JSON.parse(await readFile(meta)).url===src.url)continue;
+   if(await exists(path)&&await exists(meta)&&JSON.parse(await readFile(meta)).revision>=(phrase?5:3) && JSON.parse(await readFile(meta)).url===src.url)continue;
    const ctx=await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:1.5,locale:'en-US',javaScriptEnabled:true,serviceWorkers:'block'});
    try{
     const page=await ctx.newPage();
@@ -66,6 +66,7 @@ export async function capturePress(root,sources,indices){
       while(walker.nextNode()){
        const node=walker.currentNode,offset=normalize(node.textContent).indexOf(normalize(phrase));
        if(offset<0||!node.parentElement?.getBoundingClientRect().height)continue;
+       node.parentElement.setAttribute('data-documentary-quote','selected');
        const range=document.createRange();range.setStart(node,offset);range.setEnd(node,offset+phrase.length);
        const box=range.getBoundingClientRect();window.scrollBy(0,box.y-280);
        return range.getBoundingClientRect().toJSON();
@@ -74,8 +75,28 @@ export async function capturePress(root,sources,indices){
      },phrase);
      if(!rect)throw Error('The quoted passage is absent from the visible publisher page');
     }
-    await page.screenshot({path,animations:'disabled',timeout:25000});
-    await writeFile(meta,JSON.stringify({revision:3,rect,viewport:{width:1280,height:800},url:src.url,displayUrl:url,title,heading:headingText,captured:new Date().toISOString()},null,2));
+    if(phrase)await page.waitForTimeout(1100); // Let the site's scroll-triggered dialog finish appearing.
+    const subject=phrase?page.locator('[data-documentary-quote="selected"]'):heading;
+    const uncovered=()=>subject.evaluate((el,r)=>{
+     const x=Math.max(1,Math.min(innerWidth-2,r.x+r.width*.5)),y=Math.max(1,Math.min(innerHeight-2,r.y+r.height*.5));
+     const front=document.elementFromPoint(x,y);
+     return !!front && (el===front||el.contains(front)||front.contains(el));
+    },rect);
+    if(!await uncovered()){
+     const dismiss=page.getByRole('button',{name:/^close (?:popup|dialog|overlay|modal)|^dismiss|^no thanks$/i}).or(page.locator('[role="dialog"] button,dialog button,button[aria-label*="close" i],button[title*="close" i]')).filter({visible:true});
+     for(const button of await dismiss.all()){
+      const name=await button.evaluate(b=>(b.getAttribute('aria-label')||b.title||b.innerText).trim());
+      if(/^(?:close|dismiss|no thanks|×|✕|x)(?:\b|$)/i.test(name)){
+       await button.click({timeout:1800}).catch(()=>{});break;
+      }
+     }
+     await page.keyboard.press('Escape');
+     for(let attempt=0;attempt<12&&!await uncovered();attempt++)await page.waitForTimeout(100);
+     if(!await uncovered())throw Error('Publisher overlay covers the cited text; select a readable source capture');
+    }
+    await page.screenshot({path,animations:'allow',timeout:25000});
+    if(!await uncovered())throw Error('The publisher changed its layout during capture');
+    await writeFile(meta,JSON.stringify({revision:5,rect,viewport:{width:1280,height:800},url:src.url,displayUrl:url,title,heading:headingText,captured:new Date().toISOString()},null,2));
     console.log('Captured '+i+' '+headingText.slice(0,80));
    }finally{await ctx.close();}
   }
