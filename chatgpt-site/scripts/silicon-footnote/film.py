@@ -89,12 +89,14 @@ def lower(beat,credit):
         if not beat.get('introduceSpeaker',True):return im
         person=name.get('name') or beat['title']
         role=name.get('role','')
-        boxw=min(1130,max(face(53,'title').getlength(person),face(34).getlength(role))+68)
+        date=name.get('date','')
+        boxw=min(1130,max(face(53,'title').getlength(person),face(34).getlength(role),face(24).getlength(date))+68)
         center=W*beat.get('speakerX',.5)
         x=round(max(48,min(W-48-boxw,center-boxw/2)))
-        d.rounded_rectangle((x,505,x+boxw,649),radius=12,fill=(18,20,22,223))
+        d.rounded_rectangle((x,505,x+boxw,677 if date else 649),radius=12,fill=(18,20,22,223))
         typeblock(d,x+26,524,person,boxw-52,53,WHITE,'title',1)
         typeblock(d,x+27,590,role,boxw-52,34,WHITE,'sans',1)
+        if date:typeblock(d,x+27,639,date,boxw-52,24,'#e3e5e8',lines=1)
         return im
     card=beat.get('creditCard') or {}
     label=card.get('title','Sources & footage') if beat.get('closing') else (name.get('name') or beat['title'])
@@ -238,7 +240,27 @@ class Sequence:
         b=self.b;spec=b['chart'];values=spec['values'];labels=b['labels']
         im=Image.new('RGB',(W,H),'#17191a');d=ImageDraw.Draw(im)
         typeblock(d,72,66,self.head,1135,66,WHITE,'bold',2)
-        typeblock(d,75,185,spec['unit'],1100,30,'#d9dddb',lines=1)
+        if not spec.get('contextTrace'):typeblock(d,75,185,spec['unit'],1100,30,'#d9dddb',lines=1)
+        if trace:=spec.get('contextTrace'):
+            values2=trace['values'];lo,hi=trace['domain']
+            typeblock(d,70,232,trace['label'],580,34,WHITE,'title',1)
+            typeblock(d,700,232,spec['unit'],500,30,WHITE,'title',1)
+            points=[]
+            for i,v in enumerate(values2):
+                points.append((82+i*515/(len(values2)-1),520-(v-lo)*204/(hi-lo)))
+            d.line((82,316,82,520,597,520),fill='#8f969e',width=2)
+            for y,v in [(316,hi),(520,lo)]:d.text((79,y),format(v,'g'),anchor='rm',font=face(19),fill=WHITE)
+            count=1+int(ease(t/1.8)*(len(points)-1))
+            if count>1:d.line(points[:count],fill=PALETTE[2],width=5)
+            for i,(name,value) in enumerate(zip(labels,values)):
+                y=313+i*110;left=700
+                typeblock(d,left,y,name,284,36,WHITE,'title',1)
+                d.text((1187,y),f'{value:g}%',anchor='rt',font=face(42,'title'),fill=WHITE)
+                d.rectangle((left,y+56,1186,y+74),fill='#3c4149')
+                d.rectangle((left,y+56,left+486*value/100*ease((t-i*.2)/.65),y+74),fill=PALETTE[i])
+            typeblock(d,72,580,self.caption,1140,33,WHITE,'bold',2)
+            typeblock(d,72,675,publisher(self.source),1110,21,'#d4d6db',lines=1)
+            return im
         if spec.get('layout')=='calculation':
             typeblock(d,74,280,b['labels'][spec['active']],1120,51,WHITE,'title',1)
             # The cut arrives on the spoken result, so the answer is readable immediately.
@@ -273,7 +295,7 @@ class Sequence:
                 floor=spec['floors'][i]
                 marker=x+round(595*floor/100)
                 d.line((marker,yy,marker,yy+43),fill=WHITE,width=3)
-                d.text((marker,yy+48),f'{floor:g}% floor',font=face(20,'title'),fill=WHITE,anchor='mt')
+                d.text((x,yy+46),f'Minimum {floor:g}%   /   measured {val:g}%',font=face(30,'title'),fill=WHITE,anchor='lt')
             if k>.72:typeblock(d,x+extent+13,yy+2,format(val,',.5g'),167,46,WHITE,'bold',1)
         typeblock(d,73,542,self.caption,1124,29,WHITE,lines=2)
         typeblock(d,73,617,publisher(self.source),1120,19,'#c7cfcb',lines=1)
@@ -281,6 +303,27 @@ class Sequence:
     def map(self,t):
         im=Image.new('RGB',(W,H),'#191c1e');d=ImageDraw.Draw(im)
         typeblock(d,64,46,self.head,1148,62,WHITE,'bold',2)
+        if route:=self.b.get('route'):
+            origin,destination=route
+            atlas(d,route,(64,182,823,330),t)
+            anchors=[]
+            for state in route:
+                ring=max(STATES[state],key=len)
+                lon=(max(v[0] for v in ring)+min(v[0] for v in ring))/2
+                lat=(max(v[1] for v in ring)+min(v[1] for v in ring))/2
+                anchors.append((64+(lon+125)/59*823,182+(50-lat)/26*330))
+            (ax,ay),(bx,by)=anchors
+            count=round(50*ease(t/1.45))
+            points=[(ax+(bx-ax)*i/50,ay+(by-ay)*i/50-32*math.sin(math.pi*i/50)) for i in range(count+1)]
+            if count:
+                d.line(points,fill=GOLD,width=5)
+                x,y=points[-1];d.ellipse((x-6,y-6,x+6,y+6),fill=WHITE)
+            for row,(label,state) in enumerate([('FROM',origin),('TO',destination)]):
+                d.text((883,220+row*111),label,font=face(25,'title'),fill=PALETTE[row])
+                typeblock(d,881,255+row*111,state,330,49,WHITE,'title',1)
+            typeblock(d,70,548,self.caption,1100,36,WHITE,'bold',2)
+            typeblock(d,70,654,'Boundaries: U.S. Census Bureau   /   '+publisher(self.source),1120,20,'#d1d4d3',lines=1)
+            return im
         atlas(d,self.states[:4],(194,178,886,352),t)
         typeblock(d,70,520,'   /   '.join(self.states[:4]),1120,38,WHITE,'bold',1)
         typeblock(d,70,572,self.caption,1100,27,'#d1d4d3',lines=2)

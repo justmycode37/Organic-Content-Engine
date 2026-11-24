@@ -29,6 +29,29 @@ class MotionTests(unittest.TestCase):
         self.assertGreater(np.sum(np.all(plate==255,axis=2)),100)
 
 class DocumentaryTests(unittest.TestCase):
+    def test_reading_hold_keeps_both_ends_of_a_full_width_headline(self):
+        import json
+        from pathlib import Path
+        from tempfile import TemporaryDirectory
+        from PIL import Image, ImageDraw
+        from citation import frame
+        with TemporaryDirectory() as folder:
+            path=Path(folder)/'press.png'
+            source=Image.new('RGB',(1280,720),'white')
+            draw=ImageDraw.Draw(source)
+            draw.rectangle((4,280,18,320),fill='red')
+            draw.rectangle((1261,280,1275,320),fill='blue')
+            source.save(path)
+            path.with_suffix('.png.json').write_text(json.dumps({
+                'url':'https://example.org/report','viewport':{'width':1280,'height':720},
+                'rect':{'x':0,'y':275,'width':1280,'height':60}}))
+            for variant in range(3):
+                result=np.asarray(frame(path,4,7,variant))
+                self.assertGreater(result[300,10,0],220)
+                self.assertLess(result[300,10,2],50)
+                self.assertGreater(result[300,-11,2],220)
+                self.assertLess(result[300,-11,0],50)
+
     def test_interview_captions_follow_the_source_trim(self):
         from captions import caption_cues
         beats=[{'narration':'Here.', 'actuality':{'start':6,'end':10,'captions':[

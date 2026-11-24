@@ -23,7 +23,7 @@ export async function capturePress(root,sources,indices){
    const spec=JSON.parse(item),i=typeof spec==='number'?spec:spec.source,phrase=spec.quote??'';
    const suffix=phrase?'-'+createHash('sha256').update(phrase).digest('hex').slice(0,10):'';
    const src=sources[i],path=join(root,'press-'+i+suffix+'.png'),meta=path+'.json';
-   if(await exists(path)&&await exists(meta)&&JSON.parse(await readFile(meta)).revision>=(phrase?5:3) && JSON.parse(await readFile(meta)).url===src.url)continue;
+   if(await exists(path)&&await exists(meta)&&JSON.parse(await readFile(meta)).revision>=6 && JSON.parse(await readFile(meta)).url===src.url)continue;
    const ctx=await browser.newContext({viewport:{width:1280,height:800},deviceScaleFactor:1.5,locale:'en-US',javaScriptEnabled:true,serviceWorkers:'block'});
    try{
     const page=await ctx.newPage();
@@ -58,7 +58,7 @@ export async function capturePress(root,sources,indices){
     if(!await heading.count())throw Error('Page has no readable article or post');
     const headingText=(await heading.innerText()).trim();
     if(!headingText||/access denied|enable javascript|something went wrong/i.test(headingText))throw Error('Page did not yield source content');
-    const box=await heading.boundingBox();if(!post&&box&&box.y>430)await page.evaluate(y=>window.scrollTo(0,y),box.y-140);
+    const box=await heading.boundingBox();if(!post&&box&&box.y>430)await page.evaluate(y=>window.scrollTo(0,y),box.y-260);
     let rect=await heading.boundingBox();
     if(phrase){
      rect=await page.evaluate(phrase=>{
@@ -79,10 +79,17 @@ export async function capturePress(root,sources,indices){
     if(phrase)await page.waitForTimeout(1100); // Let the site's scroll-triggered dialog finish appearing.
     const subject=phrase?page.locator('[data-documentary-quote="selected"]'):heading;
     const uncovered=()=>subject.evaluate((el,r)=>{
-     const x=Math.max(1,Math.min(innerWidth-2,r.x+r.width*.5)),y=Math.max(1,Math.min(innerHeight-2,r.y+r.height*.5));
-     const front=document.elementFromPoint(x,y);
-     return !!front && (el===front||el.contains(front)||front.contains(el));
+     return [.12,.5,.88].every(fraction=>{
+      const x=Math.max(1,Math.min(innerWidth-2,r.x+r.width*.5));
+      const y=Math.max(1,Math.min(innerHeight-2,r.y+r.height*fraction));
+      const front=document.elementFromPoint(x,y);
+      return !!front && (el===front||el.contains(front)||front.contains(el));
+     });
     },rect);
+    if(!phrase&&!await uncovered()){
+     await page.evaluate(y=>window.scrollBy(0,y),rect.y-innerHeight*.4);
+     rect=await heading.boundingBox();
+    }
     if(!await uncovered()){
      const dismiss=page.getByRole('button',{name:/^close (?:popup|dialog|overlay|modal)|^dismiss|^no thanks$/i}).or(page.locator('[role="dialog"] button,dialog button,button[aria-label*="close" i],button[title*="close" i]')).filter({visible:true});
      for(const button of await dismiss.all()){
@@ -97,7 +104,7 @@ export async function capturePress(root,sources,indices){
     }
     await page.screenshot({path,animations:'allow',timeout:25000});
     if(!await uncovered())throw Error('The publisher changed its layout during capture');
-    await writeFile(meta,JSON.stringify({revision:5,rect,viewport:{width:1280,height:800},url:src.url,displayUrl:url,title,heading:headingText,captured:new Date().toISOString()},null,2));
+    await writeFile(meta,JSON.stringify({revision:6,rect,viewport:{width:1280,height:800},url:src.url,displayUrl:url,title,heading:headingText,captured:new Date().toISOString()},null,2));
     console.log('Captured '+i+' '+headingText.slice(0,80));
    }finally{await ctx.close();}
   }

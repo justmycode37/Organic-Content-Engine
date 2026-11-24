@@ -68,7 +68,7 @@ def render(root):
             if b['kind']=='footage' and not b.get('originalSpeech') and not b.get('clean') and not b.get('titlePosition'):
                 b['titlePosition']=choose_title_position(root/f"clip-{b['clip']}.mp4",b.get('clipStart',0))
             if b.get('originalSpeech'):
-                identity=b['nameplate']['name'].strip().casefold()
+                identity=tuple(b['nameplate'].get(k,'').strip().casefold() for k in ('name','date'))
                 b['introduceSpeaker']=identity not in speakers
                 speakers.add(identity)
     (root/'picture-edit.json').write_text(json.dumps({'plan':plan,'seconds':timing},indent=2))
