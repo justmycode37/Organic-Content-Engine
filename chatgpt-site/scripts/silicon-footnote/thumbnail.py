@@ -11,19 +11,21 @@ WHITE = '#ffffff'
 
 
 def headline_font(size):
-    paths = (
-        '/System/Library/Fonts/Supplemental/Arial Bold.ttf',
-        '/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf',
-        '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf',
+    faces = (
+        ('/System/Library/Fonts/HelveticaNeue.ttc', 9),  # Condensed Black
+        ('/System/Library/Fonts/Supplemental/Arial Black.ttf', 0),
+        ('/usr/share/fonts/truetype/dejavu/DejaVuSansCondensed-Bold.ttf', 0),
+        ('/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf', 0),
     )
-    return ImageFont.truetype(next(path for path in paths if Path(path).is_file()), size)
+    path, index = next((path, index) for path, index in faces if Path(path).is_file())
+    return ImageFont.truetype(path, size, index=index)
 
 
 def lettering(words, width):
     splits = [(words,)]
     splits.extend((' '.join(words.split()[:i]), ' '.join(words.split()[i:]))
                   for i in range(1, len(words.split())))
-    for size in range(430, 179, -10):
+    for size in range(540, 179, -10):
         face = headline_font(size)
         candidates = [lines for lines in splits if all(face.getlength(line) <= width for line in lines)]
         if candidates:
@@ -48,7 +50,7 @@ def render(source, target, spec):
             raise ValueError('Thumbnail artwork needs a wide composition and at least 640px width')
         image = ImageOps.fit(artwork, (W, H), method=Image.Resampling.LANCZOS)
     side = spec['side']
-    width, margin = 1520, 175
+    width, margin = 1740, 175
     face, lines = lettering(spec['line'], width)
     text_shadow(image, side, width)
     draw = ImageDraw.Draw(image)

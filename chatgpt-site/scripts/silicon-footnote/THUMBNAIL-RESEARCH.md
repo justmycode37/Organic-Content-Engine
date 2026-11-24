@@ -40,7 +40,7 @@ A follow-up Monid search covered AI chips, layoffs, the AI bubble, data centers,
 
 ## Applied to Silicon Footnote
 
-Each episode gets **two complete title and cover pairs**. Start with an entity, physical object, or specific human consequence the audience recognizes. Open a curiosity gap using a question, a reversal, or a comparison the episode can pay off. Lead with the strongest verifiable surprise. An existing capability can make a new decision worth asking about. Cover copy adds an angle in up to four words, set in plain white bold sans-serif type.
+Each episode gets **two complete title and cover pairs**. Start with an entity, physical object, or specific human consequence the audience recognizes. Open a curiosity gap using a question, a reversal, or a comparison the episode can pay off. Lead with the strongest verifiable surprise. An existing capability can make a new decision worth asking about. Cover copy adds an angle in up to four words, set in oversized white sans-serif type in a black weight.
 
 Create original full-bleed art for each pair. One direction can use a close-up or a dramatic hero shot. The other can use scale, an unexpected setting, or a visual metaphor. A cover can depict a concept that never appears in the footage. Clearly fictional or dramatized art should still relate to the topic, and the title should accurately describe the story. Prefer strong silhouettes, deliberate color separation, and a composition that survives a 160 × 90 preview. Remove decorative labels, tiny details, document cards, and generic backgrounds.
 
