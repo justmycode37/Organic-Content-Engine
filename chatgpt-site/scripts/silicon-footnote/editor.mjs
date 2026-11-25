@@ -39,7 +39,8 @@ const rankChange=z.object({
  layout:z.literal('rank-change'),fromLabel:string.max(30),toLabel:string.max(30),revealCue:string.optional(),
  rows:z.array(z.object({label:string.max(24),start:z.number().int(),end:z.number().int(),color:z.string().regex(/^#[0-9a-f]{6}$/i).optional()})).min(2).max(6)
 }).refine(({rows})=>['start','end'].every(key=>rows.map(row=>row[key]).sort((a,b)=>a-b).every((rank,i)=>rank===i+1)));
-const chartSpec=z.union([clockChart,subsetChart,trackMap,rankChange,
+const pipeline=z.object({layout:z.literal('pipeline'),steps:z.array(z.object({label:string.max(30),detail:z.string().max(110).optional()})).min(2).max(6),valueCues:z.array(string).min(2).max(6).optional(),illustrative:z.boolean().optional()}).refine(c=>!c.valueCues||c.valueCues.length===c.steps.length);
+const chartSpec=z.union([clockChart,subsetChart,trackMap,rankChange,pipeline,
  z.object({layout:z.literal('calculation'),unit:string,values:z.array(z.number()).length(2),active:z.number().int().min(0).max(1),answer:string.max(50)}),
  z.object({
   layout:z.literal('profile'),unit:string,axis:z.array(string).min(2).max(5),domain:z.tuple([z.number(),z.number()]),

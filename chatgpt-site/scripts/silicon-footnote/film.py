@@ -228,6 +228,43 @@ class Sequence:
         typeblock(draw,70,630,self.caption,1150,25,'#eceef1',lines=1)
         return im
 
+    def pipeline(self,t,length=None):
+        """Follow one item through a chain of steps; each step lights on its spoken cue."""
+        chart=self.b['chart'];steps=chart['steps'];n=len(steps)
+        if not 2<=n<=6:raise ValueError('A pipeline needs two to six steps')
+        # Without spoken cues, pace the steps across most of the shot so each detail can be read.
+        span=max(.7*(n-1),.72*(length or 0)-.15)
+        cues=self.b.get('barCues') or [.15+span*i/(n-1) for i in range(n)]
+        if len(cues)!=n:raise ValueError('Give one spoken cue per pipeline step')
+        im=Image.new('RGB',(W,H),'#101217');draw=ImageDraw.Draw(im)
+        typeblock(draw,68,48,self.head,1144,58,WHITE,'title',1)
+        left,right,y=150,1130,282
+        xs=[left+(right-left)*i/(n-1) for i in range(n)]
+        reached=sum(1 for c in cues if t>=c)
+        draw.line((xs[0],y,xs[-1],y),fill='#3a3e47',width=6)
+        if reached:
+            # The marker travels from the previous step to the newly spoken one.
+            k=ease((t-cues[reached-1])/.55)
+            head=xs[reached-1] if reached==1 else xs[reached-2]+(xs[reached-1]-xs[reached-2])*k
+            draw.line((xs[0],y,head,y),fill=PALETTE[0],width=6)
+            draw.ellipse((head-11,y-11,head+11,y+11),fill=WHITE)
+        for i,(x,step) in enumerate(zip(xs,steps)):
+            lit=i<reached;current=i==reached-1
+            r=26 if current else 20
+            draw.ellipse((x-r,y-r,x+r,y+r),fill=PALETTE[0] if lit else '#101217',outline=PALETTE[0] if lit else '#6b707a',width=4)
+            draw.text((x,y),str(i+1),font=face(24,'title'),fill='#101217' if lit else '#9aa0a8',anchor='mm')
+            words=step['label'].split();lines=[step['label']]
+            if len(words)>1 and draw.textlength(step['label'],font=face(28,'bold'))>(right-left)/(n-1)-24:
+                half=max(range(1,len(words)),key=lambda k:-abs(len(' '.join(words[:k]))-len(' '.join(words[k:]))))
+                lines=[' '.join(words[:half]),' '.join(words[half:])]
+            for row,line in enumerate(lines):
+                draw.text((x,y+44+row*34),line,font=face(28,'bold'),fill=WHITE if lit else '#7d838c',anchor='ma')
+        if reached:
+            typeblock(draw,70,450,steps[reached-1].get('detail',''),1140,44,WHITE,'sans',2)
+        typeblock(draw,70,632,self.caption,1140,25,'#eceef1',lines=1)
+        typeblock(draw,70,672,'Illustrative sequence  /  '+publisher(self.source) if chart.get('illustrative') else publisher(self.source),1140,19,'#c7cbd1',lines=1)
+        return im
+
     def profile(self,t,length):
         c=self.b['chart'];im=Image.new('RGB',(W,H),'#101217');d=ImageDraw.Draw(im)
         typeblock(d,67,44,self.head,1143,60,WHITE,'title',2)
@@ -340,17 +377,19 @@ class Sequence:
             for i,(label,val) in enumerate(zip(labels,values)):
                 x=74+610*i;y=328 if fixed else 277
                 typeblock(d,x,y,label,500,45,WHITE,'bold',1)
-                typeblock(d,x,y+65,format(val,',.5g'),510,102,PALETTE[i],'bold',1)
+                pct=spec['unit'].lstrip().startswith('%')
+                typeblock(d,x,y+65,format(val,',.5g')+('%' if pct else ''),510,102,PALETTE[i],'bold',1)
                 k=ease((t-i*.28)/.82)
-                d.rectangle((x,y+183,x+round(480*val/max(values)*k),y+194),fill=PALETTE[i])
-            typeblock(d,72,612,publisher(self.source),1120,19,'#c7cfcb',lines=1)
+                d.rectangle((x,y+183,x+round(480*val/(100 if pct else max(values))*k),y+194),fill=PALETTE[i])
+            if self.caption:typeblock(d,72,560,self.caption,1120,30,WHITE,lines=2)
+            typeblock(d,72,640,publisher(self.source),1120,19,'#c7cfcb',lines=1)
             return im
         y=246;gap=min(104,340/len(values));x=385
         d.line((x,y-7,x,y+len(values)*gap-10),fill='#afc1b7',width=2)
         for i,(label,val) in enumerate(zip(labels,values)):
             at=b['barCues'][i] if b.get('barCues') else .1*i
             yy=int(y+i*gap);k=ease((t-at)/.73)
-            extent=round(595*val/(100 if spec.get('floors') else max(values))*k)
+            extent=round(595*val/(100 if spec.get('floors') or spec['unit'].lstrip().startswith('%') else max(values))*k)
             typeblock(d,75,yy+5,label,295,41,WHITE,'sans',2)
             d.rounded_rectangle((x,yy+5,x+595,yy+37),radius=4,fill='#292c30')
             if extent>1:
@@ -496,6 +535,7 @@ class Sequence:
             elif layout=='response-window':drawing=self.response_window(t)
             elif layout=='subset':drawing=self.subset(t)
             elif layout=='rank-change':return self.rank_change(t)
+            elif layout=='pipeline':return self.pipeline(t,length)
             elif layout=='track-map':return self.track_map(t)
             else:drawing=self.plot(t)
             return camera(drawing,(W,H),q,self.i%2==0,amount=.024)
