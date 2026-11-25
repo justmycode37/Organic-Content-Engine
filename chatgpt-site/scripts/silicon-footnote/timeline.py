@@ -40,6 +40,7 @@ def assemble(root,plan,durations,pack):
                 if cut.get('kind')!='chart':shot.pop('chart',None)
                 if 'process' not in cut:shot.pop('process',None)
                 if 'quote' not in cut:shot['quote']=''
+                if 'frame' not in cut:shot.pop('frame',None)
                 if cut['kind']=='footage' and 'clipStart' not in cut:
                     shot.pop('clipStart',None)
                 if cut['kind']=='footage' and 'nameplate' not in cut:
@@ -97,7 +98,7 @@ def assemble(root,plan,durations,pack):
         if a:
             length=a['end']-a['start']
             if not 0<=a.get('tagStart',0)<length:raise ValueError('Speaker tag begins outside the interview')
-            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'tagStart':a.get('tagStart',0),'speakerX':a.get('speakerX',.5),'clean':a.get('nativeNameplate',False),'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
+            beats.append({**base,'kind':'footage','comparison':None,'clip':a['clip'],'clipStart':a['start'],'source':a['source'],'originalSpeech':True,'tagStart':a.get('tagStart',0),'speakerX':a.get('speakerX',.5),'clean':a.get('nativeNameplate',False),'frame':a.get('frame'),'narration':'','nameplate':{k:a[k] for k in ('name','date','role')}})
             times.append(length)
         positions.append((duration,hold,a))
     voice=original_voice
