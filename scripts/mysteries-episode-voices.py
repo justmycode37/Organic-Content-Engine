@@ -79,7 +79,10 @@ def produce(tag, narration):
     if rowan and not avatar.exists():
         profile = json.loads((root / "docs/mysteries-of-the-sky/presenter/profile.json").read_text())
         gesture = ("Beginning on 'a long column', shape a narrow tube with both hands, then turn one hand to indicate looking end-on."
-                   if tag == "17" else "On 'closer to the center', move one hand slowly toward the other, then let both settle.")
+                   if tag == "17" and episode != "green-aurora" else
+                   "On 'closer to the center', move one hand slowly toward the other, then let both settle."
+                   if episode != "green-aurora" else
+                   "Raise one hand once at chest height to illustrate the key point, then let it settle.")
         performance = job(tag + "-avatar", "heygen", "/v1/video/heygen-avatar-6-i2v", {
             "model": "heygen-avatar-6-turbo", "resolution": "1080p",
             "reference_images": [{"type": "url", "url": profile["portraitUrl"]}],

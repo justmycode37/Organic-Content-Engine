@@ -40,6 +40,19 @@ creation: choose a new filename for each revision; existing files are preserved.
 The script resolves its schema relative to itself, so it also works from other
 working directories when called by absolute path.
 
+## Look and pacing
+
+Every episode is long form, 10–15 minutes. Never publish a short cut as an episode.
+
+Match episodes 01 (*The Star That Kept Its Appointment*) and 02 (*The Star That Weighed a Black Hole*), together with the first 40 seconds of the reference film. They are the owner's preferred standard.
+
+- **Real imagery is the backbone.** Build sequences around telescope images, observatory footage and photographs of the actual object. Grade them toward the dusk palette, with indigo shadows and coral highlights, as the reference grades its portrait, deep field and Earth. Diagrams explain what the imagery shows. They must not replace it.
+- **Dark space, not slides.** Use deep night and plum backgrounds with soft glows. Avoid light pastel or paper backgrounds.
+- **No headline on every shot.** Titan's narration names the idea. Use on-screen words only for the episode title over imagery, a measurement value, or a label needed to read a diagram. Leave out per-shot titles, explanatory sentences and footnote captions. Collect "schematic", "exaggerated" and credit notes in the end credits and `sources.md`.
+- **Open like the reference.** Start with a tiled mosaic that replaces one image with another and a push through a deep field or star field. Bring in the first real evidence image within the first 30 seconds. Then put the title in large type over imagery.
+- **Showpieces.** Every episode gets at least three of these: a mosaic transition, a flight through a dense glowing field, a luminous chamber or tunnel, or an equation written over slow flowing contour lines.
+- **Motion and pace.** Keep something moving with purpose at all times: a slow camera push, drift, build-ons or a travelling highlight. Hold a frozen frame for no more than about 3 seconds. Cut or morph when the narration reaches a new observation.
+
 ## Narration and interview cuts
 
 Titan tells the story over the animations, diagrams and source material. Rowan appears in brief interview inserts like the David Tong cutaways in the reference film. Give him one thought that benefits from seeing an expert say it: a question that changes how we read the evidence, an intuition, or a caveat. Cut directly back to Titan and the relevant visual. Use a visible hand gesture when it helps explain the measurement.
