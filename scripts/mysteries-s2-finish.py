@@ -94,9 +94,21 @@ def main():
     score_lufs=loudness(work/"score.caf")
     target_music=voice_lufs-28.0
     music_gain=target_music-score_lufs
-    mix=(f"[1:a]aresample=48000,volume={music_gain:.2f}dB,atrim=duration={total:.7f},afade=t=out:st={total-4:.6f}:d=4[m];"
-         "[0:a][m]amix=inputs=2:normalize=0:duration=first,alimiter=limit=0.84:level=false:latency=true[mix]")
-    ff("-i",work/"voice.flac","-i",work/"score.caf","-filter_complex",mix,"-map","[mix]","-c:a","aac","-b:a","144k",work/"mix.m4a")
+    mix_inputs=["-i",work/"voice.flac","-i",work/"score.caf"]
+    mix=(f"[1:a]aresample=48000,volume={music_gain:.2f}dB,atrim=duration={total:.7f},afade=t=out:st={total-4:.6f}:d=4[m];")
+    tracks="[0:a][m]"
+    if episode=="gw150914":
+        # The picture cue starts 2.6 seconds before credits. The official
+        # recording's chirp peaks about 0.60 seconds into this excerpt.
+        delay=round((total-lengths[16]/fps-2.6)*1000)
+        mix_inputs+=["-i",work/"livingston-source.wav"]
+        mix+=("[2:a]atrim=start=1.4:end=2.52,asetpts=PTS-STARTPTS,aresample=48000,"
+              "aformat=channel_layouts=mono,afade=t=in:d=0.09,afade=t=out:st=0.76:d=0.36,"
+              f"volume=-3dB,pan=stereo|c0=c0|c1=c0,adelay={delay}|{delay}[chirp];")
+        tracks+="[chirp]"
+    track_count=3 if episode=="gw150914" else 2
+    mix+=f"{tracks}amix=inputs={track_count}:normalize=0:duration=first,alimiter=limit=0.84:level=false:latency=true[mix]"
+    ff(*mix_inputs,"-filter_complex",mix,"-map","[mix]","-c:a","aac","-b:a","144k",work/"mix.m4a")
     (work/"mix-levels.json").write_text(json.dumps(dict(dialogue_lufs=voice_lufs,score_source_lufs=score_lufs,score_gain_db=round(music_gain,2),score_mix_lufs=target_music,master_lufs=loudness(work/"mix.m4a")),indent=2))
     (work/"episode.srt").write_text("\n\n".join(subtitles)+"\n")
     (work/"chapters.ffmeta").write_text("\n".join([";FFMETADATA1","title="+title,"artist=Mysteries of the Sky",*cues])+"\n")
