@@ -97,10 +97,14 @@ export function load(url: string) {
 }
 // Draw an image to cover the frame, with a push (zoom) about a focus point.
 export function cover(img: CanvasImageSource & { width: number; height: number }, zoom = 1, fx = 0.5, fy = 0.5, dx = 0) {
-  const s = Math.max(W / img.width, H / img.height) * zoom;
+  const s = Math.max((W + 80) / img.width, (H + 80) / img.height) * zoom;
   const w = img.width * s,
     h = img.height * s;
-  c.drawImage(img, W / 2 - fx * w + dx, H / 2 - fy * h, w, h);
+  // Keep the image covering the frame (with margin for the camera drift).
+  const m = 40,
+    x = Math.min(-m, Math.max(W + m - w, W / 2 - fx * w + dx)),
+    y = Math.min(-m, Math.max(H + m - h, H / 2 - fy * h));
+  c.drawImage(img, x, y, w, h);
 }
 
 // Seeded tile order for mosaic reveals, as in the reference opening.
@@ -147,6 +151,10 @@ export function space(g: number, warm = 0) {
   c.globalAlpha = 1;
 }
 
+const hudQueue: (() => void)[] = [];
+export function hud(fn: () => void) {
+  hudQueue.push(fn);
+}
 export type Cue = { key: string; t: number; prev?: string; prevT?: number; g: number; left: number };
 export let cue: Cue = { key: '', t: 0, g: 0, left: 99 };
 type Draw = (k: string, t: number, g: number) => void;
@@ -184,8 +192,10 @@ function shot(draw: Draw, k: string, t: number, g: number, enter: number, lens =
   c.translate(W / 2 + dx, H / 2 + dy);
   c.scale(s, s);
   c.translate(-W / 2, -H / 2);
+  hudQueue.length = 0;
   paintWithFinePixels(c, () => draw(k, t, g));
   c.restore();
+  paintWithFinePixels(c, () => hudQueue.splice(0).forEach((fn) => fn()));
 }
 export function directFrame(draw: Draw, current: Cue) {
   cue = current;
@@ -206,8 +216,8 @@ export function directFrame(draw: Draw, current: Cue) {
     c.clip('evenodd');
     c.drawImage(held, 0, 0);
     c.restore();
-  } else if (prev && t < 0.45 && !hardIn.has(key)) {
-    const e = ease(t, 0, 0.45);
+  } else if (prev && t < 0.3 && !hardIn.has(key)) {
+    const e = ease(t, 0, 0.3);
     shot(draw, prev, prevT + t, g, 1);
     hc.drawImage(canvas, 0, 0);
     shot(draw, key, t, g, e);
@@ -235,9 +245,11 @@ export function directFrame(draw: Draw, current: Cue) {
 const said = timeline as [string, number][];
 export function at(phrase: string, after = 0) {
   const start = cue.g - cue.t,
+    end = cue.g + cue.left,
     terms = phrase.toLowerCase().replace(/[’']/g, '').split(' ');
   for (let i = 0; i < said.length; i++) {
     if (said[i][1] < start + after - 0.05) continue;
+    if (said[i][1] > end) break;
     if (terms.every((w, j) => said[i + j]?.[0] === w)) return said[i][1] - start;
   }
   return Infinity;

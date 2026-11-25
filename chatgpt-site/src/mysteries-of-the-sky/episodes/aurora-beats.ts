@@ -1,7 +1,7 @@
 // Revised beats, each step cued to the spoken phrase with at(). When a shot is
 // reused where its phrase is not spoken, it shows its finished state.
 import { c, W, H, lensGlow, line, grad } from './stage.ts';
-import { tau, ease, mix, clamp, ink, muted, lilac, coral, blush, accent, text, space, cover, at } from './aurora-core.ts';
+import { tau, ease, mix, clamp, ink, muted, lilac, coral, blush, accent, text, space, cover, at, hud } from './aurora-core.ts';
 import {
   path,
   dot,
@@ -25,7 +25,7 @@ const cue = (phrase: string, after = 0) => {
 };
 const electron = '#e8e4ff'; // incoming electrons are neutral, never the accent
 function note(s: string) {
-  text(s, W - 40, H - 34, 16, muted + 'aa', 'right');
+  hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 }
 function hash(n: number) {
   const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
@@ -331,7 +331,7 @@ function waiting(t: number, g: number) {
   grid(140, false);
   grid(780, true);
   text('most excited states', 295, 590, 24, muted, 'center');
-  text('the green state', 935, 590, 24, accent, 'center');
+  text('the green state', 935, 590, 24, ink, 'center');
   const avg = ease(t, cue('nearly a second'), cue('nearly a second') + 0.8);
   c.globalAlpha = avg;
   text('average ≈ 0.7 s · nearly a second', 935, 140, 26, accent, 'center');
@@ -581,8 +581,6 @@ function marsSpectrum(t: number, g: number) {
   }, 400).slice(0, Math.ceil(401 * draw));
   line(pts, '#cfc6ef', 2);
   line([[x0, base], [x1, base]], muted + '88', 1.4);
-  const scan = mix(x0, x1, (t * 0.18) % 1);
-  line([[scan, base - 280], [scan, base]], '#ffffff22', 2);
   for (const nm of [500, 540, 580, 620]) text(String(nm), mix(x0, x1, (nm - 500) / 120), base + 34, 18, muted, 'center');
   if (peak > 0) {
     const px = mix(x0, x1, (557.7 - 500) / 120);

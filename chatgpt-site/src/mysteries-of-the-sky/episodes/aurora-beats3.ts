@@ -2,7 +2,7 @@
 // (ground, ¹D, ¹S), a dense upper atmosphere, a real bow shock and tail, and
 // every reveal cued to the narration. All geometry remains schematic.
 import { c, W, H, lensGlow, line, grad } from './stage.ts';
-import { tau, ease, mix, clamp, ink, muted, lilac, coral, blush, accent, text, space, cover, at } from './aurora-core.ts';
+import { tau, ease, mix, clamp, ink, muted, lilac, coral, blush, accent, text, space, cover, at, hud } from './aurora-core.ts';
 import { path, dot, spark, wave, contours, gradedPlanet, dipole, X, lineRow } from './aurora-scenes.ts';
 import { photos } from './aurora.ts';
 
@@ -17,7 +17,7 @@ const hash = (n: number) => {
   return v - Math.floor(v);
 };
 function note(s: string) {
-  text(s, W - 40, H - 34, 16, muted + 'aa', 'right');
+  hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 }
 
 // One atom design for the whole film: a lit sphere whose glow shows its state.
@@ -26,7 +26,7 @@ export function oxygen(x: number, y: number, r: number, state: 0 | 1 | 2 | numbe
   c.save();
   c.globalAlpha *= alpha;
   const excited = clamp(state);
-  if (excited > 0) lensGlow(x, y, r * 3.2, state >= 1.5 ? accent : '#a99cf0', 0.45 * excited);
+  if (excited > 0) lensGlow(x, y, r * 3.2, '#a99cf0', 0.45 * excited);
   lensGlow(x, y, r * 1.8, coral, 0.35);
   const g = c.createRadialGradient(x - r * 0.35, y - r * 0.4, r * 0.08, x, y, r);
   g.addColorStop(0, '#fff3ea');
@@ -70,7 +70,7 @@ function ladder3(x: number, top: number, bottom: number, level: number, a = 1, l
     if (labels) text(names[i], x + 236, y + 8, 22, muted);
   });
   const y = level <= 1 ? mix(ys[0], ys[1], level) : mix(ys[1], ys[2], level - 1);
-  spark(x + 110, y, 7, level > 1.5 ? accent : '#c9b6ff', 1);
+  spark(x + 110, y, 7, '#c9b6ff', 1);
   c.restore();
   return ys;
 }
@@ -231,6 +231,16 @@ function dive(t: number, g: number) {
 // ── 05/21 Collision: excitation drawn on the ladder ──────────────────────
 function collision(t: number, g: number, rowan: boolean) {
   space(g);
+  // Neighbouring atoms drift past and other electrons keep arriving.
+  for (let i = 0; i < 14; i++) {
+    const x = ((hash(i) * 1500 + t * (14 + 20 * hash(i + 1))) % 1500) - 110,
+      y = 80 + hash(i + 2) * 560;
+    oxygen(x, y, 8 + 8 * hash(i + 3), 0, 0.35);
+  }
+  for (let i = 0; i < 8; i++) {
+    const f = (t * 0.35 + hash(i + 9)) % 1;
+    spark(mix(hash(i + 4) * 1280, hash(i + 5) * 1280, f), mix(-20, 740, f), 2, electron, 0.4 * Math.sin(Math.PI * f));
+  }
   const cx = 470,
     cy = 370;
   const hitT = rowan ? -5 : cue('strikes an oxygen') - 0.2;
@@ -250,7 +260,7 @@ function collision(t: number, g: number, rowan: boolean) {
   ladder3(820, 200, 520, level, ease(t, hitT - 0.6, hitT + 0.2));
   if (drop > 0) {
     const e = ease(t, later, later + 2.4);
-    wave(cx + 100, cy, mix(cx + 110, 1240, e), cy - 20, t, accent, 9, 30);
+    wave(cx + 60, cy + 80, mix(cx + 80, 1240, e), 640, t, accent, 9, 30);
   }
 }
 
@@ -445,7 +455,7 @@ function photoVsSpectrum(t: number) {
   c.fillStyle = '#120f26';
   c.fillRect(x0, y, x1 - x0, 80);
   const lx = mix(x0, x1, (557.7 - 400) / 300);
-  const on = ease(t, cue('the spectrum') - 0.3, cue('the spectrum') + 0.6);
+  const on = 0.45 + 0.55 * ease(t, cue('the spectrum') - 0.3, cue('the spectrum') + 0.6);
   lensGlow(lx, y + 40, 70, accent, 0.8 * on);
   c.fillStyle = accent;
   c.globalAlpha = on;

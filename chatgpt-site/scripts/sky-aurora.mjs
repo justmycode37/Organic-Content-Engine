@@ -27,7 +27,7 @@ const plan = {
   23: 'rowanSpectrum',
   17: 'recombine|this faint light=airglowPhoto|its the same=airglowEarth',
   18: 'mars|the perseverance rover=jezero|it recorded=marsSpectrum',
-  13: 'recap|go lower and=column|the green line that=oneLine|the next time=blanket',
+  13: 'recap|go lower and=column|the green line that=finale',
   16: 'credits',
 };
 const archives = { r21: 'rowan-21', r22: 'rowan-22', r23: 'rowan-23' };
@@ -102,4 +102,5 @@ await renderSkyChapters({
   offsets,
   leads,
   pads,
+  encode: { crf: '17', maxrate: '9000k', bufsize: '18000k' },
 });

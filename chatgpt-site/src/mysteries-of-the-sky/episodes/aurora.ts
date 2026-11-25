@@ -26,6 +26,7 @@ import {
   arriveByMosaic,
   lockCamera,
   cutTo,
+  hud,
   at,
   type Cue,
 } from './aurora-core.ts';
@@ -49,6 +50,8 @@ import bandCloudsUrl from './aurora/iss-band-clouds.jpg';
 import curtainUrl from './aurora/iss-curtain.jpg';
 import { beats2 } from './aurora-beats.ts';
 import { beats3 } from './aurora-beats3.ts';
+import { beats4 } from './aurora-beats4.ts';
+import { beats5 } from './aurora-beats5.ts';
 
 const raw = {
   cut: load(cutUrl),
@@ -264,6 +267,8 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   ...scenes2,
   ...beats2,
   ...beats3,
+  ...beats4,
+  ...beats5,
 };
 // Rowan's interview lines play over the matching diagram with his name.
 for (const [key, base] of [
@@ -274,11 +279,13 @@ for (const [key, base] of [
   scenes[key] = (t, g) => {
     scenes[base](t, g);
     const a = ease(t, 0.2, 0.8) * (1 - ease(t, 4.5, 5.2));
-    c.fillStyle = grad(0, 0, 0, 150, ['#0d0a1ecc', '#0d0a1e00']);
-    c.globalAlpha = a;
-    c.fillRect(0, 0, W, 150);
-    text('Professor Rowan Ellery', 72, 70, 30, ink, 'left', 'title');
-    c.globalAlpha = 1;
+    hud(() => {
+      c.fillStyle = grad(0, 0, 0, 130, ['#0d0a1ee0', '#0d0a1e00']);
+      c.globalAlpha = a;
+      c.fillRect(W * 0.55, 0, W * 0.45, 130);
+      text('Professor Rowan Ellery', W - 60, 66, 30, ink, 'right', 'title');
+      c.globalAlpha = 1;
+    });
   };
 }
 arriveByMosaic(['orbit', 'title', 'swirl', 'pillars', 'australis']);

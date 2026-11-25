@@ -17,7 +17,9 @@ export async function renderSkyChapters({
   leads = {},
   pads = {},
   creditsSeconds = 11,
+  encode = {},
 }) {
+  const quality = { crf: '21', maxrate: '1700k', bufsize: '3200k', ...encode };
   const fps = 24;
   const { browser, page } = await openMotionPage('src/mysteries-of-the-sky/episodes/' + entry + '.ts');
   try {
@@ -78,11 +80,11 @@ export async function renderSkyChapters({
           '-preset',
           'veryfast',
           '-crf',
-          '21',
+          quality.crf,
           '-maxrate',
-          '1700k',
+          quality.maxrate,
           '-bufsize',
-          '3200k',
+          quality.bufsize,
           '-pix_fmt',
           'yuv420p',
           '-colorspace',

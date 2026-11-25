@@ -552,7 +552,7 @@ export function quench(t: number, g: number) {
         wave(cx + 20, cy, mix(cx + 40, x0 + 570, e), cy, t, accent, 8, 28);
       }
     }
-    text(dense ? 'dense air' : 'thin air', cx, 630, 28, dense ? muted : accent, 'center');
+    text(dense ? 'dense air' : 'thin air', cx, 630, 28, dense ? muted : ink, 'center');
   };
   panel(40, true);
   panel(660, false);
