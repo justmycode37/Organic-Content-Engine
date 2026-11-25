@@ -112,7 +112,7 @@ export async function capturePress(root,sources,indices){
      });
     },rect);
     if(!phrase&&!await uncovered()){
-     await page.evaluate(y=>window.scrollBy(0,y),rect.y-innerHeight*.4);
+     await page.evaluate(y=>window.scrollBy(0,y-window.innerHeight*.4),rect.y);
      rect=await heading.boundingBox();
     }
     if(!await uncovered()){
