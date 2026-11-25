@@ -182,6 +182,7 @@ export async function renderSkyChapters({
                     prevT: cue.prevT,
                     g: cue.start + (f + i) / 24,
                     left: cue.end - (f + i) / 24,
+                    duration: n / 24,
                   }),
                 ),
               { name: cut.key, f, n, frameMethod, cue },
