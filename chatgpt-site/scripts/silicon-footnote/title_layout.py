@@ -7,7 +7,7 @@ import sys
 import tempfile
 
 from film import W, H, lower
-from footage import choose_title_position
+from footage import choose_title_position, source_frame_filter
 
 
 def source_text_regions(root, shots):
@@ -23,7 +23,7 @@ def source_text_regions(root, shots):
                 frame = Path(folder) / f'{len(paths)}.jpg'
                 subprocess.run(['ffmpeg', '-v', 'error', '-ss', str(beat['clipStart'] + start + moment),
                                 '-i', root / f"clip-{beat['clip']}.mp4", '-frames:v', '1',
-                                '-vf', 'scale=960:540:force_original_aspect_ratio=increase,crop=960:540',
+                                '-vf', source_frame_filter(beat.get('frame'), 960, 540),
                                 '-y', frame], check=True)
                 if frame.exists():
                     paths.append(str(frame))
@@ -74,5 +74,5 @@ def place_titles(root, beats, lengths, clips):
     regions = source_text_regions(root, shots)
     for index, beat, _ in shots:
         if not beat.get('originalSpeech') and not beat.get('titlePosition'):
-            beat['titlePosition'] = choose_title_position(root/f"clip-{beat['clip']}.mp4", beat['clipStart'])
+            beat['titlePosition'] = choose_title_position(root/f"clip-{beat['clip']}.mp4", beat['clipStart'], beat.get('frame'))
         avoid_source_text(beat, clips[beat['clip']]['credit'], regions.get(index, []))
