@@ -3,8 +3,11 @@
 import { atmosphericLimb, transmittedLight } from '../atmosphere.ts';
 import { drawMolecule, type Molecule } from '../molecules.ts';
 import { evidenceScenes } from './wasp39-sequences.ts';
+import { coverHook, showpieces } from './wasp39-showpieces.ts';
+import { makeBeats } from './wasp39-beats.ts';
 import data from './wasp39-data.json';
 import {
+  faces,
   canvas,
   c,
   W,
@@ -20,7 +23,7 @@ import {
   lensGlow,
   ring,
 } from './stage.ts';
-import { paintWithFinePixels } from '../finish.ts';
+import { directFrame, continuous, cue, type Cue } from './direction.ts';
 
 const tau = Math.PI * 2;
 const cubic = (t: number) => t * t * (3 - 2 * t);
@@ -84,9 +87,42 @@ function body(x: number, y: number, r: number, star = false) {
   lensGlow(x, y, r * 1.37, star ? '#df896d' : '#716693', star ? 0.51 : 0.18);
   c.drawImage(star ? sun : gas, x - r, y - r, 2 * r, 2 * r);
 }
-function heading(s: string) {
-  words(s, 62, 91, 43, 'title');
+// One sans family for every label and card; equations keep their italic serif.
+faces.title = (size) => '300 ' + size + 'px "Helvetica Neue", Arial, sans-serif';
+faces.mono = (size) => '500 ' + Math.round(size * 1.08) + 'px "Helvetica Neue", Arial, sans-serif';
+// Distinct looks for comparison planets reuse the banded gas texture.
+function globeLook(x: number, y: number, r: number, look: 'wasp' | 'saturn' | 'jupiter' | 'star' = 'wasp') {
+  if (r <= 0.5) return;
+  if (look === 'star' || look === 'wasp') return body(x, y, r, look === 'star');
+  const ring = (front: boolean) => {
+    c.save();
+    c.translate(x, y);
+    c.rotate(-0.28);
+    c.strokeStyle = grad(-2.2 * r, 0, 4.4 * r, 0, ['#e9d2a855', '#f3e0bd', '#c9a77a', '#e9d2a855']);
+    for (const [k, w] of [
+      [1.75, 7],
+      [2.05, 4],
+    ]) {
+      c.lineWidth = (w * r) / 66;
+      c.beginPath();
+      c.ellipse(0, 0, k * r, 0.38 * k * r, 0, front ? 0 : Math.PI, front ? Math.PI : tau);
+      c.stroke();
+    }
+    c.restore();
+  };
+  lensGlow(x, y, r * 1.37, look === 'saturn' ? '#d9b98a' : '#c9a080', 0.2);
+  if (look === 'saturn') ring(false);
+  c.save();
+  c.filter =
+    look === 'jupiter'
+      ? 'sepia(0.55) hue-rotate(-10deg) saturate(1.2) brightness(1.3) contrast(1.15)'
+      : 'sepia(0.85) saturate(0.55) brightness(1.45)';
+  c.drawImage(gas, x - r, y - r, 2 * r, 2 * r);
+  c.restore();
+  if (look === 'saturn') ring(true);
 }
+// Shots carry no slide titles; Titan names what is on screen.
+function heading(_s: string) {}
 function path(fn: (f: number) => number[], count = 100) {
   return Array.from({ length: count + 1 }, (_, i) => fn(i / count));
 }
@@ -116,15 +152,15 @@ function planet(t: number, k: string) {
     return;
   }
   if (k === 'distance') {
-    const n = 42;
+    const n = 90;
     for (let i = 0; i < n; i++) {
-      const z = (i / n + t * 0.025) % 1,
+      const z = (i / n + t * 0.07) % 1,
         a = i * 2.4;
       const x = 640 + 880 * z * z * Math.cos(a),
         y = 361 + 480 * z * z * Math.sin(a);
       lensGlow(x, y, 2 + 7 * z, ice, 0.5);
     }
-    lensGlow(640, 361, 56, pink, 0.85);
+    lensGlow(640, 361, 56 + 10 * (1 - Math.exp(-t / 6)), pink, 0.85);
     words(titles[k], 65, 603, 51, 'title');
     return;
   }
@@ -165,8 +201,37 @@ function planet(t: number, k: string) {
         color,
         6,
       );
+      for (let j = 0; j < 3; j++) {
+        const f = (t * 0.22 + j / 3) % 1,
+          a2 = a + (b - a) * f;
+        lensGlow(x + (r + 7) * Math.cos(a2), y + (r + 7) * Math.sin(a2), 22, color, Math.sin(Math.PI * f));
+      }
     }
   } else {
+    if (k === 'ring') {
+      // "At wavelengths the gas absorbs strongly ... reaches higher" (+2.5 s),
+      // "pass through more freely ... closer to the center" (+7.2 s).
+      for (const [extra, color, at, name] of [
+        [26, pink, 2.2, 'strongly absorbed light'],
+        [6, ice, 7, 'light that passes freely'],
+      ] as const) {
+        const a = Math.min(1, Math.max(0, (t - at) / 0.8));
+        if (a <= 0) continue;
+        c.save();
+        c.globalAlpha = a * (0.75 + 0.25 * Math.sin(t * 2 + extra));
+        c.setLineDash([10, 9]);
+        c.lineDashOffset = -t * 12;
+        c.strokeStyle = color;
+        c.lineWidth = 2.5;
+        c.beginPath();
+        c.arc(x, y, r + extra, 0, tau);
+        c.stroke();
+        c.restore();
+        c.globalAlpha = a;
+        words(name, x - r - 40, y + (extra > 10 ? -120 : 120), 22, 'mono', color, 'right');
+        c.globalAlpha = 1;
+      }
+    }
     const height = k === 'cloud' ? 12 : 8;
     atmosphericLimb(c, [x, y], r, height, k === 'cloud');
     const altitude = k === 'cloud' ? 3 : 10;
@@ -211,12 +276,17 @@ function crossing(t: number, k: string) {
   heading(k === 'ingress' ? 'First contact' : k === 'exit' ? 'Last contact' : 'A transit');
 }
 function rays(t: number, k: string) {
-  const vertical = k === 'vertical',
-    cloudy = k === 'cloudray';
+  const vertical = false,
+    cloudy = k === 'cloudray',
+    breathing = k === 'layers';
   const radius = 790,
     center = [815, 1164] as const,
     top = center[1] - radius;
-  const height = cloudy ? 22 : 16;
+  const swing = breathing ? 0.5 - 0.5 * Math.cos(t * 0.9) : 0;
+  const height = cloudy ? 22 : breathing ? 11 + 22 * swing : 16;
+  if (breathing) {
+    words(swing > 0.5 ? 'warmer · layers spread higher' : 'cooler · layers sit lower', 1220, 640, 24, 'mono', swing > 0.5 ? pink : ice, 'right');
+  }
   body(...center, radius);
   atmosphericLimb(c, center, radius, height, cloudy);
   const extinction = cloudy ? 0.046 : 0.012;
@@ -268,12 +338,22 @@ const plotX = 139,
   plotW = 1010,
   yBottom = 591,
   plotH = 387;
+const chartKeys = ['data', 'peak', 'shoulder', 'bins', 'unknown', 'co2', 'sulfur', 'pretty'];
+const zoomed = (k?: string) => k === 'shoulder' || k === 'bins' || k === 'sulfur';
+const mix = (a: number, b: number, f: number) => a + (b - a) * f;
 function chart(t: number, k: string) {
-  const zoom = k === 'shoulder' || k === 'bins' || k === 'sulfur';
-  const min = zoom ? 3.88 : 3.38,
-    max = zoom ? 4.2 : 5.06,
-    lo = zoom ? 2.063 : 2.06,
-    hi = zoom ? 2.18 : 2.29;
+  // A cut between chart views is one continuous zoom of the same axes.
+  const from = cue.prev && chartKeys.includes(cue.prev) ? cue.prev : undefined;
+  const move = from ? Math.min(1, t / 1.6) : 1,
+    e = move * move * (3 - 2 * move);
+  const z = mix(zoomed(from ?? k) ? 1 : 0, zoomed(k) ? 1 : 0, e);
+  const zoom = z > 0.5;
+  const min = mix(3.38, 3.88, z),
+    max = mix(5.06, 4.2, z),
+    lo = mix(2.06, 2.063, z),
+    hi = mix(2.29, 2.18, z);
+  // Points arrive left to right the first time the plot appears.
+  const build = from ? 1 : Math.min(1, t / 1.8);
   const X = (w: number) => plotX + ((w - min) / (max - min)) * plotW,
     Y = (p: number) => yBottom - ((p - lo) / (hi - lo)) * plotH;
   const title: Record<string, string> = {
@@ -286,11 +366,16 @@ function chart(t: number, k: string) {
     unknown: 'Two features',
   };
   heading(title[k]);
-  const target = k === 'co2' || k === 'peak' ? 4.34 : 4.045;
-  const band = zoom ? 0.035 : 0.052;
+  const aim = (q?: string) => (q === 'co2' || q === 'peak' ? 4.34 : 4.045);
+  const target = mix(aim(from ?? k), aim(k), e);
+  const band = mix(0.052, 0.035, z);
+  c.save();
+  c.beginPath();
+  c.rect(plotX - 4, yBottom - plotH - 10, plotW + 8, plotH + 14);
+  c.clip();
   c.fillStyle = grad(0, yBottom - plotH, 0, plotH, [ice + '05', ice + '28']);
   c.fillRect(X(target - band), yBottom - plotH, X(target + band) - X(target - band), plotH);
-  const ticks = zoom ? [3.9, 4.0, 4.1, 4.2] : [3.5, 4, 4.5, 5];
+  c.restore();
   line(
     [
       [plotX, yBottom - plotH],
@@ -299,8 +384,10 @@ function chart(t: number, k: string) {
     ],
     '#c4b5cd88',
   );
-  for (const w of ticks) {
+  for (const [w, wide] of [3.5, 4, 4.5, 5, 3.9, 4.0, 4.1, 4.2].map((w, i) => [w, i < 4] as const)) {
     const x = X(w);
+    if (x < plotX - 1 || x > plotX + plotW + 1) continue;
+    c.globalAlpha = wide ? 1 - z : z;
     line(
       [
         [x, yBottom],
@@ -309,10 +396,12 @@ function chart(t: number, k: string) {
       muted,
       1,
     );
-    words(w.toFixed(1), x, yBottom + 35, 18, 'mono', muted, 'center');
+    words(w.toFixed(1), x, yBottom + 35, 20, 'mono', muted, 'center');
   }
-  for (const p of zoom ? [2.08, 2.12, 2.16] : [2.1, 2.2]) {
+  for (const [p, wide] of [2.1, 2.2, 2.08, 2.12, 2.16].map((p, i) => [p, i < 2] as const)) {
     const y = Y(p);
+    if (y < yBottom - plotH || y > yBottom) continue;
+    c.globalAlpha = wide ? 1 - z : z;
     line(
       [
         [plotX, y],
@@ -323,26 +412,48 @@ function chart(t: number, k: string) {
     );
     words(p.toFixed(2) + '%', plotX - 11, y + 6, 16, 'mono', muted, 'right');
   }
+  c.globalAlpha = 1;
   words('Wavelength (μm)', 1150, 662, 20, 'mono', muted, 'right');
   words('Light blocked', plotX, 163, 19, 'mono', muted);
+  c.save();
+  c.beginPath();
+  c.rect(plotX - 4, yBottom - plotH - 10, plotW + 8, plotH + 14);
+  c.clip();
   for (const [w, p, err] of data.spectrum) {
-    if (w < min || w > max || p < lo || p > hi) continue;
+    if (w < min - 0.05 || w > max + 0.05) continue;
     const x = X(w),
       y = Y(p),
       highlight = Math.abs(w - target) < band;
+    const arrive = Math.max(0, Math.min(1, (build * 1.4 * plotW - (x - plotX)) / 60));
+    if (arrive <= 0) continue;
+    c.globalAlpha = arrive;
+    const lift = (1 - arrive) * 24;
     line(
       [
-        [x, Y(Math.min(hi, p + err))],
-        [x, Y(Math.max(lo, p - err))],
+        [x, Y(p + err) + lift],
+        [x, Y(p - err) + lift],
       ],
       highlight ? lime : ice + 'b0',
-      1.6,
+      mix(2, 2.6, z),
     );
-    c.fillStyle = highlight ? lime : pink;
+    const r = mix(5, 6.6, z);
+    if (highlight) lensGlow(x, y + lift, r * 4, lime, 0.55);
+    c.fillStyle = grad(x - r, y - r, 2 * r, 2 * r, highlight ? ['#f6ffd0', lime] : ['#ffd9d2', pink]);
     c.beginPath();
-    c.arc(x, y, zoom ? 4.7 : 3.7, 0, tau);
+    c.arc(x, y + lift, r, 0, tau);
     c.fill();
+    c.globalAlpha = 1;
   }
+  if (k === 'pretty') {
+    // "A smooth line drawn through those measurements has already involved a choice."
+    const pts = data.spectrum.filter(([w]) => w >= min && w <= max);
+    const smooth = pts.map((_, i) => {
+      const win = pts.slice(Math.max(0, i - 2), i + 3);
+      return [X(pts[i][0]), Y(win.reduce((s, q) => s + q[1], 0) / win.length)];
+    });
+    line(smooth.slice(0, Math.max(2, Math.ceil(Math.min(1, t / 2.2) * smooth.length))), grad(plotX, 0, plotW, 0, [ice, pink]), 3.5);
+  }
+  c.restore();
   const m = zoom ? 4.0425 : target === 4.34 ? 4.348 : 4.0425;
   const point = data.spectrum.reduce((a, b) => (Math.abs(a[0] - m) < Math.abs(b[0] - m) ? a : b));
   ring(X(point[0]), Y(point[1]), 12 + 1.7 * Math.sin(t * 1.2), lime, 0.72);
@@ -352,7 +463,7 @@ function lightcurve(t: number, k: string) {
   const row = data.light[keys[k === 'narrow' ? 7 : 0]];
   const X = (h: number) => 144 + (h + 4.7) * 105,
     Y = (v: number) => 219 + (1.002 - v) * 13700;
-  heading(k === 'baseline' ? 'Before and after' : k === 'narrow' ? '4.28 μm' : 'Recorded starlight');
+  if (k === 'narrow') words('4.28 μm', 1150, 196, 26, 'mono', lime, 'right');
   line(
     [
       [144, 193],
@@ -364,6 +475,10 @@ function lightcurve(t: number, k: string) {
   for (const h of [-4, -2, 0, 2, 4]) words(String(h), X(h), 604, 19, 'mono', muted, 'center');
   words('Hours from mid-transit', 1150, 655, 20, 'mono', muted, 'right');
   const f = Math.min(1, 0.28 + t * 0.13);
+  const head = Math.min(row.length - 1, Math.floor(f * row.length) - 1);
+  const scan = row[(Math.floor(t * 9) % row.length + row.length) % row.length];
+  if (f >= 1) lensGlow(X(scan[0]), Y(scan[1]), 26, ice, 0.6);
+  else if (head > 0) lensGlow(X(row[head][0]), Y(row[head][1]), 34, lime, 0.8);
   row.forEach(([h, v], i) => {
     if (i / row.length > f) return;
     c.fillStyle = k === 'baseline' && Math.abs(h) > 2 ? lime : ice;
@@ -380,37 +495,34 @@ const moleculeShots: Record<string, [Molecule, string]> = {
 };
 function molecule(t: number, k: string) {
   const [species, title] = moleculeShots[k];
-  drawMolecule(c, species, [666, 389], 1.34, t, species === 'H2O');
-  heading(title);
+  const grow = 0.82 + 0.18 * (1 - Math.exp(-t * 1.6));
+  lensGlow(640, 372, 330, species === 'SO2' ? pink : ice, 0.22);
+  drawMolecule(c, species, [640, 372], 1.6 * grow, t, species === 'H2O');
+  words(title, 640, 600, 30, 'title', muted, 'center');
 }
 function instrument(t: number, k: string) {
   heading(k === 'photon' ? 'Counting photons' : k === 'binsize' ? 'Wavelength bins' : 'Splitting starlight');
   const ox = 525,
     oy = 376;
-  line(
-    [
-      [60, oy],
-      [ox, oy],
-    ],
-    grad(40, 0, 480, 0, [pink + '20', '#ffe8cf']),
-    5,
-  );
-  const thickness = k === 'binsize' ? 14 : 6;
+  const smooth = (x: number) => cubic(Math.max(0, Math.min(1, x)));
+  // Follow the incident packet to the prism before unfolding the spectrum.
+  const beam = k === 'prism' ? smooth(t / 0.52) : 1;
+  const spread = k === 'prism' ? smooth((t - 0.5) / 1.4) : 1;
+  line([[60, oy], [60 + (ox - 60) * beam, oy]], grad(40, 0, 480, 0, [pink + '20', '#ffe8cf']), 6);
+  lensGlow(60 + (ox - 60) * beam, oy, 52, '#ffdab4', 0.7);
   for (let i = 0; i < 29; i++) {
-    const yy = 159 + i * 15,
-      col = i % 5 === 0 ? pink : ice;
-    line(
-      [
-        [ox, oy],
-        [1012, yy],
-      ],
-      grad(ox, oy, 520, yy - oy, [col + '10', col + '9a']),
-      1.4,
-    );
-    c.fillStyle = grad(1030, yy - 5, 141, 8, [col + 'bb', col + '22']);
-    c.fillRect(1030, yy - 4, 50 + 44 * (0.5 + 0.5 * Math.sin(i * 0.46)), thickness);
-    const f = (t * 0.33 + i * 0.11) % 1;
-    if (i % 4 === 0) lensGlow(ox + 487 * f, oy + (yy - oy) * f, 6, col, 0.9);
+    const yy = 159 + i * 15;
+    const active = i === 10;
+    const col = active ? lime : i < 14 ? ice : pink;
+    const endX = ox + 487 * spread;
+    const endY = oy + (yy - oy) * spread;
+    line([[ox, oy], [endX, endY]], grad(ox, oy, 487, yy - oy, [col + '10', col + 'c0']), active ? 4 : 2);
+    const f = ((t * 0.62 + 0.72) % 1) * spread;
+    if (active || i % 5 === 0) lensGlow(ox + 487 * f, oy + (yy - oy) * f, active ? 20 : 9, col, spread);
+    c.globalAlpha = spread;
+    c.fillStyle = grad(1022, yy, 133, 0, [col + 'dc', col + '35']);
+    c.fillRect(1022, yy - 5, 48 + 64 * (0.5 + 0.5 * Math.sin(i * 0.46)), k === 'binsize' ? 13 : 8);
+    c.globalAlpha = 1;
   }
   c.fillStyle = grad(435, 284, 185, 164, ['#dfc6df77', '#8879b15e', '#7561801a']);
   c.beginPath();
@@ -423,33 +535,74 @@ function instrument(t: number, k: string) {
   c.stroke();
 }
 function compare(t: number, k: string) {
-  const mid = k === 'mid',
+  const mid = k === 'mid' || k === 'predict' || k === 'confirm',
     numbers = mid ? [4.05, 7.7, 8.5] : [2, 2.1],
     x0 = 171,
     dx = 940;
   heading(mid ? 'Three absorption bands' : 'An illustrative transit');
   if (mid) {
+    // Schematic SO₂ absorption: each band rises in turn and its molecule vibrates above it.
+    const X = (w: number) => x0 + ((w - 3.4) / 5.8) * dx,
+      base = 470;
+    // predict: 4.05 μm measured, 7.7 and 8.5 μm only predicted. confirm: the two
+    // new bands rise as Titan names them. mid: all three established.
+    const grow = (s: number) => 1 - Math.exp(-Math.max(0, s) * 2.4);
+    const rise =
+      k === 'predict'
+        ? [1, 0, 0]
+        : k === 'confirm'
+          ? [1, grow(t - 1.1), grow(t - 2.3)]
+          : numbers.map((_, i) => (cue.prev && ['predict', 'confirm', 'mid'].includes(cue.prev) ? 1 : grow(t - 0.4 - i * 0.9)));
+    const active = k === 'predict' ? 0 : k === 'confirm' ? (t > 2.3 ? 2 : t > 1.1 ? 1 : 0) : -1;
+    const curve = path((f) => {
+      const w = 3.4 + 5.8 * f;
+      let a = 0;
+      numbers.forEach((n, i) => (a += rise[i] * [0.55, 1, 0.8][i] * Math.exp(-(((w - n) / [0.09, 0.22, 0.2][i]) ** 2))));
+      return [X(w), base - 190 * a];
+    }, 300);
+    const fill = c.createLinearGradient(0, base - 200, 0, base);
+    fill.addColorStop(0, pink + '88');
+    fill.addColorStop(0.6, '#7c5f9a44');
+    fill.addColorStop(1, ice + '05');
+    c.fillStyle = fill;
+    c.beginPath();
+    c.moveTo(X(3.4), base);
+    curve.forEach(([x, y]) => c.lineTo(x, y));
+    c.lineTo(X(9.2), base);
+    c.fill();
+    line(curve, grad(x0, 0, dx, 0, [ice, '#d6a3c8', pink]), 3);
     line(
       [
-        [x0, 425],
-        [x0 + dx, 425],
+        [x0, base],
+        [x0 + dx, base],
       ],
-      grad(x0, 0, dx, 0, [ice, pink]),
-      3,
+      muted + '88',
+      1.4,
     );
     for (let i = 0; i < 3; i++) {
-      const x = x0 + ((numbers[i] - 3.4) / 5.8) * dx;
-      line(
-        [
-          [x, 405],
-          [x, 445],
-        ],
-        i ? pink : ice,
-        3,
-      );
-      lensGlow(x, 425, 22 + Math.sin(t + i) * 4, i ? pink : ice);
-      words(numbers[i] + ' μm', x, 481, 24, 'mono', muted, 'center');
+      const x = X(numbers[i]),
+        full = base - 190 * [0.55, 1, 0.8][i],
+        top = base - 190 * rise[i] * [0.55, 1, 0.8][i];
+      const on = i === active;
+      // Hollow marker: where the band must appear if the identification is right.
+      if (rise[i] < 0.98) {
+        c.save();
+        c.setLineDash([5, 7]);
+        c.strokeStyle = (on ? lime : muted) + 'cc';
+        c.lineWidth = 2;
+        c.beginPath();
+        c.arc(x, full, 16 + 3 * Math.sin(t * 3), 0, tau);
+        c.stroke();
+        c.restore();
+      }
+      lensGlow(x, top, 40 + 8 * Math.sin(t * 1.7 + i), on ? lime : i ? pink : ice, 0.6 * rise[i]);
+      c.globalAlpha = Math.max(0.25, rise[i]);
+      drawMolecule(c, 'SO2', [x + [0, -34, 34][i], full - [70, 150, 70][i]], 0.34, t * (1 + 0.35 * i) + i);
+      c.globalAlpha = 1;
+      words(numbers[i] + ' μm', x, base + 36, 24, 'mono', on ? lime : muted, 'center');
     }
+    if (k === 'predict') words('predicted', X(8.1), base + 72, 22, 'mono', muted, 'center');
+    words('SO₂ bands · schematic shapes', x0, base + 104, 20, 'mono', muted);
   } else {
     numbers.forEach((n, j) => {
       const x = 292 + j * 560,
@@ -466,29 +619,39 @@ function compare(t: number, k: string) {
   }
 }
 function credits(t: number) {
+  c.globalAlpha = 0.55;
+  evidenceScenes.finalPoints(6 + t);
+  c.globalAlpha = 1;
+  c.fillStyle = '#120f2699';
+  c.fillRect(0, 300, W, 110);
   const rows = [
     'Observations · JWST Transiting Exoplanet Community ERS Team',
     'Chemistry · Tsai et al. (2023) and Powell et al. (2024)',
     'Mysteries of the Sky · Rowan Ellery is a fictional AI presenter',
   ];
-  words(rows[Math.min(2, Math.floor(t / 3.3))], 640, 372, 30, 'title', '#ebdfe8', 'center');
+  const row = Math.min(2, Math.floor(t / 3.5)),
+    f = t - row * 3.5;
+  c.globalAlpha = Math.min(1, f / 0.6, row === 2 ? 1 : (3.5 - f) / 0.6);
+  words(rows[row], 640, 366 + 8 * (1 - Math.min(1, f / 0.6)), 28, 'title', '#ebdfe8', 'center');
+  c.globalAlpha = 1;
 }
 const scenes: Record<string, (t: number, k: string) => void> = {};
 for (const k of Object.keys(titles)) scenes[k] = planet;
 for (const k of ['transit', 'ingress', 'exit']) scenes[k] = crossing;
-for (const k of ['grazing', 'vertical', 'cloudray']) scenes[k] = rays;
-for (const k of ['data', 'peak', 'shoulder', 'bins', 'unknown', 'co2', 'sulfur']) scenes[k] = chart;
+for (const k of ['grazing', 'layers', 'cloudray']) scenes[k] = rays;
+for (const k of chartKeys) scenes[k] = chart;
 for (const k of ['curve', 'narrow', 'baseline']) scenes[k] = lightcurve;
 for (const k of ['carbon', 'sulfide', 'water', 'so2']) scenes[k] = molecule;
 for (const k of ['prism', 'photon', 'binsize']) scenes[k] = instrument;
-Object.assign(scenes, evidenceScenes);
-scenes.mid = compare;
+Object.assign(scenes, evidenceScenes, showpieces, makeBeats(globeLook));
+scenes.mid = scenes.predict = compare;
 scenes.example = compare;
 scenes.credits = credits;
+continuous(chartKeys);
+continuous(['vertical', 'slant']);
+continuous(['predict', 'confirm', 'mid']);
 Object.assign(window, {
-  waspFrame(k: string, t: number) {
-    c.drawImage(plate, 0, 0);
-    paintWithFinePixels(c, () => scenes[k](t, k));
-    return canvas.toDataURL('image/jpeg', 0.91).split(',')[1];
+  waspFrame(k: string, t: number, cue?: Cue) {
+    return directFrame((key, time) => scenes[key](time, key), cue ?? { key: k, t, g: t, left: 99 }, k === 'discovery' ? () => coverHook(t) : undefined);
   },
 });

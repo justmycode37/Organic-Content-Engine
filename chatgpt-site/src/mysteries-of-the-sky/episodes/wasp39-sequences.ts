@@ -4,14 +4,13 @@ import { c, ice, pink, lime, muted, words, line, grad, lensGlow } from './stage.
 import observations from './wasp39-data.json';
 import { drawMolecule } from '../molecules.ts';
 import model from './wasp39-model.json';
+import miri from './wasp39-miri.json';
 const tau = 2 * Math.PI;
 function ease(t: number, start: number, end: number) {
   const f = Math.max(0, Math.min(1, (t - start) / (end - start)));
   return f * f * (3 - 2 * f);
 }
-function heading(s: string) {
-  words(s, 62, 91, 43, 'title');
-}
+function heading(_s: string) {}
 function mark(x: number, y: number, r: number, color: string) {
   c.fillStyle = color;
   c.beginPath();
@@ -110,7 +109,17 @@ function photonCups(t: number) {
     const count = Math.floor(total),
       phase = total - count;
     // Each drop lands as its column gains one count.
-    const stack = Math.min(count, 43) * 3.4,
+    // A one-second count jumps around; more time or a wider cup steadies it.
+    const hash = (q: number) => {
+      const v = Math.sin(q * 12.9898 + i * 78.233) * 43758.5453;
+      return v - Math.floor(v);
+    };
+    const tick = t * 2.6,
+      k = Math.floor(tick),
+      u = tick - k,
+      jitter = hash(k) + (hash(k + 1) - hash(k)) * u * u * (3 - 2 * u) - 0.5;
+    const calm = Math.max(widened, ease(t, 6, 9) * 0.55);
+    const stack = Math.min(count, 18) * 3.4 * Math.min(1, t / 4) + 70 * jitter * (1 - 0.85 * calm) + 40,
       level = bottom - 5 - stack;
     c.fillStyle = grad(x - 24, level, 48, stack || 1, [col + 'ae', col + '26']);
     c.fillRect(x - 23, level, 46, stack);
@@ -208,7 +217,8 @@ function fit(t: number) {
     y0 = 540 - 123 * separate,
     amp = 1290 - 450 * separate;
   const Y = (p: number) => y0 - (p - 2.07) * amp;
-  heading('Testing the model');
+  words('Measured transit depths', 155, 128, 25, 'sans', ice);
+  words('Proposed gas mixture', 1140, 128, 25, 'sans', pink, 'right');
   line(
     [
       [150, y0 + 18],
@@ -262,7 +272,7 @@ function fit(t: number) {
       muted + 'a0',
       1,
     );
-    words('Observed − model', 150, 502, 20, 'mono', muted);
+    words('Observed − model', 1145, 650, 20, 'mono', muted, 'right');
     c.globalAlpha = 1;
   }
   for (const w of [3.9, 4.05, 4.3, 4.5]) words(w + ' μm', X(w), y0 + 49, 17, 'mono', muted, 'center');
@@ -282,7 +292,7 @@ function thousand(t: number) {
 }
 function turnDips(t: number) {
   const morph = ease(t, 4.7, 8.3);
-  heading(morph > 0.5 ? 'Fraction blocked' : 'Light reaching the detector');
+  words(morph > 0.5 ? 'Fraction blocked' : 'Light reaching the detector', 140, 190, 20, 'mono', muted);
   for (const [i, depth] of [2, 2.1].entries()) {
     const x = 375 + 530 * i,
       col = i ? pink : ice,
@@ -301,60 +311,86 @@ function turnDips(t: number) {
   }
 }
 function bandScale(t: number) {
-  heading('Beyond visible red');
-  const max = 1.1 + 8.3 * ease(t, 3.2, 11),
-    x = (w: number) => 113 + (1044 * w) / max;
-  c.save();
-  c.beginPath();
-  c.rect(110, 184, 1049, 388);
-  c.clip();
-  const band = grad(x(0.4), 0, x(0.7) - x(0.4), 0, ['#9987c4', '#beb8de', '#cf91a8', '#df847b']);
-  c.fillStyle = band;
-  c.fillRect(x(0.4), 306, x(0.7) - x(0.4), 132);
-  c.fillStyle = grad(x(0.7), 0, 1050, 0, ['#b477814c', '#957baf17']);
-  c.fillRect(x(0.7), 306, 1800, 132);
-  for (const w of [0.4, 0.7, 4.05, 7.7, 8.5]) {
-    const tint = w > 0.7 ? pink : ice;
-    line(
-      [
-        [x(w), 300],
-        [x(w), 448],
-      ],
-      tint,
-      2,
-    );
-    words(w + ' μm', x(w), w === 0.7 || w === 8.5 ? 500 : 470, 19, 'mono', muted, 'center');
+  // All three wave trains travel at the same screen speed. Their crest
+  // spacing shares a scale, so the wavelength comparison survives the cut.
+  const visible = 0.4 + 0.3 * ease(t, 4.8, 6.4);
+  const spread = ease(t, 7.5, 9.2);
+  const bands = [
+    { wavelength: visible, name: 'Visible light', y: 355 - 165 * spread, at: 0, colors: [ice, pink] },
+    { wavelength: 4.05, name: 'First band', y: 356, at: 8.1, colors: [pink, '#ffd0ab'] },
+    { wavelength: 8.5, name: 'Longer-wave band', y: 522, at: 10.7, colors: ['#bb9fd9', ice] },
+  ];
+  c.fillStyle = grad(0, 0, 1280, 720, ['#312248', '#231c3b', '#643342']);
+  c.fillRect(-90, -50, 1460, 820);
+  for (const { wavelength, name, y, at, colors } of bands) {
+    const opened = ease(t, at, at + 1.35);
+    if (!opened) continue;
+    c.save();
+    c.globalAlpha = opened;
+    const spacing = wavelength * 75;
+    for (let layer = 0; layer < 10; layer++) {
+      const curve = Array.from({ length: 601 }, (_, i) => {
+        const x = 104 + i * 1.78 * opened;
+        const phase = (x - 104 - t * 80) * tau / spacing;
+        const amplitude = 33 + 50 * (1 - spread);
+        return [x, y + amplitude * Math.sin(phase + layer * 0.065) + layer * 1.2];
+      });
+      line(curve, grad(104, y - 45, 1068, 90, colors.map(col => col + (layer === 9 ? 'ff' : '35'))), layer === 9 ? 3.2 : 4.5);
+    }
+    const value = wavelength === visible ? visible.toFixed(2) : String(wavelength);
+    words(name + '   ' + value + ' μm', 110, y - 60 - 50 * (1 - spread), 26, 'sans', '#f4e4ec');
+    c.restore();
   }
-  c.restore();
+  if (t > 16.7) {
+    c.globalAlpha = ease(t, 16.7, 17.7);
+    words('Infrared shown in illustrative colors', 1160, 645, 20, 'sans', muted, 'right');
+    c.globalAlpha = 1;
+  }
 }
 function drift(t: number) {
-  heading('Finding the baseline');
-  const reveal = ease(t, 10, 17),
-    x = (u: number) => 140 + 1010 * u,
-    y = (u: number) => 335 - 82 * u;
-  const base = Array.from({ length: 121 }, (_, j) => {
-    const u = j / 120,
-      drop = Math.min(ease(u, 0.28, 0.35), 1 - ease(u, 0.67, 0.74));
-    return [x(u), y(u) + drop * 133 + 3 * Math.sin(j * 7.21)];
-  });
-  for (let i = 0; i < base.length; i++) {
-    const u = i / 120;
-    if (t < 8 || (u > 0.26 && u < 0.76) || reveal > 0) {
-      c.globalAlpha = t < 8 || (u > 0.26 && u < 0.76) ? 1 : reveal;
-      mark(base[i][0], base[i][1], 3.2, ice);
-      c.globalAlpha = 1;
-    }
+  const x = (u: number) => 155 + 980 * u;
+  const y = (u: number) => 295 - 94 * u;
+  const dip = (u: number) => Math.min(ease(u, 0.27, 0.34), 1 - ease(u, 0.66, 0.73));
+  const available = ease(t, 0, 6.8);
+  const hideWings = ease(t, 8.3, 9.6) * (1 - ease(t, 15.4, 17.8));
+  const until = Math.round(available * 180);
+  const shade = grad(0, 150, 0, 360, [ice + '05', ice + '25', ice + '06']);
+  c.fillStyle = shade;
+  c.fillRect(x(0.27), 150, x(0.73) - x(0.27), 390);
+  words('During transit', 640, 526, 22, 'sans', muted, 'center');
+  for (let i = 0; i <= until; i++) {
+    const u = i / 180;
+    const inTransit = u >= 0.27 && u <= 0.73;
+    const py = y(u) + 140 * dip(u) + 5 * Math.sin(i * 7.21);
+    c.globalAlpha = inTransit ? 1 : 1 - hideWings;
+    mark(x(u), py, 3.8, inTransit ? '#f3d7da' : ice);
   }
-  const f = ease(t, 14, 20);
-  line(
-    [
-      [x(0), y(0)],
-      [x(f), y(f)],
-    ],
-    pink,
-    2.3,
-  );
-  words('Illustrative exposure', 140, 587, 20, 'mono', muted);
+  c.globalAlpha = 1;
+  if (t < 7) lensGlow(x(available), y(available) + 140 * dip(available), 32, ice);
+  // With only the interior of the transit, its unocculted level is unknown.
+  if (hideWings > 0) {
+    c.save();
+    c.setLineDash([8, 8]);
+    for (const shift of [-29, 23]) {
+      c.globalAlpha = hideWings * 0.85;
+      line([[x(0.1), y(0.1) + shift], [x(0.9), y(0.9) + shift]], pink, 2.5);
+    }
+    c.restore();
+    c.globalAlpha = hideWings;
+    words('Which baseline?', 640, 150, 32, 'sans', pink, 'center');
+    c.globalAlpha = 1;
+  }
+  const fit = ease(t, 16.1, 18.8);
+  if (fit) {
+    line([[x(0), y(0)], [x(fit), y(fit)]], ice, 3);
+    const u = 0.5;
+    const depth = 140 * ease(t, 18.3, 20.3);
+    line([[x(u), y(u)], [x(u), y(u) + depth]], lime, 4);
+    if (depth > 90) words('transit depth', x(u) + 18, y(u) + 85, 24, 'sans', lime);
+  }
+  words('Relative brightness', 155, 110, 26, 'sans', muted);
+  words('Illustrative exposure', 155, 625, 20, 'sans', muted);
+  words('Time →', 1135, 625, 24, 'sans', muted, 'right');
 }
 export const evidenceScenes: Record<string, (t: number) => void> = {
   strip,
@@ -367,6 +403,58 @@ export const evidenceScenes: Record<string, (t: number) => void> = {
   bandScale,
   drift,
 };
+
+// Powell et al., Figure 2: measured Eureka! depths and 1σ errors above
+// a strip of the released SO₂ opacity, binned logarithmically for display.
+function miriEvidence(t: number) {
+  const ink = '#352741', plum = '#674760';
+  c.fillStyle = grad(0, 0, 1280, 720, ['#f1d5bd', '#e5c7c7', '#cbbbd6']);
+  c.fillRect(-90, -50, 1460, 820);
+  const zoom = ease(t, 5.1, 13.8);
+  const lo = 5 + 1.7 * zoom, hi = 11 - 1.7 * zoom;
+  const X = (w: number) => 183 + ((w - lo) / (hi - lo)) * 920;
+  const Y = (d: number) => 445 - (d - 1.87) * 850;
+  words('Webb · mid-infrared', 155, 99, 32, 'sans', ink);
+  words('Transit depth', 155, 149, 20, 'sans', plum);
+  for (const d of [1.9, 2.0, 2.1, 2.2]) {
+    line([[183, Y(d)], [1103, Y(d)]], '#65465c40', 1.5);
+    words(d.toFixed(1) + '%', 170, Y(d) + 6, 18, 'sans', plum, 'right');
+  }
+  const scan = ease(t, 0, 3.2);
+  for (const [w, d, error] of miri.measurements) {
+    if (w < lo || w >= hi || (w - 5) / 6 > scan) continue;
+    line([[X(w), Y(d - error)], [X(w), Y(d + error)]], plum, 2.5);
+    mark(X(w), Y(d), 6, ink);
+  }
+  for (const [i, w] of [7.7, 8.5].entries()) {
+    const a = ease(t, i * 1.4, i * 1.4 + 0.8);
+    c.save();
+    c.globalAlpha = a;
+    c.setLineDash([4, 7]);
+    line([[X(w), 160], [X(w), 512]], '#79485c', 1.8);
+    words(w + ' μm', X(w), 142, 24, 'sans', ink, 'center');
+    c.restore();
+  }
+  c.save();
+  c.beginPath();
+  c.rect(183, 486, 920, 46);
+  c.clip();
+  for (const [i, opacity] of miri.logOpacity.entries()) {
+    const heat = Math.min(1, Math.max(0, (opacity + 23.2) / 4.8));
+    c.fillStyle = grad(0, 486, 0, 46, ['#322339', '#4d3152']);
+    const x = X(5 + i / 40);
+    c.fillRect(x, 486, 920 / ((hi - lo) * 40) + 0.1, 46);
+    c.globalAlpha = heat ** 2;
+    c.fillStyle = '#ffd3ae';
+    c.fillRect(x, 486, 920 / ((hi - lo) * 40) + 0.1, 46);
+    c.globalAlpha = 1;
+  }
+  c.restore();
+  for (const w of [5,6,7,8,9,10,11]) if (w >= lo && w <= hi) words(String(w), X(w), 564, 19, 'sans', ink, 'center');
+  words('SO₂ absorption strength', 183, 612, 22, 'sans', ink);
+  words('Wavelength (μm)', 1103, 612, 22, 'sans', ink, 'right');
+}
+evidenceScenes.confirm = miriEvidence;
 
 function detector(t: number) {
   heading('On the detector');
@@ -408,6 +496,11 @@ function resolution(t: number) {
         pink + Math.round(l * 130).toString(16),
       ]);
       c.fillRect(x, y - 34, w / n - 1, 68);
+    }
+    for (let k = 0; k < 14; k++) {
+      const life = (t * 0.9 + k * 0.37 + i * 0.19) % 1,
+        fx = (k * 0.618 + Math.floor(t * 0.9 + k * 0.37) * 0.31) % 1;
+      lensGlow(left + fx * w, y - 70 + 70 * life * life, 9, k % 3 ? ice : pink, 1 - life);
     }
     const f = Math.min(0.45, 0.04 + 0.055 * t),
       x = left + f * w;
@@ -474,8 +567,9 @@ Object.assign(evidenceScenes, { detector, resolution, window: spectralWindow, fi
 function column(t: number, illuminated: boolean) {
   heading(illuminated ? 'Chemistry driven by starlight' : 'Thermal equilibrium');
   const x = 640,
-    y = 350,
-    r = 187;
+    y = 345,
+    r = 228;
+  lensGlow(x, y, r * 1.6, illuminated ? pink : ice, 0.25);
   c.save();
   c.beginPath();
   c.arc(x, y, r, 0, tau);
@@ -485,7 +579,7 @@ function column(t: number, illuminated: boolean) {
   for (let i = 0; i < 210; i++) {
     const u = (i * 0.6180339887) % 1,
       v = Math.sqrt((i + 0.5) / 210);
-    const xx = x - r + 2 * r * u + 5 * Math.cos(t * 0.5 + i),
+    const xx = x - r + 2 * r * ((u + t * 0.012 * (0.6 + v)) % 1) + 5 * Math.cos(t * 0.5 + i),
       yy = y - r + 2 * r * v + 4 * Math.sin(t * 0.7 + i * 0.39);
     const col = i % 3 === 0 ? ice + '65' : pink + '70';
     mark(xx, yy, 2 + (i % 3), col);

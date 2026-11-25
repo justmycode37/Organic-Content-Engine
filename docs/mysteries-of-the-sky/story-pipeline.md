@@ -2,6 +2,8 @@
 
 Plan regular episodes for roughly 10–15 minutes, with a 12-minute draft target. Make the first spoken sentence of every episode a question. Introduce the subject immediately after it, and write a later beat that answers that exact question using evidence the viewer has now seen. Check both beats in the finished cut, including any title or labels that could give the answer away. Show the first piece of evidence during or immediately after the introduction. Time the reveal, close-ups, and changes of viewpoint to Titan’s words. Give Rowan two or three short appearances spread through a full episode. Each should explain a measurement, an uncertainty, or a prediction the viewer can test. The short transit example demonstrates the handoff format.
 
+Give every episode an original, extravagant visual idea for its first few seconds and its thumbnail. Build it around that episode’s question. Show the composition immediately, animate its focal detail into the first piece of evidence, and export a thumbnail that reads at small size. Art-direct the backgrounds by scene: the instrument, sky, atmosphere and published data can each have their own materials, light and palette balance. Compare a contact sheet with the reference for changes of setting across the edit. Give Rowan’s interview footage a subtle webcam finish before adding his lower third.
+
 This is a local preproduction pipeline for a short astrophysics explainer. It
 turns a source ledger and structured brief into evidence-linked narration beats
 and a shot handoff. It runs with Node 20+ and built-in modules only. No API keys,

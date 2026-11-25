@@ -172,7 +172,7 @@ export function renderHandoff(story) {
     `Story: ${story.storyId} · Updated: ${story.updatedAt} · Planned duration: ${number(result.summary.durationSeconds)}s · Narration: ${result.summary.narrationWords} words`, '',
     `Review: ${result.summary.pendingReviews.length ? `not approved (${result.summary.pendingReviews.join(', ')})` : 'all preproduction reviews recorded as passed; production review remains separate'}`, '', '## Brief', ''];
   for (const key of ['centralQuestion', 'audience', 'oneSentenceAnswer', 'hook', 'payoff', 'scope']) lines.push(`- **${key}:** ${md(story.brief[key])}`);
-  lines.push(`- **Exclusions:** ${story.brief.exclusions.map(md).join('; ')}`, '', '## Narration', '', `Planned voice time · Titan ${number(result.summary.durationSeconds - result.summary.rowanSeconds)}s · Rowan ${number(result.summary.rowanSeconds)}s`, '', ...story.beats.flatMap(beat => [`**${speaker(beat)}** · ${md(beat.narration)}`, '']), '## Beat and shot handoff', '');
+  lines.push(`- **Exclusions:** ${story.brief.exclusions.map(md).join('; ')}`, '', '## Narration', '', `Planned voice time · Titan ${number(result.summary.durationSeconds - result.summary.rowanSeconds)}s · Rowan ${number(result.summary.rowanSeconds)}s`, '', ...story.beats.flatMap(beat => [`**${speaker(beat)}** · ${md(beat.narration)}`, '']), '## Beat and shot handoff', '', 'Open with an original visual metaphor for this question. Use its strongest composition for the thumbnail and animate it into the first evidence. Choose a setting for each change of subject or scale. Apply a light webcam finish to Rowan’s camera footage before titles.', '');
   let cursor = 0;
   for (const beat of story.beats) {
     const end = cursor + beat.durationSeconds;

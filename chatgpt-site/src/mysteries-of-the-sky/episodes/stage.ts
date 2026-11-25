@@ -16,6 +16,13 @@ const grad = (x: number, y: number, w: number, h: number, colors: string[]) => {
   colors.forEach((color, i) => g.addColorStop(i / (colors.length - 1), color));
   return g;
 };
+// Episodes may replace a face, e.g. to set every label in one family.
+const faces = {
+  title: (size: number) => size + 'px Georgia, serif',
+  italic: (size: number) => 'italic ' + size + 'px Georgia, serif',
+  mono: (size: number) => size + 'px Menlo, monospace',
+  sans: (size: number) => '500 ' + size + 'px "Helvetica Neue", Arial, sans-serif',
+};
 function words(
   s: string,
   x: number,
@@ -27,14 +34,7 @@ function words(
 ) {
   c.textAlign = align;
   c.textBaseline = 'alphabetic';
-  c.font =
-    style === 'title'
-      ? size + 'px Georgia, serif'
-      : style === 'italic'
-        ? 'italic ' + size + 'px Georgia, serif'
-        : style === 'mono'
-          ? size + 'px Menlo, monospace'
-          : '500 ' + size + 'px "Helvetica Neue", Arial, sans-serif';
+  c.font = faces[style as keyof typeof faces]?.(size) ?? faces.sans(size);
   c.fillStyle = color;
   c.fillText(s, x, y);
 }
@@ -114,4 +114,4 @@ function target(x: number, y: number, r: number, t: number) {
   }
 }
 
-export { canvas, c, W, H, muted, pink, ice, lime, grad, words, lensGlow, plate, dot, line, ring, target };
+export { faces, canvas, c, W, H, muted, pink, ice, lime, grad, words, lensGlow, plate, dot, line, ring, target };

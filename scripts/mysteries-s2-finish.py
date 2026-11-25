@@ -1,7 +1,6 @@
 """Mix the S2 score and dialogue, then write the captioned episode and chapters."""
 from pathlib import Path
 import json
-import math
 import re
 import subprocess
 import sys
@@ -42,6 +41,10 @@ def timestamp(t):
 
 
 def interview():
+    if episode == "wasp39":
+        # The episode renderer owns the camera filter and timed animation cutaways.
+        subprocess.run(["node", "chatgpt-site/scripts/sky-wasp39.mjs", str(work), "0", "21", "22"], check=True)
+        return
     overlay = Image.new("RGBA",(1280,720))
     draw = ImageDraw.Draw(overlay)
     for y in range(505,720):
@@ -49,28 +52,6 @@ def interview():
     font = ImageFont.truetype("/System/Library/Fonts/Supplemental/Georgia.ttf",36)
     draw.text((60,609),"Professor Rowan Ellery",font=font,fill="#fff1ea")
     overlay.save(work/"interview-title.png")
-    if episode == "wasp39":
-        # Switch to the evidence before the reference-guided take's timing
-        # diverges from the approved ElevenLabs recording.
-        for ch, cut_frame, evidence, in_point in [(0, None, None, None), (21, 164, 8, 4), (22, 181, 12, 19)]:
-            source = work / ("rowan.mp4" if ch == 0 else f"rowan-{ch}.mp4")
-            audio = work / f"{ch:02}.mp3"
-            seconds = float(subprocess.check_output(["ffprobe", "-v", "error", "-show_entries",
-                "format=duration", "-of", "csv=p=0", audio]))
-            frame_count = math.ceil((seconds + 0.18) * fps)
-            conform = "[0:v]fps=24,scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1"
-            if cut_frame is None:
-                inputs = ["-i", source, "-i", work/"interview-title.png"]
-                edit = conform + f",tpad=stop_mode=clone:stop_duration=0.5[a];[a][1:v]overlay,trim=end_frame={frame_count}[out]"
-            else:
-                inputs = ["-i", source, "-ss", str(in_point), "-i", work/f"video-{evidence:02}.mp4"]
-                edit = (conform + f",trim=end_frame={cut_frame},setpts=PTS-STARTPTS[a];"
-                    f"[1:v]fps=24,setsar=1,trim=end_frame={frame_count-cut_frame},setpts=PTS-STARTPTS[b];"
-                    "[a][b]concat=n=2:v=1:a=0[out]")
-            ff(*inputs, "-filter_complex", edit, "-map", "[out]", "-an", "-frames:v", str(frame_count),
-                "-c:v", "libx264", "-preset", "fast", "-crf", "19", "-pix_fmt", "yuv420p",
-                "-video_track_timescale", "24000", work/f"video-{ch:02}.mp4")
-        return
     ff("-i",work/"rowan.mp4","-i",work/"interview-title.png","-filter_complex",
        "[0:v]fps=24,scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,setsar=1[c];[c][1:v]overlay",
        "-an","-c:v","libx264","-preset","fast","-crf","20","-pix_fmt","yuv420p","-video_track_timescale","24000",work/"video-00.mp4")

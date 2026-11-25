@@ -4,7 +4,19 @@ import { rename, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { once } from 'node:events';
 
-export async function renderSkyChapters({ work, ids, edit, archives, entry, frameMethod }) {
+export async function renderSkyChapters({
+  work,
+  ids,
+  edit,
+  archives,
+  archiveFilters = {},
+  archiveOverlays = {},
+  entry,
+  frameMethod,
+  offsets = {},
+  leads = {},
+  pads = {},
+}) {
   const fps = 24;
   const { browser, page } = await openMotionPage('src/mysteries-of-the-sky/episodes/' + entry + '.ts');
   try {
@@ -35,7 +47,7 @@ export async function renderSkyChapters({ work, ids, edit, archives, entry, fram
                 ],
                 { encoding: 'utf8' },
               ),
-            ) + 0.32;
+            ) + (pads[ch] ?? 0.32);
       const frames = Math.ceil(seconds * fps);
       const cuts = edit[ch]
         .split(',')
@@ -98,9 +110,12 @@ export async function renderSkyChapters({ work, ids, edit, archives, entry, fram
               offset,
               '-i',
               join(work, archives[id] + '.mp4'),
+              ...(archiveOverlays[id] ? ['-i', archiveOverlays[id]] : []),
               '-an',
-              '-vf',
-              'fps=24,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2,tpad=stop_duration=2:stop_mode=clone',
+              '-filter_complex',
+              ['[0:v]fps=24', 'scale=1280:720:force_original_aspect_ratio=increase', 'crop=1280:720', 'setsar=1',
+                archiveFilters[id], 'tpad=stop_duration=2:stop_mode=clone'].filter(Boolean).join(',') +
+                (archiveOverlays[id] ? '[camera];[camera][1:v]overlay' : ''),
               '-frames:v',
               String(n),
               '-threads',
@@ -120,10 +135,29 @@ export async function renderSkyChapters({ work, ids, edit, archives, entry, fram
           if ((await ended)[0]) throw Error('Archive decode failed: ' + cut.key);
         } else {
           for (let f = 0; f < n; f += 8) {
+            // Frame methods may use the cue to dissolve from the previous cut and
+            // keep slow backdrop motion continuous across chapters.
+            // The first cut continues from the last shot of the preceding chapter.
+            const before = cuts[i - 1] ?? (leads[ch] && { key: leads[ch].key, f: -leads[ch].frames });
+            const cue = {
+              prev: before && !before.key.includes('@') ? before.key : undefined,
+              prevT: before ? (cut.f - before.f) / 24 : 0,
+              start: (offsets[ch] ?? 0) + cut.f / 24,
+              end: (frames - cut.f) / 24,
+            };
             const imgs = await page.evaluate(
-              ({ name, f, n, frameMethod }) =>
-                Array.from({ length: Math.min(8, n - f) }, (_, i) => window[frameMethod](name, (f + i) / 24)),
-              { name: cut.key, f, n, frameMethod },
+              ({ name, f, n, frameMethod, cue }) =>
+                Array.from({ length: Math.min(8, n - f) }, (_, i) =>
+                  window[frameMethod](name, (f + i) / 24, {
+                    key: name,
+                    t: (f + i) / 24,
+                    prev: cue.prev,
+                    prevT: cue.prevT,
+                    g: cue.start + (f + i) / 24,
+                    left: cue.end - (f + i) / 24,
+                  }),
+                ),
+              { name: cut.key, f, n, frameMethod, cue },
             );
             await new Promise((res, rej) =>
               enc.stdin.write(Buffer.concat(imgs.map((x) => Buffer.from(x, 'base64'))), (err) =>

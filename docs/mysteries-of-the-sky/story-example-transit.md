@@ -36,6 +36,8 @@ Planned voice time · Titan 59s · Rowan 5s
 
 ## Beat and shot handoff
 
+Open with an original visual metaphor for this question. Use its strongest composition for the thumbnail and animate it into the first evidence. Choose a setting for each change of subject or scale. Apply a light webcam finish to Rowan’s camera footage before titles.
+
 ### a-dip · 0–4s · hook
 
 **Titan voiceover / verbatim captions:** This tiny dip could be a planet.
