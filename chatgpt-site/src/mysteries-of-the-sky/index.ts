@@ -181,3 +181,5 @@ export function renderFrame(ctx: Ctx, shots: readonly Shot[], seconds: number) {
 
 export { atmosphericLimb, transmittedLight, type LightPath } from './atmosphere.ts';
 export { drawMolecule, type Molecule } from './molecules.ts';
+
+export { drawPlanet, preparePlanets, type PlanetName, type PlanetView } from './planets.ts';

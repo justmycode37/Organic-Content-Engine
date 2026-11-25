@@ -1,4 +1,4 @@
-import { renderFrame, type Shot } from './index.ts';
+import { preparePlanets, renderFrame, type Shot } from './index.ts';
 import { sampler, studies } from './studies.ts';
 
 const canvas = document.createElement('canvas');
@@ -20,4 +20,4 @@ const skyStudy = {
     return canvas.toDataURL(mime, 0.97).split(',')[1];
   },
 };
-Object.assign(window, { skyStudy });
+Object.assign(window, { skyStudy, motionAssetsReady: preparePlanets() });

@@ -2,8 +2,9 @@
 // atmosphere thickness, molecules and illustrative counting examples are schematic.
 import { atmosphericLimb, transmittedLight } from '../atmosphere.ts';
 import { drawMolecule, type Molecule } from '../molecules.ts';
+import { drawPlanet, preparePlanets } from '../planets.ts';
 import { evidenceScenes } from './wasp39-sequences.ts';
-import { coverHook, field, showpieces } from './wasp39-showpieces.ts';
+import { coverHook, coverReady, field, showpieces } from './wasp39-showpieces.ts';
 import { makeBeats } from './wasp39-beats.ts';
 import data from './wasp39-data.json';
 import {
@@ -24,6 +25,8 @@ import {
   ring,
 } from './stage.ts';
 import { directFrame, continuous, cue, type Cue } from './direction.ts';
+
+Object.assign(window, { motionAssetsReady: Promise.all([coverReady, preparePlanets(['jupiter', 'saturn'])]) });
 
 const tau = Math.PI * 2;
 const cubic = (t: number) => t * t * (3 - 2 * t);
@@ -90,36 +93,18 @@ function body(x: number, y: number, r: number, star = false) {
 // One sans family for every label and card; equations keep their italic serif.
 faces.title = (size) => '300 ' + size + 'px "Helvetica Neue", Arial, sans-serif';
 faces.mono = (size) => '500 ' + Math.round(size * 1.08) + 'px "Helvetica Neue", Arial, sans-serif';
-// Distinct looks for comparison planets reuse the banded gas texture.
 function globeLook(x: number, y: number, r: number, look: 'wasp' | 'saturn' | 'jupiter' | 'star' = 'wasp') {
   if (r <= 0.5) return;
   if (look === 'star' || look === 'wasp') return body(x, y, r, look === 'star');
-  const ring = (front: boolean) => {
-    c.save();
-    c.translate(x, y);
-    c.rotate(-0.28);
-    c.strokeStyle = grad(-2.2 * r, 0, 4.4 * r, 0, ['#e9d2a855', '#f3e0bd', '#c9a77a', '#e9d2a855']);
-    for (const [k, w] of [
-      [1.75, 7],
-      [2.05, 4],
-    ]) {
-      c.lineWidth = (w * r) / 66;
-      c.beginPath();
-      c.ellipse(0, 0, k * r, 0.38 * k * r, 0, front ? 0 : Math.PI, front ? Math.PI : tau);
-      c.stroke();
-    }
-    c.restore();
-  };
-  lensGlow(x, y, r * 1.37, look === 'saturn' ? '#d9b98a' : '#c9a080', 0.2);
-  if (look === 'saturn') ring(false);
-  c.save();
-  c.filter =
-    look === 'jupiter'
-      ? 'sepia(0.55) hue-rotate(-10deg) saturate(1.2) brightness(1.3) contrast(1.15)'
-      : 'sepia(0.85) saturate(0.55) brightness(1.45)';
-  c.drawImage(gas, x - r, y - r, 2 * r, 2 * r);
-  c.restore();
-  if (look === 'saturn') ring(true);
+  drawPlanet(c, {
+    body: look,
+    center: [x, y],
+    radius: r,
+    longitude: look === 'jupiter' ? -0.48 : 0.08,
+    latitude: look === 'saturn' ? 0.38 : 0.04,
+    roll: look === 'saturn' ? -0.28 : -0.04,
+    ambient: 0.06,
+  });
 }
 // Shots carry no slide titles; Titan names what is on screen.
 function heading(_s: string) {}
@@ -167,7 +152,8 @@ function planet(t: number, k: string) {
   if (k === 'size' || k === 'puff') {
     heading(titles[k]);
     const rr = k === 'size' ? 127 : 67;
-    body(370, 409, rr);
+    if (k === 'size') globeLook(370, 409, rr, 'jupiter');
+    else body(370, 409, rr);
     body(867, 409, 173);
     for (const [x, r] of [
       [370, rr],

@@ -2,6 +2,7 @@ import {
   atmosphericLimb,
   transmittedLight,
   drawMolecule,
+  drawPlanet,
   body,
   camera,
   charge,
@@ -15,6 +16,7 @@ import {
   tween,
   wave,
   type Point,
+  type PlanetName,
   type Shot,
 } from './index.ts';
 
@@ -25,6 +27,44 @@ import { catalogStudies } from './catalog.ts';
 import { interactionStudies } from './interactions.ts';
 import { plasmaStudies } from './plasma.ts';
 import { cosmosStudies } from './cosmos.ts';
+
+const planetGallery: ReadonlyArray<{ body: PlanetName; radius: number; longitude: number; roll?: number }> = [
+  { body: 'mercury', radius: 100, longitude: 0.22 },
+  { body: 'venus', radius: 114, longitude: 0.06 },
+  { body: 'earth', radius: 120, longitude: -1.45, roll: -0.20 },
+  { body: 'mars', radius: 108, longitude: -1.10 },
+  { body: 'moon', radius: 105, longitude: -0.21 },
+  { body: 'jupiter', radius: 136, longitude: -0.44 },
+  { body: 'saturn', radius: 76, longitude: 0.08, roll: -0.26 },
+  { body: 'uranus', radius: 110, longitude: 0.78, roll: 1.52 },
+  { body: 'neptune', radius: 112, longitude: 0.46 },
+  { body: 'sun', radius: 123, longitude: 0.0 },
+];
+
+const realisticPlanets: Shot = {
+  duration: 8,
+  draw(ctx, t) {
+    const space = ctx.createLinearGradient(0, 0, 1760, 1080);
+    space.addColorStop(0, '#171320');
+    space.addColorStop(0.46, '#100f1b');
+    space.addColorStop(1, '#070b15');
+    ctx.fillStyle = space;
+    ctx.fillRect(0, 0, 1920, 1080);
+    label(ctx, 'Solar System', [960, 113], 60);
+    label(ctx, 'Observation-based textures · display sizes vary', [960, 181], 25);
+    planetGallery.forEach(({ body, radius, longitude, roll }, i) => {
+      const x = 220 + (i % 5) * 370;
+      const y = i < 5 ? 391 : 746;
+      drawPlanet(ctx, {
+        body, center: [x, y], radius, roll,
+        longitude: longitude + t * (0.035 + 0.004 * i),
+        light: [-0.62, 0.31, 0.72],
+      });
+      label(ctx, body[0].toUpperCase() + body.slice(1), [x, y + 166], 31);
+    });
+    label(ctx, 'Texture maps by Solar System Scope · CC BY 4.0', [960, 1001], 21);
+  },
+};
 
 // Reference-image reconstruction. Diagrammatic symbols, independent of physical scale.
 const electron: Shot = {
@@ -143,6 +183,7 @@ export const studies = {
   ...interactionStudies,
   ...plasmaStudies,
   ...diagramStudies,
+  'realistic-planets': realisticPlanets,
   'grazing-starlight': {
     duration: 7,
     draw(ctx, t) {

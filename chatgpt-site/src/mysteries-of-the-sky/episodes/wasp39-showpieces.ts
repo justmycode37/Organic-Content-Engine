@@ -120,7 +120,7 @@ function opening(t: number) {
 // tiles peel away toward the rim glint and expose the measured spectrum below.
 const cover = new Image();
 cover.src = coverUrl;
-Object.assign(window, { motionAssetsReady: cover.decode() });
+export const coverReady = cover.decode();
 export function coverHook(t: number) {
   if (t >= 3.5) return;
   // On frame one the full artwork reads as the thumbnail. Its square cuts

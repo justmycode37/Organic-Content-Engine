@@ -17,6 +17,30 @@ Default movie output is silent 1080p H.264 at 30 fps. `SKY_WIDTH` changes output
 
 The `grazing-starlight`, `molecular-stretch`, and `water-photolysis` studies demonstrate the atmosphere and molecule primitives. Set the planet center, radius and scale height on a light path to make its brightness follow the density it traverses. The molecular renderer supports CO₂, SO₂, water and hydrogen sulfide. Its motion is slowed for the illustration.
 
+## Realistic planets
+
+The `realistic-planets` study shows all eight planets, the Moon and the Sun. The renderer projects observation-based texture maps onto lit, rotating globes. It includes Earth's cloud layer, atmospheric scattering on the light-facing limb, and Saturn's ring and globe shadows. Set `light` in camera coordinates to match the rest of your shot.
+
+```ts
+import { drawPlanet, preparePlanets } from './index.ts';
+
+await preparePlanets(['earth', 'saturn']);
+
+drawPlanet(ctx, {
+  body: 'saturn',
+  center: [960, 540],
+  radius: 240,
+  longitude: seconds * 0.065,
+  latitude: 0.42,
+  roll: -0.21,
+  light: [-0.65, 0.31, 0.69],
+});
+```
+
+Call `preparePlanets` once before drawing and use a browser with WebGL 2. Angles are in radians, sizes use equatorial radius, and scale is set by the shot. Orbit geometry, exoplanet illustrations, and rendered surface colors may be illustrative.
+
+Attribution for exports using these assets is **Solar System Scope, Solar System Textures, CC BY 4.0. Adapted with 3D projection, lighting and shading.** The Neptune renderer approximates the muted blue-green appearance reported by Irwin et al. [Texture maps and credits](https://www.solarsystemscope.com/textures/) · [License](https://creativecommons.org/licenses/by/4.0/) · [Neptune color study](https://doi.org/10.1093/mnras/stad3761)
+
 ## Compose a shot
 
 This example draws one wave and keeps the moving highlight exactly on its advancing tip. Add shots to the array in playback order. Pass the canvas context and the current playhead time in seconds from a browser or the local renderer.

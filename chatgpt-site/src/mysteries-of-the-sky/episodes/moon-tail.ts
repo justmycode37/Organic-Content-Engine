@@ -1,3 +1,4 @@
+import { drawPlanet, preparePlanets } from '../planets.ts';
 import { c, canvas, grad, lensGlow, line, W, H, words } from './stage.ts';
 import coverUrl from './moon-tail-cover.jpg';
 
@@ -17,11 +18,10 @@ const note = (text: string) => measure(text, 111, 661, 18, '#ddc7da');
 let seed = 87;
 const rng = () => ((seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296);
 const stars = Array.from({ length: 460 }, () => [rng(), rng(), rng(), rng()]);
-const craters = Array.from({ length: 87 }, () => [rng() * 2 - 1, rng() * 2 - 1, 0.017 + rng() ** 3 * 0.13]);
 const particles = Array.from({ length: 290 }, () => [rng(), rng(), rng(), rng()]);
 const cover = new Image();
 cover.src = coverUrl;
-Object.assign(window, { motionAssetsReady: cover.decode() });
+Object.assign(window, { motionAssetsReady: Promise.all([cover.decode(), preparePlanets(['moon', 'earth', 'sun'])]) });
 
 function dot(x: number, y: number, r: number, fill: string | CanvasGradient) {
   c.fillStyle = fill;
@@ -56,39 +56,18 @@ function backdrop(t: number, look: 'space' | 'desert' | 'instrument' | 'paper' |
     c.globalAlpha = 1;
   }
 }
-function disc(x: number, y: number, r: number, kind: 'moon' | 'earth' | 'sun', roll = 0) {
-  const shades = {
-    moon: ['#f3e1ca', '#9d8892', '#403349', '#181727'],
-    earth: ['#c3c8ea', '#6b77a1', '#2f3e63', '#1e1d32'],
-    sun: ['#fff1d1', '#ffc899', '#e5968f', '#a95171'],
-  }[kind];
-  lensGlow(x, y, r * (kind === 'sun' ? 2.2 : 1.12), kind === 'sun' ? '#ed9f8a' : lilac, 0.45);
-  c.save();
-  c.beginPath();
-  c.arc(x, y, r, 0, tau);
-  c.clip();
-  const lit = c.createRadialGradient(x - r * 0.43, y - r * 0.34, r * 0.08, x, y, r * 1.08);
-  shades.forEach((color, i) => lit.addColorStop(i / 3, color));
-  c.fillStyle = lit;
-  c.fillRect(x - r, y - r, r * 2, r * 2);
-  if (kind === 'moon') {
-    for (const [u, v, size] of craters) {
-      const px = x + r * (u + roll * 0.02), py = y + r * v;
-      const falloff = Math.max(0, 1 - Math.hypot(u, v) * 0.48);
-      c.globalAlpha = falloff * 0.66;
-      dot(px, py, r * size, '#746276');
-      ellipse(px - r * size * 0.05, py - r * size * 0.07, r * size, r * size * 0.78, '#ead0baa0', Math.max(0.6, r * size * 0.11));
-    }
-  } else {
-    for (let i = 0; i < 17; i++) {
-      const z = (i / 17 + roll * 0.009) % 1;
-      const py = y + r * (2 * z - 1);
-      const strip = trace(36, (u) => [x - r + 2 * r * u, py + r * 0.08 * Math.sin(i + 8 * u + roll * 0.15)]);
-      line(strip, kind === 'sun' ? '#ffe7b42b' : '#e2dbe53b', r * 0.028);
-    }
-  }
-  c.restore();
-  ellipse(x, y, r, r, kind === 'sun' ? '#ffd2ba70' : '#d6c6df50', 1.5);
+function disc(x: number, y: number, r: number, kind: 'moon' | 'earth' | 'sun', t = 0) {
+  if (kind === 'sun') lensGlow(x, y, r * 2.2, '#ed9f8a', 0.45);
+  drawPlanet(c, {
+    body: kind,
+    center: [x, y],
+    radius: r,
+    longitude: (kind === 'moon' ? -0.21 : 0.32) + t * (kind === 'earth' ? 0.046 : 0.018),
+    latitude: 0.08,
+    roll: kind === 'earth' ? -0.2 : -0.06,
+    light: [-0.84, 0.12, 0.53],
+    ambient: 0.052,
+  });
 }
 function wave(x: number, y: number, length: number, amplitude: number, pitch: number, t: number, color: string) {
   const points = trace(121, (u) => [x + length * u, y + amplitude * Math.sin(length * u * tau / pitch - t * 7.5)]);
@@ -610,6 +589,7 @@ function credit(t: number) {
     'Discovery and follow-up · Smith et al. and Baumgardner et al.',
     'Velocity measurements · Mierkiewicz et al.',
     'Rowan Ellery is a fictional presenter',
+    'Globe maps · Solar System Scope · CC BY 4.0',
   ].entries()) {
     c.globalAlpha = ease(t, 0.3 + 0.65 * i, 1.0 + 0.65 * i);
     measure(msg, 518, 344 + i * 58, 22, ink);
