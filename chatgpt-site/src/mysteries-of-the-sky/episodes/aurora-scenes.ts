@@ -6,14 +6,14 @@ import { tau, ease, mix, clamp, ink, muted, lilac, coral, blush, accent, text, s
 import { photos, atomGlyph } from './aurora.ts';
 
 type XY = [number, number];
-const path = (fn: (u: number) => XY, n = 100) => Array.from({ length: n + 1 }, (_, i) => fn(i / n));
-function dot(x: number, y: number, r: number, color: string | CanvasGradient) {
+export const path = (fn: (u: number) => XY, n = 100) => Array.from({ length: n + 1 }, (_, i) => fn(i / n));
+export function dot(x: number, y: number, r: number, color: string | CanvasGradient) {
   c.fillStyle = color;
   c.beginPath();
   c.arc(x, y, r, 0, tau);
   c.fill();
 }
-function spark(x: number, y: number, r: number, color = accent, a = 1) {
+export function spark(x: number, y: number, r: number, color = accent, a = 1) {
   if (a <= 0) return;
   c.save();
   c.globalAlpha *= a;
@@ -21,7 +21,7 @@ function spark(x: number, y: number, r: number, color = accent, a = 1) {
   dot(x, y, r, color);
   c.restore();
 }
-function wave(x0: number, y0: number, x1: number, y1: number, t: number, color = accent, amp = 9, lambda = 34) {
+export function wave(x0: number, y0: number, x1: number, y1: number, t: number, color = accent, amp = 9, lambda = 34) {
   const len = Math.hypot(x1 - x0, y1 - y0),
     ux = (x1 - x0) / len,
     uy = (y1 - y0) / len;
@@ -74,13 +74,13 @@ function spectrometer(t: number, g: number) {
   text('Uppsala, 1867', 90, 620, 30, ink, 'left', 'title');
 }
 // Hot solid → continuous rainbow; thin gas → a barcode of lines.
-const barcodes: [string, number[]][] = [
+export const barcodes: [string, number[]][] = [
   ['Hydrogen', [410.2, 434.0, 486.1, 656.3]],
   ['Helium', [447.1, 471.3, 492.2, 501.6, 587.6, 667.8]],
   ['Neon', [585.2, 588.2, 603.0, 607.4, 616.4, 621.7, 626.6, 633.4, 640.2, 650.7, 659.9, 692.9]],
 ];
-const X = (nm: number) => 230 + ((nm - 400) / 300) * 900;
-function rainbowRow(y: number, a: number) {
+export const X = (nm: number) => 230 + ((nm - 400) / 300) * 900;
+export function rainbowRow(y: number, a: number) {
   const g = c.createLinearGradient(X(400), 0, X(700), 0);
   ['#5b3fd0', '#3f6be0', '#2fb6c9', '#7fd65b', '#e8d35a', '#f09a4a', '#e0484a'].forEach((col, i, arr) => g.addColorStop(i / (arr.length - 1), col));
   c.globalAlpha = a;
@@ -88,7 +88,7 @@ function rainbowRow(y: number, a: number) {
   c.fillRect(X(400), y, X(700) - X(400), 44);
   c.globalAlpha = 1;
 }
-function lineRow(y: number, nms: number[], a: number, color = '#dcd2f3') {
+export function lineRow(y: number, nms: number[], a: number, color = '#dcd2f3') {
   c.fillStyle = '#120f26';
   c.globalAlpha = a;
   c.fillRect(X(400), y, X(700) - X(400), 44);
@@ -139,7 +139,7 @@ function mystery(t: number, g: number) {
 }
 
 // ── 03 Laboratory ────────────────────────────────────────────────────────
-function tube(t: number, g: number) {
+export function tube(t: number, g: number) {
   space(g);
   const x0 = 220,
     x1 = 1060,
@@ -190,7 +190,7 @@ function tube(t: number, g: number) {
 }
 
 // ── 04 Sun, field, tail, oval ────────────────────────────────────────────
-function dipole(u: number, L: number, cx: number, cy: number, r: number, side: number, squash = 1): XY {
+export function dipole(u: number, L: number, cx: number, cy: number, r: number, side: number, squash = 1): XY {
   const pole = Math.acos(Math.sqrt(1.02 / L)),
     lat = mix(-pole, pole, u);
   const d = r * L * Math.cos(lat) ** 2;
@@ -208,7 +208,7 @@ function sunWind(t: number, g: number) {
   }
   gradedPlanet('earth', 1110, 360, 34, t, [-1, 0, 0.3]);
 }
-function magnetosphere(t: number, g: number, tail = 0) {
+export function magnetosphere(t: number, g: number, tail = 0) {
   space(g);
   const cx = 470,
     cy = 360,
@@ -430,7 +430,7 @@ function spectrograph(t: number, g: number) {
     spark(mix(sx0, gx, f), gy, 2.5, accent, Math.sin(Math.PI * f));
   }
 }
-function contours(t: number) {
+export function contours(t: number) {
   c.fillStyle = '#16131f';
   c.fillRect(0, 0, W, H);
   lensGlow(W * 0.7, H * 0.25, 520, '#3d3f9c', 0.3);
@@ -517,7 +517,7 @@ function waiting(t: number, g: number) {
   text('about 0.7 s', cx, cy + 130, 28, accent, 'center');
   text('a hundred-millionth of a second', 350, 600, 22, muted, 'center');
 }
-function quench(t: number, g: number) {
+export function quench(t: number, g: number) {
   space(g);
   const panel = (x0: number, dense: boolean) => {
     const cx = x0 + 300,
@@ -559,7 +559,7 @@ function quench(t: number, g: number) {
 }
 
 // ── 09 Height sets the color ─────────────────────────────────────────────
-function column(t: number, g: number) {
+export function column(t: number, g: number) {
   c.fillStyle = grad(0, 0, 0, H, ['#07061a', '#120f2e', '#2a1f4a', '#4a2a4e']);
   c.fillRect(0, 0, W, H);
   const Y = (km: number) => 660 - km * 2.05;
@@ -595,7 +595,7 @@ function column(t: number, g: number) {
 }
 
 // ── 10-11 Curtains ───────────────────────────────────────────────────────
-function curtain(t: number, x0: number, w: number, base: number, hgt: number, palette: 'aurora' | 'eye', a = 1) {
+export function curtain(t: number, x0: number, w: number, base: number, hgt: number, palette: 'aurora' | 'eye', a = 1) {
   c.save();
   c.globalCompositeOperation = 'screen';
   for (let i = 0; i < 260; i++) {
@@ -729,11 +729,12 @@ function recap(t: number, g: number) {
   atomGlyph(640, 250, 90, t);
 }
 function credits(t: number) {
-  cover(photos.blanket, 1.06 + 0.01 * t, 0.5, 0.6);
+  cover(photos.redGreen, 1.06 + 0.01 * t, 0.5, 0.6);
   c.fillStyle = grad(0, 0, W * 0.75, 0, ['#0d0a1ee6', '#0d0a1e99', '#0d0a1e00']);
   c.fillRect(0, 0, W, H);
   const rows = [
     'Photographs · NASA, International Space Station crews',
+    'Storm photograph · pedrik, Connecticut, May 2024 · CC BY 2.0',
     'Milky Way panorama · ESO/S. Brunier · CC BY 4.0',
     'Planet textures · Solar System Scope · CC BY 4.0',
     'Ångström portrait and spectrometer · public domain',

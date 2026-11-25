@@ -82,7 +82,7 @@ def main():
                 if j==len(words)-1 or len(text)>=57 or (len(text)>=12 and text.endswith((".","?","!"))):
                     start=index/fps+phrase[0]["start"]
                     stop=index/fps+min(dur,phrase[-1]["end"]+.10,words[j+1]["start"] if j+1<len(words) else dur)
-                    subtitles.append(f"{len(subtitles)+1}\n{timestamp(start)} --> {timestamp(stop)}\n"+textwrap.fill(text,width=41))
+                    subtitles.append(f"{len(subtitles)+1}\n{timestamp(start)} --> {timestamp(stop)}\n"+textwrap.fill(text,width=41,break_on_hyphens=False))
                     phrase=[]
         stages.append(f"[{i}:a]aresample=48000,aformat=channel_layouts=mono,volume={gain:.3f}dB,apad,atrim=end_sample={lengths[ch]*2000},asetpts=PTS-STARTPTS[a{i}]")
         end=index+lengths[ch]

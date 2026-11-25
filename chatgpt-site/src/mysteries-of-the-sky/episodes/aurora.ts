@@ -25,6 +25,8 @@ import {
   continuous,
   arriveByMosaic,
   lockCamera,
+  cutTo,
+  at,
   type Cue,
 } from './aurora-core.ts';
 import { scenes2, gradedPlanet } from './aurora-scenes.ts';
@@ -40,6 +42,13 @@ import armUrl from './aurora/iss-arm.jpg';
 import australisUrl from './aurora/iss-australis.jpg';
 import milkyUrl from './aurora/milky-way.jpg';
 import engravingUrl from './aurora/spectrometer.jpg';
+import stormUrl from './aurora/storm-connecticut.jpg';
+import bandUrl from './aurora/iss-green-band.jpg';
+import layersUrl from './aurora/iss-layers.jpg';
+import bandCloudsUrl from './aurora/iss-band-clouds.jpg';
+import curtainUrl from './aurora/iss-curtain.jpg';
+import { beats2 } from './aurora-beats.ts';
+import { beats3 } from './aurora-beats3.ts';
 
 const raw = {
   cut: load(cutUrl),
@@ -54,6 +63,11 @@ const raw = {
   australis: load(australisUrl),
   milky: load(milkyUrl),
   engraving: load(engravingUrl),
+  storm: load(stormUrl),
+  band: load(bandUrl),
+  layers: load(layersUrl),
+  bandClouds: load(bandCloudsUrl),
+  curtainPhoto: load(curtainUrl),
 };
 export const photos: Record<string, HTMLCanvasElement> = {};
 Object.assign(window, {
@@ -73,7 +87,7 @@ Object.assign(window, {
           photos.engravingInv = grade(inv, false, 1.2);
           photos[k] = grade(img, false, 1);
         }
-        else photos[k] = grade(img, true, 1.25);
+        else photos[k] = grade(img, true, k === 'storm' ? 1.35 : 1.1);
         // Keep the cutout's transparency.
         if (k === 'cut') {
           const x = photos[k].getContext('2d')!;
@@ -174,7 +188,7 @@ function earthBand(t: number) {
   const m = photos.milky;
   const s = (W * 1.5) / m.width;
   c.drawImage(m, W / 2 - m.width * s * (0.5 + 0.004 * t), H / 2 - (m.height * s) / 2, m.width * s, m.height * s);
-  const r = mix(60, 190, ease(t, 0, 9));
+  const r = mix(60, 150, ease(t, 0, 6)) * (1 + 3 * ease(t, Math.max(1, at('the color comes') - 1.6), at('the color comes') + 0.3) ** 2);
   gradedPlanet('earth', W / 2, H / 2, r, t, [-0.6, 0.2, 0.75]);
 }
 // A minimal oxygen atom on dark, like the reference's line-drawn atom.
@@ -208,7 +222,7 @@ export function atomGlyph(x: number, y: number, r: number, t: number, glow = 1) 
 function atomCard(t: number) {
   c.fillStyle = '#16131f';
   c.fillRect(0, 0, W, H);
-  atomGlyph(W / 2, H / 2, mix(40, 210, ease(t, 0, 6)), t);
+  atomGlyph(W / 2, H / 2, mix(20, 210, ease(t, 0, 4) ** 0.7), t);
 }
 // Title over the graded photograph.
 function title(t: number) {
@@ -227,6 +241,7 @@ function photoShot(name: string, zoom: number, fx: number, fy: number, drift: nu
   return (t: number) => cover(photos[name], zoom + 0.01 * t, fx, fy, drift * t);
 }
 
+export const photoKeys = ['orbit', 'swirl', 'blanket', 'ocean', 'redGreen', 'pillars', 'airglowPhoto', 'arm', 'australis', 'band', 'layers', 'bandClouds', 'curtainPhoto', 'storm'];
 const scenes: Record<string, (t: number, g: number) => void> = {
   portrait,
   orbit,
@@ -242,26 +257,33 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   airglowPhoto: photoShot('airglow', 1.08, 0.5, 0.35, -3),
   arm: photoShot('arm', 1.06, 0.5, 0.45, 4),
   australis: photoShot('australis', 1.1, 0.5, 0.45, -4),
+  band: photoShot('band', 1.06, 0.5, 0.4, -4),
+  layers: photoShot('layers', 1.06, 0.5, 0.5, 4),
+  bandClouds: photoShot('bandClouds', 1.08, 0.5, 0.4, -4),
+  curtainPhoto: photoShot('curtainPhoto', 1.08, 0.5, 0.45, 4),
   ...scenes2,
+  ...beats2,
+  ...beats3,
 };
 // Rowan's interview lines play over the matching diagram with his name.
 for (const [key, base] of [
-  ['rowanCollision', 'collision'],
+  ['rowanCollision', 'collisionRowan'],
   ['rowanColumn', 'column'],
-  ['rowanSpectrum', 'spectrograph'],
+  ['rowanSpectrum', 'photoVsSpectrum'],
 ] as const) {
   scenes[key] = (t, g) => {
-    scenes[base](t + 4, g);
+    scenes[base](t, g);
     const a = ease(t, 0.2, 0.8) * (1 - ease(t, 4.5, 5.2));
-    c.fillStyle = grad(0, 560, 0, 160, ['#0d0a1e00', '#0d0a1ecc']);
+    c.fillStyle = grad(0, 0, 0, 150, ['#0d0a1ecc', '#0d0a1e00']);
     c.globalAlpha = a;
-    c.fillRect(0, 560, W, 160);
-    text('Professor Rowan Ellery', 72, 650, 30, ink, 'left', 'title');
+    c.fillRect(0, 0, W, 150);
+    text('Professor Rowan Ellery', 72, 70, 30, ink, 'left', 'title');
     c.globalAlpha = 1;
   };
 }
 arriveByMosaic(['orbit', 'title', 'swirl', 'pillars', 'australis']);
 lockCamera(['portrait']);
+cutTo(photoKeys);
 continuous(['portrait']);
 Object.assign(window, {
   auroraFrame(k: string, t: number, current?: Cue) {

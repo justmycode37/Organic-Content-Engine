@@ -2,6 +2,7 @@
 // photographs, a camera that never stops, and mosaic or dissolve transitions.
 import { c, canvas, W, H, lensGlow, words } from './stage.ts';
 import { paintWithFinePixels } from '../finish.ts';
+import timeline from './aurora/words.json';
 
 export const tau = Math.PI * 2;
 export const clamp = (x: number) => Math.min(1, Math.max(0, x));
@@ -48,6 +49,11 @@ const ramp = ['#0d0a1e', '#1e1f55', '#3b3c9a', '#6d5fc4', '#b073c4', '#f0878f', 
   parseInt(h.slice(3, 5), 16),
   parseInt(h.slice(5, 7), 16),
 ]);
+const greenRamp = ['#14261f', '#2f6a48', '#6fbf6a', '#c6f56a', '#f2ffd8'].map((h) => [
+  parseInt(h.slice(1, 3), 16),
+  parseInt(h.slice(3, 5), 16),
+  parseInt(h.slice(5, 7), 16),
+]);
 const greenRGB = [198, 245, 106],
   coralRGB = [240, 135, 143];
 export function grade(img: CanvasImageSource & { width: number; height: number }, keepGreen = true, lift = 1) {
@@ -68,9 +74,13 @@ export function grade(img: CanvasImageSource & { width: number; height: number }
       u = f - k;
     let o = [0, 1, 2].map((j) => ramp[k][j] + (ramp[k + 1][j] - ramp[k][j]) * u);
     if (keepGreen) {
-      const green = clamp((gg - Math.max(r, b) - 12) / 70) * clamp(lum * 2.2);
+      // Ratio-based, so pale over-exposed aurora is still recognised as green.
+      const green = clamp((gg / (Math.max(r, b) + 8) - 1.06) / 0.3) * clamp(lum * 2.4);
       const red = clamp((r - Math.max(gg, b) - 10) / 60) * 0.85;
-      o = o.map((v, j) => v + (greenRGB[j] * (0.45 + 0.75 * lum) - v) * green);
+      const gf = clamp(lum * 1.15) * (greenRamp.length - 1),
+        gk = Math.min(greenRamp.length - 2, Math.floor(gf)),
+        gu = gf - gk;
+      o = o.map((v, j) => v + (greenRamp[gk][j] + (greenRamp[gk + 1][j] - greenRamp[gk][j]) * gu - v) * green * 0.9);
       o = o.map((v, j) => v + (coralRGB[j] * (0.5 + 0.7 * lum) - v) * red);
     }
     p[i] = o[0];
@@ -116,7 +126,7 @@ export function mosaicClip(cells: ReturnType<typeof tiles>, progress: number) {
 // Background for diagram shots: deep night with slow glows and dust.
 let seed = 77;
 const rnd = () => (seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0) / 4294967296;
-const dust = Array.from({ length: 220 }, () => ({ x: rnd(), y: rnd(), d: 0.2 + 0.8 * rnd() ** 2, p: rnd() * tau }));
+const dust = Array.from({ length: 320 }, () => ({ x: rnd(), y: rnd(), d: 0.2 + 0.8 * rnd() ** 2, p: rnd() * tau }));
 export function space(g: number, warm = 0) {
   const b = c.createLinearGradient(0, 0, W * 0.5, H * 1.2);
   b.addColorStop(0, '#0c0b1d');
@@ -127,10 +137,12 @@ export function space(g: number, warm = 0) {
   lensGlow(W * (0.74 + 0.05 * Math.sin(g * 0.03)), H * 0.26, 640, '#3d3f9c', 0.34);
   lensGlow(W * (0.18 + 0.04 * Math.cos(g * 0.025)), H * 0.92, 560, '#8d3f5c', 0.26 + 0.1 * warm);
   for (const m of dust) {
-    const x = (((m.x + g * 0.002 * m.d) % 1) + 1) % 1;
-    c.globalAlpha = (0.08 + 0.32 * m.d) * (0.6 + 0.4 * Math.sin(g * (0.5 + m.d) + m.p));
+    const x = (((m.x + g * 0.012 * m.d) % 1) + 1) % 1,
+      y = (((m.y + 0.01 * Math.sin(g * 0.4 * m.d + m.p)) % 1) + 1) % 1;
+    c.globalAlpha = (0.1 + 0.4 * m.d) * (0.5 + 0.5 * Math.sin(g * (1.2 + 2 * m.d) + m.p));
     c.fillStyle = m.p > 4 ? '#f4a9a6' : '#c7c9ff';
-    c.fillRect(x * W, m.y * H, m.d > 0.8 ? 2 : 1, m.d > 0.8 ? 2 : 1);
+    const sz = m.d > 0.8 ? 2.5 : 1.3;
+    c.fillRect(x * W, y * H, sz, sz);
   }
   c.globalAlpha = 1;
 }
@@ -155,14 +167,19 @@ const still = new Set<string>();
 export function lockCamera(keys: string[]) {
   keys.forEach((k) => still.add(k));
 }
+const hardIn = new Set<string>();
+export function cutTo(keys: string[]) {
+  keys.forEach((k) => hardIn.add(k));
+}
 const cells = tiles(16, 5);
 
 function shot(draw: Draw, k: string, t: number, g: number, enter: number, lens = t) {
   c.fillStyle = night;
   c.fillRect(0, 0, W, H);
-  const s = still.has(k) ? 1 : (1.035 + 0.09 * (lens / (lens + 7))) * (0.94 + 0.06 * enter);
-  const dx = still.has(k) ? 0 : 12 * Math.sin(g * 0.12 + 0.7),
-    dy = still.has(k) ? 0 : 6 * Math.sin(g * 0.09);
+  const s = still.has(k) ? 1 : (1.04 + 0.05 * (lens / (lens + 7)) + 0.012 * Math.sin(g * 0.29)) * (0.95 + 0.05 * enter);
+  // A slow, never-stopping drift; amplitude stays inside the push margin.
+  const dx = still.has(k) ? 0 : 20 * Math.sin(g * 0.21 + 0.7) + 6 * Math.sin(g * 0.53),
+    dy = still.has(k) ? 0 : 9 * Math.sin(g * 0.17) + 3 * Math.sin(g * 0.47 + 1);
   c.save();
   c.translate(W / 2 + dx, H / 2 + dy);
   c.scale(s, s);
@@ -189,7 +206,7 @@ export function directFrame(draw: Draw, current: Cue) {
     c.clip('evenodd');
     c.drawImage(held, 0, 0);
     c.restore();
-  } else if (prev && t < 0.45) {
+  } else if (prev && t < 0.45 && !hardIn.has(key)) {
     const e = ease(t, 0, 0.45);
     shot(draw, prev, prevT + t, g, 1);
     hc.drawImage(canvas, 0, 0);
@@ -203,7 +220,7 @@ export function directFrame(draw: Draw, current: Cue) {
     c.restore();
   } else {
     shot(draw, key, t, g, prev ? 1 : ease(t, 0, 0.6));
-    if (!prev && t < 0.6) {
+    if (!prev && t < 0.6 && key !== 'portrait') {
       c.fillStyle = night;
       c.globalAlpha = 1 - ease(t, 0, 0.6);
       c.fillRect(0, 0, W, H);
@@ -211,4 +228,17 @@ export function directFrame(draw: Draw, current: Cue) {
     }
   }
   return canvas.toDataURL('image/jpeg', 0.92).split(',')[1];
+}
+
+// Local shot time at which a phrase is spoken, searching from the start of the
+// current shot (or from an earlier word in the same shot). Infinity if absent.
+const said = timeline as [string, number][];
+export function at(phrase: string, after = 0) {
+  const start = cue.g - cue.t,
+    terms = phrase.toLowerCase().replace(/[’']/g, '').split(' ');
+  for (let i = 0; i < said.length; i++) {
+    if (said[i][1] < start + after - 0.05) continue;
+    if (terms.every((w, j) => said[i + j]?.[0] === w)) return said[i][1] - start;
+  }
+  return Infinity;
 }
