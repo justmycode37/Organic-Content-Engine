@@ -12,7 +12,7 @@ const plan = {
   3: 'transitcurve|planet itself=eqdepth|soft edge=ring|some of that=grazing',
   4: 'vertical|toward the horizon=slant|light grazing=grazing|at wavelengths=ring',
   17: 'strip|another advantage=hero|gas pressure=eqscale|its absorbing=density|both effects=eqsignal|small rocky=puff',
-  5: 'transit|inside webb=passage|spread the=prism|interval of wavelength=binsize|getting dimmer=curve|either side=baseline|single dip=manydips|their depth=narrow',
+  5: 'transit|inside webb=passage|spread the=prism|interval of wavelength=detectorTrace',
   6: 'example|one photon=thousand|on a graph=turnDips|picture we opened=peak',
   18: 'photonCups|wavelength bin=rebin|vertical bars=bins',
   7: 'peak|laboratory measurements=carbon|collect the contributions=co2',

@@ -603,36 +603,7 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     label('Illustrative analysis offsets', 150, 631, 19, muted, 'left');
   }
 
-  // "Several combinations can leave a similar mark": two schematic atmospheres.
-  function degenerate(t: number) {
-    const X = (u: number) => 170 + u * 940;
-    const shape = (u: number, amp: number, w: number, floor: number) =>
-      470 - 240 * (floor + amp * Math.exp(-(((u - 0.5) / w) ** 2)));
-    const a = ease(t, 0.2, 1.6),
-      b = ease(t, 1.4, 2.8);
-    const A = Array.from({ length: 121 }, (_, i) => [X(i / 120), shape(i / 120, 0.55 * a, 0.12, 0.25)]);
-    const B = Array.from({ length: 121 }, (_, i) => [X(i / 120), shape(i / 120, 0.58 * b, 0.115, 0.22)]);
-    line(A, ice, 4);
-    c.globalAlpha = b;
-    line(B, pink, 4);
-    c.globalAlpha = 1;
-    line(
-      [
-        [170, 520],
-        [1110, 520],
-      ],
-      muted + '88',
-      1.4,
-    );
-    c.globalAlpha = a;
-    label('more gas, high cloud deck', 170, 580, 22, ice, 'left');
-    c.globalAlpha = b;
-    label('less gas, clear sky', 1110, 580, 22, pink, 'right');
-    c.globalAlpha = 1;
-    label('one short patch of spectrum · schematic', 640, 650, 20);
-  }
   return {
-    degenerate,
     mass,
     inflate,
     year,

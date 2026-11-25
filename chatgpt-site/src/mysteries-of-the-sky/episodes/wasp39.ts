@@ -384,6 +384,48 @@ function cloudDeck(t: number) {
   words('Atmospheric cross-sections · schematic', 640, 656, 19, 'sans', '#e7cfdb', 'center');
 }
 
+function cloudComparison(t: number) {
+  const phase = (start: number, end: number) => cubic(Math.max(0, Math.min(1, (t - start) / (end - start))));
+  const move = phase(0, 2.35);
+  const labels = phase(1.5, 2.8);
+  cloudDeck(4.5 + t);
+  c.globalAlpha = move;
+  c.fillStyle = grad(0, 0, W, H, ['#282034', '#544058', '#292339']);
+  c.fillRect(-90, -50, W + 180, H + 100);
+  const start = 180;
+  const span = 918;
+  const zoom = phase(2.15, 4.35);
+  const axis = 528;
+  line([[start, 174], [start, axis], [start + span, axis]], '#e8cbe59c', 1.6);
+  c.globalAlpha = phase(1.57, 2.24);
+  words('Extra light blocked', start, 146, 22, 'sans', muted);
+  words('Wavelength', start + span, 566, 21, 'sans', muted, 'right');
+  c.globalAlpha = 1;
+  for (const [i, tint] of [ice, pink].entries()) {
+    const draw = phase(0.12 + i * 0.39, 1.76 + i * 0.47);
+    c.globalAlpha = draw;
+    const points = path((u) => {
+      const w = u * draw;
+      const width = 0.18 - zoom * 0.055 + 0.004 * i;
+      const shape = Math.exp(-(((w - 0.49) / width) ** 2));
+      return [start + w * span, axis - 91 - 154 * shape - i * (15 - 11 * zoom) * (1 - shape * 0.9)];
+    });
+    if (i > 0) c.setLineDash([10, 9]);
+    line(points, tint, 3.7);
+    c.setLineDash([]);
+    if (draw < 1) {
+      const [x, y] = points.at(-1)!;
+      lensGlow(x, y, 29, tint, 0.78);
+    }
+    c.globalAlpha = labels;
+    line([[205 + 525 * i, 604], [244 + 525 * i, 604]], tint, 3.3);
+    words(i ? 'More gas above a high cloud deck' : 'Less gas, clear limb', 259 + 525 * i, 611, 21, 'sans', tint);
+  }
+  c.globalAlpha = labels;
+  words('One small part of the spectrum · schematic', 640, 658, 19, 'sans', muted, 'center');
+  c.globalAlpha = 1;
+}
+
 const plotX = 139,
   plotW = 1010,
   yBottom = 591,
@@ -721,13 +763,14 @@ function recap(t: number) {
     c.save();
     c.globalAlpha = opacity;
     const end = 1096;
-    const span = end - planetX;
+    const limb = planetX + Math.sqrt((planetR + 8) ** 2 - 64);
+    const span = end - limb;
     const trace = path((u) => {
       const phase = u * (13 - 3.8 * i) - t * 2.8;
       const envelope = Math.sin(Math.PI * u);
-      return [planetX + u * span, starY + (band.y - starY) * u + 24 * Math.sin(phase) * envelope];
+      return [limb + u * span, starY - 8 + (band.y - starY + 8) * u + 24 * Math.sin(phase) * envelope];
     });
-    line(trace, grad(planetX, 0, span, 0, [band.color + '35', band.color]), 2.2 + i * 0.4);
+    line(trace, grad(limb, 0, span, 0, [band.color + '35', band.color]), 2.2 + i * 0.4);
     const dot = trace[Math.floor((t * 0.24 + i * 0.27) % 1 * 100)];
     lensGlow(dot[0], dot[1], 22, band.color, 0.85);
     c.globalAlpha = opacity * spectrum;
@@ -776,11 +819,13 @@ for (const k of ['prism', 'photon', 'binsize']) scenes[k] = instrument;
 Object.assign(scenes, evidenceScenes, showpieces, makeBeats(globeLook));
 scenes.mid = scenes.predict = compare;
 scenes.cloudray = cloudDeck;
+scenes.degenerate = cloudComparison;
 scenes.example = compare;
 scenes.credits = credits;
 scenes.recap = recap;
 continuous(chartKeys);
 continuous(['vertical', 'slant']);
+continuous(['cloudray', 'degenerate']);
 continuous(['predict', 'confirm', 'mid']);
 Object.assign(window, {
   waspFrame(k: string, t: number, cue?: Cue) {

@@ -460,6 +460,78 @@ function drift(t: number) {
   words('Illustrative exposure', 155, 625, 20, 'sans', muted);
   words('Time →', 1135, 625, 24, 'sans', muted, 'right');
 }
+const transitRows = Object.entries(observations.light);
+function detectorTrace(t: number) {
+  const unfolding = ease(t, 1.4, 3.4);
+  const stack = ease(t, 10.9, 14.2);
+  const explainDepth = ease(t, 14.4, 15.8);
+  const startX = 222;
+  const endX = 1087;
+  const x = (hour: number) => startX + (hour + 4.55) * (endX - startX) / 8.2;
+  const main = 6;
+  const plotted = [2, 4, main, 7, 9];
+  c.fillStyle = grad(0, 0, 1280, 720, ['#151925', '#263044', '#51344d']);
+  c.fillRect(-90, -50, 1460, 820);
+  c.globalAlpha = 1 - unfolding;
+  for (const [i] of transitRows.entries()) {
+    const px = 182 + i * 84;
+    const tint = i === main ? lime : i < main ? ice : pink;
+    c.fillStyle = grad(px, 255, 0, 145, [tint + '25', tint + 'b1', tint + '19']);
+    c.fillRect(px, 254, 68, 145);
+    const pulse = ((t * 1.1 + i * 0.12) % 1);
+    lensGlow(px + 34, 240 + 177 * pulse, 22, tint, 0.7 * Math.sin(Math.PI * pulse));
+  }
+  words('Wavelength bins on the detector', 640, 476, 26, 'sans', muted, 'center');
+  c.globalAlpha = unfolding;
+  const seen = ease(t, 2.0, 5.45);
+  const baseline = ease(t, 6.1, 8.6) * (1 - stack);
+  const lower = 528 + stack * 45;
+  line([[startX, 163], [startX, lower], [endX, lower]], '#cfc4d780', 1.4);
+  words('Relative brightness', startX, 131, 25, 'sans', muted);
+  for (const hour of [-4, -2, 0, 2]) words(String(hour), x(hour), lower + 30, 20, 'sans', muted, 'center');
+  words('Hours from mid-transit', endX, 650, 20, 'sans', muted, 'right');
+  for (const [index, channel] of plotted.entries()) {
+    const [wave, row] = transitRows[channel];
+    const active = channel === main;
+    const alpha = active ? 1 : ease(t, 11.15 + index * 0.34, 12.55 + index * 0.34);
+    if (alpha === 0) continue;
+    const height = 286 - 229 * stack;
+    const base = 221 + (178 + 79 * index - 221) * stack;
+    const y = (brightness: number) => base + (1.002 - brightness) * height / 0.028;
+    const steps = active ? Math.max(1, Math.ceil(seen * row.length)) : Math.max(1, Math.ceil(alpha * row.length));
+    const points = row.slice(0, steps).map(([hour, brightness]) => [x(hour), y(brightness)]);
+    c.globalAlpha = unfolding * alpha;
+    const col = active ? lime : channel < main ? ice : pink;
+    line(points, grad(startX, 0, endX - startX, 0, [col + '65', col]), active ? 2.6 : 1.9);
+    for (const [px, py] of points) mark(px, py, active ? 3.5 : 2.45, col);
+    if (active && seen < 1) {
+      const [px, py] = points.at(-1)!;
+      lensGlow(px, py, 23, lime, 0.8);
+    }
+    if (active && baseline > 0) {
+      c.globalAlpha = baseline;
+      for (const [from, to, label] of [[-4.5, -1.58, 'Before'], [-1.55, 1.55, 'In transit'], [1.58, 3.63, 'After']] as const) {
+        c.fillStyle = grad(0, 168, 0, 342, ['#cbbbe91b', '#cbbbe908']);
+        c.fillRect(x(from), 166, x(to) - x(from), lower - 166);
+        words(label, (x(from) + x(to)) / 2, 186, 20, 'sans', muted, 'center');
+      }
+    }
+    c.globalAlpha = alpha * unfolding * (active ? 1 : stack);
+    words(Number(wave).toFixed(2) + ' μm', 1123, base + 12, 20, 'sans', col);
+    if (active && explainDepth > 0) {
+      c.globalAlpha = explainDepth;
+      const top = y(0.9965);
+      const bottom = y(row.reduce((nearest, item) => Math.abs(item[0]) < Math.abs(nearest[0]) ? item : nearest)[1]);
+      const cx = x(0) - 25;
+      line([[cx - 6, top], [cx + 6, top]], lime, 2.1);
+      line([[cx, top], [cx, bottom]], lime, 2.1);
+      line([[cx - 6, bottom], [cx + 6, bottom]], lime, 2.1);
+      words('Dip depth', cx + 20, bottom + 18, 20, 'sans', lime);
+    }
+  }
+  c.globalAlpha = 1;
+}
+
 export const evidenceScenes: Record<string, (t: number) => void> = {
   strip,
   density,
@@ -470,6 +542,7 @@ export const evidenceScenes: Record<string, (t: number) => void> = {
   turnDips,
   bandScale,
   drift,
+  detectorTrace,
 };
 
 // Powell et al. Figure 2 depths and 1σ errors with the PICASO curves
@@ -477,10 +550,10 @@ export const evidenceScenes: Record<string, (t: number) => void> = {
 function miriEvidence(t: number) {
   const ink = '#30263b';
   const plum = '#674760';
-  const withSulfur = '#874056';
-  const withoutSulfur = '#4a4f78';
-  const compare = ease(t, 4.1, 6.1);
-  const close = ease(t, 0, 3.2);
+  const withSulfur = '#783045';
+  const withoutSulfur = '#384b79';
+  const compare = ease(t, 4.8, 6.5);
+  const close = ease(t, 0.15, 1.95);
   const lo = 5.0 + 2.02 * close;
   const hi = 11.0 - 1.88 * close;
   const x = (w: number) => 154 + ((w - lo) / (hi - lo)) * 970;
@@ -501,8 +574,14 @@ function miriEvidence(t: number) {
   c.rect(154, 155, 970, 370);
   c.clip();
   const limits = [[7.28, 7.98], [8.26, 8.9]];
+  // The cut enters on "In the new spectrum"; these are the recorded
+  // times of "seven-point-seven", "eight-point-five", and "It did."
+  const spoken = [1.88, 3.13];
+  const together = ease(t, 15.9, 16.64);
+  const named = (i: number) => ease(t, spoken[i], spoken[i] + 0.32);
+  const emphasis = (i: number) => named(i) * Math.max(together, 1 - ease(t, spoken[i] + 0.55, spoken[i] + 1.3));
   for (const [i, [left, right]] of limits.entries()) {
-    c.globalAlpha = ease(t, i * 1.65, i * 1.65 + 0.7);
+    c.globalAlpha = named(i) * (0.43 + 0.57 * emphasis(i));
     c.fillStyle = grad(0, 155, 0, 370, ['#733b581c', lime + '64', '#ad706339']);
     c.fillRect(x(left), 155, x(right) - x(left), 370);
   }
@@ -519,8 +598,8 @@ function miriEvidence(t: number) {
     c.fill();
   }
   c.globalAlpha = compare;
-  line(model.map(([w, depth]) => [x(w), y(depth)]), withSulfur, 4.1);
-  c.setLineDash([8, 7]);
+  line(model.map(([w, depth]) => [x(w), y(depth)]), withSulfur, 5);
+  c.setLineDash([12, 9]);
   line(model.map(([w, , depth]) => [x(w), y(depth)]), withoutSulfur, 3.1);
   c.setLineDash([]);
   c.globalAlpha = 1;
@@ -531,7 +610,12 @@ function miriEvidence(t: number) {
   }
   c.restore();
   for (const [i, [left, right]] of limits.entries()) {
-    c.globalAlpha = ease(t, i * 1.65, i * 1.65 + 0.7);
+    c.globalAlpha = named(i);
+    const middle = x((left + right) / 2);
+    c.fillStyle = grad(middle - 72, 0, 144, 0, ['#e6d2bb', lime + 'bf', '#e6d2bb']);
+    c.globalAlpha *= emphasis(i);
+    c.fillRect(middle - 74, 121, 148, 35);
+    c.globalAlpha = named(i);
     words(i ? '8.5 μm band' : '7.7 μm band', x((left + right) / 2), 147, 23, 'sans', ink, 'center');
   }
   c.globalAlpha = 1;
@@ -545,7 +629,7 @@ function miriEvidence(t: number) {
   c.globalAlpha = compare;
   line([[432, 614], [477, 614]], withSulfur, 4);
   words('Model with SO₂', 493, 621, 21, 'sans', withSulfur);
-  c.setLineDash([8, 7]);
+  c.setLineDash([12, 9]);
   line([[723, 614], [767, 614]], withoutSulfur, 3);
   c.setLineDash([]);
   words('Same model without SO₂', 783, 621, 21, 'sans', withoutSulfur);
@@ -553,7 +637,7 @@ function miriEvidence(t: number) {
   words('Wavelength (μm)', 1124, 560, 20, 'sans', ink, 'right');
 }
 evidenceScenes.confirm = miriEvidence;
-evidenceScenes.confirmRecap = (t) => miriEvidence(10 + t);
+evidenceScenes.confirmRecap = (t) => miriEvidence(16.7 + t);
 evidenceScenes.residual = (t) => fit(10.6 + t, true);
 
 function detector(t: number) {
@@ -582,26 +666,41 @@ function detector(t: number) {
 }
 const prismSpectrum = observations.spectrum.filter(([w]) => w > 3.84 && w < 4.26);
 function resolution(t: number) {
-  const x = (w: number) => 185 + (w - 3.84) * 2210;
+  const zoom = ease(t, 7.5, 10.6);
+  const low = 3.84 + 0.06 * zoom;
+  const high = 4.26 - 0.09 * zoom;
+  const x = (w: number) => 185 + (w - low) * 928 / (high - low);
   const spectra = [
-    { rows: g395h, color: ice, name: 'Grating · G395H', start: 1.2, base: 305 },
-    { rows: prismSpectrum, color: pink, name: 'Prism · PRISM', start: 2.9, base: 542 },
+    { rows: g395h, color: ice, name: 'NIRSpec G395H · Fine dispersion', start: 1.2, base: 305 },
+    { rows: prismSpectrum, color: pink, name: 'NIRSpec PRISM · Broad coverage', start: 2.9, base: 542 },
   ];
   c.fillStyle = grad(0, 0, 1280, 720, ['#101929', '#253052', '#482d48']);
   c.fillRect(-90, -50, 1460, 820);
   const chart = ease(t, 4.8, 7.1);
-  const match = ease(t, 8.7, 9.6);
+  const match = ease(t, 7.8, 10.0);
+  const guide = ease(t, 0.1, 0.8);
+  words('Two Webb observations', 1113, 110, 23, 'sans', '#e2d7e7', 'right');
   for (const { rows, color, name, start, base } of spectra) {
     const enter = ease(t, start, start + 0.8);
     c.save();
     c.globalAlpha = enter;
     words(name, 185, base - 173, 27, 'sans', color);
-    const y = (depth: number) => base - (depth - 2.05) * 740;
+    const depthScale = 710 + 410 * zoom;
+    const depthFloor = 2.05 + 0.026 * zoom;
+    const y = (depth: number) => base - (depth - depthFloor) * depthScale;
     c.globalAlpha = enter * chart;
-    for (const depth of [2.05, 2.15, 2.25]) {
+    for (const depth of [2.05, 2.1, 2.15, 2.2, 2.25]) {
+      if (y(depth) < base - 152 || y(depth) > base + 14) continue;
       line([[185, y(depth)], [1113, y(depth)]], '#bfb4d431', 1.1);
       words(depth.toFixed(2) + '%', 169, y(depth) + 6, 17, 'sans', muted, 'right');
     }
+    c.beginPath();
+    c.rect(185, base - 149, 928, 166);
+    c.clip();
+    c.globalAlpha = enter * match;
+    const half = 0.041;
+    c.fillStyle = grad(0, base - 149, 0, 166, ['#b7cb6920', '#b7cb6950', '#b7cb6917']);
+    c.fillRect(x(4.05 - half), base - 149, x(4.05 + half) - x(4.05 - half), 166);
     c.globalAlpha = enter;
     for (const [i, [w, depth, error]] of rows.entries()) {
       const cx = x(w);
@@ -613,18 +712,21 @@ function resolution(t: number) {
       c.fillStyle = grad(cx, resting - 29, 0, 58, [color + '35', color, color + '23']);
       c.fillRect(cx - width / 2, resting - 28, width, 56);
       c.globalAlpha = enter * chart;
-      line([[cx, py - error * 740 * chart], [cx, py + error * 740 * chart]], focus > 0.5 ? lime : color + '82', 1.7);
+      line([[cx, py - error * depthScale * chart], [cx, py + error * depthScale * chart]], focus > 0.5 ? lime : color + '82', 1.7);
       mark(cx, py, rows === g395h ? 3.2 : 5, focus > 0.5 ? lime : color);
     }
     c.restore();
   }
-  c.globalAlpha = match;
+  c.globalAlpha = guide;
   c.setLineDash([4, 7]);
-  line([[x(4.05), 151], [x(4.05), 553]], lime, 2);
+  line([[x(4.05), 154], [x(4.05), 553]], lime, 2);
   c.setLineDash([]);
   words('4.05 μm', x(4.05), 591, 26, 'sans', lime, 'center');
   c.globalAlpha = chart;
-  for (const w of [3.9, 4, 4.1, 4.2]) words(w.toFixed(1), x(w), 591, 20, 'sans', muted, 'center');
+  for (const w of [3.9, 4, 4.1, 4.2]) {
+    if (w < low - 1e-7 || w > high) continue;
+    words(w.toFixed(1), x(w), 591, 20, 'sans', muted, 'center');
+  }
   words('Wavelength (μm)', 1113, 635, 21, 'sans', muted, 'right');
   c.globalAlpha = 1;
 }
@@ -663,25 +765,30 @@ function spectralWindow(t: number) {
 }
 function finalPoints(t: number) {
   heading('The bump beside the peak');
-  const points = observations.spectrum.filter(([w]) => w >= 3.88 && w <= 4.17);
+  const points = observations.spectrum.filter(([w]) => w >= 3.73 && w <= 4.52);
   const f = ease(t, 0, 3.4);
+  const xAt = (w: number) => 164 + (w - 3.73) * 1185;
+  const yAt = (depth: number) => 516 - (depth - 2.07) * 1110;
+  const opacity = c.globalAlpha;
   for (const [w, p, e] of points) {
-    const x = 182 + (w - 3.88) * 3100,
-      y = 501 - (p - 2.09) * 3500,
+    const x = xAt(w),
+      y = yAt(p),
       hi = w >= 3.99 && w <= 4.05;
-    c.globalAlpha = hi ? 0.8 + 0.2 * f : 1 - 0.62 * f;
+    c.globalAlpha = opacity * (hi ? 0.75 + 0.25 * f : 1 - 0.35 * f);
     line(
       [
-        [x, y - e * 3500],
-        [x, y + e * 3500],
+        [x, y - e * 1110],
+        [x, y + e * 1110],
       ],
       hi ? lime : ice,
       2,
     );
     mark(x, y, hi ? 5.5 : 4, hi ? lime : pink);
   }
-  c.globalAlpha = 1;
-  words('4.05 μm', 182 + 0.17 * 3100, 606, 29, 'mono', muted, 'center');
+  c.globalAlpha = opacity;
+  line([[xAt(3.73), 542], [xAt(4.52), 542]], '#e0cbe594', 1.25);
+  words('4.05 μm', xAt(4.05), 598, 26, 'sans', lime, 'center');
+  words('4.3 μm', xAt(4.3), 598, 26, 'sans', muted, 'center');
 }
 Object.assign(evidenceScenes, { detector, resolution, window: spectralWindow, finalPoints });
 
