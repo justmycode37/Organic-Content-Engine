@@ -16,6 +16,7 @@ export async function renderSkyChapters({
   offsets = {},
   leads = {},
   pads = {},
+  creditsSeconds = 11,
 }) {
   const fps = 24;
   const { browser, page } = await openMotionPage('src/mysteries-of-the-sky/episodes/' + entry + '.ts');
@@ -32,7 +33,7 @@ export async function renderSkyChapters({
         continue;
       const seconds =
         ch === 16
-          ? 11
+          ? creditsSeconds
           : Number(
               execFileSync(
                 'ffprobe',
