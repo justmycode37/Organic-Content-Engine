@@ -92,7 +92,7 @@ def main():
     ff(*inputs,"-filter_complex",";".join(stages),"-map","[voice]","-c:a","flac",work/"voice.flac")
     voice_lufs=loudness(work/"voice.flac")
     score_lufs=loudness(work/"score.caf")
-    target_music=voice_lufs-28.0
+    target_music=voice_lufs-(12.0 if episode=="hubble-deep-field" else 28.0)
     music_gain=target_music-score_lufs
     mix_inputs=["-i",work/"voice.flac","-i",work/"score.caf"]
     mix=(f"[1:a]aresample=48000,volume={music_gain:.2f}dB,atrim=duration={total:.7f},afade=t=out:st={total-4:.6f}:d=4[m];")
