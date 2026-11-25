@@ -52,6 +52,8 @@ The `voice-plan` command writes ordered provider requests for later production. 
 
 Keep the underscore light. In the S2 mix, quiet bowed notes overlap beneath speech and a solo violin enters only occasionally. Use that mix as the listening reference for how far the music sits behind both speakers.
 
+For evaluation, choose a fresh topic each round. Compare each finished cut independently against the reference with Neon, Sol and Opus at high. End the evaluation series when all three score the same video above 90/100. Save every finished export and its thumbnail to the topic’s subfolder under `~/Movies/Mysteries of the Sky/Ready to Post`. Retain previous cuts by version.
+
 For each return to a familiar diagram, name what the viewer can now see or test. Keep one continuous view while a measurement changes. Cut when the narration needs a new observation, scale, or comparison. In the WASP-39 b edit, the opening moves from the large peak to its shoulder within one plot. A later return overlays the published model and separates the residuals.
 
 ## Authoring sequence

@@ -14,7 +14,7 @@ narration = Path("docs/mysteries-of-the-sky/episodes") / episode / "narration.md
 script = narration.read_text()
 title = script.splitlines()[0].removeprefix("# ")
 order = [1, 2, 3, 4, 5, 6, 0, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
-if episode == "wasp39":
+if episode != "s2":
     order = [int(n) for n in re.findall(r"^## (\d+) · ", script, re.M)] + [16]
 fps = 24
 
@@ -44,6 +44,8 @@ def interview():
     if episode == "wasp39":
         # The episode renderer owns the camera filter and timed animation cutaways.
         subprocess.run(["node", "chatgpt-site/scripts/sky-wasp39.mjs", str(work), "0", "21", "22"], check=True)
+        return
+    if episode != "s2":
         return
     overlay = Image.new("RGBA",(1280,720))
     draw = ImageDraw.Draw(overlay)
