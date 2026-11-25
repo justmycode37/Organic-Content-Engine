@@ -75,7 +75,7 @@ A candidate earns a pitch when it has a question a non-specialist would click, e
 | 7:30–10:30 | Test the leading interpretation. Introduce the best limitation or alternative explanation, then show who bears the consequence. | Second source, bounded quote, or verified footage with an identification plate. |
 | 10:30–12:00 | Answer the opening question and name one concrete development worth watching. | Return to the opening artifact with a new annotation. |
 
-Use the runtime range as an editing constraint. Let the native Titan recording set the pace, then cut passages that repeat a point. Vary the visual when the thought or evidence changes. Build around the branch's document highlights, sequential diagrams, charts, perspective labels, and footage identification plates. Illustrative visuals should carry that label when they could be mistaken for a documented facility, measurement, or hardware interior. [Producer prompt and source schema](editor.mjs) · [Production entry point](produce.mjs).
+Use ElevenLabs Titan as the default narrator for every round, with stability and similarity boost both at 20%. Keep other voices as explicitly requested comparison editions. Use the runtime range as an editing constraint. Let the native Titan recording set the pace, then cut passages that repeat a point. Vary the visual when the thought or evidence changes. Build around the branch's document highlights, sequential diagrams, charts, perspective labels, and footage identification plates. Illustrative visuals should carry that label when they could be mistaken for a documented facility, measurement, or hardware interior. [Producer prompt and source schema](editor.mjs) · [Production entry point](produce.mjs).
 
 ## Source-backed episode briefs
 

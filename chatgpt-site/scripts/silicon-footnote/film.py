@@ -341,7 +341,7 @@ class Sequence:
     def plot(self,t):
         b=self.b;spec=b['chart'];values=spec['values'];labels=b['labels']
         im=Image.new('RGB',(W,H),'#17191a');d=ImageDraw.Draw(im)
-        typeblock(d,72,66,self.head,1135,66,WHITE,'bold',2)
+        typeblock(d,72,66,self.head,1135,66,WHITE,'bold',1)
         if not spec.get('contextTrace'):typeblock(d,75,185,spec['unit'],1100,30,'#d9dddb',lines=1)
         if trace:=spec.get('contextTrace'):
             values2=trace['values'];lo,hi=trace['domain']

@@ -20,16 +20,16 @@ function pcmHeader(bytes){
  return header;
 }
 
-function priorTakes(dir,voice,beats){
+function priorTakes(dir,voice,beats,settings){
  const found=new Map();
  if(!dir)return found;
  const priorLines=new Set(read(join(dir,'alignment.json')).map(a=>a.text));
  const wanted=[...new Set(beats.map(b=>b.narration.trim()))].filter(text=>priorLines.has(text));
  for(const name of readdirSync(dir).filter(n=>/^passage-[a-f0-9]{20}\.json$/.test(n))){
   const file=join(dir,name),take=read(file);
-  if(take.voice!==voice||take.model!==MODEL||JSON.stringify(take.voice_settings)!==JSON.stringify(TITAN_SETTINGS))continue;
+  if(take.voice!==voice||take.model!==MODEL||JSON.stringify(take.voice_settings)!==JSON.stringify(settings))continue;
   const text=take.alignment.characters.join('');
-  if(name!=='passage-'+digest([voice,MODEL,TITAN_SETTINGS,text])+'.json')continue;
+  if(name!=='passage-'+digest([voice,MODEL,settings,text])+'.json')continue;
   for(const line of wanted){
    const pos=(' '+text+' ').indexOf(' '+line+' ');
    if(pos>=0)found.set(line,{file,first:[...text.slice(0,pos)].length});
@@ -38,8 +38,8 @@ function priorTakes(dir,voice,beats){
  return found;
 }
 
-export async function narrate(dir,beats,voice,key,reuseDir){
- const prior=priorTakes(reuseDir,voice,beats);
+export async function narrate(dir,beats,voice,key,reuseDir,settings=TITAN_SETTINGS){
+ const prior=priorTakes(reuseDir,voice,beats,settings);
  const lines=beats.map(b=>b.narration.trim()),segments=[];
  let group=[];
  function flush(){if(group.length){segments.push({lines:group});group=[];}}
@@ -55,17 +55,17 @@ export async function narrate(dir,beats,voice,key,reuseDir){
   writeSync(fd,pcmHeader(0));
   for(const [i,seg] of segments.entries()){
    const text=seg.lines.join(' ');
-   const name=seg.prior?basename(seg.prior.file):'passage-'+digest([voice,MODEL,TITAN_SETTINGS,text])+'.json';
+   const name=seg.prior?basename(seg.prior.file):'passage-'+digest([voice,MODEL,settings,text])+'.json';
    const file=join(dir,name);
    if(!existsSync(file)&&seg.prior){
     try{linkSync(seg.prior.file,file);}catch(e){if(e.code!=='EXDEV')throw e;copyFileSync(seg.prior.file,file);}
    }
    if(!existsSync(file)){
-    const resp=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+voice+'/with-timestamps?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text,model_id:MODEL,voice_settings:TITAN_SETTINGS,previous_text:segments[i-1]?.lines.at(-1),next_text:segments[i+1]?.lines[0]}),signal:AbortSignal.timeout(120000)});
-    if(!resp.ok)throw Error('Titan passage '+(i+1)+' HTTP '+resp.status);
+    const resp=await fetch('https://api.elevenlabs.io/v1/text-to-speech/'+voice+'/with-timestamps?output_format=mp3_44100_128',{method:'POST',headers:{'xi-api-key':key,'content-type':'application/json'},body:JSON.stringify({text,model_id:MODEL,voice_settings:settings,previous_text:segments[i-1]?.lines.at(-1),next_text:segments[i+1]?.lines[0]}),signal:AbortSignal.timeout(120000)});
+    if(!resp.ok)throw Error('ElevenLabs passage '+(i+1)+' HTTP '+resp.status);
     const response=await resp.json();
-    if(!response.audio_base64||!response.alignment)throw Error('Titan returned incomplete timed narration');
-    save(file,{...response,voice,model:MODEL,voice_settings:TITAN_SETTINGS});
+    if(!response.audio_base64||!response.alignment)throw Error('ElevenLabs returned incomplete timed narration');
+    save(file,{...response,voice,model:MODEL,voice_settings:settings});
    }
    if(file!==lastFile){
     take=read(file);
@@ -75,10 +75,10 @@ export async function narrate(dir,beats,voice,key,reuseDir){
    let first=seg.prior?.first??0;
    for(const line of seg.lines){
     const end=first+[...line].length;
-    if(a.characters.slice(first,end).join('')!==line)throw Error('Titan alignment does not match requested line');
+    if(a.characters.slice(first,end).join('')!==line)throw Error('Narration alignment does not match requested line');
     const from=first===0?0:Math.round(RATE*(a.character_end_times_seconds[first-2]+a.character_start_times_seconds[first])/2);
     const to=end===a.characters.length?pcm.length/2:Math.round(RATE*(a.character_end_times_seconds[end-1]+a.character_start_times_seconds[end+1])/2);
-    if(!(to>from&&from>=0&&to<=pcm.length/2))throw Error('Invalid Titan take boundary');
+    if(!(to>from&&from>=0&&to<=pcm.length/2))throw Error('Invalid narration take boundary');
     writeSync(fd,pcm.subarray(from*2,to*2));bytes+=2*(to-from);
     timing.push((to-from)/RATE);alignment.push({text:line,starts:a.character_start_times_seconds.slice(first,end).map(t=>Math.max(0,t-from/RATE))});
     provenance.push({file:name,startSample:from,endSample:to,reused:Boolean(seg.prior)});first=end+1;
@@ -87,7 +87,7 @@ export async function narrate(dir,beats,voice,key,reuseDir){
   writeSync(fd,pcmHeader(bytes),0,44,0);
  }finally{closeSync(fd);}
  renameSync(partial,join(dir,'voice.wav'));
- save(join(dir,'voice-takes.json'),{voice,model:MODEL,settings:TITAN_SETTINGS,sampleRate:RATE,takes:provenance});
+ save(join(dir,'voice-takes.json'),{voice,model:MODEL,settings,sampleRate:RATE,takes:provenance});
  save(join(dir,'timing.json'),timing);save(join(dir,'alignment.json'),alignment);
  return timing;
 }
