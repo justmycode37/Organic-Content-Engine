@@ -171,43 +171,95 @@ function photonCups(t: number) {
     c.globalAlpha = 1;
   }
 }
-function rebin(t: number) {
-  const cols = observations.spectrum.filter(([w]) => w >= 3.88 && w <= 4.25);
-  const group = t < 3 ? 1 : t < 7 ? 3 : 6;
-  heading('Grouping the readings');
-  const X = (w: number) => 160 + (w - 3.86) * 2380,
-    Y = (p: number) => 531 - (p - 2.07) * 3120;
-  for (let i = 0; i < cols.length; i += group) {
-    const bin = cols.slice(i, i + group),
-      weight = bin.reduce((s, b) => s + 1 / b[2] ** 2, 0);
-    const avg = bin.reduce((s, b) => s + b[1] / b[2] ** 2, 0) / weight;
-    const mid = bin.reduce((s, b) => s + b[0], 0) / bin.length,
-      x = X(mid),
-      y = Y(avg),
-      err = 3120 / Math.sqrt(weight);
-    for (const [wl, p] of bin) mark(X(wl), Y(p), 3, pink + '77');
-    const l = X(bin[0][0]) - 9,
-      r = X(bin.at(-1)![0]) + 9;
-    line(
-      [
-        [l, y],
-        [r, y],
-      ],
-      ice,
-      2,
-    );
-    line(
-      [
-        [x, y - err],
-        [x, y + err],
-      ],
-      lime,
-      2,
-    );
-    mark(x, y, 4.5, lime);
+const readings = observations.spectrum.filter(([w]) => w >= 3.88 && w <= 4.25);
+function averageBins(size: number) {
+  const bins = [];
+  for (let start = 0; start < readings.length; start += size) {
+    const rows = readings.slice(start, start + size);
+    const weight = rows.reduce((sum, [, , error]) => sum + 1 / error ** 2, 0);
+    bins.push({
+      start,
+      left: rows[0][0],
+      right: rows.at(-1)![0],
+      wavelength: rows.reduce((sum, [w]) => sum + w, 0) / rows.length,
+      depth: rows.reduce((sum, [, depth, error]) => sum + depth / error ** 2, 0) / weight,
+      error: 1 / Math.sqrt(weight),
+    });
   }
-  words('Wavelength (μm)', 1088, 625, 20, 'mono', muted, 'right');
-  for (const w of [3.9, 4, 4.1, 4.2]) words(w.toFixed(1), X(w), 573, 18, 'mono', muted, 'center');
+  return bins;
+}
+
+const narrowBins = averageBins(1);
+const wideBins = averageBins(6);
+const joinedBins = averageBins(3);
+function rebin(t: number) {
+  const x = (w: number) => 167 + (w - 3.86) * 2390;
+  const y = (depth: number) => 543 - (depth - 2.07) * 3160;
+  const ink = '#42314c';
+  const mutedInk = '#70556d';
+  const widen = ease(t, 5.85, 7.3);
+  const refine = ease(t, 9.45, 11.2);
+  c.fillStyle = grad(0, 0, 1280, 720, ['#f1d1bd', '#e5c7cb', '#c9b9d3']);
+  c.fillRect(-90, -50, 1460, 820);
+
+  const bandX = x(4.05);
+  c.fillStyle = grad(0, 170, 0, 375, ['#42723704', lime + '8f', '#42723705']);
+  c.fillRect(bandX - 46, 166, 92, 381);
+  words('4.05 μm', bandX, 150, 23, 'sans', ink, 'center');
+  const captions = [
+    ['Narrow bins', 'More detail, more uncertainty', 1 - ease(t, 5.85, 6.15)],
+    ['Wide bins', 'Nearby features blend together', ease(t, 6.15, 6.55) * (1 - ease(t, 9.45, 9.83))],
+    ['Group neighboring readings', 'A balance of detail and precision', ease(t, 9.83, 10.3)],
+  ] as const;
+  for (const [title, detail, opacity] of captions) {
+    c.globalAlpha = opacity;
+    words(title, 164, 112, 32, 'sans', ink);
+    words(detail, 1112, 112, 23, 'sans', mutedInk, 'right');
+  }
+  c.globalAlpha = 1;
+  for (const depth of [2.07, 2.11, 2.15, 2.19]) {
+    line([[167, y(depth)], [1112, y(depth)]], '#734c6544', 1);
+    words(depth.toFixed(2) + '%', 152, y(depth) + 6, 19, 'sans', mutedInk, 'right');
+  }
+  for (const [w, depth] of readings) mark(x(w), y(depth), 4.4, '#925d71ab');
+
+  const to = refine > 0 ? joinedBins : wideBins;
+  const progress = refine > 0 ? refine : widen;
+  for (const bin of to) {
+    const left = x(bin.left) - 8;
+    const right = x(bin.right) + 8;
+    c.globalAlpha = progress * 0.66;
+    c.fillStyle = grad(0, 176, 0, 374, ['#ac6e8b0d', '#906b9e49', '#79557721']);
+    c.fillRect(left, 176, right - left, 374);
+    c.globalAlpha = 1;
+  }
+  // Leave the original marks visible so viewers can see what the average hides.
+  const markBin = (cx: number, center: number, error: number, alpha: number) => {
+    if (alpha <= 0) return;
+    c.globalAlpha = alpha;
+    const half = error * 3160;
+    line([[cx, center - half], [cx, center + half]], '#62456d', 2);
+    line([[cx - 5, center - half], [cx + 5, center - half]], '#62456d', 1.5);
+    line([[cx - 5, center + half], [cx + 5, center + half]], '#62456d', 1.5);
+    mark(cx, center, 5, ink);
+    c.globalAlpha = 1;
+  };
+  const moveBin = (first: typeof wideBins[number], second: typeof wideBins[number], alpha: number) => {
+    const wavelength = first.wavelength + (second.wavelength - first.wavelength) * progress;
+    const depth = first.depth + (second.depth - first.depth) * progress;
+    const error = first.error + (second.error - first.error) * progress;
+    markBin(x(wavelength), y(depth), error, alpha);
+  };
+  if (refine > 0) {
+    for (const bin of joinedBins) moveBin(wideBins[Math.floor(bin.start / 6)], bin, 1);
+  } else {
+    for (const bin of narrowBins) moveBin(bin, wideBins[Math.floor(bin.start / 6)], 1 - widen);
+    for (const bin of wideBins) markBin(x(bin.wavelength), y(bin.depth), bin.error, widen);
+  }
+
+  for (const w of [3.9, 4, 4.1, 4.2]) words(w.toFixed(1), x(w), 584, 20, 'sans', ink, 'center');
+  words('Illustrative grouping of Webb measurements', 167, 625, 20, 'sans', mutedInk);
+  words('Wavelength (μm)', 1112, 625, 22, 'sans', ink, 'right');
 }
 function modelAt(w: number) {
   const i = model.findIndex((p) => p[0] >= w);
