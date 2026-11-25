@@ -123,22 +123,33 @@ cover.src = coverUrl;
 Object.assign(window, { motionAssetsReady: cover.decode() });
 export function coverHook(t: number) {
   if (t >= 3.5) return;
-  const zoom = 1.02 + 0.14 * ease(t, 0, 3.4);
+  // On frame one the full artwork reads as the thumbnail. Its square cuts
+  // fan into depth with different amounts of travel in the hand and star.
+  const zoom = 1 + 0.13 * ease(t, 0, 2.95);
+  const push = ease(t, 0, 2.25);
+  const tile = 80;
   c.save();
   c.translate(704, 125);
   c.scale(zoom, zoom);
   c.translate(-704, -125);
-  const tile = 80;
   for (let y = 0; y < H; y += tile) {
     for (let x = 0; x < W; x += tile) {
       const distance = Math.hypot(x + 40 - 704, y + 40 - 125) / 920;
-      const phase = 2.54 - 1.02 * distance + 0.09 * Math.sin(x + y * 2);
-      const leave = ease(t, phase, phase + 0.76);
-      const width = tile * (1 - leave);
-      if (width < 0.1) continue;
-      c.drawImage(cover, x, y, tile, tile, x + (tile - width) / 2, y - 17 * leave, width + 0.15, tile + 0.15);
+      const aperture = x >= 720 && x < 1120 && y >= 160 && y < 480;
+      const phase = (aperture ? 0.72 + (x % 240) / 780 : 2.39 - 0.9 * distance) + 0.07 * Math.sin(x + y * 2);
+      const leave = ease(t, phase, phase + 0.57);
+      if (leave >= 1) continue;
+      const foreground = x < 650 && y > 370;
+      const separation = foreground ? 25 : x > 850 ? 14 : 3;
+      const drift = (x < 704 ? -1 : 1) * separation * push;
+      const width = tile * (1 - 0.39 * leave);
+      c.globalAlpha = 1 - leave ** 1.7;
+      c.drawImage(cover, x, y, tile, tile, x + drift * leave + (tile - width) / 2, y - separation * leave, width + 0.15, width + 0.15);
     }
   }
+  c.globalAlpha = 1;
+  const glint = Math.sin(Math.PI * ease(t, 0.05, 1.6)) * 0.68;
+  lensGlow(704, 125, 52, lime, glint);
   c.restore();
 }
 
@@ -200,7 +211,18 @@ function equation(t: number, terms: Term[], y = 330, size = 64) {
     c.textAlign = 'center';
     c.textBaseline = 'middle';
     c.fillStyle = q.accent ? lime : '#f3e7ef';
-    c.fillText(q.text, mid, y + 10 * (1 - a));
+    const baseline = y + 10 * (1 - a);
+    if (q.text.startsWith('R★')) {
+      c.textAlign = 'left';
+      const start = mid - widths[i] / 2 + size * 0.11;
+      c.fillText('R', start, baseline);
+      const end = start + c.measureText('R').width;
+      c.font = 'italic ' + size * 0.52 + 'px Georgia, serif';
+      c.fillText('★', end - 1, baseline + size * 0.22);
+      if (q.text.endsWith('²')) c.fillText('²', end + size * 0.1, baseline - size * 0.22);
+    } else {
+      c.fillText(q.text, mid, baseline);
+    }
     if (q.meaning) {
       flip = -flip;
       const reach = ease(local, 0.2, 0.65);

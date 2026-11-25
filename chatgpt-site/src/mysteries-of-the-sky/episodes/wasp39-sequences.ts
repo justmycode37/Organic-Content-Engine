@@ -5,6 +5,7 @@ import observations from './wasp39-data.json';
 import { drawMolecule } from '../molecules.ts';
 import model from './wasp39-model.json';
 import miri from './wasp39-miri.json';
+import g395h from './wasp39-g395h.json';
 const tau = 2 * Math.PI;
 function ease(t: number, start: number, end: number) {
   const f = Math.max(0, Math.min(1, (t - start) / (end - start)));
@@ -34,6 +35,12 @@ function strip(t: number) {
     }
     const col = i === 0 ? ice : pink;
     line(points, grad(x - r, y, r * 2, r * 2, [col + '8f', col, '#d2acbc']), 15);
+    const travel = (t * 0.4 + i * 0.2) % 1;
+    const [px, py] = points[Math.floor(travel * 128)];
+    lensGlow(px, py, 32 + 15 * open, col, 0.74);
+    c.globalAlpha = ease(t, 10.4, 11.4);
+    words(i ? 'Larger planet · more light blocked' : 'Smaller planet', 233, y - 33, 25, 'sans', col);
+    c.globalAlpha = 1;
     // Small fiducial marks move with the material as the annulus unwraps.
     for (let j = 0; j < points.length - 1; j += 8) {
       const [px, py] = points[j],
@@ -209,11 +216,11 @@ function modelAt(w: number) {
     b = model[i];
   return a[1] + ((b[1] - a[1]) * (w - a[0])) / (b[0] - a[0]);
 }
-function fit(t: number) {
+function fit(t: number, returnToEvidence = false) {
   const start = 3.84,
     stop = 4.58,
     X = (w: number) => 150 + ((w - start) / (stop - start)) * 995;
-  const separate = ease(t, 7.2, 11.8),
+  const separate = ease(t, 6.2, 10.1),
     y0 = 540 - 123 * separate,
     amp = 1290 - 450 * separate;
   const Y = (p: number) => y0 - (p - 2.07) * amp;
@@ -247,18 +254,20 @@ function fit(t: number) {
     );
     mark(x, y, 3.6, ice);
     if (separate > 0) {
-      const residual = 563 - (p - modelAt(w)) * 1900;
+      const residual = 546 - (p - modelAt(w)) * 1330;
       c.globalAlpha = separate;
       const yy = y + (residual - y) * separate;
       line(
         [
-          [x, yy - e * 1900],
-          [x, yy + e * 1900],
+          [x, yy - e * 1330],
+          [x, yy + e * 1330],
         ],
         ice + '8f',
         1.2,
       );
-      mark(x, yy, 3.7, Math.abs(w - 4.05) < 0.062 ? lime : ice);
+      const nearby = Math.abs(w - 4.05) < 0.062 && p > modelAt(w);
+      if (nearby && returnToEvidence) lensGlow(x, yy, 27, lime, 0.43);
+      mark(x, yy, nearby ? 5 : 3.7, nearby ? lime : ice);
       c.globalAlpha = 1;
     }
   }
@@ -266,16 +275,16 @@ function fit(t: number) {
     c.globalAlpha = separate;
     line(
       [
-        [150, 563],
-        [1145, 563],
+        [150, 546],
+        [1145, 546],
       ],
       muted + 'a0',
       1,
     );
-    words('Observed − model', 1145, 650, 20, 'mono', muted, 'right');
+    words('Observed − model', 155, 475, 20, 'sans', muted);
     c.globalAlpha = 1;
   }
-  for (const w of [3.9, 4.05, 4.3, 4.5]) words(w + ' μm', X(w), y0 + 49, 17, 'mono', muted, 'center');
+  for (const w of [3.9, 4.05, 4.3, 4.5]) words(w + ' μm', X(w), y0 + 49 + 178 * separate, 18, 'sans', muted, 'center');
 }
 function thousand(t: number) {
   heading('One photon in a thousand');
@@ -292,9 +301,15 @@ function thousand(t: number) {
 }
 function turnDips(t: number) {
   const morph = ease(t, 4.7, 8.3);
+  const axes = ease(t, 6.5, 9.6);
+  c.globalAlpha = axes;
+  line([[156, 244], [156, 507], [1127, 507]], '#cfc2dc78', 1.5);
+  words('Wavelength', 1127, 550, 23, 'sans', muted, 'right');
+  c.globalAlpha = 1;
   words(morph > 0.5 ? 'Fraction blocked' : 'Light reaching the detector', 140, 190, 20, 'mono', muted);
   for (const [i, depth] of [2, 2.1].entries()) {
-    const x = 375 + 530 * i,
+    const align = ease(t, 8.3, 11.2);
+    const x = 375 + 530 * i + (i ? -141 : 142) * align,
       col = i ? pink : ice,
       base = 245 + 258 * morph,
       dy = 73 * depth * (1 - 2 * morph);
@@ -306,6 +321,7 @@ function turnDips(t: number) {
       ];
     });
     line(pts, col, 3);
+    lensGlow(x, base + dy, 18 + 10 * axes, col, 0.6);
     mark(x, base + dy, 6, col);
     if (morph > 0.7) words(depth.toFixed(1) + '%', x, base + dy - 27, 32, 'title', col, 'center');
   }
@@ -404,57 +420,89 @@ export const evidenceScenes: Record<string, (t: number) => void> = {
   drift,
 };
 
-// Powell et al., Figure 2: measured Eureka! depths and 1σ errors above
-// a strip of the released SO₂ opacity, binned logarithmically for display.
+// Powell et al. Figure 2 depths and 1σ errors with the PICASO curves
+// from Extended Data Figure 3, including the isolated effect of SO₂ opacity.
 function miriEvidence(t: number) {
-  const ink = '#352741', plum = '#674760';
-  c.fillStyle = grad(0, 0, 1280, 720, ['#f1d5bd', '#e5c7c7', '#cbbbd6']);
+  const ink = '#30263b';
+  const plum = '#674760';
+  const withSulfur = '#874056';
+  const withoutSulfur = '#4a4f78';
+  const compare = ease(t, 4.1, 6.1);
+  const close = ease(t, 0, 3.2);
+  const lo = 5.0 + 2.02 * close;
+  const hi = 11.0 - 1.88 * close;
+  const x = (w: number) => 154 + ((w - lo) / (hi - lo)) * 970;
+  const lowDepth = 1.85 + 0.14 * close;
+  const depthRange = 0.4 - 0.12 * close;
+  const y = (value: number) => 516 - (value - lowDepth) * 337 / depthRange;
+  c.fillStyle = grad(0, 0, 1280, 720, ['#ffe0c0', '#edcdcb', '#cbbbd6']);
   c.fillRect(-90, -50, 1460, 820);
-  const zoom = ease(t, 5.1, 13.8);
-  const lo = 5 + 1.7 * zoom, hi = 11 - 1.7 * zoom;
-  const X = (w: number) => 183 + ((w - lo) / (hi - lo)) * 920;
-  const Y = (d: number) => 445 - (d - 1.87) * 850;
-  words('Webb · mid-infrared', 155, 99, 32, 'sans', ink);
-  words('Transit depth', 155, 149, 20, 'sans', plum);
-  for (const d of [1.9, 2.0, 2.1, 2.2]) {
-    line([[183, Y(d)], [1103, Y(d)]], '#65465c40', 1.5);
-    words(d.toFixed(1) + '%', 170, Y(d) + 6, 18, 'sans', plum, 'right');
-  }
-  const scan = ease(t, 0, 3.2);
-  for (const [w, d, error] of miri.measurements) {
-    if (w < lo || w >= hi || (w - 5) / 6 > scan) continue;
-    line([[X(w), Y(d - error)], [X(w), Y(d + error)]], plum, 2.5);
-    mark(X(w), Y(d), 6, ink);
-  }
-  for (const [i, w] of [7.7, 8.5].entries()) {
-    const a = ease(t, i * 1.4, i * 1.4 + 0.8);
-    c.save();
-    c.globalAlpha = a;
-    c.setLineDash([4, 7]);
-    line([[X(w), 160], [X(w), 512]], '#79485c', 1.8);
-    words(w + ' μm', X(w), 142, 24, 'sans', ink, 'center');
-    c.restore();
+  words('Webb · mid-infrared', 154, 105, 34, 'sans', ink);
+  words('Transit depth', 154, 151, 21, 'sans', plum);
+  for (const depth of [1.9, 2.0, 2.1, 2.2]) {
+    if (depth < lowDepth) continue;
+    line([[154, y(depth)], [1124, y(depth)]], '#65465c42', 1.4);
+    words(depth.toFixed(1) + '%', 140, y(depth) + 6, 20, 'sans', plum, 'right');
   }
   c.save();
   c.beginPath();
-  c.rect(183, 486, 920, 46);
+  c.rect(154, 155, 970, 370);
   c.clip();
-  for (const [i, opacity] of miri.logOpacity.entries()) {
-    const heat = Math.min(1, Math.max(0, (opacity + 23.2) / 4.8));
-    c.fillStyle = grad(0, 486, 0, 46, ['#322339', '#4d3152']);
-    const x = X(5 + i / 40);
-    c.fillRect(x, 486, 920 / ((hi - lo) * 40) + 0.1, 46);
-    c.globalAlpha = heat ** 2;
-    c.fillStyle = '#ffd3ae';
-    c.fillRect(x, 486, 920 / ((hi - lo) * 40) + 0.1, 46);
-    c.globalAlpha = 1;
+  const limits = [[7.28, 7.98], [8.26, 8.9]];
+  for (const [i, [left, right]] of limits.entries()) {
+    c.globalAlpha = ease(t, i * 1.65, i * 1.65 + 0.7);
+    c.fillStyle = grad(0, 155, 0, 370, ['#733b581c', lime + '64', '#ad706339']);
+    c.fillRect(x(left), 155, x(right) - x(left), 370);
+  }
+  const model = miri.models.filter(([w]) => w > lo - 0.13 && w < hi + 0.13);
+  for (const [i, [left, right]] of limits.entries()) {
+    const fill = ease(t, 6.0 + i * 1.8, 7.85 + i * 1.8);
+    if (!fill) continue;
+    const band = model.filter(([w]) => w >= left && w <= left + (right - left) * fill);
+    c.globalAlpha = fill * 0.72;
+    c.fillStyle = grad(0, 215, 0, 260, ['#9b485d95', '#844c734a']);
+    c.beginPath();
+    band.forEach(([w, withSO2], j) => j ? c.lineTo(x(w), y(withSO2)) : c.moveTo(x(w), y(withSO2)));
+    [...band].reverse().forEach(([w, , noSO2]) => c.lineTo(x(w), y(noSO2)));
+    c.fill();
+  }
+  c.globalAlpha = compare;
+  line(model.map(([w, depth]) => [x(w), y(depth)]), withSulfur, 4.1);
+  c.setLineDash([8, 7]);
+  line(model.map(([w, , depth]) => [x(w), y(depth)]), withoutSulfur, 3.1);
+  c.setLineDash([]);
+  c.globalAlpha = 1;
+  for (const [w, depth, error] of miri.measurements) {
+    if (w < lo || w > hi) continue;
+    line([[x(w), y(depth - error)], [x(w), y(depth + error)]], plum + 'ad', 2.2);
+    mark(x(w), y(depth), 5.6, ink);
   }
   c.restore();
-  for (const w of [5,6,7,8,9,10,11]) if (w >= lo && w <= hi) words(String(w), X(w), 564, 19, 'sans', ink, 'center');
-  words('SO₂ absorption strength', 183, 612, 22, 'sans', ink);
-  words('Wavelength (μm)', 1103, 612, 22, 'sans', ink, 'right');
+  for (const [i, [left, right]] of limits.entries()) {
+    c.globalAlpha = ease(t, i * 1.65, i * 1.65 + 0.7);
+    words(i ? '8.5 μm band' : '7.7 μm band', x((left + right) / 2), 147, 23, 'sans', ink, 'center');
+  }
+  c.globalAlpha = 1;
+  line([[154, 526], [1124, 526]], plum, 1.5);
+  for (const w of [5, 6, 7, 7.5, 8, 8.5, 9, 10, 11]) {
+    if (w < lo || w > hi - 0.3 || (w % 1 !== 0 && close < 0.55)) continue;
+    words(String(w), x(w), 560, 20, 'sans', ink, 'center');
+  }
+  mark(161, 614, 5, ink);
+  words('Webb measurements', 179, 621, 21, 'sans', ink);
+  c.globalAlpha = compare;
+  line([[432, 614], [477, 614]], withSulfur, 4);
+  words('Model with SO₂', 493, 621, 21, 'sans', withSulfur);
+  c.setLineDash([8, 7]);
+  line([[723, 614], [767, 614]], withoutSulfur, 3);
+  c.setLineDash([]);
+  words('Same model without SO₂', 783, 621, 21, 'sans', withoutSulfur);
+  c.globalAlpha = 1;
+  words('Wavelength (μm)', 1124, 560, 20, 'sans', ink, 'right');
 }
 evidenceScenes.confirm = miriEvidence;
+evidenceScenes.confirmRecap = (t) => miriEvidence(10 + t);
+evidenceScenes.residual = (t) => fit(10.6 + t, true);
 
 function detector(t: number) {
   heading('On the detector');
@@ -480,63 +528,86 @@ function detector(t: number) {
       c.fillRect(px, py, 24, 24);
     }
 }
+const prismSpectrum = observations.spectrum.filter(([w]) => w > 3.84 && w < 4.26);
 function resolution(t: number) {
-  heading('Two views of the same band');
-  for (const [i, n] of [32, 100].entries()) {
-    const y = 277 + i * 166,
-      left = 151,
-      w = 975;
-    for (let j = 0; j < n; j++) {
-      const f = (j + 0.5) / n;
-      const l =
-        0.27 + 0.58 * Math.exp(-(((f - 0.45) / 0.048) ** 2)) + 0.21 * Math.exp(-(((f - 0.75) / 0.08) ** 2));
-      const x = left + (w * j) / n;
-      c.fillStyle = grad(x, y - 35, w / n, 70, [
-        ice + Math.round(l * 245).toString(16),
-        pink + Math.round(l * 130).toString(16),
-      ]);
-      c.fillRect(x, y - 34, w / n - 1, 68);
+  const x = (w: number) => 185 + (w - 3.84) * 2210;
+  const spectra = [
+    { rows: g395h, color: ice, name: 'Grating · G395H', start: 1.2, base: 305 },
+    { rows: prismSpectrum, color: pink, name: 'Prism · PRISM', start: 2.9, base: 542 },
+  ];
+  c.fillStyle = grad(0, 0, 1280, 720, ['#101929', '#253052', '#482d48']);
+  c.fillRect(-90, -50, 1460, 820);
+  const chart = ease(t, 4.8, 7.1);
+  const match = ease(t, 8.7, 9.6);
+  for (const { rows, color, name, start, base } of spectra) {
+    const enter = ease(t, start, start + 0.8);
+    c.save();
+    c.globalAlpha = enter;
+    words(name, 185, base - 173, 27, 'sans', color);
+    const y = (depth: number) => base - (depth - 2.05) * 740;
+    c.globalAlpha = enter * chart;
+    for (const depth of [2.05, 2.15, 2.25]) {
+      line([[185, y(depth)], [1113, y(depth)]], '#bfb4d431', 1.1);
+      words(depth.toFixed(2) + '%', 169, y(depth) + 6, 17, 'sans', muted, 'right');
     }
-    for (let k = 0; k < 14; k++) {
-      const life = (t * 0.9 + k * 0.37 + i * 0.19) % 1,
-        fx = (k * 0.618 + Math.floor(t * 0.9 + k * 0.37) * 0.31) % 1;
-      lensGlow(left + fx * w, y - 70 + 70 * life * life, 9, k % 3 ? ice : pink, 1 - life);
+    c.globalAlpha = enter;
+    for (const [i, [w, depth, error]] of rows.entries()) {
+      const cx = x(w);
+      const resting = base - 68;
+      const py = resting + (y(depth) - resting) * chart;
+      const width = rows === g395h ? 9 : 19;
+      const focus = ease(t, 8.65 + i * 0.009, 9.15 + i * 0.009) * (Math.abs(w - 4.05) < 0.042 ? 1 : 0);
+      c.globalAlpha = enter * (1 - chart);
+      c.fillStyle = grad(cx, resting - 29, 0, 58, [color + '35', color, color + '23']);
+      c.fillRect(cx - width / 2, resting - 28, width, 56);
+      c.globalAlpha = enter * chart;
+      line([[cx, py - error * 740 * chart], [cx, py + error * 740 * chart]], focus > 0.5 ? lime : color + '82', 1.7);
+      mark(cx, py, rows === g395h ? 3.2 : 5, focus > 0.5 ? lime : color);
     }
-    const f = Math.min(0.45, 0.04 + 0.055 * t),
-      x = left + f * w;
-    line(
-      [
-        [x, y - 48],
-        [x, y + 47],
-      ],
-      lime,
-      1.5,
-    );
+    c.restore();
   }
-  words('Illustrative wavelength bins', 151, 592, 20, 'mono', muted);
+  c.globalAlpha = match;
+  c.setLineDash([4, 7]);
+  line([[x(4.05), 151], [x(4.05), 553]], lime, 2);
+  c.setLineDash([]);
+  words('4.05 μm', x(4.05), 591, 26, 'sans', lime, 'center');
+  c.globalAlpha = chart;
+  for (const w of [3.9, 4, 4.1, 4.2]) words(w.toFixed(1), x(w), 591, 20, 'sans', muted, 'center');
+  words('Wavelength (μm)', 1113, 635, 21, 'sans', muted, 'right');
+  c.globalAlpha = 1;
 }
 function spectralWindow(t: number) {
-  heading('A second instrument');
-  const x = (w: number) => 144 + w * 105;
-  for (const [i, range] of [
-    [0.6, 5.3],
-    [5, 10],
-  ].entries()) {
-    const y = 291 + i * 122,
-      f = i ? ease(t, 2, 7) : 1;
-    c.fillStyle = grad(x(range[0]), y, x(range[1]) - x(range[0]), 0, [ice + 'a2', pink + '99']);
-    c.fillRect(x(range[0]), y, f * (x(range[1]) - x(range[0])), 13);
-    if (f > 0.35) words(i ? 'MIRI observation' : 'NIRSpec PRISM', x(range[0]), y - 17, 22, 'sans', muted);
+  const x = (w: number) => 142 + (w - 0.5) * 85;
+  const ranges = [
+    { start: 0.6, end: 5.3, y: 286, color: ice, name: 'NIRSpec · PRISM', reveal: 1 },
+    { start: 5.0, end: 12.0, y: 432, color: pink, name: 'MIRI · low-resolution spectrum', reveal: ease(t, 3.7, 7.3) },
+  ];
+  c.fillStyle = grad(0, 0, 1280, 720, ['#20192f', '#493758', '#704151']);
+  c.fillRect(-90, -50, 1460, 820);
+  const band = (left: number, right: number, y: number, color: string) => {
+    c.fillStyle = grad(0, y - 31, 0, 62, [color + '0d', color + '9a', color + '0b']);
+    c.fillRect(left, y - 31, right - left, 62);
+    for (let i = 0; i < 30; i++) {
+      const target = left + (right - left) * ((i * 0.618 + t * 0.16) % 1);
+      lensGlow(target, y + 14 * Math.sin(i + t), 12, color, 0.42);
+    }
+  };
+  for (const { start, end, y, color, name, reveal } of ranges) {
+    if (reveal <= 0) continue;
+    band(x(start), x(start) + reveal * (x(end) - x(start)), y, color);
+    c.globalAlpha = reveal;
+    words(name, x(start), y - 49, 26, 'sans', color);
+    c.globalAlpha = 1;
   }
-  line(
-    [
-      [x(0.5), 509],
-      [x(10), 509],
-    ],
-    muted + '99',
-    1.5,
-  );
-  for (const w of [1, 3, 5, 7, 9]) words(w + ' μm', x(w), 550, 18, 'mono', muted, 'center');
+  for (const [w, y, start] of [[4.05, 286, 0.4], [7.7, 432, 7], [8.5, 432, 7.8]]) {
+    c.globalAlpha = ease(t, start, start + 0.7);
+    line([[x(w), y - 23], [x(w), y + 24]], lime, 2.1);
+    words(w + ' μm', x(w), y + 59, 18, 'sans', lime, 'center');
+  }
+  c.globalAlpha = 1;
+  line([[x(0.5), 551], [x(12), 551]], muted + '99', 1.5);
+  for (const w of [1, 3, 5, 7, 9, 11]) words(String(w), x(w), 584, 20, 'sans', muted, 'center');
+  words('Wavelength (μm)', x(12), 632, 23, 'sans', muted, 'right');
 }
 function finalPoints(t: number) {
   heading('The bump beside the peak');
@@ -565,50 +636,61 @@ Object.assign(evidenceScenes, { detector, resolution, window: spectralWindow, fi
 // Schematic upper-atmosphere column. The particles illustrate a qualitative
 // chemical model prediction; their number does not encode a measured abundance.
 function column(t: number, illuminated: boolean) {
-  heading(illuminated ? 'Chemistry driven by starlight' : 'Thermal equilibrium');
-  const x = 640,
-    y = 345,
-    r = 228;
-  lensGlow(x, y, r * 1.6, illuminated ? pink : ice, 0.25);
-  c.save();
-  c.beginPath();
-  c.arc(x, y, r, 0, tau);
-  c.clip();
-  c.fillStyle = grad(x - r, y - r, 2 * r, 2 * r, ['#3c3558', '#282138', '#69424b']);
-  c.fillRect(x - r, y - r, r * 2, r * 2);
-  for (let i = 0; i < 210; i++) {
-    const u = (i * 0.6180339887) % 1,
-      v = Math.sqrt((i + 0.5) / 210);
-    const xx = x - r + 2 * r * ((u + t * 0.012 * (0.6 + v)) % 1) + 5 * Math.cos(t * 0.5 + i),
-      yy = y - r + 2 * r * v + 4 * Math.sin(t * 0.7 + i * 0.39);
-    const col = i % 3 === 0 ? ice + '65' : pink + '70';
-    mark(xx, yy, 2 + (i % 3), col);
-  }
-  if (illuminated) {
-    const on = 1 - ease(t, 6.6, 9.8);
-    for (let i = 0; i < 20; i++) {
-      const xx = x - 178 + 356 * ((i * 0.61803) % 1),
-        yy = y - 124 + 206 * ((i * 0.723) % 1) + 3 * Math.sin(i + t);
-      c.globalAlpha = on;
-      mark(xx, yy, 4.2, '#debc94');
-      mark(xx - 6, yy + 4, 2.4, pink);
-      mark(xx + 6, yy + 4, 2.4, pink);
+  const reveal = illuminated ? ease(t, 6.4, 8.2) : 0;
+  const create = illuminated ? ease(t, 1.1, 4.2) : 0;
+  const parcel = (x: number, y: number, radius: number, lit: boolean) => {
+    lensGlow(x, y, radius * 1.45, lit ? pink : ice, 0.43);
+    c.save();
+    const alpha = c.globalAlpha;
+    c.beginPath();
+    c.arc(x, y, radius, 0, tau);
+    c.clip();
+    c.fillStyle = grad(x - radius, y - radius, 2 * radius, 2 * radius, ['#272544', '#472d49', '#99606a']);
+    c.fillRect(x - radius, y - radius, 2 * radius, 2 * radius);
+    for (let i = 0; i < 130; i++) {
+      const u = (i * 0.618 + t * 0.022) % 1;
+      const v = (i * 0.733 + 0.018 * Math.sin(i + t)) % 1;
+      mark(x + (u - 0.5) * 2 * radius, y + (v - 0.5) * 2 * radius, 1.5 + (i % 3), ice + '53');
     }
-    c.globalAlpha = on * 0.55;
-    for (let i = 0; i < 6; i++) {
-      const yy = y - r - 28 + ((t * 93 + i * 39) % 160);
-      line(
-        [
-          [x - 115 + i * 43, yy],
-          [x - 110 + i * 43, yy + 13],
-        ],
-        ice,
-        2,
-      );
+    if (lit) {
+      for (let i = 0; i < 12; i++) {
+        const phase = (t * 0.9 + i * 0.073) % 1;
+        const px = x + (i - 5.5) * radius * 0.145;
+        const py = y - radius * 1.04 + phase * radius * 0.91;
+        c.globalAlpha = alpha * Math.sin(Math.PI * phase) * 0.75;
+        line([[px - 15, py - 40], [px, py]], '#d1b9ff', 2.3);
+        c.globalAlpha = alpha;
+      }
     }
+    const molecules = lit ? 12 : illuminated ? 2 : 0;
+    for (let i = 0; i < molecules; i++) {
+      const angle = i * 2.4;
+      const span = radius * (0.15 + 0.68 * Math.sqrt(i / 12));
+      const px = x + span * Math.cos(angle) + 4 * Math.sin(i + t);
+      const py = y - 16 + span * 0.75 * Math.sin(angle) + 5 * Math.cos(t * 1.1 + i);
+      c.globalAlpha = alpha * (lit ? ease(create, i / 18, i / 18 + 0.23) : 1);
+      drawMolecule(c, 'SO2', [px, py], 0.23, t + i);
+    }
+    c.restore();
+    c.strokeStyle = lit ? '#fac0a180' : '#c4bed88c';
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(x, y, radius, 0, tau);
+    c.stroke();
+  };
+  const x = 640 - 300 * reveal;
+  const y = 354;
+  const radius = 218 - 40 * reveal;
+  parcel(x, y, radius, illuminated);
+  if (reveal) {
+    c.save();
+    c.globalAlpha = reveal;
+    parcel(940, y, radius, false);
+    words('Without UV chemistry', 940, 593, 27, 'sans', ice, 'center');
+    c.restore();
   }
-  c.restore();
-  words('Upper atmosphere · schematic', x, 604, 21, 'mono', muted, 'center');
+  words(illuminated ? 'With UV chemistry' : 'Thermal equilibrium', x, 593, 27, 'sans', illuminated ? '#f7c5b2' : ice, 'center');
+  words('Upper atmosphere · schematic', 640, 653, 20, 'sans', '#e7cfdb', 'center');
 }
 function identity(t: number) {
   heading('From the spectrum to the molecule');
@@ -659,11 +741,15 @@ evidenceScenes.discovery = (t) => {
   for (const [w, p, e] of observations.spectrum) {
     if (w < left || w > right) continue;
     const near = Math.abs(w - focus) < width;
+    const grow = ease(t, 0.32 + (w - 3.6) * 1.55, 1.38 + (w - 3.6) * 1.55);
+    c.globalAlpha = 0.15 + grow * 0.85;
+    const center = y(p);
+    if (near && bright > 0.2) lensGlow(x(w), center, 37 * bright, lime, 0.56 + Math.sin(t * 2.3 + w * 44) * 0.12);
     const col = near && bright > 0.3 ? lime : ice;
     line(
       [
-        [x(w), y(p + e)],
-        [x(w), y(p - e)],
+        [x(w), center + (y(p + e) - center) * grow],
+        [x(w), center + (y(p - e) - center) * grow],
       ],
       col + 'be',
       1.5,

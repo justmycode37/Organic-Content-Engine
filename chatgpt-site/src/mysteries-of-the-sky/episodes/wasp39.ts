@@ -3,7 +3,7 @@
 import { atmosphericLimb, transmittedLight } from '../atmosphere.ts';
 import { drawMolecule, type Molecule } from '../molecules.ts';
 import { evidenceScenes } from './wasp39-sequences.ts';
-import { coverHook, showpieces } from './wasp39-showpieces.ts';
+import { coverHook, field, showpieces } from './wasp39-showpieces.ts';
 import { makeBeats } from './wasp39-beats.ts';
 import data from './wasp39-data.json';
 import {
@@ -334,6 +334,56 @@ function rays(t: number, k: string) {
   heading(vertical ? 'Looking straight down' : cloudy ? 'An opaque layer' : 'Grazing starlight');
 }
 
+function cloudDeck(t: number) {
+  c.fillStyle = grad(0, 0, W, H, ['#211b35', '#704652', '#28233f']);
+  c.fillRect(-90, -50, W + 180, H + 100);
+  const cloud = Math.min(1, Math.max(0, (t - 0.55) / 1.55));
+  const cutoff = 410 - 105 * cubic(cloud);
+  const layers = [259, 315, 372, 429, 486];
+  words('Clear limb', 345, 135, 30, 'sans', ice, 'center');
+  words('High cloud deck', 935, 135, 30, 'sans', pink, 'center');
+  for (const [i, cx] of [345, 935].entries()) {
+    const left = cx - 248;
+    const right = cx + 248;
+    c.save();
+    c.beginPath();
+    c.rect(left, 167, 496, 376);
+    c.clip();
+    c.fillStyle = grad(0, 177, 0, 366, ['#1f203766', '#9570a1aa', '#d98783ee']);
+    c.fillRect(left, 174, 496, 369);
+    for (const altitude of layers) {
+      const color = altitude < 325 ? ice : '#f6cdb6';
+      const area = path((u) => [left + u * 496, altitude + 45 * (2 * u - 1) ** 2]);
+      line(area, color + '42', 2.2);
+    }
+    if (i) {
+      c.fillStyle = grad(0, cutoff, 0, 220, ['#ad6e84', '#57354a', '#301e3a']);
+      c.beginPath();
+      path((u) => [left + u * 496, cutoff + 22 + 12 * Math.sin(u * 17 + t * 0.45) + 8 * Math.sin(u * 28)]).forEach(([x, y], idx) => idx ? c.lineTo(x, y) : c.moveTo(x, y));
+      c.lineTo(right, 545);
+      c.lineTo(left, 545);
+      c.fill();
+    }
+    for (const [j, altitude] of [230, 350, 434].entries()) {
+      const blocked = i === 1 && altitude > cutoff + 21;
+      const end = blocked ? cx - 88 - (altitude - cutoff) * 0.75 : right;
+      const progress = Math.min(1, Math.max(0, (t - j * 0.34) / 1.05));
+      const tip = left + (end - left) * progress;
+      line([[left, altitude], [tip, altitude]], grad(left, 0, Math.max(1, tip - left), 0, ['#ded5ff61', '#fee6bf']), 2.8);
+      if (blocked) {
+        c.setLineDash([3, 8]);
+        line([[end + 11, altitude], [right, altitude]], '#efd6dd37', 2.2);
+        c.setLineDash([]);
+      }
+      const traveling = (t * 0.55 + j * 0.2) % 1;
+      lensGlow(left + (tip - left) * traveling, altitude, 18, '#ffe1b7', 0.65);
+    }
+    c.restore();
+    words(i ? 'Only the upper path reaches Webb' : 'Paths sample several heights', cx, 597, 25, 'sans', i ? '#f5c6bb' : ice, 'center');
+  }
+  words('Atmospheric cross-sections · schematic', 640, 656, 19, 'sans', '#e7cfdb', 'center');
+}
+
 const plotX = 139,
   plotW = 1010,
   yBottom = 591,
@@ -618,21 +668,101 @@ function compare(t: number, k: string) {
     });
   }
 }
-function credits(t: number) {
-  c.globalAlpha = 0.55;
-  evidenceScenes.finalPoints(6 + t);
-  c.globalAlpha = 1;
-  c.fillStyle = '#120f2699';
-  c.fillRect(0, 300, W, 110);
-  const rows = [
-    'Observations · JWST Transiting Exoplanet Community ERS Team',
-    'Chemistry · Tsai et al. (2023) and Powell et al. (2024)',
-    'Mysteries of the Sky · Rowan Ellery is a fictional AI presenter',
+// A single pullback from the star to the evidence at three wavelengths.
+function recap(t: number) {
+  const reveal = (start: number, end: number) => cubic(Math.max(0, Math.min(1, (t - start) / (end - start))));
+  const transit = reveal(1.3, 4.8);
+  const separate = reveal(5.6, 8.5);
+  const spectrum = reveal(10.0, 12.9);
+  const ultraviolet = reveal(14.0, 16.0) * (1 - reveal(18.2, 19.6));
+  const extend = reveal(19.3, 22.0);
+  const returnToShoulder = reveal(24.0, 28.7);
+  field(t, 1.2 + 1.41 * (1 - transit), [W / 2, H / 2]);
+  c.fillStyle = grad(0, 0, W, H, ['#1011216e', '#261c3bbc', '#351d3999']);
+  c.fillRect(-90, -50, W + 180, H + 100);
+  const starX = 625 - 335 * separate;
+  const starY = 340 - 39 * separate;
+  const starR = 14 + 156 * transit - 61 * separate;
+  c.save();
+  c.globalAlpha = 1 - returnToShoulder;
+  globeLook(starX, starY, starR, 'star');
+  const planetR = starR * 0.17 + 10 * separate;
+  const planetX = starX - starR * (1.25 - 1.16 * transit);
+  c.fillStyle = grad(planetX - planetR, starY - planetR, planetR * 2, planetR * 2, ['#352947', '#120d20', '#47304c']);
+  c.beginPath();
+  c.arc(planetX, starY, planetR, 0, tau);
+  c.fill();
+  for (let i = 0; i < 5; i++) {
+    const shell = planetR + 2.2 + 3.1 * i;
+    c.strokeStyle = '#f5aec7' + Math.round((130 - 19 * i) * separate).toString(16).padStart(2, '0');
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(planetX, starY, shell, 0, tau);
+    c.stroke();
+  }
+  c.globalAlpha *= ultraviolet;
+  for (let i = 0; i < 8; i++) {
+    const travel = (t * 1.12 + i * 0.12) % 1;
+    const target = planetX + (i - 3.5) * 11;
+    const x = target + 38 * (1 - travel);
+    const y = 85 + (starY - planetR - 85) * travel;
+    line([[x + 14, y - 29], [x, y]], '#c2adff', 2.5);
+    lensGlow(x, y, 22, '#b4a1ed', Math.sin(Math.PI * travel));
+  }
+  c.restore();
+  const bands = [
+    { wavelength: '4.05 μm', y: 383, color: lime, phase: separate },
+    { wavelength: '7.7 μm', y: 473, color: pink, phase: extend },
+    { wavelength: '8.5 μm', y: 565, color: ice, phase: reveal(20.4, 22.15) },
   ];
-  const row = Math.min(2, Math.floor(t / 3.5)),
-    f = t - row * 3.5;
-  c.globalAlpha = Math.min(1, f / 0.6, row === 2 ? 1 : (3.5 - f) / 0.6);
-  words(rows[row], 640, 366 + 8 * (1 - Math.min(1, f / 0.6)), 28, 'title', '#ebdfe8', 'center');
+  for (const [i, band] of bands.entries()) {
+    const opacity = band.phase * (1 - returnToShoulder);
+    if (opacity === 0) continue;
+    c.save();
+    c.globalAlpha = opacity;
+    const end = 1096;
+    const span = end - planetX;
+    const trace = path((u) => {
+      const phase = u * (13 - 3.8 * i) - t * 2.8;
+      const envelope = Math.sin(Math.PI * u);
+      return [planetX + u * span, starY + (band.y - starY) * u + 24 * Math.sin(phase) * envelope];
+    });
+    line(trace, grad(planetX, 0, span, 0, [band.color + '35', band.color]), 2.2 + i * 0.4);
+    const dot = trace[Math.floor((t * 0.24 + i * 0.27) % 1 * 100)];
+    lensGlow(dot[0], dot[1], 22, band.color, 0.85);
+    c.globalAlpha = opacity * spectrum;
+    words(band.wavelength, end, band.y - 19, 24, 'sans', band.color, 'right');
+    c.restore();
+  }
+  if (returnToShoulder > 0) {
+    c.save();
+    c.globalAlpha = returnToShoulder;
+    evidenceScenes.finalPoints(6 * returnToShoulder);
+    c.restore();
+  }
+}
+
+function credits(t: number) {
+  c.fillStyle = grad(0, 0, W, H, ['#f1d1b8', '#e4c3c9', '#bfb6d6']);
+  c.fillRect(-90, -50, W + 180, H + 100);
+  const ink = '#382941';
+  const shimmer = cubic(Math.min(1, t / 7));
+  for (let i = 0; i < 13; i++) {
+    const y = 172 + i * 23;
+    line(path((u) => [100 + 390 * u, y + 34 * Math.sin(u * 5 - i * 0.24 - t * 0.51)]),
+      grad(100, 0, 390, 200, ['#986a8144', '#5d517380', '#9a6a810b']), 1.7);
+  }
+  lensGlow(268 + 125 * shimmer, 315, 145, '#8e6077', 0.55);
+  words('Mysteries of the Sky', 523, 228, 38, 'sans', ink);
+  const rows = [
+    'Observations · JWST Early Release Science team',
+    'Chemistry · Tsai et al. and Powell et al.',
+    'Rowan Ellery is a fictional AI presenter',
+  ];
+  for (const [i, row] of rows.entries()) {
+    c.globalAlpha = cubic(Math.max(0, Math.min(1, (t - 0.22 - 0.72 * i) / 0.56)));
+    words(row, 524, 322 + i * 66, 23, 'sans', ink);
+  }
   c.globalAlpha = 1;
 }
 const scenes: Record<string, (t: number, k: string) => void> = {};
@@ -645,8 +775,10 @@ for (const k of ['carbon', 'sulfide', 'water', 'so2']) scenes[k] = molecule;
 for (const k of ['prism', 'photon', 'binsize']) scenes[k] = instrument;
 Object.assign(scenes, evidenceScenes, showpieces, makeBeats(globeLook));
 scenes.mid = scenes.predict = compare;
+scenes.cloudray = cloudDeck;
 scenes.example = compare;
 scenes.credits = credits;
+scenes.recap = recap;
 continuous(chartKeys);
 continuous(['vertical', 'slant']);
 continuous(['predict', 'confirm', 'mid']);

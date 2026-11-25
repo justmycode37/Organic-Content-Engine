@@ -41,7 +41,7 @@ const motes = Array.from({ length: 260 }, () => ({
   warm: rand() < 0.3,
 }));
 
-const spectrograph = new Set(['data','peak','shoulder','bins','unknown','co2','sulfur','pretty','discovery','fit','shortfall','pipelines','resolution','detector','finalPoints','drift','manydips','turnDips','curve','baseline','narrow','curveedges']);
+const spectrograph = new Set(['data','peak','shoulder','bins','unknown','co2','sulfur','pretty','discovery','fit','residual','shortfall','pipelines','resolution','detector','finalPoints','drift','manydips','turnDips','curve','baseline','narrow','curveedges']);
 const atmosphere = new Set(['reaction','balance','chemistry','identity','sulfide','water','so2','carbon','density','degenerate','layers','cloudray','grazing','slant','vertical']);
 const space = new Set(['transit','year','inflate','mass','hero','puff','limbs','edges','ring','strip','transitcurve']);
 export function backdrop(g: number, key: string) {
@@ -160,7 +160,7 @@ export function directFrame(draw: (k: string, t: number) => void, current: Cue, 
   if (prev && together(prev, key)) {
     // Carry the previous cut's push so the camera does not jump.
     shot(draw, key, t, g, 1, t + prevT);
-  } else if (prev && t < DISSOLVE) {
+  } else if (prev && prev !== 'opening' && key !== 'credits' && t < DISSOLVE) {
     const e = smooth(t / DISSOLVE);
     // Outgoing shot keeps running and pushes past the camera as it fades.
     shot(draw, prev, prevT + t, g, 1);

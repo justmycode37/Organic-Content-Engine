@@ -257,6 +257,9 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
       6,
     );
     label('short path', ox - 18, (top + ground) / 2, 20, ice, 'right');
+    const verticalProgress = (t * 0.67 + 0.4) % 1;
+    const pulseY = mix(83, ground - 24, verticalProgress);
+    lensGlow(ox, pulseY, 33, ice, Math.sin(Math.PI * verticalProgress) * v);
     if (!slant) return;
     // The ray swings down toward the horizon; its path inside the layer grows.
     const angle = mix(Math.PI / 2, 0.16, ease(t, 0.3, 3.2));
@@ -456,9 +459,9 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
         3,
       );
       lensGlow(mix(60, 1220, pass), y, 20, ice, 0.9);
-      label('passes through · measured by Webb', 1200, y - 18, 20, ice, 'right');
+      label('Infrared reaches Webb', 1154, y - 21, 22, ice, 'right');
       c.globalAlpha = ease(t, 35.2, 36);
-      label('absorbed · drives the chemistry', 760, 150, 20, '#c9b6ff', 'left');
+      label('UV drives the chemistry', 1154, 109, 22, '#daccff', 'right');
       c.globalAlpha = 1;
     }
   }
@@ -540,7 +543,7 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
   function curveEdges(t: number) {
     const row = observations.light[curveKeys[6]];
     const X = (h: number) => 144 + (h + 4.7) * 105,
-      Y = (v: number) => 219 + (1.002 - v) * 13700;
+      Y = (v: number) => 222 + (1.002 - v) * 11000;
     const shade = ease(t, 0.4, 1.4);
     for (const [a, b, color] of [
       [-1.45, -1.1, ice],
@@ -575,16 +578,29 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     const X = (w: number) => 150 + ((w - lo) / (hi - lo)) * 980,
       Y = (p: number) => 560 - (p - 2.07) * 1700;
     const pts = observations.spectrum.filter(([w]) => w >= lo && w <= hi);
-    [ice, pink, '#c9b6ff'].forEach((col, k) => {
+    c.fillStyle = grad(0, 0, 1280, 720, ['#30253a', '#6b4053', '#342941']);
+    c.fillRect(-90, -50, 1460, 820);
+    for (const depth of [2.1, 2.2, 2.3]) {
+      line([[150, Y(depth)], [1130, Y(depth)]], '#f4c5da32', 1);
+      label(depth.toFixed(1) + '%', 136, Y(depth) + 6, 19, muted, 'right');
+    }
+    words('Light blocked', 155, 160, 23, 'sans', muted);
+    words('Wavelength (μm)', 1130, 628, 22, 'sans', muted, 'right');
+    for (const w of [3.6, 3.8, 4.0, 4.2, 4.4, 4.6]) label(w.toFixed(1), X(w), 588, 18);
+    [ice, pink, '#daccff'].forEach((col, k) => {
       const a = ease(t, k * 0.8, k * 0.8 + 1);
+      c.globalAlpha = a;
+      dot(596 + k * 170, 152, 5, col);
+      words('Analysis ' + (k + 1), 614 + k * 170, 160, 21, 'sans', col);
       pts.forEach(([w, p], i) => {
         const jitter = 0.004 * Math.sin(i * 2.3 + k * 1.7);
-        c.globalAlpha = a;
+        const stage = ease(t, k * 0.75 + i * 0.027, k * 0.75 + i * 0.027 + 0.45);
+        c.globalAlpha = a * stage;
         dot(X(w) + (k - 1) * 5, Y(p + jitter), 4.5, col);
       });
     });
     c.globalAlpha = 1;
-    label('Three analyses · illustrative offsets', 150, 640, 20, muted, 'left');
+    label('Illustrative analysis offsets', 150, 631, 19, muted, 'left');
   }
 
   // "Several combinations can leave a similar mark": two schematic atmospheres.

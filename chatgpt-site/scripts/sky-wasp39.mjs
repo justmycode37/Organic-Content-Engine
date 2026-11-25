@@ -21,21 +21,30 @@ const plan = {
   9: 'bins|two different modes=resolution|a chemical model=shortfall|something seemed=balance',
   10: 'reaction',
   11: 'shoulder|sulfur dioxide=identity|include the reactions=chemistry|the telescope measured=sulfur',
-  12: 'so2|other infrared=window|they found absorption=confirm',
+  12: 'so2|other infrared=window|in the new spectrum=confirm',
   20: 'bandScale|webb actually recorded=detector|new bands=predict',
-  13: 'mid|change the temperature=layers|cloud high=cloudray|several combinations=degenerate|more bands=mid',
+  13: 'mid|change the temperature=layers|cloud high=cloudray|several combinations=degenerate|more bands=confirmRecap',
   14: 'limbs|keep the timing=edges|same dip=curveedges',
-  15: 'starpoint|keeping the colors=prism|small peak=shoulder|ultraviolet=chemistry|longer wavelengths=mid|look between=finalPoints',
+  15: 'recap',
   16: 'credits',
   // Rowan's takes end on a cutaway into the next idea.
   0: 'r0@0',
-  21: 'r21@0|@6.85=shoulder',
+  21: 'r21@0|@6.85=residual',
   22: 'r22@0|@7.55=predict',
 };
 const archives = { r0: 'rowan', r21: 'rowan-21', r22: 'rowan-22' };
-// Mild webcam optics and sensor grain, applied only to Rowan's source footage.
-const webcam = 'scale=864:486:flags=area,gblur=sigma=0.35,eq=saturation=0.94:contrast=0.97,noise=alls=2:allf=t,scale=1280:720:flags=bilinear';
-const archiveFilters = { r0: webcam, r21: webcam, r22: webcam };
+// Tone down the saturated shelves and lamp while grading Rowan more gently.
+// Chroma is feathered across the frame so gestures can cross the grade naturally.
+const chroma = '0.64+0.24*exp(-(((X/W-0.50)/0.23)^2+((Y/H-0.55)/0.55)^2))';
+const webcam = [
+  'scale=864:486:flags=area',
+  'gblur=sigma=0.35',
+  "geq=lum='lum(X,Y)':cb='128+(cb(X,Y)-128)*(" + chroma + ")':cr='128+(cr(X,Y)-128)*(" + chroma + ")'",
+  'eq=contrast=0.97:brightness=0.018',
+  'noise=alls=2:allf=t',
+  'scale=1280:720:flags=bilinear',
+].join(',');
+const archiveFilters = { r0: webcam.replace('brightness=0.018', 'brightness=0.034'), r21: webcam, r22: webcam };
 const archiveOverlays = { r0: fileURLToPath(new URL('../src/mysteries-of-the-sky/episodes/rowan-lower-third.png', import.meta.url)) };
 const pads = { 0: 0.18, 21: 0.18, 22: 0.18 };
 const clean = (s) =>
