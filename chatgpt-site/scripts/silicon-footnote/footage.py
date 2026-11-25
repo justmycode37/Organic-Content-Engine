@@ -93,10 +93,21 @@ def place_footage(root, beats, lengths, clips):
         selected=trim_flashes(intervals[index],offset,seconds)
         if selected:shot['trimFlashes']=selected
 
-def choose_title_position(media, start):
+def source_frame_filter(frame, width, height):
+    filters = []
+    if frame is not None:
+        x, y, w, h = frame
+        if not (0 <= x < x + w <= 1 and 0 <= y < y + h <= 1):
+            raise ValueError('Frame leaves the source picture')
+        filters.append(f'crop=iw*{w}:ih*{h}:iw*{x}:ih*{y}')
+    filters.extend((f'scale={width}:{height}:force_original_aspect_ratio=increase', f'crop={width}:{height}'))
+    return ','.join(filters)
+
+
+def choose_title_position(media, start, frame=None):
     """Place text in a quiet corner of the actual camera frame."""
     pixels=subprocess.check_output(['ffmpeg','-v','error','-ss',str(start+.16),'-i',media,
-        '-frames:v','1','-vf','scale=128:72','-pix_fmt','gray','-f','rawvideo','-'])
+        '-frames:v','1','-vf',source_frame_filter(frame, 128, 72),'-pix_fmt','gray','-f','rawvideo','-'])
     if len(pixels)!=128*72:return 'upper-left'
     luminance=np.frombuffer(pixels,dtype=np.uint8).reshape(72,128).astype(float)
     edges=np.abs(np.gradient(luminance,axis=1))+np.abs(np.gradient(luminance,axis=0))

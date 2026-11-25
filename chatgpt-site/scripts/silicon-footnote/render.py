@@ -11,7 +11,7 @@ from film import Sequence,lower
 from score import score
 from credits import write_credits,closing_cards
 from timeline import assemble
-from footage import place_footage
+from footage import place_footage, source_frame_filter
 from title_layout import place_titles
 from captions import render_captions
 from PIL import Image
@@ -117,7 +117,7 @@ def render(root):
         if voice!=root/'voice.wav':voice.unlink()
     cuts,clock,jobs=[],0,[]
     code=hashlib.sha256()
-    for name in ['render.py','film.py','citation.py','motion.py','us-states.json']:
+    for name in ['render.py','film.py','footage.py','citation.py','motion.py','us-states.json']:
         code.update(Path(__file__).with_name(name).read_bytes())
     for i,(beat,length) in enumerate(zip(plan['beats'],timing,strict=True)):
         start=round(clock*FPS)
@@ -154,13 +154,8 @@ def render(root):
             if beat.get('trimFlashes'):
                 windows='+'.join(f'between(t,{a:.6f},{b:.6f})' for a,b in beat['trimFlashes'])
                 select=f",select='not({windows})',setpts=N/({FPS}*TB)"
-            frame=''
-            if beat.get('frame'):
-                # A fractional source window (x, y, w, h) removes station graphics or isolates evidence.
-                fx,fy,fw,fh=beat['frame']
-                if not (0<=fx<fx+fw<=1 and 0<=fy<fy+fh<=1):raise ValueError(f'Shot {i} frame leaves the source picture')
-                frame=f',crop=iw*{fw}:ih*{fh}:iw*{fx}:ih*{fy}'
-            graph=f'[0:v]fps={FPS}{select}{frame},scale={width}:{height}:force_original_aspect_ratio=increase,crop={width}:{height},setsar=1[v]'
+            frame=source_frame_filter(beat.get('frame'), width, height)
+            graph=f'[0:v]fps={FPS}{select},{frame},setsar=1[v]'
             layer=['-framerate',str(FPS),'-loop','1','-i',overlay]
             if modern:
                 tag_start=beat.get('tagStart',0)
