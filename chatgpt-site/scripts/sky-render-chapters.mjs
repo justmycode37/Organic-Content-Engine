@@ -1,6 +1,6 @@
 import { openMotionPage } from './motion.mjs';
 import { execFileSync, spawn } from 'node:child_process';
-import { rename, access } from 'node:fs/promises';
+import { rename, access, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { once } from 'node:events';
 
@@ -101,6 +101,18 @@ export async function renderSkyChapters({
         const n = (cuts[i + 1]?.f ?? frames) - cut.f;
         if (cut.key.includes('@')) {
           const [id, offset] = cut.key.split('@');
+          const overlay = archiveOverlays[id];
+          let overlayFile = typeof overlay === 'string' ? overlay : undefined;
+          let overlayFilter = overlayFile ? '[camera];[camera][1:v]overlay' : '';
+          if (overlay && typeof overlay !== 'string') {
+            const encoded = await page.evaluate(
+              ({ method, key, time }) => window[method](key, time),
+              { method: frameMethod, key: overlay.key, time: overlay.time },
+            );
+            overlayFile = join(work, 'inset-' + tag + '-' + i + '.jpg');
+            await writeFile(overlayFile, Buffer.from(encoded, 'base64'));
+            overlayFilter = `[camera];[1:v]scale=${overlay.width}:-2[inset];[camera][inset]overlay=x=${overlay.x}:y=${overlay.y}:enable='gte(t,${overlay.from})'`;
+          }
           const child = spawn(
             'ffmpeg',
             [
@@ -110,12 +122,12 @@ export async function renderSkyChapters({
               offset,
               '-i',
               join(work, archives[id] + '.mp4'),
-              ...(archiveOverlays[id] ? ['-i', archiveOverlays[id]] : []),
+              ...(overlayFile ? ['-i', overlayFile] : []),
               '-an',
               '-filter_complex',
               ['[0:v]fps=24', 'scale=1280:720:force_original_aspect_ratio=increase', 'crop=1280:720', 'setsar=1',
                 archiveFilters[id], 'tpad=stop_duration=2:stop_mode=clone'].filter(Boolean).join(',') +
-                (archiveOverlays[id] ? '[camera];[camera][1:v]overlay' : ''),
+                overlayFilter,
               '-frames:v',
               String(n),
               '-threads',

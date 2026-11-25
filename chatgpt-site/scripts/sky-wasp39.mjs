@@ -14,13 +14,13 @@ const plan = {
   17: 'strip|another advantage=hero|gas pressure=eqscale|its absorbing=density|both effects=eqsignal|small rocky=puff',
   5: 'transit|inside webb=passage|spread the=prism|interval of wavelength=detectorTrace',
   6: 'example|one photon=thousand|on a graph=turnDips|picture we opened=peak',
-  18: 'photonCups|wavelength bin=rebin|vertical bars=bins',
+  18: 'photonCups|wavelength bin=rebin',
   7: 'peak|laboratory measurements=carbon|collect the contributions=co2',
-  8: 'unknown|four point zero=shoulder|detectors give=bins|a smooth line=pretty|astronomers instead=fit',
+  8: 'unknown|four point zero=shoulder|distrust a pretty=pretty|astronomers instead=fit',
   19: 'drift|image moves=detector|several groups=pipelines',
   9: 'bins|two different modes=resolution|a chemical model=shortfall|something seemed=balance',
   10: 'reaction',
-  11: 'shoulder|sulfur dioxide=identity|include the reactions=chemistry|the telescope measured=sulfur',
+  11: 'shoulder|sulfur dioxide=identity|include the reactions=chemistry|the telescope measured=inference',
   12: 'so2|other infrared=window|in the new spectrum=confirm',
   20: 'bandScale|webb actually recorded=detector|new bands=predict',
   13: 'mid|change the temperature=layers|cloud high=cloudray|several combinations=degenerate|more bands=confirmRecap',
@@ -45,7 +45,10 @@ const webcam = [
   'scale=1280:720:flags=bilinear',
 ].join(',');
 const archiveFilters = { r0: webcam.replace('brightness=0.018', 'brightness=0.034'), r21: webcam, r22: webcam };
-const archiveOverlays = { r0: fileURLToPath(new URL('../src/mysteries-of-the-sky/episodes/rowan-lower-third.png', import.meta.url)) };
+const archiveOverlays = {
+  r0: fileURLToPath(new URL('../src/mysteries-of-the-sky/episodes/rowan-lower-third.png', import.meta.url)),
+  r21: { key: 'residualInset', time: 1, width: 368, x: 870, y: 65, from: 2.875 },
+};
 const pads = { 0: 0.18, 21: 0.18, 22: 0.18 };
 const clean = (s) =>
   s

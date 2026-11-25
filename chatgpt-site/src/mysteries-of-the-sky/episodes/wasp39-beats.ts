@@ -146,15 +146,17 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     const merge = settled ? 1 : ease(t, 0.3, 4.6);
     const sep = mix(150, 0, merge),
       r = mix(120, 7, merge);
-    const pulse = settled || t > 7.6 ? Math.max(0, Math.sin(((t - 7.6) / 2.6) * Math.PI)) ** 8 : 0;
+    const pulse = ease(t, 3.8, 5.4) * Math.max(0, Math.sin(((t - 3.6) / 2.6) * Math.PI)) ** 6;
     // The camera pulls back through a crowded field as the pair merges.
-    field(t, mix(2.6, 1.05, merge), [640, 360]);
+    field(t * 2.8, mix(2.6, 1.05, merge) + 0.032 * Math.sin(t * 0.95) * merge, [640, 360]);
     c.fillStyle = '#120f26';
     c.globalAlpha = 0.5;
     c.fillRect(0, 0, 1280, 720);
     c.globalAlpha = 1;
     lensGlow(640, 360, mix(260, 70, merge), '#f79c9a', 0.55 * (1 - 0.35 * pulse));
+    c.globalAlpha = 1 - 0.39 * pulse;
     globe(640 - sep * 0.4, 360, r, 'star');
+    c.globalAlpha = 1;
     if (merge < 0.97) globe(640 + sep, 360, Math.max(2, r * 0.3), 'wasp');
     lensGlow(640, 360, 14 * merge, '#fff1ea', merge * (1 - 0.4 * pulse));
     c.globalAlpha = ease(t, 0.8, 1.6);
@@ -318,7 +320,12 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     const lo = 3.85,
       hi = 4.25;
     const X = (w: number) => 150 + ((w - lo) / (hi - lo)) * 980,
-      Y = (p: number) => 560 - (p - 2.07) * 3300;
+      Y = (p: number) => 533 - (p - 2.06) * 2450;
+    words('Transit depth', 150, 132, 24, 'sans', muted);
+    for (const depth of [2.08, 2.12, 2.16, 2.2]) {
+      line([[150, Y(depth)], [1130, Y(depth)]], '#bfb4d431', 1.1);
+      label(depth.toFixed(2) + '%', 133, Y(depth) + 6, 18, muted, 'right');
+    }
     const pts = observations.spectrum.filter(([w]) => w >= lo && w <= hi);
     const curve = (model as number[][]).filter(([w]) => w >= lo && w <= hi);
     const drawn = Math.max(2, Math.ceil(ease(t, 0.2, 2.2) * curve.length));
@@ -348,8 +355,8 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
       if (hot) lensGlow(X(w), Y(p), 22, lime, 0.5);
       dot(X(w), Y(p), 5.5, hot ? lime : ice);
     }
-    label('Published model', X(4.21), Y(2.1) - 4, 20, pink, 'right');
-    for (const w of [3.9, 4.0, 4.1, 4.2]) label(w.toFixed(1) + ' μm', X(w), 640, 18);
+    words('Published equilibrium model', 1130, 132, 24, 'sans', pink, 'right');
+    for (const w of [3.9, 4.0, 4.1, 4.2]) label(w.toFixed(1) + ' μm', X(w), 600, 19);
   }
 
   // Ten seconds of photochemistry, one step per phrase. Intermediate steps are omitted.
@@ -374,7 +381,7 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
       cy = mix(520, 300, rise);
     lensGlow(cx, cy, 190, '#b58ac8', 0.22);
     // Ultraviolet arrives from above from "Ultraviolet light" onward.
-    const uv = ease(t, 10.4, 11.2);
+    const uv = ease(t, 10.4, 11.2) * (1 - ease(t, 29.4, 31.7));
     for (let i = 0; i < 6; i++) {
       const f = (t * 0.6 + i / 6) % 1,
         x = 760 + i * 60 - f * 120,
@@ -400,7 +407,7 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
       take2 = ease(t, 19.0, 19.9);
     const freeX = mix(wx + 34, wx + 120, split),
       freeY = mix(wy - 26, wy - 80, split);
-    const hX = mix(freeX, cx - 96, pull2) + mix(0, -380, take2),
+    const hX = mix(freeX, cx - 96, pull2) + mix(0, -283, take2),
       hY = mix(freeY, cy + 20, pull2) + mix(0, -150, take2);
     const ohX = mix(wx, cx + 110, pull1) + mix(0, 380, take1),
       ohY = mix(wy, cy, pull1) + mix(0, -160, take1);
@@ -448,20 +455,16 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     const jobs = ease(t, 31.6, 32.6);
     if (jobs > 0) {
       c.globalAlpha = jobs;
-      const y = 200;
+      const y = 515;
       const pass = (t * 0.5) % 1;
-      line(
-        [
-          [60, y],
-          [1220, y],
-        ],
-        grad(60, 0, 1160, 0, [ice + '22', ice, ice + '22']),
-        3,
-      );
-      lensGlow(mix(60, 1220, pass), y, 20, ice, 0.9);
-      label('Infrared reaches Webb', 1154, y - 21, 22, ice, 'right');
-      c.globalAlpha = ease(t, 35.2, 36);
-      label('UV drives the chemistry', 1154, 109, 22, '#daccff', 'right');
+      line([[107, y], [1150, y]], grad(107, 0, 1043, 0, [ice + '46', ice, ice + '70']), 3.2);
+      lensGlow(mix(107, 1150, pass), y, 27, ice, 0.9);
+      label('Infrared reaches Webb', 1150, y + 46, 23, ice, 'right');
+      const absorption = ease(t, 35.2, 36);
+      c.globalAlpha = absorption;
+      const upper = Array.from({ length: 62 }, (_, i) => [174 + i * 5.7, 150 + 13 * Math.sin(i * 0.62 - t * 8)]);
+      line(upper, grad(174, 0, 351, 0, ['#daccff', '#b59ce99f']), 3.5);
+      label('UV drives the chemistry', 177, 120, 23, '#daccff', 'left');
       c.globalAlpha = 1;
     }
   }

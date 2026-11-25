@@ -157,7 +157,9 @@ function shot(
 export function directFrame(draw: (k: string, t: number) => void, current: Cue, overlay?: () => void) {
   cue = current;
   const { key, t, prev, prevT = 0, g, left } = current;
-  if (prev && together(prev, key)) {
+  if (prev === key) {
+    shot(draw, key, t + prevT, g, 1);
+  } else if (prev && together(prev, key)) {
     // Carry the previous cut's push so the camera does not jump.
     shot(draw, key, t, g, 1, t + prevT);
   } else if (prev && prev !== 'opening' && key !== 'credits' && t < DISSOLVE) {

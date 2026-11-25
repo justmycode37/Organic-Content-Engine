@@ -182,8 +182,11 @@ function planet(t: number, k: string) {
     return;
   }
   if (k === 'title' || k === 'hero') {
-    const r = 340 + 5 * Math.sin(t * 0.17);
-    body(969, 404, r);
+    const pull = k === 'hero' ? cubic(Math.max(0, Math.min(1, (t - 3.3) / 6))) : 0;
+    const r = 340 + 5 * Math.sin(t * 0.17) - 124 * pull;
+    const x = 969 - 100 * pull;
+    body(x, 404, r);
+    if (pull > 0) atmosphericLimb(c, [x, 404], r, 9 + 8 * pull);
     words(titles[k], 62, 391, k === 'hero' ? 64 : 50, 'title');
     return;
   }
@@ -718,18 +721,19 @@ function recap(t: number) {
   const spectrum = reveal(10.0, 12.9);
   const ultraviolet = reveal(14.0, 16.0) * (1 - reveal(18.2, 19.6));
   const extend = reveal(19.3, 22.0);
-  const returnToShoulder = reveal(24.0, 28.7);
+  const clearMontage = reveal(23.4, 24.72);
+  const returnToShoulder = reveal(24.7, 26.9);
   field(t, 1.2 + 1.41 * (1 - transit), [W / 2, H / 2]);
   c.fillStyle = grad(0, 0, W, H, ['#1011216e', '#261c3bbc', '#351d3999']);
   c.fillRect(-90, -50, W + 180, H + 100);
-  const starX = 625 - 335 * separate;
+  const starX = 625 - 335 * separate - 55 * ultraviolet;
   const starY = 340 - 39 * separate;
   const starR = 14 + 156 * transit - 61 * separate;
   c.save();
-  c.globalAlpha = 1 - returnToShoulder;
+  c.globalAlpha = 1 - clearMontage;
   globeLook(starX, starY, starR, 'star');
   const planetR = starR * 0.17 + 10 * separate;
-  const planetX = starX - starR * (1.25 - 1.16 * transit);
+  const planetX = starX - starR * (1.25 - 1.16 * transit) + 330 * ultraviolet;
   c.fillStyle = grad(planetX - planetR, starY - planetR, planetR * 2, planetR * 2, ['#352947', '#120d20', '#47304c']);
   c.beginPath();
   c.arc(planetX, starY, planetR, 0, tau);
@@ -743,12 +747,15 @@ function recap(t: number) {
     c.stroke();
   }
   c.globalAlpha *= ultraviolet;
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; ultraviolet > 0 && i < 8; i++) {
     const travel = (t * 1.12 + i * 0.12) % 1;
-    const target = planetX + (i - 3.5) * 11;
-    const x = target + 38 * (1 - travel);
-    const y = 85 + (starY - planetR - 85) * travel;
-    line([[x + 14, y - 29], [x, y]], '#c2adff', 2.5);
+    const offset = (i - 3.5) * 7;
+    const start = starX + Math.sqrt(starR ** 2 - offset ** 2);
+    const finish = planetX - Math.sqrt((planetR + 6) ** 2 - offset ** 2);
+    if (finish <= start) continue;
+    const x = start + (finish - start) * travel;
+    const y = starY + offset;
+    line([[Math.max(start, x - 32), y], [x, y]], '#c2adff', 2.5);
     lensGlow(x, y, 22, '#b4a1ed', Math.sin(Math.PI * travel));
   }
   c.restore();
@@ -758,7 +765,7 @@ function recap(t: number) {
     { wavelength: '8.5 μm', y: 565, color: ice, phase: reveal(20.4, 22.15) },
   ];
   for (const [i, band] of bands.entries()) {
-    const opacity = band.phase * (1 - returnToShoulder);
+    const opacity = band.phase * (1 - clearMontage) * (1 - ultraviolet);
     if (opacity === 0) continue;
     c.save();
     c.globalAlpha = opacity;
@@ -780,7 +787,7 @@ function recap(t: number) {
   if (returnToShoulder > 0) {
     c.save();
     c.globalAlpha = returnToShoulder;
-    evidenceScenes.finalPoints(6 * returnToShoulder);
+    evidenceScenes.finalPoints(Math.max(0, t - 24.7));
     c.restore();
   }
 }

@@ -100,19 +100,19 @@ function opening(t: number) {
   c.fillRect(0, 0, W, H);
   c.save();
   c.scale(W / 1920, H / 1080);
-  tileReveal(c, ease(t, 0, 2.4), 24, () => {
+  tileReveal(c, ease(t, 0, 1.22), 24, () => {
     c.scale(1920 / W, 1080 / H);
     field(t, 1 + 0.025 * t, [W * 0.52, H * 0.5]);
   });
   c.restore();
   c.save();
   c.fillStyle = '#0c0b1e';
-  c.globalAlpha = 0.45 * ease(t, 2.2, 3.4);
+  c.globalAlpha = 0.45 * ease(t, 0.63, 1.5);
   c.fillRect(0, 0, W, H);
   c.restore();
   c.save();
   c.scale(W / 1920, H / 1080);
-  typeWipe(c, 'Mysteries of the Sky', 540, 92, ease(t, 2.4, 4.6));
+  typeWipe(c, 'Mysteries of the Sky', 540, 92, ease(t, 0.33, 1.67));
   c.restore();
 }
 

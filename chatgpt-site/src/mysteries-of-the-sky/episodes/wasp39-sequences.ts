@@ -209,7 +209,8 @@ function rebin(t: number) {
   const captions = [
     ['Narrow bins', 'More detail, more uncertainty', 1 - ease(t, 5.85, 6.15)],
     ['Wide bins', 'Nearby features blend together', ease(t, 6.15, 6.55) * (1 - ease(t, 9.45, 9.83))],
-    ['Group neighboring readings', 'A balance of detail and precision', ease(t, 9.83, 10.3)],
+    ['Group neighboring readings', 'A balance of detail and precision', ease(t, 9.83, 10.3) * (1 - ease(t, 13.3, 13.7))],
+    ['Smaller uncertainty bars', 'Individual reading and grouped estimate', ease(t, 13.75, 14.2)],
   ] as const;
   for (const [title, detail, opacity] of captions) {
     c.globalAlpha = opacity;
@@ -255,6 +256,20 @@ function rebin(t: number) {
   } else {
     for (const bin of narrowBins) moveBin(bin, wideBins[Math.floor(bin.start / 6)], 1 - widen);
     for (const bin of wideBins) markBin(x(bin.wavelength), y(bin.depth), bin.error, widen);
+  }
+
+  const compare = ease(t, 13.55, 14.6);
+  if (compare > 0) {
+    c.globalAlpha = compare;
+    const example = joinedBins.find((bin) => bin.left <= 4.05 && bin.right >= 4.05) ??
+      joinedBins.reduce((near, bin) => Math.abs(bin.wavelength - 4.05) < Math.abs(near.wavelength - 4.05) ? bin : near);
+    const [w, depth, error] = readings[example.start];
+    const low = Math.min(x(w), x(example.wavelength));
+    c.fillStyle = grad(low - 24, 210, 100, 286, ['#e5da8b13', '#e0f176b2', '#ebe18932']);
+    c.fillRect(low - 22, 205, Math.abs(x(w) - x(example.wavelength)) + 44, 295);
+    c.globalAlpha = 1;
+    markBin(x(w), y(depth), error, compare);
+    markBin(x(example.wavelength), y(example.depth), example.error, compare);
   }
 
   for (const w of [3.9, 4, 4.1, 4.2]) words(w.toFixed(1), x(w), 584, 20, 'sans', ink, 'center');
@@ -518,15 +533,28 @@ function detectorTrace(t: number) {
     }
     c.globalAlpha = alpha * unfolding * (active ? 1 : stack);
     words(Number(wave).toFixed(2) + ' μm', 1123, base + 12, 20, 'sans', col);
-    if (active && explainDepth > 0) {
-      c.globalAlpha = explainDepth;
-      const top = y(0.9965);
-      const bottom = y(row.reduce((nearest, item) => Math.abs(item[0]) < Math.abs(nearest[0]) ? item : nearest)[1]);
+    const baselineSamples = row.filter(([hour]) => Math.abs(hour) > 2.2);
+    const baseLevel = baselineSamples.reduce((sum, [, flux]) => sum + flux, 0) / baselineSamples.length;
+    const midLevel = row.reduce((nearest, item) => Math.abs(item[0]) < Math.abs(nearest[0]) ? item : nearest)[1];
+    if (active && baseline > 0) {
+      const compareDepth = ease(t, 6.2, 9.45);
+      const cursor = x(-2.45 + 2.45 * compareDepth);
+      const height = y(baseLevel) + (y(midLevel) - y(baseLevel)) * compareDepth;
+      c.globalAlpha = baseline;
+      line([[x(-3.8), y(baseLevel)], [cursor, y(baseLevel)], [cursor, height]], '#e7efab', 1.7);
+      lensGlow(cursor, height, 28, lime, 0.7);
+    }
+    const second = channel === 7;
+    if ((active || second) && explainDepth > 0) {
+      c.globalAlpha = active ? explainDepth : ease(t, 15.7, 16.6);
+      const top = y(baseLevel);
+      const bottom = y(midLevel);
       const cx = x(0) - 25;
-      line([[cx - 6, top], [cx + 6, top]], lime, 2.1);
-      line([[cx, top], [cx, bottom]], lime, 2.1);
-      line([[cx - 6, bottom], [cx + 6, bottom]], lime, 2.1);
-      words('Dip depth', cx + 20, bottom + 18, 20, 'sans', lime);
+      const color = active ? lime : pink;
+      line([[cx - 6, top], [cx + 6, top]], color, 2.1);
+      line([[cx, top], [cx, bottom]], color, 2.1);
+      line([[cx - 6, bottom], [cx + 6, bottom]], color, 2.1);
+      if (active) words('Dip depth', cx + 20, bottom + 18, 20, 'sans', lime);
     }
   }
   c.globalAlpha = 1;
@@ -605,6 +633,23 @@ function miriEvidence(t: number) {
   c.globalAlpha = 1;
   for (const [w, depth, error] of miri.measurements) {
     if (w < lo || w > hi) continue;
+    if (together > 0 && (w === 7.625 || w === 8.625)) {
+      const after = model.findIndex(([wavelength]) => wavelength > w);
+      if (after > 0) {
+        const left = model[after - 1];
+        const right = model[after];
+        const pos = (w - left[0]) / (right[0] - left[0]);
+        const predicted = [left[1] + pos * (right[1] - left[1]), left[2] + pos * (right[2] - left[2])];
+        c.globalAlpha = together;
+        for (const [i, prediction] of predicted.entries()) {
+          const off = i ? 7 : -7;
+          const tone = i ? withoutSulfur : withSulfur;
+          line([[x(w) + off, y(depth)], [x(w) + off, y(prediction)]], tone + 'b0', 1.65);
+          mark(x(w) + off, y(prediction), 3.5, tone);
+        }
+        c.globalAlpha = 1;
+      }
+    }
     line([[x(w), y(depth - error)], [x(w), y(depth + error)]], plum + 'ad', 2.2);
     mark(x(w), y(depth), 5.6, ink);
   }
@@ -634,7 +679,7 @@ function miriEvidence(t: number) {
   c.setLineDash([]);
   words('Same model without SO₂', 783, 621, 21, 'sans', withoutSulfur);
   c.globalAlpha = 1;
-  words('Wavelength (μm)', 1124, 560, 20, 'sans', ink, 'right');
+  words('Wavelength (μm)', 1124, 583, 20, 'sans', ink, 'right');
 }
 evidenceScenes.confirm = miriEvidence;
 evidenceScenes.confirmRecap = (t) => miriEvidence(16.7 + t);
@@ -667,12 +712,13 @@ function detector(t: number) {
 const prismSpectrum = observations.spectrum.filter(([w]) => w > 3.84 && w < 4.26);
 function resolution(t: number) {
   const zoom = ease(t, 7.5, 10.6);
-  const low = 3.84 + 0.06 * zoom;
-  const high = 4.26 - 0.09 * zoom;
+  const crop = ease(t, 2.75, 4.8);
+  const low = 0.6 + 3.24 * crop + 0.06 * zoom;
+  const high = 5.3 - 1.04 * crop - 0.09 * zoom;
   const x = (w: number) => 185 + (w - low) * 928 / (high - low);
   const spectra = [
-    { rows: g395h, color: ice, name: 'NIRSpec G395H · Fine dispersion', start: 1.2, base: 305 },
-    { rows: prismSpectrum, color: pink, name: 'NIRSpec PRISM · Broad coverage', start: 2.9, base: 542 },
+    { rows: g395h, color: ice, name: 'NIRSpec G395H · Fine dispersion', start: 0, base: 305, coverage: [[2.73, 3.72], [3.82, 5.15]] },
+    { rows: prismSpectrum, color: pink, name: 'NIRSpec PRISM · Broad coverage', start: 1, base: 542, coverage: [[0.6, 5.3]] },
   ];
   c.fillStyle = grad(0, 0, 1280, 720, ['#101929', '#253052', '#482d48']);
   c.fillRect(-90, -50, 1460, 820);
@@ -680,7 +726,7 @@ function resolution(t: number) {
   const match = ease(t, 7.8, 10.0);
   const guide = ease(t, 0.1, 0.8);
   words('Two Webb observations', 1113, 110, 23, 'sans', '#e2d7e7', 'right');
-  for (const { rows, color, name, start, base } of spectra) {
+  for (const { rows, color, name, start, base, coverage } of spectra) {
     const enter = ease(t, start, start + 0.8);
     c.save();
     c.globalAlpha = enter;
@@ -697,6 +743,17 @@ function resolution(t: number) {
     c.beginPath();
     c.rect(185, base - 149, 928, 166);
     c.clip();
+    c.globalAlpha = enter * (1 - crop);
+    for (const [begin, end] of coverage) {
+      const from = x(begin);
+      const width = x(end) - from;
+      c.fillStyle = grad(0, base - 109, 0, 84, [color + '16', color + 'bf', color + '36']);
+      c.fillRect(from, base - 109, width, 74);
+      for (let i = 0; i < 36; i++) {
+        const offset = (t * 0.19 + i * 0.618) % 1;
+        lensGlow(from + width * offset, base - 71, 16, color, 0.43);
+      }
+    }
     c.globalAlpha = enter * match;
     const half = 0.041;
     c.fillStyle = grad(0, base - 149, 0, 166, ['#b7cb6920', '#b7cb6950', '#b7cb6917']);
@@ -708,7 +765,7 @@ function resolution(t: number) {
       const py = resting + (y(depth) - resting) * chart;
       const width = rows === g395h ? 9 : 19;
       const focus = ease(t, 8.65 + i * 0.009, 9.15 + i * 0.009) * (Math.abs(w - 4.05) < 0.042 ? 1 : 0);
-      c.globalAlpha = enter * (1 - chart);
+      c.globalAlpha = enter * crop * (1 - chart);
       c.fillStyle = grad(cx, resting - 29, 0, 58, [color + '35', color, color + '23']);
       c.fillRect(cx - width / 2, resting - 28, width, 56);
       c.globalAlpha = enter * chart;
@@ -722,6 +779,9 @@ function resolution(t: number) {
   line([[x(4.05), 154], [x(4.05), 553]], lime, 2);
   c.setLineDash([]);
   words('4.05 μm', x(4.05), 591, 26, 'sans', lime, 'center');
+  c.globalAlpha = 1 - crop;
+  line([[185, 555], [1113, 555]], '#c6c0dc80', 1.2);
+  for (const w of [1, 2, 3, 5]) if (w >= low && w <= high) words(String(w), x(w), 591, 20, 'sans', muted, 'center');
   c.globalAlpha = chart;
   for (const w of [3.9, 4, 4.1, 4.2]) {
     if (w < low - 1e-7 || w > high) continue;
@@ -763,18 +823,98 @@ function spectralWindow(t: number) {
   for (const w of [1, 3, 5, 7, 9, 11]) words(String(w), x(w), 584, 20, 'sans', muted, 'center');
   words('Wavelength (μm)', x(12), 632, 23, 'sans', muted, 'right');
 }
+function residualInset() {
+  const ink = '#342743';
+  c.fillStyle = grad(0, 0, 1280, 720, ['#f9deca', '#dbc5d7', '#c8bbd6']);
+  c.fillRect(-90, -50, 1460, 820);
+  words('Several neighboring bins', 640, 159, 66, 'sans', ink, 'center');
+  words('Above the model', 640, 613, 55, 'sans', ink, 'center');
+  const x = (w: number) => 265 + (w - 3.95) * 3770;
+  const y = (residual: number) => 486 - residual * 4350;
+  line([[190, 486], [1070, 486]], '#6a4f71', 5);
+  const nearby = observations.spectrum.filter(([w]) => w > 3.95 && w < 4.14);
+  for (const [w, depth, error] of nearby) {
+    const diff = depth - modelAt(w);
+    const highlight = w > 3.98 && w < 4.06 && diff > 0;
+    const tint = highlight ? '#5c781e' : '#664d6c';
+    const cx = x(w);
+    line([[cx, y(diff - error)], [cx, y(diff + error)]], tint, 6);
+    mark(cx, y(diff), 12, tint);
+  }
+}
+evidenceScenes.residualInset = residualInset;
+
+function inference(t: number) {
+  const divide = ease(t, 2.3, 4.1);
+  const left = 169 - 28 * divide;
+  const chartWidth = 947 - 522 * divide;
+  const x = (w: number) => left + (w - 3.87) * chartWidth / 0.42;
+  const y = (depth: number) => 510 - (depth - 2.066) * 1510;
+  const axisEnd = x(4.29);
+  c.fillStyle = grad(0, 0, 1280, 720, ['#182133', '#3b364d', '#583446']);
+  c.fillRect(-90, -50, 1460, 820);
+  const points = observations.spectrum.filter(([w]) => w >= 3.87 && w <= 4.28);
+  const show = ease(t, 0, 1.7);
+  line([[x(3.87), 179], [x(3.87), 524], [axisEnd, 524]], '#e4d0e491', 1.4);
+  for (const depth of [2.08, 2.16, 2.24, 2.28]) {
+    line([[left, y(depth)], [axisEnd, y(depth)]], '#d8c7e531', 1.1);
+    words(depth.toFixed(2) + '%', left - 13, y(depth) + 6, 17, 'sans', muted, 'right');
+  }
+  words('Webb measured the missing light', x(3.87), 129, 27, 'sans', '#f3e2f2');
+  for (const [i, [w, depth, error]] of points.entries()) {
+    if (i / points.length > show) continue;
+    const tint = Math.abs(w - 4.05) < 0.044 ? lime : ice;
+    line([[x(w), y(depth - error)], [x(w), y(depth + error)]], tint, 1.75);
+    mark(x(w), y(depth), 4.4, tint);
+  }
+  words('4.05 μm', x(4.05), 565, 24, 'sans', lime, 'center');
+
+  c.globalAlpha = divide;
+  words('Chemistry explains the measurement', 654, 129, 27, 'sans', '#f3e2f2');
+  c.setLineDash([6, 9]);
+  line([[610, 163], [610, 556]], '#d4b8cb80', 1.6);
+  c.setLineDash([]);
+  const stage = ease(t, 3.39, 5.4);
+  lensGlow(938, 360, 190, '#bc647f', stage * 0.72);
+  drawMolecule(c, 'SO2', [938, 367], 1, t);
+  const passes = (t * 0.9) % 1;
+  const start = 694;
+  const end = 875;
+  const beam = Array.from({ length: 65 }, (_, i) => {
+    const u = i / 64;
+    return [start + u * (end - start), 285 + 19 * Math.sin(u * 34 - t * 8)];
+  });
+  c.globalAlpha = divide * stage;
+  line(beam, grad(start, 285, end - start, 0, [ice + '45', ice]), 3.4);
+  const head = beam[Math.floor(passes * 64)];
+  lensGlow(head[0], head[1], 24, ice, 0.75);
+  words('Ultraviolet from the star', 687, 234, 23, 'sans', ice);
+  words('SO₂ production · modeled', 938, 544, 25, 'sans', '#f5cbc9', 'center');
+  c.globalAlpha = 1;
+}
+evidenceScenes.inference = inference;
+
 function finalPoints(t: number) {
   heading('The bump beside the peak');
   const points = observations.spectrum.filter(([w]) => w >= 3.73 && w <= 4.52);
-  const f = ease(t, 0, 3.4);
+  const f = ease(t, 2, 4.1);
   const xAt = (w: number) => 164 + (w - 3.73) * 1185;
   const yAt = (depth: number) => 516 - (depth - 2.07) * 1110;
   const opacity = c.globalAlpha;
+  c.fillStyle = grad(0, 0, 1280, 720, ['#141126ce', '#201735ef', '#29203ada']);
+  c.fillRect(-90, -50, 1460, 820);
+  for (const [w, color] of [[4.05, lime], [4.3, pink]] as const) {
+    c.globalAlpha = opacity * (w === 4.05 ? 0.25 + 0.62 * f : 0.66 - 0.23 * f);
+    c.fillStyle = grad(0, 171, 0, 368, [color + '0b', color + '36', color + '11']);
+    c.fillRect(xAt(w) - 43, 174, 86, 367);
+    line([[xAt(w), 539], [xAt(w), 566]], color, 1.4);
+  }
   for (const [w, p, e] of points) {
+    const tall = Math.abs(w - 4.3) < 0.09;
     const x = xAt(w),
       y = yAt(p),
       hi = w >= 3.99 && w <= 4.05;
-    c.globalAlpha = opacity * (hi ? 0.75 + 0.25 * f : 1 - 0.35 * f);
+    c.globalAlpha = opacity * (hi ? 0.84 + 0.16 * f : tall ? 1 : 0.83 - 0.29 * f);
     line(
       [
         [x, y - e * 1110],
@@ -783,7 +923,7 @@ function finalPoints(t: number) {
       hi ? lime : ice,
       2,
     );
-    mark(x, y, hi ? 5.5 : 4, hi ? lime : pink);
+    mark(x, y, hi ? 5.5 : tall ? 5 : 4, hi ? lime : pink);
   }
   c.globalAlpha = opacity;
   line([[xAt(3.73), 542], [xAt(4.52), 542]], '#e0cbe594', 1.25);
