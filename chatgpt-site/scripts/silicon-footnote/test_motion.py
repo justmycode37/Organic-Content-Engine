@@ -273,6 +273,23 @@ class DocumentaryTests(unittest.TestCase):
                 events=[at for at,index in events]
             self.assertEqual([at+times[0] for at in events],[line.index(cue)/4 for cue in cues])
 
+    def test_pipeline_lights_each_step_on_its_cue(self):
+        from film import Sequence, PALETTE
+        from PIL import ImageColor
+        steps=[dict(label='Attempt',detail='He tries to say a word'),dict(label='Decode',detail='Sounds become words'),dict(label='Play',detail='He chooses to play it')]
+        beat=dict(kind='chart',source=0,art=dict(headline='One sentence',caption='Card et al.'),narration='',labels=[],barCues=[.5,2,4],
+                  chart=dict(layout='pipeline',steps=steps))
+        scene=Sequence(None,beat,{'sources':[{'url':'https://example.org'}]},0)
+        rgb=ImageColor.getrgb(PALETTE[0])
+        def lit(t):
+            im=np.asarray(scene.pipeline(t))
+            return [bool(np.all(im[282,x+10:x+14]==rgb)) for x in (150,640,1130)]
+        self.assertEqual(lit(.2),[False,False,False])
+        self.assertEqual(lit(2.6),[True,True,False])
+        self.assertEqual(lit(5),[True,True,True])
+        beat['barCues']=[1,2]
+        with self.assertRaises(ValueError):scene.pipeline(3)
+
     def test_subset_reveals_true_proportion_on_cue(self):
         from film import Sequence, PALETTE
         from PIL import ImageColor
