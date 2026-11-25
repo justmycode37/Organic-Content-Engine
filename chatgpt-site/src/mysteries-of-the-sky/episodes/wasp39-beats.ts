@@ -449,7 +449,7 @@ export function makeBeats(globe: Globe): Record<string, (t: number) => void> {
     c.globalAlpha = water * (1 - ease(t, 15.5, 16.4));
     label(split > 0.5 ? 'OH + H' : 'H₂O', wx, wy + 76, 22);
     c.globalAlpha = ease(t, 22.3, 23.2) * (1 - ease(t, 29, 30));
-    label('several reactions, shown as one step', cx, cy + 132, 18);
+    label('Several reactions shown as one step', cx, cy + 141, 25, '#e9cddd');
     c.globalAlpha = 1;
     // "The star was doing two jobs."
     const jobs = ease(t, 31.6, 32.6);

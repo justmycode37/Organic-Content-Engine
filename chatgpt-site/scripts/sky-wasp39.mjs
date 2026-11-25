@@ -7,7 +7,7 @@ import { renderSkyChapters } from './sky-render-chapters.mjs';
 
 const work = resolve(process.argv[2]);
 const plan = {
-  1: 'discovery|different telescope=prism|welcome=opening|world we can=hero',
+  1: 'discovery|different telescope=prism|welcome=opening|story of wasp39=hero',
   2: 'hero|put saturn=mass|puff it up=inflate|set it so=year|from here=deepfield|directly in front=transit',
   3: 'transitcurve|planet itself=eqdepth|soft edge=ring|some of that=grazing',
   4: 'vertical|toward the horizon=slant|light grazing=grazing|at wavelengths=ring',
@@ -23,7 +23,7 @@ const plan = {
   11: 'shoulder|sulfur dioxide=identity|include the reactions=chemistry|the telescope measured=inference',
   12: 'so2|other infrared=window|in the new spectrum=confirm',
   20: 'bandScale|webb actually recorded=detector|new bands=predict',
-  13: 'mid|change the temperature=layers|cloud high=cloudray|several combinations=degenerate|more bands=confirmRecap',
+  13: 'mid|change the temperature=layers|cloud high=cloudray|several combinations=degenerate|more bands=abundanceRange',
   14: 'limbs|keep the timing=edges|same dip=curveedges',
   15: 'recap',
   16: 'credits',
@@ -47,7 +47,7 @@ const webcam = [
 const archiveFilters = { r0: webcam.replace('brightness=0.018', 'brightness=0.034'), r21: webcam, r22: webcam };
 const archiveOverlays = {
   r0: fileURLToPath(new URL('../src/mysteries-of-the-sky/episodes/rowan-lower-third.png', import.meta.url)),
-  r21: { key: 'residualInset', time: 1, width: 368, x: 870, y: 65, from: 2.875 },
+  r21: { key: 'residualInset', width: 368, x: 870, y: 65, from: 0.16, expandAt: 6.0, expandFor: 0.74 },
 };
 const pads = { 0: 0.18, 21: 0.18, 22: 0.18 };
 const clean = (s) =>

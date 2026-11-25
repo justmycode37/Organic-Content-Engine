@@ -503,6 +503,12 @@ function detectorTrace(t: number) {
   const lower = 528 + stack * 45;
   line([[startX, 163], [startX, lower], [endX, lower]], '#cfc4d780', 1.4);
   words('Relative brightness', startX, 131, 25, 'sans', muted);
+  const chip = unfolding * (1 - ease(t, 11.3, 12.7));
+  c.globalAlpha = chip;
+  c.fillStyle = grad(908, 94, 177, 43, ['#4a4259', '#76815c', '#39384f']);
+  c.fillRect(897, 94, 191, 46);
+  words('4.07 μm bin', 994, 125, 22, 'sans', '#ecf3c5', 'center');
+  c.globalAlpha = unfolding;
   for (const hour of [-4, -2, 0, 2]) words(String(hour), x(hour), lower + 30, 20, 'sans', muted, 'center');
   words('Hours from mid-transit', endX, 650, 20, 'sans', muted, 'right');
   for (const [index, channel] of plotted.entries()) {
@@ -633,19 +639,24 @@ function miriEvidence(t: number) {
   c.globalAlpha = 1;
   for (const [w, depth, error] of miri.measurements) {
     if (w < lo || w > hi) continue;
-    if (together > 0 && (w === 7.625 || w === 8.625)) {
+    const band = w === 7.625 ? 0 : w === 8.625 ? 1 : undefined;
+    const closeLook = band === undefined ? 0 : ease(t, 5.8 + band * 2.3, 6.9 + band * 2.3) *
+      (1 - ease(t, 7.7 + band * 2.3, 8.25 + band * 2.3));
+    const showGuides = band === undefined ? 0 : Math.max(together, closeLook);
+    if (showGuides > 0) {
       const after = model.findIndex(([wavelength]) => wavelength > w);
       if (after > 0) {
         const left = model[after - 1];
         const right = model[after];
         const pos = (w - left[0]) / (right[0] - left[0]);
         const predicted = [left[1] + pos * (right[1] - left[1]), left[2] + pos * (right[2] - left[2])];
-        c.globalAlpha = together;
+        c.globalAlpha = showGuides;
+        lensGlow(x(w), y(depth), 23, lime, 0.58);
         for (const [i, prediction] of predicted.entries()) {
-          const off = i ? 7 : -7;
+          const off = i ? 13 : -13;
           const tone = i ? withoutSulfur : withSulfur;
-          line([[x(w) + off, y(depth)], [x(w) + off, y(prediction)]], tone + 'b0', 1.65);
-          mark(x(w) + off, y(prediction), 3.5, tone);
+          line([[x(w) + off, y(depth)], [x(w) + off, y(prediction)]], tone + 'c7', 2.3);
+          line([[x(w) + off - 4, y(prediction)], [x(w) + off + 4, y(prediction)]], tone, 2.5);
         }
         c.globalAlpha = 1;
       }
@@ -682,8 +693,68 @@ function miriEvidence(t: number) {
   words('Wavelength (μm)', 1124, 583, 20, 'sans', ink, 'right');
 }
 evidenceScenes.confirm = miriEvidence;
-evidenceScenes.confirmRecap = (t) => miriEvidence(16.7 + t);
-evidenceScenes.residual = (t) => fit(10.6 + t, true);
+evidenceScenes.residual = (t) => {
+  residualInset(6.84 + t);
+  const widen = ease(t, 0.18, 0.92);
+  if (!widen) return;
+  c.globalAlpha = widen;
+  c.fillStyle = grad(0, 0, 1280, 720, ['#151426', '#2d243e', '#362b44']);
+  c.fillRect(-90, -50, 1460, 820);
+  c.globalAlpha = 1;
+  if (widen > 0.55) fit(10.6 + t, true);
+};
+
+// Schematic model family. Matching all three bands narrows the set of
+// plausible atmospheres, even when several settings fit the short segment.
+function abundanceRange(t: number) {
+  const broad = ease(t, 0.4, 3.5);
+  const constrain = ease(t, 4.45, 7.9);
+  const start = 172;
+  const width = 938;
+  const bottom = 527;
+  const shown = width * (0.44 + 0.56 * broad);
+  c.fillStyle = grad(0, 0, 1280, 720, ['#eee0ce', '#e3c2cc', '#c4b9d7']);
+  c.fillRect(-90, -50, 1460, 820);
+  const ink = '#392b46';
+  words('Which atmospheres fit?', 173, 108, 35, 'sans', ink);
+  words('Extra light blocked', 173, 148, 21, 'sans', '#6b4e69');
+  const bands = [
+    { position: 0.24, label: '4.05 μm' },
+    { position: 0.66, label: '7.7 μm' },
+    { position: 0.84, label: '8.5 μm' },
+  ];
+  for (const [i, { position, label }] of bands.entries()) {
+    c.globalAlpha = i ? broad : 1;
+    const x = start + position * width;
+    c.fillStyle = grad(0, 170, 0, 350, ['#ac749528', '#b091ac80', '#ad849117']);
+    c.fillRect(x - 41, 166, 82, 360);
+    words(label, x, 572, 22, 'sans', ink, 'center');
+  }
+  c.globalAlpha = 1;
+  const peak = (u: number, position: number, spread: number) => Math.exp(-(((u - position) / spread) ** 2));
+  for (let i = 0; i < 7; i++) {
+    const offset = i - 3;
+    const compatible = Math.abs(offset) < 2;
+    c.globalAlpha = compatible ? 0.7 : 0.64 * (1 - constrain) + 0.12 * constrain;
+    if (!compatible) c.setLineDash([8, 8]);
+    const points = Array.from({ length: 181 }, (_, j) => {
+      const u = j / 180 * shown / width;
+      const depth = 0.43 * peak(u, 0.24, 0.048) +
+        (0.49 + offset * 0.099) * peak(u, 0.66, 0.073) +
+        (0.31 + offset * 0.084) * peak(u, 0.84, 0.051);
+      return [start + u * width, bottom - 59 - depth * 290 - 3.4 * offset];
+    });
+    line(points, compatible ? '#7c4566' : '#746694', compatible ? 3.1 : 1.95);
+    c.setLineDash([]);
+  }
+  c.globalAlpha = 1;
+  line([[start, 157], [start, bottom], [start + shown, bottom]], '#67516d', 1.6);
+  words('Schematic model family', start, 632, 21, 'sans', '#654e68');
+  c.globalAlpha = ease(t, 6.1, 7.4);
+  words('A range still fits all three bands', start + width, 632, 23, 'sans', ink, 'right');
+  c.globalAlpha = 1;
+}
+evidenceScenes.abundanceRange = abundanceRange;
 
 function detector(t: number) {
   heading('On the detector');
@@ -758,6 +829,13 @@ function resolution(t: number) {
     const half = 0.041;
     c.fillStyle = grad(0, base - 149, 0, 166, ['#b7cb6920', '#b7cb6950', '#b7cb6917']);
     c.fillRect(x(4.05 - half), base - 149, x(4.05 + half) - x(4.05 - half), 166);
+    const showBaseline = ease(t, 9.1, 10.4);
+    const side = rows.filter(([w]) => (w >= 3.91 && w < 3.985) || (w > 4.105 && w <= 4.165));
+    const level = side.reduce((sum, [, depth]) => sum + depth, 0) / side.length;
+    c.globalAlpha = enter * showBaseline;
+    c.setLineDash([10, 7]);
+    line([[185, y(level)], [1113, y(level)]], color + 'c0', 1.5);
+    c.setLineDash([]);
     c.globalAlpha = enter;
     for (const [i, [w, depth, error]] of rows.entries()) {
       const cx = x(w);
@@ -788,6 +866,11 @@ function resolution(t: number) {
     words(w.toFixed(1), x(w), 591, 20, 'sans', muted, 'center');
   }
   words('Wavelength (μm)', 1113, 635, 21, 'sans', muted, 'right');
+  c.globalAlpha = ease(t, 9.1, 10.4);
+  c.setLineDash([9, 6]);
+  line([[185, 632], [224, 632]], muted, 1.5);
+  c.setLineDash([]);
+  words('Local baseline from side bins', 239, 640, 20, 'sans', muted);
   c.globalAlpha = 1;
 }
 function spectralWindow(t: number) {
@@ -823,24 +906,35 @@ function spectralWindow(t: number) {
   for (const w of [1, 3, 5, 7, 9, 11]) words(String(w), x(w), 584, 20, 'sans', muted, 'center');
   words('Wavelength (μm)', x(12), 632, 23, 'sans', muted, 'right');
 }
-function residualInset() {
+function residualInset(t: number) {
   const ink = '#342743';
   c.fillStyle = grad(0, 0, 1280, 720, ['#f9deca', '#dbc5d7', '#c8bbd6']);
   c.fillRect(-90, -50, 1460, 820);
-  words('Several neighboring bins', 640, 159, 66, 'sans', ink, 'center');
-  words('Above the model', 640, 613, 55, 'sans', ink, 'center');
   const x = (w: number) => 265 + (w - 3.95) * 3770;
-  const y = (residual: number) => 486 - residual * 4350;
-  line([[190, 486], [1070, 486]], '#6a4f71', 5);
+  const y = (residual: number) => 478 - residual * 4050;
+  line([[191, 478], [1070, 478]], '#6a4f71', 5);
+  const group = ease(t, 2.92, 3.55);
   const nearby = observations.spectrum.filter(([w]) => w > 3.95 && w < 4.14);
-  for (const [w, depth, error] of nearby) {
+  const initial = nearby.findIndex(([w]) => w > 4.01);
+  for (const [i, [w, depth, error]] of nearby.entries()) {
     const diff = depth - modelAt(w);
     const highlight = w > 3.98 && w < 4.06 && diff > 0;
+    const show = i === initial ? ease(t, 0.22, 0.8) : ease(t, 2.92 + Math.abs(i - initial) * 0.12, 3.42 + Math.abs(i - initial) * 0.12);
+    if (!show) continue;
+    c.globalAlpha = show;
     const tint = highlight ? '#5c781e' : '#664d6c';
     const cx = x(w);
-    line([[cx, y(diff - error)], [cx, y(diff + error)]], tint, 6);
-    mark(cx, y(diff), 12, tint);
+    const center = 478 + (y(diff) - 478) * show;
+    line([[cx, 478], [cx, center]], tint + '70', 4.3);
+    line([[cx, center - error * 4050 * show], [cx, center + error * 4050 * show]], tint, 6);
+    mark(cx, center, 12, tint);
   }
+  c.globalAlpha = 1 - ease(t, 2.56, 2.9);
+  words('One point above the model', 640, 153, 61, 'sans', ink, 'center');
+  c.globalAlpha = group;
+  words('Several neighboring bins', 640, 153, 66, 'sans', ink, 'center');
+  c.globalAlpha = 1;
+  words('Observed − model', 640, 633, 53, 'sans', ink, 'center');
 }
 evidenceScenes.residualInset = residualInset;
 

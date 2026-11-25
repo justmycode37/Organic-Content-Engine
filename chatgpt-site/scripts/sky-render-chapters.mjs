@@ -1,6 +1,6 @@
 import { openMotionPage } from './motion.mjs';
 import { execFileSync, spawn } from 'node:child_process';
-import { rename, access, writeFile } from 'node:fs/promises';
+import { rename, access } from 'node:fs/promises';
 import { join } from 'node:path';
 import { once } from 'node:events';
 
@@ -105,13 +105,28 @@ export async function renderSkyChapters({
           let overlayFile = typeof overlay === 'string' ? overlay : undefined;
           let overlayFilter = overlayFile ? '[camera];[camera][1:v]overlay' : '';
           if (overlay && typeof overlay !== 'string') {
-            const encoded = await page.evaluate(
-              ({ method, key, time }) => window[method](key, time),
-              { method: frameMethod, key: overlay.key, time: overlay.time },
+            const clipSeconds = n / fps;
+            const insetFps = 12;
+            const start = (offsets[ch] ?? 0) + cut.f / fps;
+            const images = await page.evaluate(
+              ({ frameMethod, key, frameCount, insetFps, start }) =>
+                Array.from({ length: frameCount }, (_, i) => {
+                  const t = i / insetFps;
+                  return window[frameMethod](key, t, { key, t, g: start + t, prev: key, prevT: 0, left: 99 });
+                }),
+              { frameMethod, key: overlay.key, frameCount: Math.ceil(clipSeconds * insetFps), insetFps, start },
             );
-            overlayFile = join(work, 'inset-' + tag + '-' + i + '.jpg');
-            await writeFile(overlayFile, Buffer.from(encoded, 'base64'));
-            overlayFilter = `[camera];[1:v]scale=${overlay.width}:-2[inset];[camera][inset]overlay=x=${overlay.x}:y=${overlay.y}:enable='gte(t,${overlay.from})'`;
+            overlayFile = join(work, 'inset-' + tag + '-' + i + '.mp4');
+            execFileSync('ffmpeg', [
+              '-v', 'error', '-y', '-f', 'image2pipe', '-framerate', String(insetFps),
+              '-c:v', 'mjpeg', '-i', 'pipe:0', '-an', '-pix_fmt', 'yuv420p', '-c:v', 'libx264',
+              '-preset', 'veryfast', '-crf', '17', overlayFile,
+            ], { input: Buffer.concat(images.map((encoded) => Buffer.from(encoded, 'base64'))) });
+            const progress = `clip((t-${overlay.expandAt})/${overlay.expandFor},0,1)`;
+            const ease = `(${progress})*(${progress})*(3-2*(${progress}))`;
+            const width = `trunc((${overlay.width}+(1280-${overlay.width})*(${ease}))/2)*2`;
+            overlayFilter = `[camera];[1:v]scale=w='${width}':h=-2:eval=frame[inset];` +
+              `[camera][inset]overlay=x='${overlay.x}*(1-(${ease}))':y='${overlay.y}*(1-(${ease}))':enable='gte(t,${overlay.from})'`;
           }
           const child = spawn(
             'ffmpeg',

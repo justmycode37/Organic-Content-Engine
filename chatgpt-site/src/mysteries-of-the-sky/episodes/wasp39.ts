@@ -759,6 +759,7 @@ function recap(t: number) {
     lensGlow(x, y, 22, '#b4a1ed', Math.sin(Math.PI * travel));
   }
   c.restore();
+  const shoulderCue = reveal(10.7, 11.8) * (1 - reveal(13.6, 14.4));
   const bands = [
     { wavelength: '4.05 μm', y: 383, color: lime, phase: separate },
     { wavelength: '7.7 μm', y: 473, color: pink, phase: extend },
@@ -780,9 +781,27 @@ function recap(t: number) {
     line(trace, grad(limb, 0, span, 0, [band.color + '35', band.color]), 2.2 + i * 0.4);
     const dot = trace[Math.floor((t * 0.24 + i * 0.27) % 1 * 100)];
     lensGlow(dot[0], dot[1], 22, band.color, 0.85);
-    c.globalAlpha = opacity * spectrum;
+    c.globalAlpha = opacity * spectrum * (1 - shoulderCue);
     words(band.wavelength, end, band.y - 19, 24, 'sans', band.color, 'right');
     c.restore();
+  }
+  if (shoulderCue > 0) {
+    c.save();
+    c.globalAlpha = shoulderCue;
+    c.translate(574, 168);
+    c.scale(0.49, 0.49);
+    c.beginPath();
+    c.rect(0, 0, W, H);
+    c.clip();
+    evidenceScenes.finalPoints(2 + t - 10.7);
+    c.restore();
+  }
+  const handoff = reveal(23.7, 24.1) * (1 - reveal(25.34, 25.8));
+  if (handoff > 0) {
+    const move = reveal(24, 25.58);
+    const x = 1096 + (544 - 1096) * move;
+    const y = 383 + (432 - 383) * move;
+    lensGlow(x, y, 38, lime, handoff * 0.8);
   }
   if (returnToShoulder > 0) {
     c.save();
@@ -836,6 +855,8 @@ continuous(['cloudray', 'degenerate']);
 continuous(['predict', 'confirm', 'mid']);
 Object.assign(window, {
   waspFrame(k: string, t: number, cue?: Cue) {
-    return directFrame((key, time) => scenes[key](time, key), cue ?? { key: k, t, g: t, left: 99 }, k === 'discovery' ? () => coverHook(t) : undefined);
+    const frame = cue ?? { key: k, t, g: t, left: 99 };
+    if (k === 'residual' && !frame.prev) frame.prev = k;
+    return directFrame((key, time) => scenes[key](time, key), frame, k === 'discovery' ? () => coverHook(t) : undefined);
   },
 });
