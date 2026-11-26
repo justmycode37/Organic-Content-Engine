@@ -1,0 +1,9 @@
+# The Moon Has a Tail
+
+- The discovery. The original observations covered November 18–20, 1998 after the Leonids. The patch was near the antisolar direction and about three degrees across. [Smith et al., 1999](https://doi.org/10.1029/1999GL900314).
+- The observation and physical interpretation. Section 3.1 of the follow-up gives the nightly values of 22, 90 and 38 rayleighs with ±25% uncertainty. It explains radiation pressure and terrestrial focusing. Section 3.2 describes the Japanese confirmation and the earlier August detections. The historical sky-dome shots are illustrations. Only the numbered nightly plot reproduces the published discovery measurements. [Baumgardner et al., 2021](https://doi.org/10.1029/2020JE006671).
+- The fourteen-year Argentina study. Sections 4–6 describe the effect of viewing geometry and the relationship with sporadic meteors after geometry correction. We show the two effects conceptually with no simulated values presented as recorded brightness. [Baumgardner et al., 2021](https://doi.org/10.1029/2020JE006671) · [Data archive](https://doi.org/10.5281/zenodo.4434492).
+- The observed 12.4 km/s average line-of-sight recession over three nights near new Moon in 2006. The spectral drawing is an illustration of the shift, using 589.0 nm and the low-speed relation Δλ ≈ λv/c to visualize the scale. [Mierkiewicz et al., 2006](https://doi.org/10.1029/2006GL027650).
+- The sodium-line wavelengths, the effect of sunlight, and the contrast between the local lunar exosphere and the extended neutral sodium tail. [Matta et al., 2009](https://doi.org/10.1016/j.icarus.2009.06.017).
+
+Orbital dimensions, elapsed times and particle densities are schematic unless measured values are shown. The cover is an original ImageGen illustration of a large lunar disk and an optical filter revealing a golden ribbon. Rowan Ellery is a fictional presenter.

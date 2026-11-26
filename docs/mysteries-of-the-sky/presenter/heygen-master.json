@@ -1,0 +1,11 @@
+{
+  "image": {
+    "type": "url",
+    "url": "https://raw.githubusercontent.com/justmycode37/Organic-Content-Engine/7dc5c344e114d808ba1c6bc4825327772c45c722/docs/mysteries-of-the-sky/presenter/rowan-ellery.png"
+  },
+  "resolution": "480p",
+  "duration": 5,
+  "prompt_enhancement": "disabled",
+  "seed": 184711,
+  "prompt": "Use this exact portrait of Professor Rowan Ellery as the first frame. Keep him clean shaven, a high receding hairline with short loose grey hair, lightly smudged rectangular glasses and only a lightly rumpled white button-down shirt with its collar open, in the same bookshelf room. An ordinary slightly older webcam capture in muted indoor light, softened low-resolution detail, modest saturation and subdued whites. Keep the camera still and the framing consistent. He looks at the camera and says in a warm, mature baritone of a physicist in his early sixties, with a slight dry grain and the relaxed pace of an experienced teacher: \"I'm Professor Rowan Ellery. Welcome to Mysteries of the Sky.\" Natural lip sync and blinking, hands out of frame, calm smile on the last beat, no background music, graphics or captions."
+}

@@ -85,3 +85,7 @@ and [content drafting](docs/content-engine/content-drafting.md). See the
 [workflow integration and research roadmap](docs/content-engine/README.md) for
 usage, limitations, and policy synchronization. Live social research is not yet
 implemented; missing evidence must not be replaced with invented viral examples.
+
+## Mysteries of the Sky
+
+The [landscape animation library](docs/mysteries-of-the-sky/README.md) includes a reference index, renderable studies and a local story-development workflow for astrophysics explainers.

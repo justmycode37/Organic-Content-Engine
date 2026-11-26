@@ -1,0 +1,134 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:mysteries-of-the-sky:story:1",
+  "title": "Mysteries of the Sky local preproduction story",
+  "description": "Structural contract; validation is not scientific or production approval.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "brand", "storyId", "status", "updatedAt", "brief", "sources", "claims", "beats", "reviews"],
+  "properties": {
+    "version": { "const": 1 },
+    "brand": { "const": "Mysteries of the Sky" },
+    "storyId": { "$ref": "#/$defs/id" },
+    "status": { "const": "preproduction" },
+    "updatedAt": { "type": "string", "format": "date" },
+    "brief": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["title", "centralQuestion", "audience", "oneSentenceAnswer", "hook", "payoff", "targetDurationSeconds", "scope", "exclusions"],
+      "properties": {
+        "title": { "$ref": "#/$defs/text" },
+        "centralQuestion": { "$ref": "#/$defs/text" },
+        "audience": { "$ref": "#/$defs/text" },
+        "oneSentenceAnswer": { "$ref": "#/$defs/text" },
+        "hook": { "$ref": "#/$defs/text" },
+        "payoff": { "$ref": "#/$defs/text" },
+        "targetDurationSeconds": { "type": "number", "minimum": 15 },
+        "scope": { "$ref": "#/$defs/text" },
+        "exclusions": { "$ref": "#/$defs/textList" }
+      }
+    },
+    "sources": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/source" } },
+    "claims": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/claim" } },
+    "beats": { "type": "array", "minItems": 3, "items": { "$ref": "#/$defs/beat" } },
+    "reviews": { "type": "array", "minItems": 4, "maxItems": 4, "items": { "$ref": "#/$defs/review" } }
+  },
+  "$defs": {
+    "text": { "type": "string", "minLength": 1, "pattern": "\\S" },
+    "textList": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/text" } },
+    "id": { "type": "string", "pattern": "^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$" },
+    "ids": { "type": "array", "minItems": 1, "uniqueItems": true, "items": { "$ref": "#/$defs/id" } },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "authors", "kind", "institution", "url", "version", "published", "accessedAt", "primaryReason", "evidenceNote"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "title": { "$ref": "#/$defs/text" },
+        "authors": { "$ref": "#/$defs/textList" },
+        "kind": { "enum": ["research-paper", "research-preprint", "mission-documentation", "data-release"] },
+        "institution": { "$ref": "#/$defs/text" },
+        "url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "version": { "$ref": "#/$defs/text" },
+        "published": { "$ref": "#/$defs/text" },
+        "accessedAt": { "type": "string", "format": "date" },
+        "primaryReason": { "$ref": "#/$defs/text" },
+        "evidenceNote": { "$ref": "#/$defs/text" }
+      }
+    },
+    "support": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["sourceId", "locator", "supports"],
+      "properties": {
+        "sourceId": { "$ref": "#/$defs/id" },
+        "locator": { "$ref": "#/$defs/text" },
+        "supports": { "$ref": "#/$defs/text" }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "kind", "support", "uncertainty", "limitations"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "statement": { "$ref": "#/$defs/text" },
+        "kind": { "enum": ["observation", "inference", "illustrative-calculation"] },
+        "support": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/support" } },
+        "uncertainty": { "$ref": "#/$defs/text" },
+        "limitations": { "$ref": "#/$defs/textList" },
+        "calculation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["inputs", "formula", "result", "assumptions"],
+          "properties": {
+            "inputs": { "$ref": "#/$defs/textList" },
+            "formula": { "$ref": "#/$defs/text" },
+            "result": { "$ref": "#/$defs/text" },
+            "assumptions": { "$ref": "#/$defs/textList" }
+          }
+        }
+      }
+    },
+    "beat": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "role", "durationSeconds", "narration", "claimIds", "shot"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "role": { "enum": ["hook", "evidence", "mechanism", "caveat", "payoff"] },
+        "durationSeconds": { "type": "number", "exclusiveMinimum": 0, "maximum": 60 },
+        "narration": { "$ref": "#/$defs/text" },
+        "claimIds": { "$ref": "#/$defs/ids" },
+        "shot": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["representation", "direction", "onScreenText", "provenanceLabel", "claimIds", "sourceIds", "visualCaveats", "continuity", "transition"],
+          "properties": {
+            "representation": { "enum": ["schematic", "replotted-data", "source-image", "presenter"] },
+            "direction": { "$ref": "#/$defs/text" },
+            "onScreenText": { "$ref": "#/$defs/textList" },
+            "provenanceLabel": { "$ref": "#/$defs/text" },
+            "claimIds": { "$ref": "#/$defs/ids" },
+            "sourceIds": { "$ref": "#/$defs/ids" },
+            "visualCaveats": { "$ref": "#/$defs/textList" },
+            "continuity": { "$ref": "#/$defs/text" },
+            "transition": { "enum": ["cut", "match-cut", "dissolve", "hold"] }
+          }
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["stage", "status", "reviewer", "evidence", "findings"],
+      "properties": {
+        "stage": { "enum": ["factual-accuracy", "story-clarity", "visual-science", "readability-timing"] },
+        "status": { "enum": ["pending", "pass", "changes-requested"] },
+        "reviewer": { "$ref": "#/$defs/text" },
+        "evidence": { "$ref": "#/$defs/text" },
+        "findings": { "type": "array", "items": { "$ref": "#/$defs/text" } }
+      }
+    }
+  }
+}

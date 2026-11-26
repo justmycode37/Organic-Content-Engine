@@ -19,12 +19,13 @@ function boundedEnvInt(value,fallback,min,max){const parsed=Number.parseInt(valu
 function boundedEnvNumber(value,fallback,min,max){const parsed=Number(value);return Number.isFinite(parsed)?Math.max(min,Math.min(max,parsed)):fallback;}
 
 export async function openMotionPage(entry='src/motion/page.ts'){
- const bundle=(await build({entryPoints:[process.env.MOTION_DIR?join(process.env.MOTION_DIR,entry.split('/').at(-1)):join(ROOT,entry)],bundle:true,write:false,format:'iife',target:'es2022'})).outputFiles[0].text;
+ const bundle=(await build({entryPoints:[process.env.MOTION_DIR?join(process.env.MOTION_DIR,entry.split('/').at(-1)):join(ROOT,entry)],bundle:true,loader:{'.jpg':'dataurl','.png':'dataurl'},write:false,format:'iife',target:'es2022'})).outputFiles[0].text;
  const browser=await chromium.launch({headless:true,executablePath:CHROME});
  const page=await browser.newPage();
  page.on('pageerror',error=>{console.error(`Page error: ${error.message}`);process.exitCode=1;});
  await page.setContent('<!doctype html><title>Motion</title>');
  await page.addScriptTag({content:bundle});
+ await page.evaluate(() => window.motionAssetsReady);
  return {browser,page};
 }
 
