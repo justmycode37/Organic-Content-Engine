@@ -163,14 +163,36 @@ function planetPhoto(name: string, size = 0.86) {
     c.globalCompositeOperation = 'lighten';
     c.drawImage(img, W / 2 - (img.width * s) / 2, H / 2 - (img.height * s) / 2, img.width * s, img.height * s);
     c.restore();
+    if (name === 'uranus') {
+      // Where the tables said Uranus should be, slowly parting from where it is.
+      const w0 = at('would not stay'),
+        k = Number.isFinite(w0) ? ease(t, w0 - 0.3, w0 + 3) : 0;
+      if (k > 0) {
+        const r = (img.height * s) / 2,
+          ox = W / 2 + 70 * k,
+          oy = H / 2 - 24 * k;
+        c.globalAlpha = k;
+        c.strokeStyle = coral;
+        c.lineWidth = 2;
+        c.setLineDash([8, 8]);
+        c.lineDashOffset = -t * 8;
+        c.beginPath();
+        c.arc(ox, oy, r, 0, tau);
+        c.stroke();
+        c.setLineDash([]);
+        text('predicted', ox + r * 0.75, oy - r * 0.8, 22, coral);
+        c.globalAlpha = 1;
+      }
+    }
     if (name === 'triton') {
       // Dark plumes thought to be driven by nitrogen gas.
-      const on = ease(t, cue('geysers') - 0.3, cue('geysers') + 1);
+      const g0 = at('geysers'),
+        on = Number.isFinite(g0) ? ease(t, g0 - 0.3, g0 + 1) : 0;
       for (let k = 0; k < 6; k++) {
         const x = W / 2 - 120 + k * 46,
           y = H / 2 + 60 + 20 * hash(k);
-        c.globalAlpha = on * 0.45;
-        line([[x, y], [x + 24 + 8 * Math.sin(t + k), y - 50 - 16 * hash(k + 3)]], '#3a2a4a', 2.5);
+        c.globalAlpha = on * 0.25;
+        lensGlow(x + 12, y - 30 - 10 * Math.sin(t * 0.7 + k), 22, '#2a1d3a', 0.9);
       }
       c.globalAlpha = 1;
     }
@@ -187,11 +209,14 @@ const planets: [string, number, number, string][] = [
 ];
 // Mean longitude (degrees) at 1846.0, approximate.
 const L1846: Record<string, number> = { Jupiter: 80, Saturn: 330, Uranus: 335, Neptune: 326 };
-function lon(name: string, year: number) {
+function lonRaw(name: string, year: number) {
   const p = planets.find((q) => q[0] === name)!;
   return ((L1846[name] + (360 * (year - 1846)) / p[2]) * Math.PI) / 180;
 }
-function orbits(year: number, show: string[], cx = 640, cy = 360, s = 1) {
+function lon(name: string, year: number) {
+  return lonRaw(name, year) + spin;
+}
+function orbits(year: number, show: string[], cx = 640, cy = 360, s = 1, inward: string[] = []) {
   lensGlow(cx, cy, 70 * s, '#ffd2a8', 0.8);
   dot(cx, cy, 10 * s, '#fff1dc');
   for (const [name, a, , col] of planets) {
@@ -204,10 +229,18 @@ function orbits(year: number, show: string[], cx = 640, cy = 360, s = 1) {
     const th = lon(name, year);
     const x = cx + AU(a) * s * Math.cos(th),
       y = cy - AU(a) * s * Math.sin(th);
-    lensGlow(x, y, 22 * s, col, 0.6);
-    dot(x, y, 6 * s, col);
+    lensGlow(x, y, 30 * s, col, 0.6);
+    oxygen(x, y, 8 * s, 0, 1);
+    c.save();
+    c.globalCompositeOperation = 'color';
+    dot(x, y, 8 * s, col);
+    c.restore();
+    if (inward.includes(name)) text(name, x - 52 * Math.cos(th), y + 52 * Math.sin(th) + 6, 20, muted, 'center');
+    else text(name, x + 14, y - 12, 20, muted);
   }
 }
+// The whole system is turned so the 1820s conjunction sits on the right, mid-frame.
+const spin = -((L1846.Neptune - 30) * Math.PI) / 180 + Math.PI / 12;
 // ── 02 Uranus drifts off its predicted path ──────────────────────────────
 function drift(t: number, g: number) {
   space(g);
@@ -272,11 +305,12 @@ function residuals(t: number, g: number) {
 // ── 04 Every planet pulls on every other ─────────────────────────────────
 function pulls(t: number, g: number) {
   space(g);
-  const year = 1820 + t * 0.8;
-  orbits(year, ['Jupiter', 'Saturn', 'Uranus']);
+  const year = 1820 + t * 0.3,
+    cx = 450;
+  orbits(year, ['Jupiter', 'Saturn', 'Uranus'], cx);
   const pos = (n: string, a: number) => {
     const th = lon(n, year);
-    return [640 + AU(a) * Math.cos(th), 360 - AU(a) * Math.sin(th)] as [number, number];
+    return [cx + AU(a) * Math.cos(th), 360 - AU(a) * Math.sin(th)] as [number, number];
   };
   const u = pos('Uranus', 19.2);
   for (const [n, a] of [
@@ -287,7 +321,19 @@ function pulls(t: number, g: number) {
     const k = 0.18;
     line([u, [mix(u[0], p[0], k), mix(u[1], p[1], k)]], '#e8d3a0aa', 2.5);
   }
-  line([u, [mix(u[0], 640, 0.3), mix(u[1], 360, 0.3)]], '#fff1dcaa', 3);
+  line([u, [mix(u[0], cx, 0.3), mix(u[1], 360, 0.3)]], '#fff1dcaa', 3);
+  // Jupiter and Saturn nudge each other in a slow rhythm.
+  const js = ease(t, cue('jupiter and saturn') - 0.2, cue('jupiter and saturn') + 0.6) * (1 - ease(t, cue('when they added') - 0.2, cue('when they added') + 0.6));
+  if (js > 0) {
+    const j = pos('Jupiter', 5.2),
+      s = pos('Saturn', 9.58),
+      beat = 0.5 + 0.5 * Math.sin(t * 2.2);
+    c.globalAlpha = js;
+    line([j, s], '#e8d3a0', 1.5 + 2 * beat);
+    lensGlow((j[0] + s[0]) / 2, (j[1] + s[1]) / 2, 40, '#e8d3a0', 0.4 * beat);
+    text('Jupiter ⇄ Saturn', 860, 600, 24, '#e8d3a0');
+    c.globalAlpha = 1;
+  }
   const cards: [string, string][] = [
     ['maybe the observations', 'bad observations?'],
     ['maybe gravity', 'different gravity far out?'],
@@ -297,9 +343,9 @@ function pulls(t: number, g: number) {
     const a = ease(t, cue(ph) - 0.2, cue(ph) + 0.5);
     if (a <= 0) return;
     c.globalAlpha = a * (i === 2 ? 1 : 0.75);
-    c.fillStyle = grad(860, 120 + i * 90, 0, 70, ['#2a2050cc', '#1a1438cc']);
-    c.fillRect(860, 120 + i * 90, 360, 66);
-    text(label, 880, 162 + i * 90, 24, i === 2 ? accent : ink);
+    c.fillStyle = grad(820, 120 + i * 90, 400, 0, ['#2a2050cc', '#1a143800']);
+    c.fillRect(820, 120 + i * 90, 400, 66);
+    text(label, 840, 162 + i * 90, 24, i === 2 ? coral : ink);
     c.globalAlpha = 1;
   });
   const left = ease(t, cue('still did not fit') - 0.2, cue('still did not fit') + 0.8);
@@ -323,7 +369,7 @@ function inverse(t: number) {
     c.globalAlpha = a;
     c.font = 'italic 88px Georgia, serif';
     c.textAlign = 'center';
-    c.fillStyle = s === 'm₂' ? accent : ink;
+    c.fillStyle = s === 'm₂' ? coral : ink;
     c.fillText(s, x + ws[i] / 2, 330);
     c.restore();
     x += ws[i];
@@ -404,15 +450,18 @@ function search(t: number, g: number) {
 // ── 09 Wrong orbit, right place ─────────────────────────────────────────
 function luck(t: number, g: number) {
   space(g);
-  const year = mix(1795, 1846, ((t * 0.04) % 1.2) / 1.2);
-  orbits(year, ['Uranus', 'Neptune']);
+  const year = mix(1800, 1846, ease(t, 0.5, 26));
+  orbits(year, ['Uranus', 'Neptune'], 640, 360, 1, ['Neptune']);
   const show = ease(t, 0.8, 2);
   // The strongest clues came while the two planets were closest (about 1815–1830).
   const near = Math.exp(-(((year - 1822) / 7) ** 2));
+  const said = ease(t, cue('strongest clues') - 0.3, cue('strongest clues') + 0.6);
   if (near > 0.05) {
-    lensGlow(640 + AU(24) * Math.cos(lon('Uranus', year)), 360 - AU(24) * Math.sin(lon('Uranus', year)), 120, accent, 0.35 * near);
-    c.globalAlpha = near;
-    text('strongest clues', 90, 640, 28, accent);
+    lensGlow(640 + AU(24) * Math.cos(lon('Uranus', year)), 360 - AU(24) * Math.sin(lon('Uranus', year)), 120, '#c9b6ff', 0.35 * near);
+  }
+  if (said > 0) {
+    c.globalAlpha = said;
+    text('closest approach · the clues are strongest', 90, 96, 28, ink);
     c.globalAlpha = 1;
   }
   // Le Verrier's assumed planet: farther out, roughly the same direction.
@@ -428,7 +477,8 @@ function luck(t: number, g: number) {
   const x = 640 + AU(a) * Math.cos(th),
     y = 360 - AU(a) * Math.sin(th);
   dot(x, y, 7, coral);
-  text('predicted orbit', x + 14, y - 14, 20, coral);
+  // Label outside the orbit, along the radius, so it never sits on Neptune's own label.
+  text('predicted orbit', x + 56 * Math.cos(th), y - 56 * Math.sin(th) + 6, 20, coral, 'center');
   c.globalAlpha = 1;
   const thu = lon('Uranus', year);
   const u: [number, number] = [640 + AU(19.2) * Math.cos(thu), 360 - AU(19.2) * Math.sin(thu)];
@@ -450,14 +500,26 @@ function galileo(t: number) {
     dot(500, y, 16, ink2);
     [[-150, -60, 70, 150], [-90, 40, 110, 200], [-180, -40, 30, 130]][k].forEach((dx) => dot(500 + dx, y, 5, ink2));
     // A "star" beside Jupiter that drifts slightly between entries.
-    dot(820 + 10 * k, y + 4, 5, '#2b5a9e');
+    dot(820 + (k === 2 ? 26 : 10 * k), y + 4, 6, '#2b5a9e');
+    if (k === 2) line([[836, y + 26], [846, y + 26]], '#2b5a9e', 2);
     text(['28 Dec 1612', '27 Jan 1613', '28 Jan 1613'][k], 120, y + 8, 24, ink2, 'left', 'italic');
   }
-  c.globalAlpha = ease(t, 6.5, 7.3);
+  // "One entry even suggests he noticed it had moved": last night's place as a
+  // ghost, and the step between them.
+  const moved = ease(t, cue('even suggests') - 0.2, cue('even suggests') + 0.8);
+  c.globalAlpha = moved;
   c.strokeStyle = '#2b5a9e';
+  c.lineWidth = 2;
   c.beginPath();
-  c.arc(840, 480, 30, 0, tau);
+  c.arc(846, 484, 30 + 2 * Math.sin(t * 2.5), 0, tau);
   c.stroke();
+  c.setLineDash([3, 4]);
+  c.beginPath();
+  c.arc(830, 484, 6, 0, tau);
+  c.stroke();
+  c.setLineDash([]);
+  line([[830, 512], [846, 512]], '#2b5a9e', 2);
+  text('moved', 846, 540, 22, '#2b5a9e', 'center', 'italic');
   c.globalAlpha = 1;
 }
 // ── 11 Triton orbits backwards; its orbit weighs Neptune ────────────────
@@ -471,6 +533,13 @@ function triton(t: number, g: number) {
   c.arc(cx, cy, 110, 0, tau);
   c.clip();
   cover(P.voyager, 1, 0.5, 0.5);
+  // Terminator shading so the disk reads as a globe.
+  const sh = c.createRadialGradient(cx - 40, cy - 40, 20, cx, cy, 120);
+  sh.addColorStop(0, '#0d0a1e00');
+  sh.addColorStop(0.7, '#0d0a1e33');
+  sh.addColorStop(1, '#0d0a1ecc');
+  c.fillStyle = sh;
+  c.fillRect(cx - 120, cy - 120, 240, 240);
   c.restore();
   // Neptune spins one way (arrow), Triton orbits the other way.
   c.strokeStyle = '#c9b6ff';
@@ -482,8 +551,15 @@ function triton(t: number, g: number) {
   const x = cx + 300 * Math.cos(a) * Math.cos(-0.3) - 90 * Math.sin(a) * Math.sin(-0.3),
     y = cy + 300 * Math.cos(a) * Math.sin(-0.3) + 90 * Math.sin(a) * Math.cos(-0.3);
   dot(x, y, 10, '#e8d3c8');
+  const back = ease(t, cue('orbits backwards') - 0.3, cue('orbits backwards') + 0.6);
+  c.globalAlpha = back;
   text('Triton · orbits backwards', 1190, 640, 24, ink, 'right');
-  const mass = ease(t, cue('seventeen earth') - 0.3, cue('seventeen earth') + 0.6);
+  // Neptune's spin (lilac) against Triton's orbit (coral).
+  line(path((u) => [cx + 150 * Math.cos(-1.2 + u * 1.2), cy - 150 * Math.sin(-1.2 + u * 1.2) * 0.35 - 130], 30), '#c9b6ff', 3);
+  text('spin', cx + 160, cy - 150, 20, '#c9b6ff');
+  text('orbit', cx - 320, cy - 40, 20, coral);
+  c.globalAlpha = 1;
+  const mass = ease(t, cue('17 earth') - 0.3, cue('17 earth') + 0.6);
   c.globalAlpha = mass;
   text('≈ 17 Earth masses', 90, 110, 34, accent);
   c.globalAlpha = 1;
@@ -495,11 +571,12 @@ function mercury(t: number, g: number, vulcan = true) {
     cy = 360;
   lensGlow(cx, cy, 120, '#ffd2a8', 0.9);
   dot(cx, cy, 18, '#fff1dc');
-  // Exaggerated precession: a rosette of successive orbits.
+  // Exaggerated precession: a rosette of successive orbits, still turning.
   const turns = 6,
-    shown = ease(t, 0.3, 8) * turns;
+    shown = ease(t, 0.3, 8) * turns,
+    drift = 0.012 * t;
   for (let k = 0; k < Math.ceil(shown); k++) {
-    const rot = k * 0.25,
+    const rot = k * 0.25 + drift,
       a = Math.min(1, shown - k);
     c.globalAlpha = 0.25 + 0.5 * (k === Math.ceil(shown) - 1 ? 1 : 0.4);
     c.strokeStyle = '#d9c8b8';
@@ -509,10 +586,24 @@ function mercury(t: number, g: number, vulcan = true) {
     c.stroke();
   }
   c.globalAlpha = 1;
-  const v = vulcan ? ease(t, cue('vulcan') - 0.3, cue('vulcan') + 0.6) : 0;
+  // Mercury itself, running round the newest orbit.
+  {
+    const k = Math.max(0, Math.ceil(shown) - 1),
+      rot = k * 0.25 + drift,
+      m = t * 1.4;
+    const ex = 230 * Math.cos(m),
+      ey = 180 * Math.sin(m);
+    const mx = cx + 40 * Math.cos(rot) + ex * Math.cos(rot) - ey * Math.sin(rot),
+      my = cy + 40 * Math.sin(rot) + ex * Math.sin(rot) + ey * Math.cos(rot);
+    lensGlow(mx, my, 22, '#d9c8b8', 0.6 * ease(t, 0.3, 1));
+    dot(mx, my, 6, '#e8ded4');
+  }
+  const gone = ease(t, cue('wasnt there') - 0.2, cue('wasnt there') + 1.2);
+  const v = vulcan ? ease(t, cue('vulcan') - 0.3, cue('vulcan') + 0.6) * (1 - 0.85 * gone) : 0;
   if (v > 0) {
-    c.globalAlpha = v * (0.6 + 0.4 * Math.sin(t * 3));
+    c.globalAlpha = v;
     c.strokeStyle = coral;
+    c.lineWidth = 2.5;
     c.setLineDash([5, 7]);
     c.beginPath();
     c.arc(cx, cy, 90, 0, tau);
@@ -527,41 +618,125 @@ function mercury(t: number, g: number, vulcan = true) {
       c.globalAlpha = 1;
     }
   }
+  c.globalAlpha = ease(t, cue('fortythree') - 0.2, cue('fortythree') + 0.6);
   text('43″ per century', 90, 640, 30, accent);
+  c.globalAlpha = 1;
   text('precession exaggerated', 1190, 640, 20, muted, 'right');
+}
+// ── 23 Same evidence, two lessons: a missing planet, a missing theory ─────
+function contrast(t: number, g: number) {
+  space(g);
+  const year = 1815 + t * 0.6;
+  // Left: Uranus pulled by Neptune.
+  const lc = 330,
+    s = 0.62;
+  lensGlow(lc, 340, 50, '#ffd2a8', 0.7);
+  dot(lc, 340, 7, '#fff1dc');
+  for (const [name, a, , col] of planets) {
+    if (name !== 'Uranus' && name !== 'Neptune') continue;
+    c.strokeStyle = col + '44';
+    c.lineWidth = 1.2;
+    c.beginPath();
+    c.arc(lc, 340, AU(a) * s, 0, tau);
+    c.stroke();
+    const th = lon(name, year);
+    const x = lc + AU(a) * s * Math.cos(th),
+      y = 340 - AU(a) * s * Math.sin(th);
+    lensGlow(x, y, 22, col, 0.6);
+    dot(x, y, 6, col);
+  }
+  // Right: Mercury's orbit turning in a dip of curved space.
+  const rc = 950;
+  for (let i = -5; i <= 5; i++) {
+    const v = i / 5;
+    line(path((u) => {
+      const x = (u - 0.5) * 2;
+      return [rc + x * 240, 340 + v * 120 + 70 * Math.exp(-(x * x + v * v) / 0.12)];
+    }, 50), '#7d86d844', 1.1);
+  }
+  lensGlow(rc, 410, 50, '#ffd2a8', 0.8);
+  dot(rc, 410, 8, '#fff1dc');
+  for (let k = 0; k < 4; k++) {
+    const rot = k * 0.3 + 0.02 * t;
+    c.strokeStyle = k === 3 ? '#e8ded4' : '#d9c8b855';
+    c.lineWidth = 1.4;
+    c.beginPath();
+    c.ellipse(rc + 14 * Math.cos(rot), 410, 120, 40, rot * 0.25, 0, tau);
+    c.stroke();
+  }
+  const l = ease(t, cue('with uranus') - 0.2, cue('with uranus') + 0.6),
+    r = ease(t, cue('with mercury') - 0.2, cue('with mercury') + 0.6);
+  c.globalAlpha = 0.4 + 0.6 * l;
+  text('Uranus', lc, 110, 30, ink, 'center', 'title');
+  c.globalAlpha = l;
+  text('missing piece: a planet', lc, 560, 24, neptuneBlue, 'center');
+  c.globalAlpha = 0.4 + 0.6 * r;
+  text('Mercury', rc, 110, 30, ink, 'center', 'title');
+  c.globalAlpha = r;
+  text('missing piece: a better theory of gravity', rc, 560, 24, coral, 'center');
+  c.globalAlpha = 1;
+  line([[640, 140], [640, 520]], '#ffffff22', 1);
 }
 // ── 14 Curved space-time: Mercury's extra turn ──────────────────────────
 function einstein(t: number, g: number) {
   space(g);
-  const cx = 640,
-    cy = 330;
-  for (let i = -9; i <= 9; i++) {
-    const v = i / 9;
+  // A full-frame sheet of space-time seen in perspective, sagging into a well
+  // around the Sun; the camera circles slowly.
+  const cam = 0.25 + 0.035 * t,
+    depth = (r: number) => 1.6 * Math.exp(-(r * r) / 1.8) + 0.25 / (0.6 + r * r);
+  const project = (x: number, z: number, y = -depth(Math.hypot(x, z))): [number, number, number] => {
+    const xr = x * Math.cos(cam) - z * Math.sin(cam),
+      zr = Math.max(0.9, x * Math.sin(cam) + z * Math.cos(cam) + 8);
+    const yc = 4 - y; // camera above the sheet
+    return [640 + (xr * 820) / zr, -60 + (yc * 820) / zr, zr];
+  };
+  const N = 22,
+    span = 4.5;
+  for (let i = 0; i <= N; i++) {
+    const v = -span + (2 * span * i) / N;
+    for (const along of [true, false]) {
+      const pts = path((u) => {
+        const w = -span + 2 * span * u;
+        const p = along ? project(w, v) : project(v, w);
+        return [p[0], p[1]];
+      }, 90);
+      const near = 1 - Math.abs(v) / span;
+      line(pts, `rgba(125,134,216,${(0.12 + 0.35 * near).toFixed(2)})`, 1 + 0.6 * near);
+    }
+  }
+  const sun = project(0, 0, -depth(0) + 0.25);
+  lensGlow(sun[0], sun[1], 120, '#ffd2a8', 0.9);
+  dot(sun[0], sun[1], 16, '#fff1dc');
+  // Mercury on a slowly turning ellipse inside the well; faint trails of earlier turns.
+  const orbitAt = (u: number, turn: number) => {
+    const a = 2.1,
+      e = 0.35,
+      th = u * tau;
+    const r = (a * (1 - e * e)) / (1 + e * Math.cos(th));
+    const x = r * Math.cos(th + turn),
+      z = r * Math.sin(th + turn);
+    return project(x, z, -depth(Math.hypot(x, z)) + 0.12);
+  };
+  const turn = 0.06 * t;
+  for (let k = 3; k >= 0; k--) {
+    const tk = turn - k * 0.22;
     line(
       path((u) => {
-        const x = (u - 0.5) * 2,
-          r = Math.hypot(x, v * 0.5);
-        const dip = 140 * Math.exp(-(r * r) / 0.08);
-        return [cx + x * 520, cy + v * 200 + dip];
-      }, 80),
-      '#7d86d855',
-      1.4,
-    );
-    line(
-      path((u) => {
-        const y = (u - 0.5) * 2,
-          r = Math.hypot(v, y * 0.5);
-        const dip = 140 * Math.exp(-(r * r) / 0.08);
-        return [cx + v * 520, cy + y * 200 + dip];
-      }, 80),
-      '#7d86d833',
-      1.2,
+        const p = orbitAt(u, tk);
+        return [p[0], p[1]];
+      }, 120),
+      k === 0 ? '#e8ded4cc' : `rgba(217,200,184,${(0.32 - k * 0.07).toFixed(2)})`,
+      k === 0 ? 2 : 1.2,
     );
   }
-  lensGlow(cx, cy + 140, 90, '#ffd2a8', 0.9);
-  dot(cx, cy + 140, 14, '#fff1dc');
-  const a = t * 0.9;
-  dot(cx + 220 * Math.cos(a), cy + 140 + 80 * Math.sin(a), 7, '#d9c8b8');
+  const m = orbitAt((t * 0.22) % 1, turn);
+  lensGlow(m[0], m[1], 26, '#e8ded4', 0.7);
+  dot(m[0], m[1], 7, '#e8ded4');
+  // Perihelion marker advancing with each turn.
+  const peri = orbitAt(0, turn);
+  c.globalAlpha = ease(t, cue('43') - 0.3, cue('43') + 0.6);
+  lensGlow(peri[0], peri[1], 30, accent, 0.6);
+  text('+43″ per century', peri[0] + 24, peri[1] - 18, 24, accent);
   c.globalAlpha = ease(t, 0.5, 1.5);
   text('General relativity · 1915', 90, 640, 30, ink, 'left', 'title');
   c.globalAlpha = 1;
@@ -597,7 +772,12 @@ function answer(t: number, g: number) {
   }
   if (b > 0) starField(t, g, b);
   else if (a > 0) inverse(t + 4);
-  else residuals(t + 9, g);
+  else {
+    // Watch a planet for a long time, then take the leftover error seriously.
+    const lo = cue('leftover error');
+    if (t < lo - 0.3) drift(t, g);
+    else residuals(t - lo + 1, g);
+  }
   if (d > 0) {
     c.globalAlpha = d;
     cover(P.voyager, mix(2, 1.2, d), 0.5, 0.5);
@@ -649,14 +829,52 @@ function transitWire(t: number, g: number) {
   c.stroke();
   // Clock and circle readings; the crossing time freezes when the star meets the wire.
   const crossing = Math.abs(sx - cx) < 4;
-  const secs = 21 * 60 + 14 + t * 1.0;
+  const secs = 21 * 3600 + 14 * 60 + Math.min(t, 8.3);
   const hms = (v: number) => `${String(Math.floor(v / 3600) % 24).padStart(2, '0')}h ${String(Math.floor(v / 60) % 60).padStart(2, '0')}m ${(v % 60).toFixed(1).padStart(4, '0')}s`;
-  text(hms(secs), 760, 300, 40, crossing ? accent : ink, 'left');
-  text('altitude 31° 14′ 08″', 760, 360, 30, muted, 'left');
-  const rows = ['1843  ·  Greenwich', '1844  ·  Paris', '1845  ·  Berlin', '1845  ·  Cambridge'];
+  text(hms(secs), 760, 300, 40, t > 8.3 ? accent : ink, 'left');
+  // The graduated circle: a scale sweeps to the object's height.
+  const gc = ease(t, cue('graduated circle') - 0.3, cue('graduated circle') + 0.6) * (1 - ease(t, cue('bending') - 1, cue('bending') - 0.2));
+  if (gc > 0) {
+    c.globalAlpha = gc;
+    const ox = 760,
+      oy = 600,
+      R = 150,
+      alt = (31.2 * Math.PI) / 180;
+    c.strokeStyle = '#c9b6e6aa';
+    c.lineWidth = 1.5;
+    c.beginPath();
+    c.arc(ox, oy, R, -Math.PI / 2, 0);
+    c.stroke();
+    for (let d = 0; d <= 90; d += 5) {
+      const a = (d * Math.PI) / 180,
+        l = d % 30 === 0 ? 14 : 7;
+      line([[ox + R * Math.cos(a), oy - R * Math.sin(a)], [ox + (R - l) * Math.cos(a), oy - (R - l) * Math.sin(a)]], '#c9b6e6aa', 1.2);
+    }
+    const sweep = alt * ease(t, cue('graduated circle'), cue('graduated circle') + 2);
+    line([[ox, oy], [ox + (R + 10) * Math.cos(sweep), oy - (R + 10) * Math.sin(sweep)]], '#e8e4ff', 2);
+    line([[ox, oy], [ox + R + 20, oy]], '#ffffff44', 1);
+    c.globalAlpha = 1;
+  }
+  c.globalAlpha = ease(t, cue('height in the sky') - 0.2, cue('height in the sky') + 0.6);
+  text('altitude 31° 14′ 08″', 760, 360, 30, accent, 'left');
+  c.globalAlpha = 1;
+  // Starlight bends slightly on its way down through the atmosphere.
+  const bend = ease(t, cue('bending') - 0.3, cue('bending') + 0.8);
+  if (bend > 0) {
+    c.globalAlpha = bend;
+    const bx = 1000,
+      by = 600;
+    c.fillStyle = grad(0, by - 60, 0, 120, ['#7a6fc000', '#7a6fc066']);
+    c.fillRect(bx - 140, by - 60, 280, 120);
+    line([[bx - 130, by - 160], [bx - 40, by - 40], [bx + 20, by + 50]], '#fff1dc', 2);
+    line([[bx - 40, by - 40], [bx + 40, by + 70]], '#fff1dc44', 1.5);
+    text('refraction', bx + 60, by - 70, 20, muted);
+    c.globalAlpha = 1;
+  }
+  const rows = ['1843  ·  Greenwich', '1844  ·  Paris', '1845  ·  Berlin', '1845  ·  Cambridge'].slice(0, 2);
   rows.forEach((row, i) => {
     c.globalAlpha = ease(t, cue('ledger') + i * 0.4, cue('ledger') + i * 0.4 + 0.6);
-    text(row, 760, 440 + i * 36, 22, muted, 'left');
+    text(row, 760, 170 + i * 36, 22, muted, 'left');
   });
   c.globalAlpha = 1;
 }
@@ -677,6 +895,20 @@ function occult(t: number, g: number) {
     c.beginPath();
     c.ellipse(cx, cy, 110 * k, 32 * k, -0.2, 0, tau);
     c.stroke();
+  }
+  // Bright clumps along the outermost ring.
+  const clumps = ease(t, cue('bright clumps') - 0.2, cue('bright clumps') + 0.8);
+  if (clumps > 0) {
+    c.globalAlpha = clumps;
+    for (let k = 0; k < 4; k++) {
+      const a = 0.9 + k * 0.16 + 0.02 * t;
+      const x = cx + 110 * 2.3 * Math.cos(a) * Math.cos(-0.2) - 32 * 2.3 * Math.sin(a) * Math.sin(-0.2),
+        y = cy + 110 * 2.3 * Math.cos(a) * Math.sin(-0.2) + 32 * 2.3 * Math.sin(a) * Math.cos(-0.2);
+      lensGlow(x, y, 18, '#e8e4ff', 0.7);
+      dot(x, y, 3, '#fff');
+    }
+    text('ring arcs', cx + 200, cy + 110, 20, muted);
+    c.globalAlpha = 1;
   }
   const sx = mix(60, 1220, (t * 0.07) % 1),
     sy = cy + 40;
@@ -705,7 +937,24 @@ function orbitLoop(t: number, g: number) {
   lensGlow(x, y, 26, neptuneBlue, 0.7);
   dot(x, y, 8, neptuneBlue);
   text(String(Math.round(year)), 1180, 90, 44, ink, 'right', 'title');
-  if (f > 0.98) text('one Neptunian year', 640, 680, 26, accent, 'center');
+  // The 1846 position stays marked; the planet arrives back at it.
+  const x0 = 640 + R * Math.cos(th0),
+    y0 = 360 - R * Math.sin(th0);
+  c.strokeStyle = '#ffffff66';
+  c.setLineDash([5, 6]);
+  c.lineDashOffset = -t * 6;
+  c.beginPath();
+  c.arc(x0, y0, 22 + 3 * Math.sin(t * 2), 0, tau);
+  c.stroke();
+  c.setLineDash([]);
+  text('1846', x0 + 30, y0 + 6, 20, muted);
+  const done = ease(t, 7, 8);
+  if (done > 0) {
+    c.globalAlpha = done;
+    lensGlow(x0, y0, 60 + 10 * Math.sin(t * 1.5), neptuneBlue, 0.5);
+    text('one Neptunian year', 640, 680, 26, ink, 'center');
+    c.globalAlpha = 1;
+  }
 }
 void wave;
 void oxygen;
@@ -757,7 +1006,7 @@ function searchSplit(t: number, g: number) {
   const called = Math.floor(clamp((t - 1) / 14) * 40);
   const found = ease(t, cue('could not find') - 0.2, cue('could not find') + 0.6);
   const moved = ease(t, cue('next night') - 0.2, cue('next night') + 2);
-  chartPaper(40, 110, 580, 480, t, called);
+  chartPaper(70, 120, 540, 460, t, called);
   // Eyepiece: the same stars, plus one more.
   c.save();
   c.beginPath();
@@ -811,9 +1060,9 @@ function challis(t: number) {
   c.fillRect(0, 0, W, H);
   for (let y = 120; y < H - 60; y += 44) line([[100, y], [W - 100, y]], '#8a7a6a44', 1);
   const rows = [
-    ['30 July 1846', '21h 48m 31s', '−13° 21′'],
-    ['4 Aug 1846', '21h 52m 07s', '−13° 24′'],
-    ['12 Aug 1846', '21h 51m 22s', '−13° 26′'],
+    ['30 July 1846', '≈ 21h 58.4m', '≈ −13° 15′'],
+    ['4 Aug 1846', '≈ 21h 58.1m', '≈ −13° 17′'],
+    ['12 Aug 1846', '≈ 21h 57.6m', '≈ −13° 20′'],
     ['…', '', ''],
   ];
   rows.forEach((r, i) => {
@@ -836,6 +1085,7 @@ function challis(t: number) {
   text('Neptune, recorded but not recognised', 140, 560, 28, '#8a4a3a', 'left', 'title');
   c.globalAlpha = 1;
   text('Cambridge · James Challis', 140, 650, 26, '#4a3b58', 'left', 'title');
+  text('values illustrative', 1140, 650, 18, '#4a3b58', 'right');
 }
 // ── 03 Bouvard's see-saw: fit one era, the other goes wrong ───────────────
 function seesaw(t: number, g: number) {
@@ -855,7 +1105,7 @@ function seesaw(t: number, g: number) {
     const y = y0 - off(yr) + 6 * Math.sin(yr);
     dot(X(yr), y, 4.5, yr < 1781 ? '#c9b6ff' : '#e8e4ff');
   }
-  text(fitOld > fitNew ? 'fit the old observations' : fitNew > 0.1 ? 'fit the new observations' : '', 640, 140, 28, accent, 'center');
+  text(fitOld > fitNew ? 'fit the old observations' : fitNew > 0.1 ? 'fit the new observations' : '', 640, 140, 28, ink, 'center');
   text('old sightings', X(1730), 520, 20, muted, 'center');
   text('after 1781', X(1810), 520, 20, muted, 'center');
 }
@@ -874,7 +1124,7 @@ function wobble2(t: number, g: number) {
       c.stroke();
     }
     c.globalAlpha = nine;
-    text('a possible ninth planet · not yet found', 90, 640, 26, accent);
+    text('a possible ninth planet · not yet found', 90, 640, 26, ink);
     c.globalAlpha = 1;
     return;
   }
@@ -932,7 +1182,8 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   galileo: (t) => galileo(t),
   triton,
   mercury: (t, g) => mercury(t, g, true),
-  mercuryPlain: (t, g) => mercury(t + 8, g, false),
+  contrast,
+  leverrierDesk: (t) => plate(t, 'leverrier', 'Paris Observatory', 'Urbain Le Verrier · 1845', 'webb', 0.74),
   einstein,
   wobble,
   answer,
@@ -951,7 +1202,7 @@ const scenes: Record<string, (t: number, g: number) => void> = {
 for (const [key, base] of [
   ['rowanTug', 'tug'],
   ['rowanLuck', 'luck'],
-  ['rowanTwo', 'mercuryPlain'],
+  ['rowanTwo', 'contrast'],
 ] as const) {
   scenes[key] = (t, g) => {
     scenes[base](t, g);
@@ -970,6 +1221,5 @@ for (const [key, base] of [
 }
 arriveByMosaic(['chart', 'title', 'neptune', 'webb']);
 lockCamera(['leverrier', 'herschel', 'galle', 'adams']);
-continuous(['mercury', 'rowanTwo']);
 cutTo(['spot', 'webb', 'galileo']);
 Object.assign(window, { neptuneFrame: episodeFrame(scenes) });
