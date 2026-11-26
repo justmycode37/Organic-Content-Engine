@@ -10,8 +10,9 @@ const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.js
 if(action==='publish'){
  const directoryRound=dir.match(/(?:^|[\/])evaluation[\/]r(\d+)(?:[\/]|$)/)?.[1];
  if(directoryRound||Object.hasOwn(pack,'round')){
-  if(![11,12].includes(pack.round)||(directoryRound&&Number(directoryRound)!==pack.round)){
-   throw Error('Only rounds 11 and 12 are authorized for this publication run. Keep later rounds in videos/.');
+  // Owner-authorized YouTube releases: rounds 11 and 12 (Nov 24) and 9, 10, 13-20 (Nov 26, 2026).
+  if(![9,10,11,12,13,14,15,16,17,18,19,20].includes(pack.round)||(directoryRound&&Number(directoryRound)!==pack.round)){
+   throw Error('This round is not authorized for publication. Keep it in videos/.');
   }
  }
 }
