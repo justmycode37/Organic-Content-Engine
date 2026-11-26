@@ -6,10 +6,16 @@ import {z} from 'zod';
 
 import {accountSlots,siliconId,type Account} from './accounts.ts';
 export {siliconId};
-export function matchSilicon(targets:PostizIntegration[]){
+/** One connected YouTube channel by name; editions may go to any owner channel listed here. */
+export const youtubeChannels=['SiliconFootnote','MysteryOfTheSky'] as const;
+export function matchYoutube(targets:PostizIntegration[],channel:(typeof youtubeChannels)[number]){
  const normalize=(s:string)=>s.toLowerCase().replace(/[^a-z0-9]/g,'').replace(/^the/,'');
- const candidates=targets.filter(t=>t.identifier==='youtube'&&!t.disabled&&[t.name,t.profile??''].some(v=>normalize(v)==='siliconfootnote'));
+ const want=normalize(channel);
+ const candidates=targets.filter(t=>t.identifier==='youtube'&&!t.disabled&&[t.name,t.profile??''].some(v=>normalize(v)===want));
  return candidates.length===1?candidates[0]:undefined;
+}
+export function matchSilicon(targets:PostizIntegration[]){
+ return matchYoutube(targets,'SiliconFootnote');
 }
 export async function bindSilicon(db:Db,targets:PostizIntegration[]){
  const match=matchSilicon(targets);
@@ -26,11 +32,12 @@ function thumbnailEntry(id:z.infer<typeof thumbnailId>){
  return z.object({
   id:z.literal(id),
   line:z.string().trim().min(1).max(90),
+  title:z.string().trim().min(1).max(100).optional(),
   credit:z.object({label:z.string().min(1).max(300),url:z.url({protocol:/^https$/})}).optional(),
  });
 }
 export const thumbnailKey=(episodeId:string,id:z.infer<typeof thumbnailId>)=>`silicon/${episodeId}/thumbnail-${id}.jpg`;
-export interface Episode {mediaId?:string;revision?:{original:string;previous:string};id:string;topic:string;status:'queued'|'producing'|'ready'|'failed'|'cancelled';created:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;sources?:{title:string;url:string}[];thumbnails?:z.infer<typeof thumbnailManifest>}
+export interface Episode {mediaId?:string;revision?:{original:string;previous:string};id:string;topic:string;status:'queued'|'producing'|'ready'|'failed'|'cancelled';created:string;scheduledAt?:string;title?:string;seconds?:number;error?:string;thumbnailError?:string;sources?:{title:string;url:string}[];thumbnails?:z.infer<typeof thumbnailManifest>}
 export async function episodes(db:Db){
  const rows=await db.prepare("SELECT last_result FROM job_state WHERE name GLOB 'silicon-episode:*' AND json_type(last_result,'$.revision') IS NULL ORDER BY last_run_at DESC LIMIT 25").all<{last_result:string}>();
  return rows.results.map(r=>JSON.parse(r.last_result) as Episode);

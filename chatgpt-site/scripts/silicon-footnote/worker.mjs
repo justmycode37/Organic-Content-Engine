@@ -34,11 +34,11 @@ async function run(job){
    }
   }finally{await file.close();}
   const sources=[...result.sources.sources,...(result.sources.images??[]).map(i=>({title:i.title+' · '+i.credit,url:i.page})),...result.sources.clips.map(c=>({title:c.title+' · '+c.credit,url:c.url}))].map(({title,url})=>({title,url}));
-  for(const {id} of result.thumbnails){
+  for(const {id} of result.thumbnails??[]){
    const body=await readFile(join(root,`thumbnail-${id}.jpg`));
    await siteRequest(config,jobs+path+'/thumbnail/'+id,{method:'PUT',headers:{'content-type':'image/jpeg'},body});
   }
-  await post(path+'/complete',{title:result.title,seconds:result.seconds,sources,parts,uploadId,thumbnails:result.thumbnails});
+  await post(path+'/complete',{title:result.title,seconds:result.seconds,sources,parts,uploadId,thumbnails:result.thumbnails,thumbnailError:result.thumbnailError});
  }catch(e){
   await mkdir(root,{recursive:true});await writeFile(join(root,'failure.txt'),String(e.stack||e));
   await post(path+'/fail',{error:'Production stopped. The worker saved its evidence and completed takes.',uploadId});
@@ -48,7 +48,8 @@ async function run(job){
 async function finished(root){
  const json=async name=>JSON.parse(await readFile(join(root,name),'utf8'));
  const output=join(root,'episode.mp4');await stat(output);
- return {title:(await json('episode.json')).title,seconds:duration(output),sources:await json('sources.json'),thumbnails:prepareThumbnails(root),output};
+ const thumbnails=await prepareThumbnails(root,{reuseExisting:true});
+ return {title:thumbnails[0].title??(await json('episode.json')).title,seconds:duration(output),sources:await json('sources.json'),thumbnails,output};
 }
 if(process.argv[2]==='--import'){
  const root=resolve(process.argv[3]),result=await finished(root),file=join(root,'site-id');

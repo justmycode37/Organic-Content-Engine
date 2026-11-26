@@ -1,5 +1,6 @@
 """Write a quiet original instrumental bed and picture-synchronous Foley in stereo."""
 import math
+from bisect import bisect_right
 import wave
 import subprocess
 from pathlib import Path
@@ -16,20 +17,39 @@ def hz(note):return 440*2**((note-69)/12)
 def score(path,timing,beats,pack=None):
     frames=round(sum(timing)*SR)
     starts=np.r_[0,np.cumsum(timing)[:-1]]
+    themes={'pulse':0,'field':1,'sparse':2,'resolution':3}
+    theme_changes=[]
+    for onset,beat in zip(starts,beats):
+        theme=beat.get('musicTheme')
+        if theme and (not theme_changes or theme_changes[-1][1]!=themes[theme]):
+            theme_changes.append((onset,themes[theme]))
+    theme_times=[onset for onset,_ in theme_changes]
     events=[]
     for i,(moment,b) in enumerate(zip(starts,beats)):
         if i==0 or b['kind'] in ('chart','quote','document') and (i<2 or b['kind']!=beats[i-1]['kind']):
             events.append((moment+.15,'paper' if b['kind'] in ('quote','document') else 'key'))
+        if b['kind'] in ('chart','terrain'):
+            events.append((moment+.08,'sweep'))
+            if b['kind']=='chart':
+                reveal=max(.8,min(timing[i]*.48,3)) if b['chart'].get('layout')=='profile' else 1.05
+                reveal=b.get('revealAt',reveal)
+                accents=[at for at,_ in b.get('traceCues',[])]+b.get('barCues',[])
+                if not any(abs(at-reveal)<.35 for at in accents):accents.append(reveal)
+                for at in accents:
+                    if .12<at<timing[i]-.2:events.append((moment+at,'settle'))
         if b.get('insert'):events.append((moment+timing[i]*b['insert']['at'],'air'))
     rooms={}
     ambience=[]
     for i,b in enumerate(beats):
-        if not pack or b['kind']!='footage' or not pack['clips'][b['clip']].get('ambientSound'):continue
+        if not pack or b['kind']!='footage' or b.get('originalSpeech') or b.get('trimFlashes'):continue
+        clip=pack['clips'][b['clip']]
+        offset=b.get('clipStart',0)
+        if not clip.get('ambientSound') or not any(w['start']<=offset and offset+timing[i]<=w['end'] for w in clip.get('ambientRanges',[])):continue
         idx=b['clip']
         if idx not in rooms:
             pcm=subprocess.check_output(['ffmpeg','-v','error','-i',path.parent/f'clip-{idx}.mp4','-vn','-af','highpass=f=56,lowpass=f=6600','-ar',str(SR),'-ac','1','-f','f32le','-'])
             rooms[idx]=np.frombuffer(pcm,dtype='<f4')
-        offset=b.get('clipStart',0);room=rooms[idx][round(offset*SR):round((offset+timing[i])*SR)]
+        room=rooms[idx][round(offset*SR):round((offset+timing[i])*SR)]
         if len(room):
             rms=np.sqrt(np.mean(room**2))
             ambience.append((starts[i],room*min(1.6,.030/max(.001,rms))))
@@ -44,6 +64,8 @@ def score(path,timing,beats,pack=None):
             raw=np.zeros((n+SR*3,2));raw[:len(tail)]+=tail
             position=start/frames
             movement=0 if position<.24 else 1 if position<.44 else 2 if position<.73 else 3
+            section=bisect_right(theme_times,start/SR)-1
+            if section>=0:movement=theme_changes[section][1]
             chord=CHORDS[((bar//(3 if movement in (0,3) else 2))+[0,3,5,0][movement])%len(CHORDS)]
             def add(at,dur,signal,pan):
                 j=round(at*SR);count=min(round(dur*SR),len(raw)-j)
@@ -73,7 +95,14 @@ def score(path,timing,beats,pack=None):
             for moment,kind in events:
                 sec=moment-start/SR
                 if not 0<=sec<n/SR:continue
-                if kind=='key':
+                if kind=='sweep':
+                    def sweep(t):
+                        env=np.sin(np.pi*t/.29)**1.5
+                        return .085*env*(np.sin(2*np.pi*(150*t+630*t*t))+.16*np.sin(2*np.pi*1520*t))
+                    add(sec,.29,sweep,.58)
+                elif kind=='settle':
+                    add(sec,.24,lambda t:.082*(1-np.exp(-t/.003))*np.exp(-t/.047)*(np.sin(2*np.pi*760*t)+.37*np.sin(2*np.pi*1140*t)),.45)
+                elif kind=='key':
                     add(sec,.30,lambda t:.060*(1-np.exp(-t/.003))*np.exp(-t/.050)*(np.sin(2*np.pi*590*t)+.45*np.sin(2*np.pi*890*t)),.58)
                 else:
                     def rustle(t):
@@ -86,9 +115,9 @@ def score(path,timing,beats,pack=None):
             fade=np.minimum(1,np.maximum(0,(frames/SR-clock)/1.9))*np.minimum(1,clock/.22)
             music=raw[:n].copy()
             for onset,end in interviews:
-                if clock[-1]<onset-.4 or clock[0]>end+.4:continue
+                if clock[-1]<onset-.85 or clock[0]>end+.85:continue
                 distance=np.maximum(onset-clock,clock-end)
-                music*= (.12+.88*np.clip(distance/.4,0,1))[:,None]
+                music*=np.clip(distance/.85,0,1)[:,None]
             for onset,room in ambience:
                 offset=round(onset*SR);a=max(start,offset);b=min(start+n,offset+len(room))
                 if a>=b:continue

@@ -100,6 +100,12 @@ chosen illustrative treatment; do not demand a physiological eye-water simulatio
 
 ## Comprehensibility and integration
 
+For Silicon Footnote long-form videos, use ElevenLabs Titan
+(`dtSEyYGNJqjrtBArPCVZ`) as the default narrator in every round, with stability
+and similarity boost both set to 0.20. A requested voice comparison applies to
+that round only. Keep the Titan cut as the main edition unless the user selects
+a different voice for that edition.
+
 The clarity/simplicity score measures whether the explanation is comprehensible
 on first listen, not how basic its vocabulary is. Words such as "enzymes" and
 other technical terms are welcome when their meaning or role is clear in context

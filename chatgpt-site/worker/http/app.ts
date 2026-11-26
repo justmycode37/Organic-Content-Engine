@@ -1,3 +1,4 @@
+import {downloadEdition,uploadEditionAsset,publishEdition,editionStatus,youtubeEdition} from '../services/youtube-editions.ts';
 import {beginRevision,selectedVideo} from '../services/episode-revision.ts';
 import {activeEpisode,bindSilicon,claimEpisode,episodes,queueEpisode,queueScheduledEpisodes,reportEpisode,siliconId,siliconWorker,readyEpisodeThumbnail,thumbnailIds,thumbnailId,thumbnailKey,thumbnailManifest} from '../services/silicon-footnote.ts';
 import {tickAccounts,claimAccountJob,accountReelHistory,heartbeatAccountJob,completeAccountJob,failAccountJob,accountLease,publishAccountJobs,runtime,scheduleQuriozityRun,reserveHedgyEvaluation,hedgyEvaluationStatus} from '../services/account-automation.ts';
@@ -205,6 +206,10 @@ export function createApp(): Hono<AppEnv> {
   });
 
   app.use('/api/jobs/accounts/*',async(c,next)=>{await assertRenderCaller(c,{...c.get('container').config,renderWorkerToken:typeof c.env.ACCOUNT_WORKER_TOKEN==='string'?c.env.ACCOUNT_WORKER_TOKEN:null},c.get('access'));await next();});
+  app.get('/api/media/editions/:id/:file',c=>downloadEdition(c.get('container').db,c.env,c.req.param('id'),c.req.param('file'),c.req.query('expires')??'',c.req.query('signature')??''));
+  app.post('/api/jobs/accounts/silicon/:id/youtube/assets/:kind',async c=>c.json(await uploadEditionAsset(c.get('container').db,c.env,c.req.param('id'),c.req.param('kind'),String(c.env.PUBLIC_BASE_URL||new URL(c.req.url).origin))));
+  app.post('/api/jobs/accounts/silicon/:id/youtube/publish',async c=>c.json(await publishEdition(c.get('container').db,c.env,c.req.param('id'),await readBody(c,youtubeEdition))));
+  app.get('/api/jobs/accounts/silicon/:id/youtube/status',async c=>c.json(await editionStatus(c.get('container').db,c.env,c.req.param('id'))));
   app.post('/api/jobs/accounts/silicon/sync',async c=>{
    const db=c.get('container').db;await listAccounts(db);
    const targets=await new Postiz(c.env).integrations();const match=await bindSilicon(db,targets);
@@ -266,13 +271,13 @@ export function createApp(): Hono<AppEnv> {
   });
   app.post('/api/jobs/accounts/silicon/:id/complete',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id'));
-   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100),thumbnails:thumbnailManifest.optional()}));
+   const v=await readBody(c,validator.object({uploadId:validator.string(),parts:validator.array(validator.object({partNumber:validator.number().int(),etag:validator.string()})).min(1).max(512),title:validator.string().max(100),seconds:validator.number().min(600).max(900),sources:validator.array(validator.object({title:validator.string(),url:validator.url({protocol:/^https$/})})).max(100),thumbnails:thumbnailManifest.optional(),thumbnailError:validator.string().max(150).optional()}));
    if(v.thumbnails){
     const stored=await Promise.all(v.thumbnails.map(({id})=>c.env.BUCKET!.head(thumbnailKey(e.id,id))));
     if(stored.some(object=>!object))throw new AppError(409,'thumbnail_missing','Upload both thumbnails before completing the episode');
    }
    await c.env.BUCKET!.resumeMultipartUpload('silicon/'+e.id+'.mp4',v.uploadId).complete(v.parts);
-   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources,thumbnails:v.thumbnails});return c.json({ok:true});
+   await reportEpisode(db,{...e,status:'ready',title:v.title,seconds:v.seconds,sources:v.sources,thumbnails:v.thumbnails,thumbnailError:v.thumbnailError});return c.json({ok:true});
   });
   app.post('/api/jobs/accounts/silicon/:id/fail',async c=>{
    const db=c.get('container').db,e=await activeEpisode(db,c.req.param('id')),v=await readBody(c,validator.object({error:validator.string().max(300),uploadId:validator.string().optional()}));

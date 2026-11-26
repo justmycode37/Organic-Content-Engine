@@ -170,9 +170,11 @@ matching Site code too: its completion gate validates the model/review profile.
 Use the [editorial foundation](scripts/silicon-footnote/EDITORIAL-FOUNDATION.md)
 for YouTube references, episode selection, and source-backed reporting briefs.
 The [thumbnail research](scripts/silicon-footnote/THUMBNAIL-RESEARCH.md) explains
-the two separately designed covers available for preview and download under
-**Episodes → YouTube thumbnails**. Standalone runs save the same JPEGs and
-their credit manifest beside the video.
+the two independently generated covers and their matching titles. Preview and
+download them under **Episodes → YouTube titles and thumbnails**. The Mac
+producer uses the signed-in Codex image generation tool, and saves both art
+files and export JPEGs beside the video. An image failure leaves the episode
+available for review with the packaging error saved in its production folder.
 
 Open **Accounts → Silicon Footnote** to see its Postiz YouTube destination. The
 workspace binds a unique channel named Silicon Footnote or The Silicon Footnote
@@ -192,6 +194,9 @@ oEmbed when available, and direct MP4 footage. A story needs at least two
 accessible sources and a decodable clip. Scripts cite sources per shot. Exact
 quote cards are checked against retrieved text. The local episode directory
 retains the evidence, editorial plan, audio takes and measured cut timings.
+Numbered evaluation rounds also save their finished MP4 at
+`videos/round-NN.mp4` in the project root. New scripts open with a question.
+Before narration is recorded, the editor identifies the later passage that answers it.
 
 The custom 1280 × 720, 24 fps library draws black-and-white source cards with selective amber word highlights,
 perspective text terrain, sequential diagrams, zero-based charts and white
