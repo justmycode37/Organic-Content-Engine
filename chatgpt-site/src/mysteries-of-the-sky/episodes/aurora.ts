@@ -52,6 +52,7 @@ import { beats2 } from './aurora-beats.ts';
 import { beats3 } from './aurora-beats3.ts';
 import { beats4 } from './aurora-beats4.ts';
 import { beats5 } from './aurora-beats5.ts';
+import { beats6 } from './aurora-beats6.ts';
 
 const raw = {
   cut: load(cutUrl),
@@ -241,7 +242,25 @@ function title(t: number) {
 }
 // Full-frame photograph with a slow push and drift.
 function photoShot(name: string, zoom: number, fx: number, fy: number, drift: number) {
-  return (t: number) => cover(photos[name], zoom + 0.01 * t, fx, fy, drift * t);
+  return (t: number) => {
+    cover(photos[name], zoom + 0.012 * t, fx, fy, drift * t);
+    // Shimmer: the same frame, slightly displaced and pulsing, lifts the glow.
+    c.save();
+    c.globalCompositeOperation = 'lighter';
+    c.globalAlpha = 0.07 + 0.05 * Math.sin(t * 1.9);
+    cover(photos[name], zoom + 0.012 * t + 0.004, fx, fy - 0.004 * Math.sin(t * 0.8), drift * t + 3 * Math.sin(t * 1.3));
+    c.restore();
+    for (let i = 0; i < 40; i++) {
+      const h = (Math.sin(i * 127.1) * 43758.5) % 1,
+        k = (Math.sin(i * 311.7) * 43758.5) % 1;
+      const x = ((Math.abs(h) * W + t * (6 + 10 * Math.abs(k))) % (W + 40)) - 20,
+        y = Math.abs(k) * H * 0.45;
+      c.globalAlpha = 0.25 + 0.25 * Math.sin(t * 2 + i);
+      c.fillStyle = '#e8e4ff';
+      c.fillRect(x, y, 1.6, 1.6);
+    }
+    c.globalAlpha = 1;
+  };
 }
 
 export const photoKeys = ['orbit', 'swirl', 'blanket', 'ocean', 'redGreen', 'pillars', 'airglowPhoto', 'arm', 'australis', 'band', 'layers', 'bandClouds', 'curtainPhoto', 'storm'];
@@ -269,6 +288,7 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   ...beats3,
   ...beats4,
   ...beats5,
+  ...beats6,
 };
 // Rowan's interview lines play over the matching diagram with his name.
 for (const [key, base] of [
@@ -280,9 +300,12 @@ for (const [key, base] of [
     scenes[base](t, g);
     const a = ease(t, 0.2, 0.8) * (1 - ease(t, 4.5, 5.2));
     hud(() => {
-      c.fillStyle = grad(0, 0, 0, 130, ['#0d0a1ee0', '#0d0a1e00']);
+      const scrim = c.createRadialGradient(W - 200, 56, 10, W - 200, 56, 300);
+      scrim.addColorStop(0, '#0d0a1ec0');
+      scrim.addColorStop(1, '#0d0a1e00');
       c.globalAlpha = a;
-      c.fillRect(W * 0.55, 0, W * 0.45, 130);
+      c.fillStyle = scrim;
+      c.fillRect(W - 520, 0, 520, 200);
       text('Professor Rowan Ellery', W - 60, 66, 30, ink, 'right', 'title');
       c.globalAlpha = 1;
     });

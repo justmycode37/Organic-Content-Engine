@@ -11,7 +11,7 @@ const plan = {
   1: 'portrait|from the international=orbit|that green light=oneLine|identifying the atom=earthBand|the color comes=atomCard|welcome to=title',
   2: 'spectrometer|a spectroscope spreads=rainbow|the auroras brightest=mystery|for decades=curtainPhoto',
   3: 'tube|the reason turned=quench',
-  4: 'sunWind|earths magnetic field=magnetosphere|when its released=tailRelease|they end up=oval|seen from space=swirl',
+  4: 'sunWind|earths magnetic field=sunField|they end up=oval|seen from space=swirl',
   14: 'ovalGrow|in may=storm|a viewer far=horizon',
   5: 'dive|when the electron=collision',
   21: 'rowanCollision',

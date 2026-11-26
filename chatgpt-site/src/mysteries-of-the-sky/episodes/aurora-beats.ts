@@ -581,7 +581,8 @@ function marsSpectrum(t: number, g: number) {
   }, 400).slice(0, Math.ceil(401 * draw));
   line(pts, '#cfc6ef', 2);
   line([[x0, base], [x1, base]], muted + '88', 1.4);
-  for (const nm of [500, 540, 580, 620]) text(String(nm), mix(x0, x1, (nm - 500) / 120), base + 34, 18, muted, 'center');
+  for (const nm of [500, 540, 580, 620]) text(nm + ' nm', mix(x0, x1, (nm - 500) / 120), base + 34, 18, muted, 'center');
+  text('light from the night sky', x0, base - 300, 20, muted);
   if (peak > 0) {
     const px = mix(x0, x1, (557.7 - 500) / 120);
     lensGlow(px, base - 270, 60, accent, 0.7 * peak);

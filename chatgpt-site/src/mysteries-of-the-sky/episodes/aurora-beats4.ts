@@ -82,10 +82,10 @@ function rainbow(t: number, g: number) {
     c.strokeStyle = '#d8cdf0aa';
     c.stroke();
     const open = ease(t, 0.2, 2.2);
-    const cols = ['#5b3fd0', '#3f6be0', '#2fb6c9', '#7fd65b', '#e8d35a', '#f09a4a', '#e0484a'];
+    const cols = ['#e0484a', '#f09a4a', '#e8d35a', '#7fd65b', '#2fb6c9', '#3f6be0', '#5b3fd0'];
     cols.forEach((col, i) => {
-      const a = (i - 3) * 0.06 * open;
-      line([[px + 30, py], [px + 30 + 800 * Math.cos(a), py + 800 * Math.sin(a)]], col + 'aa', 7);
+      const a = (0.06 + (i / 6) * 0.2) * open;
+      line([[px + 30, py + 20], [px + 30 + 800 * Math.cos(a), py + 20 + 800 * Math.sin(a)]], col + 'aa', 7);
     });
     c.globalAlpha = 1;
   }
@@ -196,9 +196,9 @@ function horizon(t: number, g: number) {
   }
   const hiddenNow = move > 0.7;
   c.globalAlpha = ease(t, cue('the tall red'), cue('the tall red') + 0.8);
-  text('red: still above the horizon', 60, 90, 24, coral);
+  text('red: still above the horizon', 72, 90, 24, coral);
   c.globalAlpha = ease(t, cue('still hidden'), cue('still hidden') + 0.8) * (hiddenNow ? 1 : 0);
-  text('green: blocked by the Earth', 60, 130, 24, accent);
+  text('green: blocked by the Earth', 72, 130, 24, accent);
   c.globalAlpha = 1;
   note('Heights and curvature exaggerated');
 }
@@ -211,20 +211,23 @@ function column(t: number, g: number) {
   const greenOn = ease(t, cue('explains where') - 0.2, cue('explains where') + 0.8);
   const quenchOn = ease(t, cue('below about'), cue('below about') + 0.8);
   const redOn = ease(t, cue('higher up'), cue('higher up') + 2.5);
-  const fringe = ease(t, cue('purple or pink'), cue('purple or pink') + 0.8);
+  const fringeAt = at('purple or pink');
+  const fringe = Number.isFinite(fringeAt) ? ease(t, fringeAt, fringeAt + 0.8) : 0;
   const profile = (peak: number, below: number, above: number, col: string, a: number) => {
     if (a <= 0) return;
+    c.save();
+    c.filter = 'blur(3px)';
     for (let km = 60; km <= 320; km += 2) {
       const d = km - peak,
         v = Math.exp(-((d / (d < 0 ? below : above)) ** 2));
       if (v < 0.02) continue;
       c.globalAlpha = a * v * (0.5 + 0.1 * Math.sin(t * 1.7 + km * 0.05));
       c.fillStyle = grad(380, 0, 520, 0, [col + '00', col, col + '00']);
-      c.fillRect(380, Y(km) - 1.2, 520, 2.4);
+      c.fillRect(380, Y(km) - 2.6, 520, 5.2);
     }
-    c.globalAlpha = 1;
+    c.restore();
   };
-  profile(120, 14, 45, accent, greenOn);
+  profile(112, 10, 40, accent, greenOn);
   profile(250, 55, 70, coral, redOn);
   profile(92, 6, 6, '#e08ad6', fringe);
   // Electrons rain down; each lights a flash at the height where it collides.
@@ -233,7 +236,7 @@ function column(t: number, g: number) {
       f = ((t + hash(i + 1) * 9) % life) / life;
     const x = 400 + hash(i + 2) * 480;
     const stop = hash(i + 4);
-    const km = stop < 0.55 ? 100 + 70 * hash(i + 5) : stop < 0.85 ? 180 + 110 * hash(i + 6) : 70 + 28 * hash(i + 7);
+    const km = stop < 0.55 ? 100 + 45 * hash(i + 5) : stop < 0.85 ? 180 + 110 * hash(i + 6) : 70 + 28 * hash(i + 7);
     const fall = clamp(f / 0.6),
       y = mix(Y(330), Y(km), fall);
     if (f < 0.6) spark(x, y, 1.6, electron, 0.6);
@@ -252,13 +255,16 @@ function column(t: number, g: number) {
   }
   line([[360, Y(0)], [360, Y(310)]], muted + '88', 1.5);
   c.globalAlpha = greenOn;
-  text('green · waits about 0.7 s', 920, Y(125) + 8, 24, accent);
+  dot(906, Y(115), 6, accent);
+  text('green · waits about 0.7 s', 920, Y(115) + 8, 24, ink);
   c.globalAlpha = redOn;
-  text('red · about 2 min', 920, Y(250) + 8, 24, coral);
+  dot(906, Y(250), 6, coral);
+  text('red · about 2 min', 920, Y(250) + 8, 24, ink);
   c.globalAlpha = quenchOn;
   text('collisions win', 920, Y(72) + 8, 24, muted);
   c.globalAlpha = fringe;
-  text('nitrogen fringe', 920, Y(96) + 8, 22, '#e08ad6');
+  dot(906, Y(92), 6, '#e08ad6');
+  text('nitrogen fringe', 920, Y(96) + 8, 22, ink);
   c.globalAlpha = 1;
   note('Approximate altitudes · profiles vary');
 }
@@ -279,29 +285,42 @@ export function sheet3d(
     [1, accent + '00'],
   ],
   length = 900,
+  edge = accent,
 ) {
   c.save();
   c.globalCompositeOperation = 'lighter';
   const ca = Math.cos(angle),
     sa = Math.sin(angle);
-  for (let i = 0; i < 300; i++) {
-    const s = i / 299;
-    // The sheet: long in x, folded in z, tall in y. Thickness is tiny.
+  const n = 420;
+  for (let i = 0; i < n; i++) {
+    const s = i / (n - 1);
+    // The sheet: long in x, folded in z, tall in y; a ripple travels along it.
     const x0 = (s - 0.5) * length,
       z0 = 90 * Math.sin(s * Math.PI * 2.2 + t * 0.35) + 30 * Math.sin(s * 9 - t * 0.6);
     const x = x0 * ca - z0 * sa,
       z = x0 * sa + z0 * ca;
     const p = 900 / (900 + z + 400);
+    const ripple = 16 * Math.sin(s * 13 - t * 1.7) + 7 * Math.sin(s * 31 + t * 2.3);
+    // Ray striations: bright vertical structure that drifts along the sheet.
+    const ray = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(s * 150 + t * 2.2 + 3 * Math.sin(s * 17 - t * 0.4))) ** 3;
     const sx = cx + x * p * scale,
-      base = cy + 120 * p * scale,
-      top = cy - 260 * p * scale * (0.85 + 0.15 * Math.sin(s * 23 + t));
+      base = cy + (120 + ripple) * p * scale,
+      top = cy - 260 * p * scale * (0.75 + 0.25 * ray) + ripple * p * scale;
     const gg = c.createLinearGradient(0, top, 0, base);
     stops.forEach(([o, col]) => gg.addColorStop(o, col));
-    c.globalAlpha = 0.16 * gain * Math.sin(Math.PI * s);
+    const a = gain * Math.sin(Math.PI * s);
+    c.globalAlpha = 0.11 * a * (0.5 + ray);
     c.strokeStyle = gg;
-    c.lineWidth = 6 * p * scale;
+    c.lineWidth = 4 * p * scale;
     c.beginPath();
     c.moveTo(sx, top);
+    c.lineTo(sx, base);
+    c.stroke();
+    // A sharp, bright lower edge.
+    c.globalAlpha = 0.16 * a * (0.6 + 0.4 * ray);
+    c.strokeStyle = edge;
+    c.beginPath();
+    c.moveTo(sx, base - 14 * p * scale);
     c.lineTo(sx, base);
     c.stroke();
   }

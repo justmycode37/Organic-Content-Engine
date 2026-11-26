@@ -86,6 +86,10 @@ function waiting(t: number, g: number) {
       const excitedAt = clamp((x - 60) / 1160) * 0.35;
       const delay = slow ? excitedAt + -0.7 * Math.log(1 - 0.98 * hash(i * 7 + k * 131)) : excitedAt + 0.03;
       const since = s - delay;
+      if (!slow) {
+        const fast = (t * 1.7 + hash(i * 5)) % 1;
+        if (fast < 0.12) spark(x, y, 5, '#cfd4ff', 1 - fast / 0.12);
+      }
       const waitingNow = s > excitedAt && since < 0;
       oxygen(x, y, 9, waitingNow ? 1 : 0, 1);
       if (since > 0 && since < 0.35) spark(x, y, 6, slow ? accent : '#cfd4ff', 1 - since / 0.35);
@@ -236,7 +240,7 @@ function spectrograph(t: number, g: number) {
   const meas = ease(t, cue('measure where') - 0.2, cue('measure where') + 0.6);
   c.globalAlpha = meas;
   line([[dx - 120, Ynm(557.7)], [dx, Ynm(557.7)]], accent, 1.5);
-  text('557.7 nm', dx - 130, Ynm(557.7) + 8, 26, accent, 'right');
+  text('557.7 nm', dx - 130, Ynm(557.7) - 22, 26, accent, 'right');
   c.globalAlpha = 1;
 }
 
@@ -337,7 +341,7 @@ function jezero(t: number, g: number) {
     c.fill();
     c.globalAlpha = 1;
   }
-  text('Jezero crater · Perseverance', 80, 670, 28, ink, 'left', 'title');
+  text('Jezero Crater · Perseverance', 80, 670, 28, ink, 'left', 'title');
   note('Illustration');
 }
 
