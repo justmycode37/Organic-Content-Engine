@@ -69,22 +69,11 @@ for (const [key, spec] of Object.entries(plan)) {
 // being discussed), cut on word boundaries about every six seconds. The scene's
 // own clock keeps running across these cuts.
 const framings = {
-  residuals: ['1.3:640:300'],
+  // Only scenes without labels near the frame edge are reframed.
   pulls: ['1.3:640:360'],
-  drift: ['1.3:640:360'],
-  tug: ['1.3:640:360'],
-  rowanTug: ['1.3:640:360'],
-  luck: ['1.3:640:360'],
-  rowanLuck: ['1.3:640:360'],
   prediction: ['1.3:690:330'],
   search: ['1.3:690:330'],
-  mercury: ['1.3:640:360'],
-  rowanTwo: ['1.3:640:360'],
-  einstein: ['1.3:640:420'],
-  wobble: ['1.3:640:360'],
-  triton: ['1.3:640:360'],
   inverse: ['1.25:640:380'],
-  transitWire: ['1.3:440:360'],
   occult: ['1.3:520:330'],
 };
 for (const [key, spec] of Object.entries(edits)) {
