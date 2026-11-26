@@ -268,16 +268,16 @@ function column(t: number, g: number) {
   }
   line([[360, Y(0)], [360, Y(310)]], muted + '88', 1.5);
   c.globalAlpha = greenOn;
-  dot(906, Y(108), 6, accent);
-  text('green · about 0.75 s', 920, Y(108) + 8, 24, ink);
+  dot(836, Y(108), 6, accent);
+  text('green · ~0.75 s', 850, Y(108) + 8, 24, ink);
   c.globalAlpha = redOn;
-  dot(906, Y(250), 6, coral);
-  text('red · about 2 min', 920, Y(250) + 8, 24, ink);
+  dot(836, Y(250), 6, coral);
+  text('red · ~2 min', 850, Y(250) + 8, 24, ink);
   c.globalAlpha = quenchOn;
-  text('collisions win', 920, Y(72) + 8, 24, muted);
+  text('collisions win', 850, Y(72) + 8, 24, muted);
   c.globalAlpha = fringe;
-  dot(906, Y(92), 6, '#e08ad6');
-  text('nitrogen fringe', 920, Y(96) + 8, 22, ink);
+  dot(836, Y(92), 6, '#e08ad6');
+  text('nitrogen fringe', 850, Y(96) + 8, 22, ink);
   c.globalAlpha = 1;
   note('Approximate altitudes · profiles vary');
 }

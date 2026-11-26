@@ -2,7 +2,6 @@
 // photographs, a camera that never stops, and mosaic or dissolve transitions.
 import { c, canvas, W, H, lensGlow, words } from './stage.ts';
 import { paintWithFinePixels } from '../finish.ts';
-import timeline from './aurora/words.json';
 
 export const tau = Math.PI * 2;
 export const clamp = (x: number) => Math.min(1, Math.max(0, x));
@@ -241,7 +240,7 @@ export function directFrame(draw: Draw, current: Cue) {
     c.restore();
   } else {
     shot(draw, key, t, g, prev ? 1 : ease(t, 0, 0.6));
-    if (!prev && t < 0.6 && key !== 'portrait') {
+    if (!prev && t < 0.6 && !still.has(key)) {
       c.fillStyle = night;
       c.globalAlpha = 1 - ease(t, 0, 0.6);
       c.fillRect(0, 0, W, H);
@@ -253,7 +252,11 @@ export function directFrame(draw: Draw, current: Cue) {
 
 // Local shot time at which a phrase is spoken, searching from the start of the
 // current shot (or from an earlier word in the same shot). Infinity if absent.
-const said = timeline as [string, number][];
+let said: [string, number][] = [];
+/** Each episode supplies its recorded words with episode times. */
+export function setTimeline(words: [string, number][]) {
+  said = words;
+}
 export function at(phrase: string, after = 0) {
   const start = cue.g - cue.t,
     end = cue.g + cue.left,
@@ -264,4 +267,36 @@ export function at(phrase: string, after = 0) {
     if (terms.every((w, j) => said[i + j]?.[0] === w)) return said[i][1] - start;
   }
   return Infinity;
+}
+
+/** Frame function for an episode: alternate framings ("key~zoom:x:y") of the
+ * same scene keep that scene's clock running across the cut. */
+export function episodeFrame(scenes: Record<string, (t: number, g: number) => void>) {
+  let chain = { base: '', start: 0 };
+  return (k: string, t: number, current?: Cue) => {
+    const base = k.split('~')[0];
+    if (!scenes[base]) throw new Error('Unknown scene: ' + k);
+    const cue0 = current ?? { key: k, t, g: t, left: 99 };
+    const prevBase = cue0.prev?.split('~')[0];
+    if (!(prevBase === base && chain.base === base)) chain = { base, start: cue0.g - cue0.t };
+    const T = cue0.g - chain.start;
+    const cueT = { ...cue0, t: T, left: cue0.left + (cue0.t - T) };
+    return directFrame((key, time, g) => {
+      const [name, frame] = key.split('~');
+      if (!frame) return scenes[name](time, g);
+      const [zRaw, fxRaw, fyRaw] = frame.split(':').map(Number);
+      // Gentle reframings only: cap the zoom and pull the focus toward the centre
+      // so labels near the edges stay in frame.
+      const z = Math.min(1.15, zRaw),
+        fx = mix(W / 2, fxRaw, 0.5),
+        fy = mix(H / 2, fyRaw, 0.5);
+      const zz = z * (1 + 0.006 * Math.min(time, 12));
+      c.save();
+      c.translate(W / 2, H / 2);
+      c.scale(zz, zz);
+      c.translate(-fx, -fy);
+      scenes[name](time, g);
+      c.restore();
+    }, cueT);
+  };
 }

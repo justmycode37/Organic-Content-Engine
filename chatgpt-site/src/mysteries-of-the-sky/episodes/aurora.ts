@@ -28,6 +28,8 @@ import {
   cutTo,
   hud,
   at,
+  setTimeline,
+  episodeFrame,
   type Cue,
 } from './aurora-core.ts';
 import { scenes2, gradedPlanet } from './aurora-scenes.ts';
@@ -49,6 +51,7 @@ import layersUrl from './aurora/iss-layers.jpg';
 import bandCloudsUrl from './aurora/iss-band-clouds.jpg';
 import curtainUrl from './aurora/iss-curtain.jpg';
 import { beats2 } from './aurora-beats.ts';
+import auroraWords from './aurora/words.json';
 import { beats3 } from './aurora-beats3.ts';
 import { beats4 } from './aurora-beats4.ts';
 import { beats5 } from './aurora-beats5.ts';
@@ -269,7 +272,7 @@ function photoShot(name: string, zoom: number, fx: number, fy: number, drift: nu
   };
 }
 
-let chain = { base: '', start: 0 };
+setTimeline(auroraWords as [string, number][]);
 export const photoKeys = ['orbit', 'swirl', 'blanket', 'ocean', 'redGreen', 'pillars', 'airglowPhoto', 'arm', 'australis', 'band', 'layers', 'bandClouds', 'curtainPhoto', 'storm'];
 const scenes: Record<string, (t: number, g: number) => void> = {
   portrait,
@@ -323,28 +326,5 @@ arriveByMosaic(['orbit', 'title', 'swirl', 'pillars', 'australis']);
 lockCamera(['portrait']);
 cutTo([...photoKeys, 'rainbow']);
 continuous(['portrait']);
-Object.assign(window, {
-  auroraFrame(k: string, t: number, current?: Cue) {
-    const base = k.split('~')[0];
-    if (!scenes[base]) throw new Error('Unknown aurora scene: ' + k);
-    const cue0 = current ?? { key: k, t, g: t, left: 99 };
-    // A run of cuts on the same scene (alternate framings) keeps the scene's clock.
-    const prevBase = cue0.prev?.split('~')[0];
-    if (!(prevBase === base && chain.base === base)) chain = { base, start: cue0.g - cue0.t };
-    const T = cue0.g - chain.start;
-    const cueT = { ...cue0, t: T, left: cue0.left + (cue0.t - T) };
-    return directFrame((key, time, g) => {
-      const [name, frame] = key.split('~');
-      if (!frame) return scenes[name](time, g);
-      const [z, fx, fy] = frame.split(':').map(Number);
-      const zz = z * (1 + 0.012 * Math.min(time, 12));
-      c.save();
-      c.translate(W / 2, H / 2);
-      c.scale(zz, zz);
-      c.translate(-fx, -fy);
-      scenes[name](time, g);
-      c.restore();
-    }, cueT);
-  },
-});
+Object.assign(window, { auroraFrame: episodeFrame(scenes) });
 export { scenes, ink, muted, lilac, coral, line };

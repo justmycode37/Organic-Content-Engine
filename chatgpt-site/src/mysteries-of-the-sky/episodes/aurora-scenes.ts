@@ -737,7 +737,8 @@ function credits(t: number) {
     'Storm photograph · pedrik, Connecticut, May 2024 · CC BY 2.0',
     'Milky Way panorama · ESO/S. Brunier · CC BY 4.0',
     'Planet textures · Solar System Scope · CC BY 4.0',
-    'Ångström portrait and spectrometer · public domain',
+    'Ångström and McLennan portraits, spectrometer · public domain',
+    'Jezero Crater · NASA/JPL-Caltech/ASU/MSSS, Perseverance',
     'Field lines, atoms, levels and altitudes are schematic',
   ];
   text('The Light Oxygen Makes', 80, 200, 46, ink, 'left', 'title');
@@ -746,7 +747,7 @@ function credits(t: number) {
     text(r, 82, 280 + i * 44, 22, muted);
   });
   c.globalAlpha = 1;
-  text('Mysteries of the Sky', 82, 560, 20, lilac, 'left', 'caps');
+  text('Mysteries of the Sky', 82, 640, 20, lilac, 'left', 'caps');
 }
 
 export const scenes2: Record<string, (t: number, g: number) => void> = {

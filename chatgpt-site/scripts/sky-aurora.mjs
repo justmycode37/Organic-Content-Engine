@@ -68,7 +68,6 @@ for (const [key, spec] of Object.entries(plan)) {
 // being discussed), cut on word boundaries about every six seconds. The scene's
 // own clock keeps running across these cuts.
 const framings = {
-  column: ['1.3:640:430', '1.35:640:260'],
   quench: ['1.5:340:330', '1.5:960:330'],
   ladder: ['1.3:530:345'],
   greenDrop: ['1.3:560:360'],
@@ -79,7 +78,6 @@ const framings = {
   collision: ['1.4:470:370', '1.4:930:360'],
   collisionRowan: ['1.4:470:370', '1.4:930:360'],
   rowanCollision: ['1.4:470:370', '1.4:930:360'],
-  rowanColumn: ['1.3:640:430'],
   rowanSpectrum: ['1.4:320:360', '1.4:960:360'],
   dive: ['1.4:640:450'],
   tube: ['1.5:640:260', '1.4:640:480'],
@@ -96,7 +94,6 @@ const framings = {
   flicker: ['1.4:640:390'],
   recombine: ['1.4:640:300'],
   mars: ['1.3:640:380'],
-  marsSpectrum: ['1.2:660:380'],
   recap: ['1.4:520:380', '1.4:930:360'],
   finale: ['1.3:640:400'],
   manydips: ['1.3:640:360'],
