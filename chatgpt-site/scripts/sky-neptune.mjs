@@ -15,7 +15,7 @@ const plan = {
   4: 'pulls',
   5: 'leverrierDesk|start with the error=inverse',
   21: 'rowanTug',
-  6: 'prediction|so le verrier=galle|berlin had=bremiker',
+  6: 'prediction|so le verrier=galle|about five degrees=prediction|berlin had=bremiker',
   7: 'searchSplit',
   8: 'adams|james challis=challis|today most=prediction',
   9: 'luck',
@@ -74,7 +74,6 @@ const framings = {
   search: ['1.3:690:330'],
   steps: ['1.3:640:330'],
   inverse: ['1.25:640:380'],
-  occult: ['1.3:520:330'],
 };
 for (const [key, spec] of Object.entries(edits)) {
   const n = Number(key);

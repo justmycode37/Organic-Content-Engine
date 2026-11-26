@@ -215,7 +215,10 @@ export function directFrame(draw: Draw, current: Cue) {
     shot(draw, key, t, g, 1, t + prevT);
   } else if (prev && mosaicIn.has(key) && t < 1.1) {
     // The new picture replaces the old one tile by tile.
+    // The outgoing shot looks up its cues from its own start, not the new shot's.
+    cue = { ...current, key: prev, t: prevT + t };
     shot(draw, prev, prevT + t, g, 1);
+    cue = current;
     hc.drawImage(canvas, 0, 0);
     shot(draw, key, t, g, 1);
     // Paint the outgoing frame back except where tiles have arrived.
@@ -228,7 +231,10 @@ export function directFrame(draw: Draw, current: Cue) {
     c.restore();
   } else if (prev && t < 0.3 && !hardIn.has(key) && !key.includes('~') && !prev.includes('~') && prev.split('~')[0] !== key) {
     const e = ease(t, 0, 0.3);
+    // The outgoing shot looks up its cues from its own start, not the new shot's.
+    cue = { ...current, key: prev, t: prevT + t };
     shot(draw, prev, prevT + t, g, 1);
+    cue = current;
     hc.drawImage(canvas, 0, 0);
     shot(draw, key, t, g, e);
     c.save();
