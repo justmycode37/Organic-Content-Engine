@@ -53,9 +53,14 @@ import { beats3 } from './aurora-beats3.ts';
 import { beats4 } from './aurora-beats4.ts';
 import { beats5 } from './aurora-beats5.ts';
 import { beats6 } from './aurora-beats6.ts';
+import { beats7 } from './aurora-beats7.ts';
+import mclennanUrl from './aurora/mclennan-cut.png';
+import jezeroUrl from './aurora/jezero.jpg';
 
 const raw = {
   cut: load(cutUrl),
+  mclennan: load(mclennanUrl),
+  jezero: load(jezeroUrl),
   limb: load(limbUrl),
   pillars: load(pillarsUrl),
   redGreen: load(redGreenUrl),
@@ -78,8 +83,9 @@ Object.assign(window, {
   motionAssetsReady: Promise.all([...Object.values(raw).map((i) => i.decode()), preparePlanets(['earth', 'mars', 'sun'])]).then(
     () => {
       for (const [k, img] of Object.entries(raw)) {
-        if (k === 'cut') photos[k] = grade(img, false, 1.15);
+        if (k === 'cut' || k === 'mclennan') photos[k] = grade(img, false, 1.15);
         else if (k === 'milky') photos[k] = grade(img, false, 1.25);
+        else if (k === 'jezero') photos[k] = grade(img, false, 0.8);
         else if (k === 'engraving') {
           // Light lines on dark: invert the engraving before grading.
           const inv = document.createElement('canvas');
@@ -93,7 +99,7 @@ Object.assign(window, {
         }
         else photos[k] = grade(img, true, k === 'storm' ? 1.35 : 1.1);
         // Keep the cutout's transparency.
-        if (k === 'cut') {
+        if (k === 'cut' || k === 'mclennan') {
           const x = photos[k].getContext('2d')!;
           x.globalCompositeOperation = 'destination-in';
           x.drawImage(img, 0, 0);
@@ -263,6 +269,7 @@ function photoShot(name: string, zoom: number, fx: number, fy: number, drift: nu
   };
 }
 
+let chain = { base: '', start: 0 };
 export const photoKeys = ['orbit', 'swirl', 'blanket', 'ocean', 'redGreen', 'pillars', 'airglowPhoto', 'arm', 'australis', 'band', 'layers', 'bandClouds', 'curtainPhoto', 'storm'];
 const scenes: Record<string, (t: number, g: number) => void> = {
   portrait,
@@ -289,6 +296,7 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   ...beats4,
   ...beats5,
   ...beats6,
+  ...beats7,
 };
 // Rowan's interview lines play over the matching diagram with his name.
 for (const [key, base] of [
@@ -300,25 +308,43 @@ for (const [key, base] of [
     scenes[base](t, g);
     const a = ease(t, 0.2, 0.8) * (1 - ease(t, 4.5, 5.2));
     hud(() => {
-      const scrim = c.createRadialGradient(W - 200, 56, 10, W - 200, 56, 300);
-      scrim.addColorStop(0, '#0d0a1ec0');
+      const scrim = c.createRadialGradient(W / 2, 690, 10, W / 2, 690, 320);
+      scrim.addColorStop(0, '#0d0a1ed0');
       scrim.addColorStop(1, '#0d0a1e00');
       c.globalAlpha = a;
       c.fillStyle = scrim;
-      c.fillRect(W - 520, 0, 520, 200);
-      text('Professor Rowan Ellery', W - 60, 66, 30, ink, 'right', 'title');
+      c.fillRect(W / 2 - 340, 600, 680, 120);
+      text('Professor Rowan Ellery', W / 2, 700, 28, ink, 'center', 'title');
       c.globalAlpha = 1;
     });
   };
 }
 arriveByMosaic(['orbit', 'title', 'swirl', 'pillars', 'australis']);
 lockCamera(['portrait']);
-cutTo(photoKeys);
+cutTo([...photoKeys, 'rainbow']);
 continuous(['portrait']);
 Object.assign(window, {
   auroraFrame(k: string, t: number, current?: Cue) {
-    if (!scenes[k]) throw new Error('Unknown aurora scene: ' + k);
-    return directFrame((key, time, g) => scenes[key](time, g), current ?? { key: k, t, g: t, left: 99 });
+    const base = k.split('~')[0];
+    if (!scenes[base]) throw new Error('Unknown aurora scene: ' + k);
+    const cue0 = current ?? { key: k, t, g: t, left: 99 };
+    // A run of cuts on the same scene (alternate framings) keeps the scene's clock.
+    const prevBase = cue0.prev?.split('~')[0];
+    if (!(prevBase === base && chain.base === base)) chain = { base, start: cue0.g - cue0.t };
+    const T = cue0.g - chain.start;
+    const cueT = { ...cue0, t: T, left: cue0.left + (cue0.t - T) };
+    return directFrame((key, time, g) => {
+      const [name, frame] = key.split('~');
+      if (!frame) return scenes[name](time, g);
+      const [z, fx, fy] = frame.split(':').map(Number);
+      const zz = z * (1 + 0.012 * Math.min(time, 12));
+      c.save();
+      c.translate(W / 2, H / 2);
+      c.scale(zz, zz);
+      c.translate(-fx, -fy);
+      scenes[name](time, g);
+      c.restore();
+    }, cueT);
   },
 });
 export { scenes, ink, muted, lilac, coral, line };

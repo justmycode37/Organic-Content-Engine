@@ -39,7 +39,8 @@ export function text(
     c.restore();
     return;
   }
-  words(s, x, y, size, style, color, align);
+  // Small labels read on a phone: scale them up.
+  words(s, x, y, size < 26 ? Math.round(size * 1.15) : size, style, color, align);
 }
 
 // Gradient map from luminance to the dusk ramp. Auroral green survives as the
@@ -195,6 +196,16 @@ function shot(draw: Draw, k: string, t: number, g: number, enter: number, lens =
   hudQueue.length = 0;
   paintWithFinePixels(c, () => draw(k, t, g));
   c.restore();
+  // Out-of-focus foreground glows drift faster than the diagram: depth.
+  if (!hardIn.has(k) && !still.has(k) && k !== 'title' && k !== 'spectrometer' && k !== 'mclennan') {
+    for (let i = 0; i < 6; i++) {
+      const h = Math.abs(Math.sin(i * 91.7) * 1000) % 1,
+        v = Math.abs(Math.sin(i * 37.3) * 1000) % 1;
+      const x = (((h * (W + 400) + g * (14 + 10 * v)) % (W + 400)) + W + 400) % (W + 400) - 200,
+        y = v * H;
+      lensGlow(x, y, 90 + 70 * v, i % 2 ? '#7d6fd0' : '#c0607a', 0.16);
+    }
+  }
   paintWithFinePixels(c, () => hudQueue.splice(0).forEach((fn) => fn()));
 }
 export function directFrame(draw: Draw, current: Cue) {
@@ -216,7 +227,7 @@ export function directFrame(draw: Draw, current: Cue) {
     c.clip('evenodd');
     c.drawImage(held, 0, 0);
     c.restore();
-  } else if (prev && t < 0.3 && !hardIn.has(key)) {
+  } else if (prev && t < 0.3 && !hardIn.has(key) && !key.includes('~') && !prev.includes('~') && prev.split('~')[0] !== key) {
     const e = ease(t, 0, 0.3);
     shot(draw, prev, prevT + t, g, 1);
     hc.drawImage(canvas, 0, 0);

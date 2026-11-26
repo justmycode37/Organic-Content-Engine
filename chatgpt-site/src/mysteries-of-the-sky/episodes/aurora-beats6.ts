@@ -16,7 +16,7 @@ const hash = (n: number) => {
   const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return v - Math.floor(v);
 };
-const note = (s: string) => hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
+const note = (s: string) => s.includes('Knutsen') && hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 
 // ── 01 The dive continues: Earth's glow fills the frame, the atom resolves
 function atomCard(t: number) {
@@ -153,7 +153,13 @@ function airglow(t: number, g: number) {
   const cx = 640,
     cy = 1500,
     R = 1100;
-  gradedPlanet('earth', cx, cy, R, t * 0.2, [mix(-0.2, 0.9, night), 0.3, mix(0.9, -0.4, night)], 0.3);
+  gradedPlanet('earth', cx, cy, R, t * 0.2, [mix(-0.2, 0.15, night), mix(0.3, 0.2, night), mix(0.9, -1, night)], 0.3);
+  // Night side: the disc darkens to a faint glow.
+  c.fillStyle = '#05040f';
+  c.globalAlpha = 0.65 * night;
+  c.beginPath();
+  c.arc(cx, cy, R, 0, tau);
+  c.fill();
   c.fillStyle = '#ffe8c8';
   c.globalAlpha = 0.18 * (1 - night);
   c.fillRect(0, 0, W, H);
@@ -228,6 +234,20 @@ function jezero(t: number) {
     c.fillRect(-100 + 40 * Math.sin(t * 0.2 + k), 150 + 26 * Math.sin(t * 0.35 + k), W + 200, 380);
   }
   c.globalAlpha = 1;
+  // Perseverance's own view across Jezero, graded to night.
+  const pj = photos.jezero;
+  if (pj) {
+    const s = (W * 1.08) / pj.width,
+      w = pj.width * s,
+      h = pj.height * s,
+      top = 300 - 0.02 * h - 6 * t;
+    c.drawImage(pj, W / 2 - w / 2 + 4 * t, top, w, h);
+    c.fillStyle = grad(0, top, 0, h, ['#0b0a1c66', '#0b0a1c99', '#05040bcc']);
+    c.fillRect(0, top, W, h);
+    line([[0, top + 0.02 * h + 4], [W, top + 0.02 * h + 4]], accent + '33', 2);
+    text('Jezero Crater · Perseverance', 80, 676, 28, ink, 'left', 'title');
+    return;
+  }
   // Three ridges, each a gradient with a faint rim light from the sky glow.
   for (const [base, amp, top, bottom, sp] of [
     [470, 46, '#3b2d52', '#21183a', 0.015],

@@ -17,6 +17,7 @@ const hash = (n: number) => {
   return v - Math.floor(v);
 };
 function note(s: string) {
+  if (!s.includes('Knutsen')) return;
   hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 }
 
@@ -90,6 +91,13 @@ function rainbow(t: number, g: number) {
     c.globalAlpha = 1;
   }
   softRainbow(200, ease(t, hot - 0.3, hot + 0.5));
+  const lamp = ease(t, hot - 0.3, hot + 0.5);
+  if (lamp > 0) {
+    lensGlow(1180, 222, 60 + 8 * Math.sin(t * 6), '#ffb27a', 0.9 * lamp);
+    c.globalAlpha = lamp;
+    line(path((u) => [1165 + 30 * u, 222 + 8 * Math.sin(u * 24)], 80), '#fff0c8', 3);
+    c.globalAlpha = 1;
+  }
   c.globalAlpha = ease(t, hot - 0.3, hot + 0.5);
   text('Hot solid', 200, 230, 24, muted, 'right');
   c.globalAlpha = 1;
@@ -208,7 +216,7 @@ function column(t: number, g: number) {
   c.fillStyle = grad(0, 0, 0, H, ['#07061a', '#120f2e', '#2a1f4a', '#4a2a4e']);
   c.fillRect(0, 0, W, H);
   const Y = (km: number) => 660 - km * 2.0;
-  const greenOn = ease(t, cue('explains where') - 0.2, cue('explains where') + 0.8);
+  const greenOn = ease(t, Math.min(0.2, cue('explains where') - 0.2), Math.min(1.2, cue('explains where') + 0.8));
   const quenchOn = ease(t, cue('below about'), cue('below about') + 0.8);
   const redOn = ease(t, cue('higher up'), cue('higher up') + 2.5);
   const fringeAt = at('purple or pink');
@@ -227,7 +235,12 @@ function column(t: number, g: number) {
     }
     c.restore();
   };
-  profile(112, 10, 40, accent, greenOn);
+  profile(106, 5, 34, accent, greenOn);
+  if (greenOn > 0) {
+    c.globalAlpha = greenOn * 0.8;
+    line([[400, Y(100)], [880, Y(100)]], grad(400, 0, 480, 0, [accent + '00', accent, accent + '00']), 2);
+    c.globalAlpha = 1;
+  }
   profile(250, 55, 70, coral, redOn);
   profile(92, 6, 6, '#e08ad6', fringe);
   // Electrons rain down; each lights a flash at the height where it collides.
@@ -236,7 +249,7 @@ function column(t: number, g: number) {
       f = ((t + hash(i + 1) * 9) % life) / life;
     const x = 400 + hash(i + 2) * 480;
     const stop = hash(i + 4);
-    const km = stop < 0.55 ? 100 + 45 * hash(i + 5) : stop < 0.85 ? 180 + 110 * hash(i + 6) : 70 + 28 * hash(i + 7);
+    const km = stop < 0.55 ? 100 + 30 * hash(i + 5) : stop < 0.85 ? 180 + 110 * hash(i + 6) : 70 + 28 * hash(i + 7);
     const fall = clamp(f / 0.6),
       y = mix(Y(330), Y(km), fall);
     if (f < 0.6) spark(x, y, 1.6, electron, 0.6);
@@ -255,8 +268,8 @@ function column(t: number, g: number) {
   }
   line([[360, Y(0)], [360, Y(310)]], muted + '88', 1.5);
   c.globalAlpha = greenOn;
-  dot(906, Y(115), 6, accent);
-  text('green · waits about 0.7 s', 920, Y(115) + 8, 24, ink);
+  dot(906, Y(108), 6, accent);
+  text('green · about 0.75 s', 920, Y(108) + 8, 24, ink);
   c.globalAlpha = redOn;
   dot(906, Y(250), 6, coral);
   text('red · about 2 min', 920, Y(250) + 8, 24, ink);
@@ -317,7 +330,7 @@ export function sheet3d(
     c.lineTo(sx, base);
     c.stroke();
     // A sharp, bright lower edge.
-    c.globalAlpha = 0.16 * a * (0.6 + 0.4 * ray);
+    c.globalAlpha = 0.07 * a * (0.6 + 0.4 * ray);
     c.strokeStyle = edge;
     c.beginPath();
     c.moveTo(sx, base - 14 * p * scale);
@@ -347,7 +360,7 @@ function recap(t: number, g: number) {
   space(g);
   const excite = ease(t, cue('a collision can') - 0.2, cue('a collision can') + 0.6);
   const emit = ease(t, cue('then gives up') - 0.2, cue('then gives up') + 0.6);
-  const out = ease(t, cue('theres enough'), cue('theres enough') + 2.5);
+  const out = ease(t, cue('theres enough'), cue('theres enough') + 0.9);
   c.globalAlpha = 1 - out;
   // Field lines with electrons streaming down them from the first second.
   for (let k = 0; k < 5; k++) line([[160 + k * 80, -20], [420 + k * 30, 420]], lilac + '44', 1.5);

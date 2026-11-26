@@ -25,6 +25,7 @@ const cue = (phrase: string, after = 0) => {
 };
 const electron = '#e8e4ff'; // incoming electrons are neutral, never the accent
 function note(s: string) {
+  if (!s.includes('Knutsen')) return;
   hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 }
 function hash(n: number) {

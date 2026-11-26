@@ -18,7 +18,7 @@ const hash = (n: number) => {
   const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return v - Math.floor(v);
 };
-const note = (s: string) => hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
+const note = (s: string) => s.includes('Knutsen') && hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 
 // ── 01 Opening: tiles of several sizes pop in over a gridded cream sheet ─
 const small = tiles(24, 41),
@@ -42,11 +42,9 @@ function portrait(t: number) {
       const s = q.size * (0.6 + 0.4 * age);
       c.rect(q.x + (q.size - s) / 2, q.y + (q.size - s) / 2, s + 0.5, s + 0.5);
       c.clip();
-      if (q.kind < 0.2) cover(photos.pillars, 1.4, 0.5 + 0.2 * Math.sin(q.x), 0.4);
-      else if (q.kind < 0.32) {
-        c.fillStyle = '#1c1d4a';
-        c.fillRect(q.x, q.y, q.size, q.size);
-      } else cover(photos.limb, 1.15, 0.5, 0.5);
+      if (q.kind < 0.25) cover(photos.pillars, 1.4, 0.5 + 0.2 * Math.sin(q.x), 0.4);
+      else if (q.kind < 0.4) cover(photos.band, 1.5, 0.3 + 0.4 * q.kind, 0.45);
+      else cover(photos.limb, 1.15, 0.5, 0.5);
       c.strokeStyle = '#ffffff26';
       c.strokeRect(q.x + 0.5, q.y + 0.5, q.size - 1, q.size - 1);
       c.restore();
@@ -101,7 +99,7 @@ function waiting(t: number, g: number) {
   text('the green state', 935, 590, 24, ink, 'center');
   const avg = ease(t, cue('nearly a second'), cue('nearly a second') + 0.8);
   c.globalAlpha = avg;
-  text('average ≈ 0.7 s · nearly a second', 935, 140, 26, accent, 'center');
+  text('average ≈ 0.75 s · nearly a second', 935, 140, 26, accent, 'center');
   text('≈ 0.00000001 s', 295, 140, 26, muted, 'center');
   c.globalAlpha = 1;
 }
@@ -221,8 +219,8 @@ function spectrograph(t: number, g: number) {
   const cols = ['#5b3fd0', '#3f6be0', '#2fb6c9', '#7fd65b', '#e8d35a', '#f09a4a', '#e0484a'];
   for (let i = 0; i < 28; i++) {
     const nm = 400 + (i / 27) * 300;
-    c.globalAlpha = 0.12;
-    line([[gx, gy], [dx, Ynm(nm)]], cols[Math.min(6, Math.floor((i / 28) * 7))], 2);
+    c.globalAlpha = 0.32;
+    line([[gx, gy], [dx, Ynm(nm)]], cols[Math.min(6, Math.floor((i / 28) * 7))], 3);
   }
   c.globalAlpha = 1;
   const on = ease(t, cue('stripe stands') - 0.3, cue('stripe stands') + 0.5);
@@ -233,10 +231,10 @@ function spectrograph(t: number, g: number) {
     line([[dx + 64, Ynm(nm)], [dx + 80, Ynm(nm)]], muted, 1.5);
     text(nm + ' nm', dx + 88, Ynm(nm) + 6, 17, muted);
   }
-  lensGlow(dx + 32, Ynm(557.7), 60, accent, 0.8 * on);
+  lensGlow(dx + 32, Ynm(557.7), 110, accent, 0.9 * on);
   c.fillStyle = accent;
   c.globalAlpha = on;
-  c.fillRect(dx + 2, Ynm(557.7) - 4, 60, 8);
+  c.fillRect(dx + 2, Ynm(557.7) - 7, 60, 14);
   const meas = ease(t, cue('measure where') - 0.2, cue('measure where') + 0.6);
   c.globalAlpha = meas;
   line([[dx - 120, Ynm(557.7)], [dx, Ynm(557.7)]], accent, 1.5);
@@ -350,7 +348,7 @@ function finale(t: number, g: number) {
   space(g);
   const many = ease(t, 0, 3);
   const sheet = ease(t, 2.5, 5);
-  const photo = ease(t, Math.max(4.5, cue('the next time') - 1.5), Math.max(6, cue('the next time') + 0.5));
+  const photo = ease(t, Math.max(4.5, cue('the next time') - 0.6), Math.max(5.5, cue('the next time') + 0.4));
   for (let i = 0; i < 160; i++) {
     const x = mix(640, 120 + hash(i) * 1040, many),
       y = mix(380, 200 + hash(i + 5) * 340, many);

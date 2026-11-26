@@ -17,6 +17,7 @@ const hash = (n: number) => {
   return v - Math.floor(v);
 };
 function note(s: string) {
+  if (!s.includes('Knutsen')) return;
   hud(() => text(s, W - 48, H - 30, 16, muted + 'bb', 'right'));
 }
 
@@ -243,8 +244,9 @@ function collision(t: number, g: number, rowan: boolean) {
   }
   const cx = 470,
     cy = 370;
-  const hitT = rowan ? -5 : cue('strikes an oxygen') - 0.2;
-  const lift = rowan ? 1 : ease(t, cue('lift one') - 0.3, cue('lift one') + 0.6);
+  // Rowan: the electron arrives unlit, hands over its energy and leaves; the atom glows later.
+  const hitT = rowan ? 1.6 : cue('strikes an oxygen') - 0.2;
+  const lift = rowan ? ease(t, 1.5, 2.2) : ease(t, cue('lift one') - 0.3, cue('lift one') + 0.6);
   const later = rowan ? cue('light comes later') : 1e9;
   const drop = ease(t, later - 0.4, later + 0.3);
   const level = 2 * lift - drop;
@@ -278,7 +280,9 @@ function ladderDrops(t: number, g: number) {
     [420, 560, coral, small, 620, 44, 'smaller drop · redder', 640],
   ] as const) {
     const f = ease(t, when - 0.2, when + 0.6);
-    spark(x, mix(ya, yb, f), 7, col, 1);
+    const idle = f < 0.01 ? 3 * Math.sin(t * 3.1 + x) : 0;
+    if (f < 0.01) lensGlow(x, ya, 26 + 6 * Math.sin(t * 2.4 + x), col, 0.5);
+    spark(x, mix(ya, yb, f) + idle, 7, col, 1);
     if (f > 0.9) wave(x + 20, (ya + yb) / 2, mix(x + 60, 1180, ease(t, when + 0.5, when + 2.2)), (ya + yb) / 2, t, col, 10, lam);
     c.globalAlpha = ease(t, when, when + 0.6);
     text(label, 1180, ly, 24, col === coral ? coral : '#a9b2ff', 'right');
