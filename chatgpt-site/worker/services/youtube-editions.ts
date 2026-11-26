@@ -4,9 +4,9 @@ import type {Db} from '../db/database.ts';
 import {AppError,notFound} from '../errors.ts';
 import {equal,sign} from '../lib/crypto.ts';
 import {Postiz} from './postiz.ts';
-import {matchSilicon,thumbnailKey,thumbnailId,type Episode} from './silicon-footnote.ts';
+import {matchYoutube,youtubeChannels,thumbnailKey,thumbnailId,type Episode} from './silicon-footnote.ts';
 
-export const youtubeEdition=z.object({title:z.string().trim().min(1).max(100),description:z.string().max(5000),variant:z.union([thumbnailId,z.literal('automatic')]).default('automatic')});
+export const youtubeEdition=z.object({title:z.string().trim().min(1).max(100),description:z.string().max(5000),variant:z.union([thumbnailId,z.literal('automatic')]).default('automatic'),channel:z.enum(youtubeChannels).default('SiliconFootnote')});
 type Package=z.infer<typeof youtubeEdition>;
 type Media={id:string;path:string};
 type Publication={created:string;state:'sending'|'processing'|'published'|'error';postId?:string;url?:string;error?:string;target:string;description:string};
@@ -80,8 +80,8 @@ export async function publishEdition(db:Db,env:Env,id:string,pack:Package){
  const episode=await ready(db,id);
  const custom=pack.variant==='automatic'?undefined:pack.variant;
  if(custom&&!episode.thumbnails?.some(x=>x.id===custom))throw new AppError(409,'thumbnail_missing','Episode does not have that cover');
- const service=new Postiz(env),target=matchSilicon(await service.integrations());
- if(!target)throw new AppError(409,'channel_missing','Expected one connected Silicon Footnote YouTube channel');
+ const service=new Postiz(env),target=matchYoutube(await service.integrations(),pack.channel);
+ if(!target)throw new AppError(409,'channel_missing',`Expected one connected ${pack.channel} YouTube channel`);
  const asset=(kind:z.infer<typeof assets>)=>row<Media>(db,'youtube-media:'+keyFor(episode,kind));
  const [video,thumb]=await Promise.all([asset('video'),custom?asset(custom):null]);
  if(!video||(custom&&!thumb))throw new AppError(409,'uploads_pending','A required publication asset is missing');
