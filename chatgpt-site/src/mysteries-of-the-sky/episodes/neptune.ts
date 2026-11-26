@@ -27,6 +27,7 @@ import {
   arriveByMosaic,
   lockCamera,
   cutTo,
+  continuous,
 } from './aurora-core.ts';
 import { path, dot, spark, wave, contours, gradedPlanet } from './aurora-scenes.ts';
 import { oxygen } from './aurora-beats3.ts';
@@ -78,7 +79,7 @@ const hash = (n: number) => {
   const v = Math.sin(n * 127.1 + 311.7) * 43758.5453;
   return v - Math.floor(v);
 };
-const neptuneBlue = '#7d9cff';
+const neptuneBlue = '#9aa6f0';
 
 // ── Cream plates: a portrait among tiles of the sky, as in the reference opening
 function plate(t: number, who: string, place: string, name: string, tileSrc: string, side = 0.62) {
@@ -87,7 +88,7 @@ function plate(t: number, who: string, place: string, name: string, tileSrc: str
   for (let x = 0; x <= W; x += W / 24) line([[x, 0], [x, H]], '#b9b0a230', 1);
   for (let y = 0; y <= H; y += W / 24) line([[0, y], [W, y]], '#b9b0a230', 1);
   const set = tiles(16, who.length * 31 + 7);
-  const fill = ease(t, 0.2, 3.5) * 0.5;
+  const fill = ease(t, 0.2, 3.5) * 0.45 + ease(t, 4, 16) * 0.3;
   for (const q of set) {
     if (q.at > fill || (q.x < 480 && q.y > 520)) continue;
     const age = clamp((fill - q.at) * 10),
@@ -102,7 +103,7 @@ function plate(t: number, who: string, place: string, name: string, tileSrc: str
   const p = P[who],
     h = 660,
     w = (p.width / p.height) * h,
-    z = 1 + 0.05 * ease(t, 0, 8);
+    z = 1 + 0.14 * ease(t, 0, 16);
   c.drawImage(p, W * side - (w * z) / 2, H - h * z + 20, w * z, h * z);
   c.globalAlpha = ease(t, 0.4, 1.2);
   text(place, 90, 596, 36, '#2a1d3a', 'left', 'title');
@@ -158,16 +159,30 @@ function planetPhoto(name: string, size = 0.86) {
     const img = P[name],
       s = ((H * size) / img.height) * (1 + 0.015 * t);
     lensGlow(W / 2, H / 2, H * 0.6, '#5a6fd8', 0.35);
+    c.save();
+    c.globalCompositeOperation = 'lighten';
     c.drawImage(img, W / 2 - (img.width * s) / 2, H / 2 - (img.height * s) / 2, img.width * s, img.height * s);
+    c.restore();
+    if (name === 'triton') {
+      // Dark plumes thought to be driven by nitrogen gas.
+      const on = ease(t, cue('geysers') - 0.3, cue('geysers') + 1);
+      for (let k = 0; k < 6; k++) {
+        const x = W / 2 - 120 + k * 46,
+          y = H / 2 + 60 + 20 * hash(k);
+        c.globalAlpha = on * 0.45;
+        line([[x, y], [x + 24 + 8 * Math.sin(t + k), y - 50 - 16 * hash(k + 3)]], '#3a2a4a', 2.5);
+      }
+      c.globalAlpha = 1;
+    }
   };
 }
 
 // ── Solar-system orbits, top-down, schematic scale (square-root of distance)
-const AU = (a: number) => 52 * Math.sqrt(a);
+const AU = (a: number) => 60 * Math.sqrt(a);
 const planets: [string, number, number, string][] = [
   ['Jupiter', 5.2, 11.86, '#e6b98a'],
   ['Saturn', 9.58, 29.46, '#e8d3a0'],
-  ['Uranus', 19.2, 84.0, '#9fd8e6'],
+  ['Uranus', 19.2, 84.0, '#c9b6ff'],
   ['Neptune', 30.1, 164.8, neptuneBlue],
 ];
 // Mean longitude (degrees) at 1846.0, approximate.
@@ -204,7 +219,7 @@ function drift(t: number, g: number) {
   const x = 640 + AU(19.2) * Math.cos(th),
     y = 360 - AU(19.2) * Math.sin(th);
   c.globalAlpha = 0.8;
-  c.strokeStyle = '#9fd8e6';
+  c.strokeStyle = '#c9b6ff';
   c.setLineDash([4, 4]);
   c.beginPath();
   c.arc(x, y, 10, 0, tau);
@@ -220,7 +235,7 @@ function residuals(t: number, g: number) {
     x1 = 1130,
     y0 = 380;
   const X = (yr: number) => mix(x0, x1, (yr - 1690) / 160),
-    Y = (arcsec: number) => y0 - arcsec * 1.6;
+    Y = (arcsec: number) => y0 - Math.max(-140, Math.min(140, arcsec * 0.55));
   line([[x0, y0], [x1, y0]], muted + '88', 1.4);
   line([[x0, 120], [x0, 640]], muted + '55', 1.2);
   for (const yr of [1700, 1750, 1800, 1850]) text(String(yr), X(yr), y0 + 290, 18, muted, 'center');
@@ -230,7 +245,7 @@ function residuals(t: number, g: number) {
   const curve = (yr: number) => (yr > 1821 ? 0.045 : -0.012) * (yr - 1821) * Math.abs(yr - 1821);
   const end = mix(1690, 1846, ease(t, 0.2, 9));
   const pts = path((u) => [X(mix(1690, end, u)), Y(curve(mix(1690, end, u)))], 200);
-  line(pts, grad(x0, 0, x1 - x0, 0, ['#9fd8e6', coral]), 3);
+  line(pts, grad(x0, 0, x1 - x0, 0, ['#c9b6ff', coral]), 3);
   for (let i = 0; i < 40; i++) {
     const yr = 1690 + i * 4;
     if (yr > end) break;
@@ -273,6 +288,20 @@ function pulls(t: number, g: number) {
     line([u, [mix(u[0], p[0], k), mix(u[1], p[1], k)]], '#e8d3a0aa', 2.5);
   }
   line([u, [mix(u[0], 640, 0.3), mix(u[1], 360, 0.3)]], '#fff1dcaa', 3);
+  const cards: [string, string][] = [
+    ['maybe the observations', 'bad observations?'],
+    ['maybe gravity', 'different gravity far out?'],
+    ['or maybe something', 'something unseen pulling?'],
+  ];
+  cards.forEach(([ph, label], i) => {
+    const a = ease(t, cue(ph) - 0.2, cue(ph) + 0.5);
+    if (a <= 0) return;
+    c.globalAlpha = a * (i === 2 ? 1 : 0.75);
+    c.fillStyle = grad(860, 120 + i * 90, 0, 70, ['#2a2050cc', '#1a1438cc']);
+    c.fillRect(860, 120 + i * 90, 360, 66);
+    text(label, 880, 162 + i * 90, 24, i === 2 ? accent : ink);
+    c.globalAlpha = 1;
+  });
   const left = ease(t, cue('still did not fit') - 0.2, cue('still did not fit') + 0.8);
   if (left > 0) {
     lensGlow(u[0], u[1], 60, coral, 0.6 * left);
@@ -301,7 +330,7 @@ function inverse(t: number) {
   });
   const rev = ease(t, cue('reverse problem') - 0.2, cue('reverse problem') + 0.8);
   c.globalAlpha = rev;
-  text('known motion  →  unknown mass, distance, position', W / 2, 470, 28, accent, 'center');
+  text('known motion  →  unknown mass, distance, position', W / 2, 470, 28, ink, 'center');
   c.globalAlpha = 1;
 }
 // ── 21 Uranus speeds up approaching the hidden planet ───────────────────
@@ -319,8 +348,8 @@ function tug(t: number, g: number) {
   const v = 50 + 25 * ahead * Math.exp(-(((year - 1822) / 14) ** 2));
   const tx = -Math.sin(th),
     ty = -Math.cos(th);
-  line([u as [number, number], [u[0] + tx * v, u[1] + ty * v]], '#9fd8e6', 3);
-  text(year < 1822 ? 'speeding up' : 'slowing down', u[0] + 20, u[1] + 40, 22, '#9fd8e6');
+  line([u as [number, number], [u[0] + tx * v, u[1] + ty * v]], '#c9b6ff', 3);
+  text(year < 1822 ? 'speeding up' : 'slowing down', u[0] + 20, u[1] + 40, 22, '#c9b6ff');
   text(String(Math.round(year)), 1180, 90, 40, ink, 'right', 'title');
 }
 // ── 06 The prediction on the sky; 07 the search ─────────────────────────
@@ -337,7 +366,24 @@ function prediction(t: number, g: number) {
   c.arc(x, y, 60, 0, tau);
   c.stroke();
   c.setLineDash([]);
-  text('predicted', x + 70, y - 50, 24, accent);
+  text('predicted', x + 70, y - 50, 24, ink);
+  // Le Verrier's letter: about five degrees east of delta Capricorni.
+  const delta = ease(t, cue('delta') - 0.3, cue('delta') + 0.8);
+  if (delta > 0) {
+    c.globalAlpha = delta;
+    lensGlow(x - 300, y + 40, 30, '#fff1dc', 0.6);
+    dot(x - 300, y + 40, 5, '#fff1dc');
+    text('δ Capricorni', x - 300, y + 80, 22, muted, 'center');
+    line([[x - 285, y + 34], [x - 60, y + 4]], '#ffffff55', 1.5);
+    text('≈ 5° east', x - 170, y + 2, 22, ink, 'center');
+    c.globalAlpha = 1;
+  }
+  for (let i = 0; i < 30; i++) {
+    const f = (t * 0.04 + hash(i)) % 1;
+    c.globalAlpha = 0.3 * Math.sin(Math.PI * f);
+    dot(80 + hash(i + 3) * 1120 - 40 * f, 60 + hash(i + 7) * 600, 1.2, '#e8e4ff');
+  }
+  c.globalAlpha = 1;
   text('Capricornus', 90, 640, 30, ink, 'left', 'title');
   c.globalAlpha = 1;
 }
@@ -358,9 +404,17 @@ function search(t: number, g: number) {
 // ── 09 Wrong orbit, right place ─────────────────────────────────────────
 function luck(t: number, g: number) {
   space(g);
-  const year = mix(1800, 1846, ease(t, 0.3, 10));
+  const year = mix(1795, 1846, ((t * 0.04) % 1.2) / 1.2);
   orbits(year, ['Uranus', 'Neptune']);
   const show = ease(t, 0.8, 2);
+  // The strongest clues came while the two planets were closest (about 1815–1830).
+  const near = Math.exp(-(((year - 1822) / 7) ** 2));
+  if (near > 0.05) {
+    lensGlow(640 + AU(24) * Math.cos(lon('Uranus', year)), 360 - AU(24) * Math.sin(lon('Uranus', year)), 120, accent, 0.35 * near);
+    c.globalAlpha = near;
+    text('strongest clues', 90, 640, 28, accent);
+    c.globalAlpha = 1;
+  }
   // Le Verrier's assumed planet: farther out, roughly the same direction.
   const a = 36.2,
     th = lon('Neptune', year) + 0.05;
@@ -390,14 +444,14 @@ function galileo(t: number) {
   c.fillRect(0, 0, W, H);
   for (let y = 100; y < H; y += 46) line([[60, y], [W - 60, y]], '#c9b89a55', 1);
   const ink2 = '#3a2a1e';
-  const night = Math.min(2, Math.floor(t / 3));
+  const night = Math.min(2, Math.floor(t / 4));
   for (let k = 0; k <= night; k++) {
     const y = 180 + k * 150;
     dot(500, y, 16, ink2);
-    [-140, -70, 60, 160].forEach((dx, i) => dot(500 + dx + 6 * Math.sin(k + i), y, 5, ink2));
+    [[-150, -60, 70, 150], [-90, 40, 110, 200], [-180, -40, 30, 130]][k].forEach((dx) => dot(500 + dx, y, 5, ink2));
     // A "star" beside Jupiter that drifts slightly between entries.
     dot(820 + 10 * k, y + 4, 5, '#2b5a9e');
-    text(['28 Dec 1612', '2 Jan 1613', '28 Jan 1613'][k], 120, y + 8, 24, ink2, 'left', 'italic');
+    text(['28 Dec 1612', '27 Jan 1613', '28 Jan 1613'][k], 120, y + 8, 24, ink2, 'left', 'italic');
   }
   c.globalAlpha = ease(t, 6.5, 7.3);
   c.strokeStyle = '#2b5a9e';
@@ -419,7 +473,7 @@ function triton(t: number, g: number) {
   cover(P.voyager, 1, 0.5, 0.5);
   c.restore();
   // Neptune spins one way (arrow), Triton orbits the other way.
-  c.strokeStyle = '#9fd8e6';
+  c.strokeStyle = '#c9b6ff';
   c.lineWidth = 2;
   c.beginPath();
   c.ellipse(cx, cy, 300, 90, -0.3, 0, tau);
@@ -466,8 +520,15 @@ function mercury(t: number, g: number, vulcan = true) {
     c.setLineDash([]);
     text('Vulcan?', cx + 100, cy - 70, 26, coral);
     c.globalAlpha = 1;
+    const claim = clamp((t - cue('claimed') ) / 3);
+    if (claim > 0 && claim < 1) {
+      c.globalAlpha = Math.sin(Math.PI * claim);
+      dot(cx - 20 + 40 * claim, cy - 4, 4, '#1a1328');
+      c.globalAlpha = 1;
+    }
   }
   text('43″ per century', 90, 640, 30, accent);
+  text('precession exaggerated', 1190, 640, 20, muted, 'right');
 }
 // ── 14 Curved space-time: Mercury's extra turn ──────────────────────────
 function einstein(t: number, g: number) {
@@ -523,7 +584,17 @@ function answer(t: number, g: number) {
   const a = ease(t, cue('work backwards') - 0.3, cue('work backwards') + 0.6),
     b = ease(t, cue('exactly where') - 0.3, cue('exactly where') + 0.6),
     d = ease(t, cue('that is how') - 0.3, cue('that is how') + 1.2);
-  if (d > 0.99) return cover(P.voyager, 1.2 + 0.01 * t, 0.5, 0.5);
+  const e = ease(t, cue('the same kind') - 0.3, cue('the same kind') + 0.8);
+  if (e > 0.99) return einstein(t, g);
+  if (d > 0.99) {
+    cover(P.voyager, 1.2 + 0.01 * t, 0.5, 0.5);
+    if (e > 0) {
+      c.globalAlpha = e;
+      einstein(t, g);
+      c.globalAlpha = 1;
+    }
+    return;
+  }
   if (b > 0) starField(t, g, b);
   else if (a > 0) inverse(t + 4);
   else residuals(t + 9, g);
@@ -568,8 +639,8 @@ function transitWire(t: number, g: number) {
   line([[cx - r, cy], [cx + r, cy]], '#e8e4ff55', 1);
   const f = (t * 0.12) % 1,
     sx = cx - r + 2 * r * f;
-  lensGlow(sx, cy - 30, 30, '#9fd8e6', 0.7);
-  dot(sx, cy - 30, 5, '#9fd8e6');
+  lensGlow(sx, cy - 30, 30, '#c9b6ff', 0.7);
+  dot(sx, cy - 30, 5, '#c9b6ff');
   c.restore();
   c.strokeStyle = '#c9b6e6';
   c.lineWidth = 3;
@@ -642,11 +713,207 @@ void blush;
 void gradedPlanet;
 void hud;
 
+// ── 02 Night after night, the new object steps across the stars ──────────
+function steps(t: number, g: number) {
+  starField(t, g, 0);
+  for (let k = 0; k < 6; k++) {
+    const a = ease(t, 0.3 + k * 0.9, 0.8 + k * 0.9);
+    if (a <= 0) continue;
+    const x = 420 + k * 70,
+      y = 300 + k * 18;
+    c.globalAlpha = a * (k === 5 ? 1 : 0.35 + 0.1 * k);
+    lensGlow(x, y, 26, '#c9b6ff', 0.6);
+    dot(x, y, 5, '#e8e4ff');
+    c.globalAlpha = 1;
+  }
+  text('Bath, March 1781', 90, 640, 30, ink, 'left', 'title');
+}
+// ── Engraved Berlin star chart (Bremiker), drawn on paper ──────────────────
+function chartPaper(x0: number, y0: number, w: number, h: number, t: number, ticked: number) {
+  c.fillStyle = '#efe6d2';
+  c.fillRect(x0, y0, w, h);
+  c.strokeStyle = '#8a7a6a55';
+  for (let i = 1; i < 6; i++) {
+    line([[x0 + (w * i) / 6, y0], [x0 + (w * i) / 6, y0 + h]], '#8a7a6a44', 1);
+    line([[x0, y0 + (h * i) / 6], [x0 + w, y0 + (h * i) / 6]], '#8a7a6a44', 1);
+  }
+  for (let i = 0; i < 40; i++) {
+    const x = x0 + 20 + hash(i) * (w - 40),
+      y = y0 + 20 + hash(i + 50) * (h - 40),
+      m = 1.5 + 4 * hash(i + 9) ** 2;
+    dot(x, y, m, '#2a1d14');
+    if (i < ticked) line([[x - 10, y + 8], [x - 4, y + 14], [x + 10, y - 6]], '#8a4a3a', 1.6);
+  }
+}
+function bremiker(t: number) {
+  c.fillStyle = cream;
+  c.fillRect(0, 0, W, H);
+  chartPaper(220, 90, 840, 520, t, 0);
+  text('Berlin star chart · hour 21', 230, 650, 28, '#2a1d3a', 'left', 'title');
+}
+// ── 07 Chart against eyepiece, star by star, until one does not match ─────
+function searchSplit(t: number, g: number) {
+  space(g);
+  const called = Math.floor(clamp((t - 1) / 14) * 40);
+  const found = ease(t, cue('could not find') - 0.2, cue('could not find') + 0.6);
+  const moved = ease(t, cue('next night') - 0.2, cue('next night') + 2);
+  chartPaper(40, 110, 580, 480, t, called);
+  // Eyepiece: the same stars, plus one more.
+  c.save();
+  c.beginPath();
+  c.arc(940, 350, 250, 0, tau);
+  c.clip();
+  c.fillStyle = grad(690, 100, 500, 500, ['#0b0a1d', '#141233']);
+  c.fillRect(690, 100, 500, 500);
+  for (let i = 0; i < 40; i++) {
+    const x = 690 + 20 * 500 / 580 + hash(i) * (500 - 40),
+      y = 120 + hash(i + 50) * 460,
+      m = 1.2 + 3 * hash(i + 9) ** 2;
+    dot(x, y, m, '#e8e4ff');
+    if (i === called % 40 && found < 0.5) {
+      c.strokeStyle = '#e8e4ffaa';
+      c.strokeRect(x - 14, y - 14, 28, 28);
+    }
+  }
+  const nx = 960 + 18 * moved,
+    ny = 300 + 6 * moved;
+  dot(nx, ny, 4, neptuneBlue);
+  if (found > 0) {
+    lensGlow(nx, ny, 40, accent, 0.7 * found);
+    c.globalAlpha = found;
+    c.strokeStyle = accent;
+    c.lineWidth = 2;
+    c.beginPath();
+    c.arc(nx, ny, 22, 0, tau);
+    c.stroke();
+    c.setLineDash([6, 8]);
+    c.beginPath();
+    c.arc(930, 330, 70, 0, tau);
+    c.stroke();
+    c.setLineDash([]);
+    c.globalAlpha = 1;
+  }
+  c.restore();
+  c.strokeStyle = '#c9b6e6';
+  c.lineWidth = 3;
+  c.beginPath();
+  c.arc(940, 350, 250, 0, tau);
+  c.stroke();
+  const deg = ease(t, cue('one degree') - 0.2, cue('one degree') + 0.6);
+  c.globalAlpha = deg;
+  text('within about 1° of the prediction', 940, 660, 24, accent, 'center');
+  c.globalAlpha = 1;
+  text('chart', 330, 640, 24, muted, 'center');
+}
+// ── 08 Challis's ledger: two sightings nobody compared ─────────────────────
+function challis(t: number) {
+  c.fillStyle = cream;
+  c.fillRect(0, 0, W, H);
+  for (let y = 120; y < H - 60; y += 44) line([[100, y], [W - 100, y]], '#8a7a6a44', 1);
+  const rows = [
+    ['30 July 1846', '21h 48m 31s', '−13° 21′'],
+    ['4 Aug 1846', '21h 52m 07s', '−13° 24′'],
+    ['12 Aug 1846', '21h 51m 22s', '−13° 26′'],
+    ['…', '', ''],
+  ];
+  rows.forEach((r, i) => {
+    const a = ease(t, 0.4 + i * 0.6, 1 + i * 0.6);
+    c.globalAlpha = a;
+    text(r[0], 140, 170 + i * 88, 30, '#2a1d14', 'left', 'italic');
+    text(r[1], 520, 170 + i * 88, 30, '#2a1d14', 'left', 'italic');
+    text(r[2], 860, 170 + i * 88, 30, '#2a1d14', 'left', 'italic');
+    c.globalAlpha = 1;
+  });
+  const mark = ease(t, cue('twice in august') - 0.2, cue('twice in august') + 0.6);
+  c.globalAlpha = mark;
+  c.strokeStyle = '#8a4a3a';
+  c.lineWidth = 2;
+  for (const i of [1, 2]) {
+    c.beginPath();
+    c.ellipse(640, 160 + i * 88, 560, 30, 0, 0, tau);
+    c.stroke();
+  }
+  text('Neptune, recorded but not recognised', 140, 560, 28, '#8a4a3a', 'left', 'title');
+  c.globalAlpha = 1;
+  text('Cambridge · James Challis', 140, 650, 26, '#4a3b58', 'left', 'title');
+}
+// ── 03 Bouvard's see-saw: fit one era, the other goes wrong ───────────────
+function seesaw(t: number, g: number) {
+  space(g);
+  const x0 = 150,
+    x1 = 1130,
+    y0 = 380;
+  const X = (yr: number) => mix(x0, x1, (yr - 1690) / 160);
+  line([[x0, y0], [x1, y0]], muted + '88', 1.4);
+  for (const yr of [1700, 1750, 1800, 1850]) text(String(yr), X(yr), 620, 20, muted, 'center');
+  const old = Array.from({ length: 12 }, (_, i) => 1690 + i * 7),
+    neu = Array.from({ length: 12 }, (_, i) => 1781 + i * 5);
+  const fitOld = ease(t, cue('fit the old') - 0.2, cue('fit the old') + 0.6) * (1 - ease(t, cue('fit the new') - 0.2, cue('fit the new') + 0.6));
+  const fitNew = ease(t, cue('fit the new') - 0.2, cue('fit the new') + 0.6);
+  const off = (yr: number) => (yr < 1781 ? -1 : 1) * (fitOld > fitNew ? (yr < 1781 ? 0 : 60) : yr < 1781 ? 60 : 0);
+  for (const yr of [...old, ...neu]) {
+    const y = y0 - off(yr) + 6 * Math.sin(yr);
+    dot(X(yr), y, 4.5, yr < 1781 ? '#c9b6ff' : '#e8e4ff');
+  }
+  text(fitOld > fitNew ? 'fit the old observations' : fitNew > 0.1 ? 'fit the new observations' : '', 640, 140, 28, accent, 'center');
+  text('old sightings', X(1730), 520, 20, muted, 'center');
+  text('after 1781', X(1810), 520, 20, muted, 'center');
+}
+// ── 15 A star wobbles around the shared centre; timing shifts; Planet Nine
+function wobble2(t: number, g: number) {
+  space(g);
+  const tt = ease(t, cue('timing of another') - 0.3, cue('timing of another') + 0.8);
+  const nine = ease(t, cue('ninth planet') - 0.3, cue('ninth planet') + 0.8);
+  if (nine > 0.5) {
+    // Clustered orbits of distant icy bodies (schematic).
+    lensGlow(640, 360, 40, '#ffd2a8', 0.8);
+    for (let k = 0; k < 7; k++) {
+      c.strokeStyle = '#c9b6ff' + (k === 3 ? 'ff' : '88');
+      c.beginPath();
+      c.ellipse(640 + 120, 360 - 20 + k * 6, 300 + k * 10, 110 + k * 6, 0.35 + k * 0.03, 0, tau);
+      c.stroke();
+    }
+    c.globalAlpha = nine;
+    text('a possible ninth planet · not yet found', 90, 640, 26, accent);
+    c.globalAlpha = 1;
+    return;
+  }
+  const cx = 640,
+    cy = 300,
+    a = t * 1.2;
+  // The star circles the shared centre of mass, opposite the planet.
+  const sx = cx - 28 * Math.cos(a),
+    sy = cy - 8 * Math.sin(a);
+  line([[cx - 4, cy], [cx + 4, cy]], '#ffffff55', 1);
+  lensGlow(sx, sy, 90, '#ffd2a8', 0.8);
+  dot(sx, sy, 22, '#fff1dc');
+  dot(cx + 260 * Math.cos(a), cy + 70 * Math.sin(a), 8, neptuneBlue);
+  // Live trace of the star's line-of-sight motion.
+  const span = 6;
+  const pts = path((u) => {
+    const tau2 = t - span + u * span;
+    return [160 + u * 960, 560 + 50 * Math.sin(tau2 * 1.2)];
+  }, 200);
+  line(pts, accent, 2.5);
+  lensGlow(pts[pts.length - 1][0], pts[pts.length - 1][1], 20, accent, 0.8);
+  text('the star’s wobble, measured in its light', 160, 650, 22, muted);
+  if (tt > 0) {
+    c.globalAlpha = tt;
+    for (let k = 0; k < 6; k++) {
+      const x = 200 + k * 160 + 14 * Math.sin(k * 1.7);
+      line([[x, 120], [x, 150]], '#c9b6ff', 3);
+      line([[200 + k * 160, 158], [200 + k * 160, 168]], '#ffffff44', 2);
+    }
+    text('transit times arrive early or late', 640, 100, 22, muted, 'center');
+    c.globalAlpha = 1;
+  }
+}
+
 const scenes: Record<string, (t: number, g: number) => void> = {
   leverrier: (t) => plate(t, 'leverrier', 'Paris, 1846', 'Urbain Le Verrier', 'voyager'),
   herschel: (t) => plate(t, 'herschel', 'Bath, 1781', 'William Herschel', 'uranus'),
-  galle: (t) => plate(t, 'galle', 'Berlin, 1846', 'Johann Galle', 'voyager'),
-  adams: (t) => plate(t, 'adams', 'Cambridge, 1845', 'John Couch Adams', 'webb'),
+  galle: (t) => plate(t, 'galle', 'Berlin', 'Johann Galle', 'voyager', 0.7),
+  adams: (t) => plate(t, 'adams', 'Cambridge', 'John Couch Adams', 'webb', 0.7),
   chart,
   title: (t) => title(t),
   neptune: planetPhoto('voyager', 0.92),
@@ -669,6 +936,12 @@ const scenes: Record<string, (t: number, g: number) => void> = {
   einstein,
   wobble,
   answer,
+  steps,
+  bremiker: (t) => bremiker(t),
+  searchSplit,
+  challis: (t) => challis(t),
+  seesaw,
+  wobble2,
   transitWire,
   occult,
   orbitLoop,
@@ -682,7 +955,7 @@ for (const [key, base] of [
 ] as const) {
   scenes[key] = (t, g) => {
     scenes[base](t, g);
-    const a = ease(t, 0.2, 0.8) * (1 - ease(t, 4.5, 5.2));
+    const a = ease(t, 0.2, 0.8);
     hud(() => {
       const scrim = c.createRadialGradient(W / 2, 690, 10, W / 2, 690, 320);
       scrim.addColorStop(0, '#0d0a1ed0');
@@ -697,5 +970,6 @@ for (const [key, base] of [
 }
 arriveByMosaic(['chart', 'title', 'neptune', 'webb']);
 lockCamera(['leverrier', 'herschel', 'galle', 'adams']);
+continuous(['mercury', 'rowanTwo']);
 cutTo(['spot', 'webb', 'galileo']);
 Object.assign(window, { neptuneFrame: episodeFrame(scenes) });

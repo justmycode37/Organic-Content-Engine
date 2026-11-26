@@ -9,15 +9,15 @@ import { renderSkyChapters } from './sky-render-chapters.mjs';
 const work = resolve(process.argv[2]);
 const plan = {
   1: 'leverrier|within an hour=chart|it was neptune=neptune|the clue was=uranus|welcome to=title',
-  2: 'herschel|we call it=uranus|astronomers did=drift',
-  3: 'residuals',
+  2: 'herschel|over the following=steps|we call it=uranus|astronomers did=drift',
+  3: 'residuals|fit the old=seesaw|over the next=residuals',
   17: 'transitWire',
   4: 'pulls',
   5: 'leverrier|start with the error=inverse',
   21: 'rowanTug',
-  6: 'prediction|so le verrier=galle',
-  7: 'search',
-  8: 'adams',
+  6: 'prediction|so le verrier=galle|berlin had=bremiker',
+  7: 'searchSplit',
+  8: 'adams|james challis=challis|the credit became=adams|today most=prediction',
   9: 'luck',
   22: 'rowanLuck',
   10: 'galileo',
@@ -27,7 +27,7 @@ const plan = {
   13: 'mercury',
   23: 'rowanTwo',
   14: 'einstein',
-  15: 'wobble',
+  15: 'wobble2',
   19: 'answer',
   16: 'credits',
 };
@@ -73,6 +73,7 @@ const framings = {
   pulls: ['1.3:640:360'],
   prediction: ['1.3:690:330'],
   search: ['1.3:690:330'],
+  steps: ['1.3:640:330'],
   inverse: ['1.25:640:380'],
   occult: ['1.3:520:330'],
 };
