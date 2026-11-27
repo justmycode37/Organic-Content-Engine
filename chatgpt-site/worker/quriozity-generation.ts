@@ -267,7 +267,14 @@ export async function realizeVisuals(ask:Ask,spec:QuriozitySpec,cat:Catalog,log:
  const prefix=`${VISUAL_RULES}\nYou are the visual realization artist. Sol has chosen the story, storyboard, subjects, composition and text. Realize that plan as high-quality physical subjects, supported geometry/materials, animation, contact and camera execution. Preserve every say line, scene count/order, duration, hue and text item EXACTLY. Respect the planned composition and camera intent; make only execution adjustments needed for accurate geometry and readable physical action. Never substitute diagrams or crude primitives for a real subject. Use only the verified documented sources and controls. Keep white paper, black ink, sparse/dense rounded dots, fixed ink and reference-like motion. Return the complete authorable spec JSON.\n${catalogContext(cat,{query,required:specCatalogIds(spec)})}`;
  const records:unknown[]=[];let feedback='';
  for(let attempt=0;attempt<=STAGE_REPAIR_LIMIT;attempt++){
-  const raw=await ask(attempt?'visual-realization-repair':'visual-realization',`Sol plan to realize: ${JSON.stringify(input)}\nValidation feedback from prior attempt: ${feedback||'none'}`,0,{name:'quriozity_realization',schema:specSchema},[],{prefix});
+  let raw:string;
+  try{raw=await ask(attempt?'visual-realization-repair':'visual-realization',`Sol plan to realize: ${JSON.stringify(input)}\nValidation feedback from prior attempt: ${feedback||'none'}`,0,{name:'quriozity_realization',schema:specSchema},[],{prefix});}
+  catch(error){
+   // A failed Opus call (transport, killed CLI, exhausted allowance) consumes its attempt but never ends the reel.
+   feedback=`request failed: ${String((error as Error)?.message??error).slice(0,300)}`;records.push({attempt,valid:false,problems:feedback});log.visualRealization=records;
+   if(['opus_repair_limit','opus_stage_repair_limit'].includes((error as {code?:string}).code??''))break;
+   continue;
+  }
   const p=specSchema.safeParse(json(raw));
   if(!p.success){feedback=p.error.issues.slice(0,16).map(i=>`${i.path.join('.')}: ${i.message}`).join('; ');records.push({attempt,raw,valid:false,problems:feedback});continue;}
   const restored=restoreSolFields(p.data as QuriozitySpec,spec);
@@ -278,7 +285,12 @@ export async function realizeVisuals(ask:Ask,spec:QuriozitySpec,cat:Catalog,log:
   if(!problems.length)return {...proposed,captionStyle:spec.captionStyle,title:spec.title,musicBrief:spec.musicBrief};
   feedback=problems.join('; ');
  }
- throw Object.assign(new Error(`Visual realization invalid after its repair allowance: ${feedback}`),{details:{step:'visual-realization',attempts:records}});
+ // Every reel ends in a post: after the Opus allowance, render Sol's reviewed storyboard as the visual recipe.
+ // It stays labelled unresolved; the rendered visual review stages still review (and Opus may repair) it.
+ const fallback=directCameras(applyStyleProfile({...spec,style:QURIOZITY_STYLE} as QuriozitySpec),log,'visualRealizationFallback');
+ log.visualRealization=records;
+ log.visualRealizationFallback={used:'sol-storyboard',unresolved:true,reason:`Visual realization unavailable after its allowance: ${feedback}`,problems:[...specProblems(fallback,cat.has),...cameraProblems(fallback),...transitionProblems(fallback)]};
+ return {...fallback,captionStyle:spec.captionStyle,title:spec.title,musicBrief:spec.musicBrief};
 }
 const SOL_FIELDS=['say','duration','hue','text'] as const;
 /**

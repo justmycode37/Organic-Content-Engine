@@ -6,11 +6,13 @@ import {HEDGY_SERIES_IDS} from '../worker/hedgy-policy.ts';
 import {hedgyPostCaptionSchema} from '../worker/hedgy-caption.ts';
 import {siteRequest, workerConfig} from './render-worker.mjs';
 
-const [roundArg, integrationId] = process.argv.slice(2);
-if (!roundArg || !integrationId) throw new Error('Usage: hedgy-round-publish.mjs <roundDir|--check> <instagramIntegrationId>');
+const [roundArg, integrationId, roundFlag] = process.argv.slice(2);
+if (!roundArg || !integrationId) throw new Error('Usage: hedgy-round-publish.mjs <roundDir|--check> <instagramIntegrationId> [--round=N]');
+// Backfilled reels from un-numbered or pre-r12 folders publish under an explicit round number (e.g. 9000+).
+const roundOverride = roundFlag === undefined ? undefined : Number(/^--round=(\d+)$/.exec(roundFlag)?.[1] ?? NaN);
 const checking = roundArg === '--check';
 const dir = resolve(roundArg);
-const round = checking ? 12 : Number(/^r(\d+)$/.exec(basename(dir))?.[1]);
+const round = checking ? 12 : roundOverride ?? Number(/^r(\d+)$/.exec(basename(dir))?.[1]);
 if (!Number.isSafeInteger(round) || round < 12 || round > 10000) {
  throw new Error('Choose a numbered Hedgy round from r12 through r10000.');
 }

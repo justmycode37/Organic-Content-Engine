@@ -13,7 +13,14 @@ Normal Quriozity production uses `gpt-6.2-sol` at `medium` for the story, script
 storyboard plan, subject choices, composition, text, sound design and every review.
 `claude-opus-5-5` at `medium` is used ONLY for actual visual realization and rendered
 visual repairs. Opus executes Sol's selected subjects/layout/narration as physical
-geometry, materials and motion. There is no Sol visual repair fallback. Normal production uses style `paper-ink`: white background, black fixed
+geometry, materials and motion. There is no Sol visual repair fallback. Every reel
+still ends in a post: when the initial Opus realization and its one repair both fail
+(invalid output, killed CLI or transport error), Sol's reviewed storyboard renders as
+the visual recipe, recorded as `visualRealizationFallback` and left for the rendered
+review stages. A review stage or the sound review that cannot run at all is recorded
+as `reviewUnavailable`/unapproved and the current version continues; the voice
+delivery review falls back to the original words; the account worker retries a failed
+production up to three times from its cache. Normal production uses style `paper-ink`: white background, black fixed
 ink and black text; other colors are very rare and require an essential role.
 Hedgy is unaffected. The local producer needs `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
 and `ELEVENLABS_API_KEY` in private runtime configuration. Loading defaults does

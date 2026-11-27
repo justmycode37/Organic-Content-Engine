@@ -22,15 +22,16 @@ async function make(job,evidence){
  const cache=evidence.cache,done=join(cache,'finished.mp4'),specFile=join(cache,'spec.json'),provFile=join(cache,'provenance.json');
  let spec,provenance;
  try{spec=JSON.parse(await readFile(specFile));provenance=JSON.parse(await readFile(provFile));}catch{
+  // Every Hedgy run ends in a post: an interrupted generation is regenerated (and recorded) instead of stopping.
   const guard=join(cache,'paid-generation-started');
-  if(await stat(guard).catch(()=>null))throw Object.assign(Error('Generation was interrupted; inspect cache before repeating a request.'),{code:'generation_interrupted'});
+  const interrupted=await stat(guard).then(()=>readFile(guard,'utf8'),()=>null);
   await writeFile(guard,new Date().toISOString());
   const {generateHedgyReel}=await import('../worker/hedgy-generation.ts');
   evidence.stage='generation';
   const research=evidence.hedgyResearch;
   const history=[...(Array.isArray(job.history)?job.history:[]),...await research.history()];
   const result=await generateHedgyReel({OPENAI_API_KEY:evidence.env.OPENAI_API_KEY},job.account.topic,entry=>evidence.usage(entry),history,evidence.subscription,research);
-  spec=result.spec;provenance=result.provenance;
+  spec=result.spec;provenance=interrupted?{...result.provenance,regeneratedAfterInterruption:interrupted.trim()}:result.provenance;
   await writeFile(specFile,JSON.stringify(spec));await writeFile(provFile,JSON.stringify(provenance));
  }
  if(!await stat(done).catch(()=>null)){
@@ -57,6 +58,10 @@ const stamp=()=>new Date().toISOString();
 // A report sent while the network is still waking (DNS) must not be lost: heartbeats keep
 // the lease alive meanwhile, so retry within the 20-minute lease instead of failing once.
 export const FAILURE_REPORT_ATTEMPTS=30,FAILURE_REPORT_SPACING=30000;
+// Every Hedgy and Quriozity run must end in a post. A failed production is retried from its cache
+// (saved specs, reviews, repair budgets and audio are reused) before the job is reported as failed.
+export const REEL_ATTEMPTS=3,REEL_RETRY_SPACING=60000;
+const unrecoverable=error=>['api_key_missing'].includes(error?.code)||/Configure.*_API_KEY|Set (?:OPENAI|ELEVENLABS)_API_KEY/.test(String(error?.message));
 export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeReel=make,cacheRoot=CACHE,env=process.env,log=console,subscription=createReelSubscription({env}),hedgyResearch=hedgyTopicResearch(env),keepAwake=keepAwakeDuringJob,sleep=ms=>new Promise(r=>setTimeout(r,ms))}={}){
  const {job}=await (await fetchSite(config,'/api/jobs/accounts/claim',{method:'POST'})).json();if(!job)return false;
  const release=keepAwake();
@@ -65,7 +70,17 @@ export async function runOnce(config=workerConfig(),{fetchSite=siteRequest,makeR
  log.log(`[${stamp()}] Account job ${safe(job.id)} (${safe(job.account?.id??'unknown')}) claimed`);
  try{
   await evidence.prepare();
-  const result=await makeReel(job,evidence);evidence.stage='read-output';const bytes=await readFile(result.done);
+  let result;
+  for(let attempt=1;;attempt++){
+   try{result=await makeReel(job,evidence);break;}
+   catch(error){
+    if(attempt>=REEL_ATTEMPTS||unrecoverable(error))throw error;
+    try{await evidence.save(`retry-${attempt}.json`,evidence.failure(error));}catch{}
+    log.error(`[${stamp()}] Account job ${safe(job.id)} production attempt ${attempt}/${REEL_ATTEMPTS} failed at ${evidence.stage}; retrying from cache: ${evidence.text({message:String(error?.message??error).slice(0,240)})}`);
+    await sleep(REEL_RETRY_SPACING);evidence.stage='prepare';
+   }
+  }
+  evidence.stage='read-output';const bytes=await readFile(result.done);
   evidence.stage='upload';
   const {materialId}=await (await fetchSite(config,`/api/jobs/accounts/${job.id}/${job.lease}/output`,{method:'PUT',headers:{'content-type':'video/mp4','content-length':String(bytes.length)},body:bytes})).json();
   evidence.stage='complete';

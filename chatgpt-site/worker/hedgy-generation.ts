@@ -17,7 +17,8 @@ import {AppError} from './errors.ts';
 import {hedgyAstraCritic,hedgyClient,hedgyCritic,HEDGY_MODEL,HEDGY_EFFORT,HEDGY_CRITIC_MODEL,HEDGY_ASTRA_REVIEW} from './hedgy-model-client.ts';
 import type {ReelSubscription} from './reel-subscription.ts';
 import {HEDGY_MUSIC_STYLE,recentlyUsed,ideaSchema,ideaProblems,type HedgyHistoryEntry,type HedgyIdea} from './hedgy-ideas.ts';
-import {researchHedgyTopics,type HedgyResearchOptions} from './hedgy-research.ts';
+import {researchHedgyTopics,repeatedHedgyTopic,type HedgyResearchOptions} from './hedgy-research.ts';
+import {HEDGY_CONCEPTS,type HedgyConcept} from './hedgy-ideas.ts';
 const ROLES=['hook','factual accuracy','narration','scene 1 animation','scene 2 animation','scene 3 animation','scene 4 animation','scene 5 animation','scene 6 animation','sound effects','music and pacing','captions and accessibility'];
 /** Story-level checks that keep the reel on its chosen idea instead of drifting back to library defaults. */
 /** Advice that improves a storyboard but must never invalidate an otherwise correct one. */
@@ -80,7 +81,18 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
  // 1. Ideation: a concept this account has not covered, told through a new story world and a new score.
  const {items:usedItems,moods}=recentlyUsed(history);
  const focus=topic==='Simple finance and market explainers'?HEDGY_TOPIC:topic;
- const research=await researchHedgyTopics(strict,search,focus,history);
+ // Every run ends in a post: when live topic research fails or finds nothing new, fall back to the
+ // built-in concept list (least repeated first) and record the fallback instead of stopping.
+ let research:Awaited<ReturnType<typeof researchHedgyTopics>>,researchFallback:string|undefined;
+ try{research=await researchHedgyTopics(strict,search,focus,history);}
+ catch(error){
+  if((error as AppError)?.code==='api_key_missing')throw error;
+  researchFallback=`${(error as AppError)?.code??'error'}: ${String((error as Error)?.message??error).slice(0,240)}`;
+  await Promise.resolve(onUsage?.({step:'topic-research',status:'degraded-to-fallback',code:(error as AppError)?.code})).catch(()=>{});
+  const builtIn=HEDGY_CONCEPTS.map(c=>({...c,topic:c.name}) as HedgyConcept);
+  const fresh=builtIn.filter(c=>!repeatedHedgyTopic({topic:c.topic,topicKey:c.id,title:c.name},history));
+  research={topics:fresh.length?fresh:builtIn,query:'',runId:'',results:[]} as unknown as typeof research;
+ }
  const candidates=research.topics;
  const past=history.slice(0,12).map(h=>`- ${[h.title,h.concept,h.item&&`item ${h.item}`,h.setting,h.music&&`music ${h.music}`].filter(Boolean).join(' | ')}${h.summary?`: ${h.summary.slice(0,160)}`:''}`).join('\n')||'- none yet';
  const ideaPrompt=`${JSON.stringify(HEDGY_POLICY)}\nYou are the ideation lead for Hedgy’s animated story account (${focus}). Pitch recognizable situations with a specific puzzle, a chain of events and a surprising outcome we can show. Rotate story lanes, items and music.\nEarlier reels, newest first (do not resemble them):\n${past}\nChoose concept from exactly these ids: ${candidates.map(c=>`${c.id} (${c.lane}: ${c.name}; use ${c.heroItem}. ${c.reveal})`).join('; ')}.\nheroItem and supportingItems must be item ids from this list: ${SHOT_ITEMS.join(', ')}. ${usedItems.length?`heroItem must NOT be any of: ${usedItems.join(', ')}.`:''} Use a world that makes the opening situation immediately recognizable.\ncast: 1–3 actor ids (hedgy, clerk, customer, fox, owl, badger, raccoon, rabbit, mouse; the dedicated wildlife shot depicts its subject).\nangle: pitch the story in one sentence. Say what the viewer sees first, what makes it puzzling, what happens next, and what visible result explains it. music: one of ${moods.join(', ')}. musicBrief: a 1–3 sentence instrumental brief for THIS story within this style: ${HEDGY_MUSIC_STYLE} Name the sub-genre, lead instruments, BPM and energy arc (e.g. builds at the twist, hits on the concept reveal); it must differ from the earlier reels' music; no vocals.\nhook: open inside the situation with a specific need, choice or obstacle the first shot can show. If you ask a question, the payoff must answer that exact question.`;
@@ -110,7 +122,10 @@ export async function generateHedgyReel(env:Env,topic:string,onUsage?:(usage:unk
   idea=fallbackIdea(first,moods[0]??'drive');
  }
  const concept=candidates.find(c=>c.id===idea.concept)!;
- await reserveTopic?.({topic:concept.topic,title:concept.name,topicKey:concept.id,concept:concept.id});
+ // A reservation conflict (e.g. a fallback concept reused) is recorded, never a reason to skip the post.
+ let reservationConflict:string|undefined;
+ try{await reserveTopic?.({topic:concept.topic,title:concept.name,topicKey:concept.id,concept:concept.id});}
+ catch(error){reservationConflict=String((error as Error)?.message??error).slice(0,240);}
  const ideaText=`CHOSEN IDEA (keep the topic, setting, items, cast and score): ${concept.lane} — "${concept.name}". Story: ${idea.angle} Setting: ${idea.setting}. Hero item: ${idea.heroItem}${idea.supportingItems.length?`; supporting items: ${idea.supportingItems.join(', ')}`:''}. Cast: ${idea.cast.join(', ')}. Proposed hook: ${idea.hook} Music: ${idea.music} — ${idea.musicBrief}
 Topic grounding: ${concept.beats.join(' ')} Source: ${concept.source}
 Visual approach: ${concept.reveal}
@@ -216,7 +231,7 @@ ${catalog}`,{name:'hedgy_reel',schema:hedgyReelSchema});
  }
  const copy=await reviewHedgyCopy(ask,editorial.narration,{title:result.spec.title,postCaption:result.spec.postCaption},review);
  const spec={...result.spec,...copy.copy};
- return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:astraReview?HEDGY_ASTRA_REVIEW:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,topic:concept.topic,topicKey:concept.id,lane:concept.lane,source:concept.source,title:spec.title},topicResearch:{query:research.query,runId:research.runId,results:research.results},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardDirection,storyboardFallback,ideaFallback,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
+ return {spec,provenance:{orchestrator:HEDGY_MODEL,effort:HEDGY_EFFORT,critic:astraReview?HEDGY_ASTRA_REVIEW:HEDGY_CRITIC_MODEL,ideaPick,specialist:HEDGY_MODEL,specialists:ROLES.length,idea:{...idea,conceptName:concept.name,topic:concept.topic,topicKey:concept.id,lane:concept.lane,source:concept.source,title:spec.title},topicResearch:{query:research.query,runId:research.runId,results:research.results},plan,contributions,editorial:{story:editorial.story,storyRounds:editorial.rounds,sceneRounds,unresolvedContinuity,storyboardDirection,storyboardFallback,ideaFallback,researchFallback,reservationConflict,modelFailure:degraded,storyUnresolved:'unresolved' in editorial?editorial.unresolved:false,copyUnresolved:'unresolved' in copy?copy.unresolved:false,copyRounds:copy.rounds}}};
 }
 
 import {reviewRenderedHedgy,repairFromVisualReview} from './hedgy-visual-review.ts';
