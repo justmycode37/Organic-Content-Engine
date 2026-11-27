@@ -134,4 +134,8 @@ A Hedgy run never ends without a postable reel. A failed model or transport call
 - **Storyboard** uses the last valid storyboard. Failing that, it uses the latest storyboard sanitised to documented params, worlds, hook and payoff, and as a last resort a deterministic storyboard of `act` shots that keeps every spoken word.
 - **Post copy** keeps the latest valid copy.
 
-Rendering is retried once, and a repair render that fails keeps the reviewed first render. Each fallback is recorded in provenance as unresolved (`ideaFallback`, `storyUnresolved`, `storyboardFallback`, `copyUnresolved`), together with every finding. The only remaining stop is a missing model credential.
+- **Topic research** that fails or finds nothing new falls back to the built-in concept list (least repeated first). A topic reservation conflict is recorded and does not stop the run.
+
+Rendering is retried once, and a repair render that fails keeps the reviewed first render. An interrupted generation is regenerated rather than left for inspection. The account worker retries a failed production up to three times from its cache before it reports the job as failed. Each fallback is recorded in provenance as unresolved (`ideaFallback`, `researchFallback`, `reservationConflict`, `storyUnresolved`, `storyboardFallback`, `copyUnresolved`, `regeneratedAfterInterruption`), together with every finding. The only remaining stop is a missing model credential.
+
+Past reels that were never posted can be published under a backfill round with `node scripts/hedgy-round-publish.mjs <dir> <integrationId> --round=<N>` (9000+ is reserved for backfills).

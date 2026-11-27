@@ -305,6 +305,12 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
   await writeFile(join(dir,'frame-index.json'),JSON.stringify({samples:unique,index,...(compareStyle?{styleReferenceHash:styleReference.hash,styleSourceHash:styleReference.sourceHash,motionSamples:motion.samples}:{})},null,1));
   return {sheets:[...sheets,...references,...extra],index,files};
  };
+ const reviewUnavailable=async(id,current,error)=>{
+  const reason=String(error?.message??error).slice(0,500);
+  log(`${id} unavailable (${reason.slice(0,200)}); continuing with the current unreviewed version (unapproved)`);
+  provenance[id]={stage:id,passed:false,reviewUnavailable:true,selectedBest:true,attempts:[{error:reason}],selectionReason:'The review could not complete; the current unreviewed version continues under the owner always-post policy and remains unapproved.'};
+  provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),id])];await save();return current;
+ };
  const visualStage=async(current,stage)=>{
   log(`${reviewLabel}: ${stage.id}`);
   const retainFailure=async failure=>{
@@ -323,7 +329,13 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
    review:(s,e,focus)=>reviewVisuals(ask,s,e.sheets,e.index,cat,provenance.thread??'',focus),
    repair:(s,r,focus,e,feedback)=>repairVisuals(ask,s,r,cat,focus,e.sheets,feedback),
    onResult:async r=>{provenance[stage.id]={...r,spec:undefined};if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),stage.id])];}await save();}});
-  }catch(e){if(!allowUnapproved||!e.reviewFailure)throw e;return retainFailure(e.reviewFailure);}
+  }catch(e){
+   if(allowUnapproved){if(!e.reviewFailure)throw e;return retainFailure(e.reviewFailure);}
+   // Normal reels always end in a post: keep the best rendered-and-reviewed candidate, or, when the review
+   // itself could not run, continue with the current version labelled unreviewed and unapproved.
+   if(e.reviewFailure?.attempts?.length){try{return await retainFailure(e.reviewFailure);}catch{}}
+   return reviewUnavailable(stage.id,current,e);
+  }
  };
  for(const stage of VISUAL_REVIEW_STAGES.slice(0,-1))spec=await visualStage(spec,stage);
  await writeFile(join(workdir,'spec.reviewed.json'),JSON.stringify(spec,null,1));
@@ -331,12 +343,20 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  log(`${reviewLabel}: delivery and timing reviews; ElevenLabs Adam at unchanged provider-default speed`);
  let voice;try{voice=await runVoiceReviews({text:spec.scenes.map(s=>s.say.trim()).join(' '),workdir,context:{...clientContext,narrationSpeed:'elevenlabs-default'},measure,
   narrate:(delivery,take)=>narrate(delivery,take,key,usage),
-  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600}),clients?'stop':'best'),
+  reviewDelivery:text=>reviewNarrationDelivery(ask,text,record=>appendFile(join(workdir,'voice-delivery-attempts.jsonl'),JSON.stringify({at:new Date().toISOString(),...record})+'\n',{mode:0o600}),clients?'stop':'best').catch(error=>{
+   if(clients)throw error;
+   provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-delivery-review'])];
+   log(`voice delivery review unavailable (${String(error?.message??error).slice(0,200)}); narrating the original reviewed words`);
+   return {text,notes:'Delivery review unavailable; original reviewed narration retained at provider-default speed.',pauses:[]};
+  }),
   reviewPacing:(text,delivery,metrics)=>reviewVoicePacing(ask,text,delivery,metrics),
   onResult:async r=>{provenance.voiceReview=r;if(!r.passed){provenance.unapprovedTest=true;provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];}await save();}});
  }catch(e){
-  if(!allowUnapproved||!e.voiceFailure||!e.lastVoice)throw e;
-  voice=e.lastVoice;provenance.unapprovedTest=true;provenance.voiceReview=e.voiceFailure;
+  if(!e.lastVoice||(allowUnapproved&&!e.voiceFailure))throw e;
+  // A generated take exists: publish it rather than losing the reel, labelled unresolved.
+  const audioHash=reviewFingerprint((await readFile(e.lastVoice.audio)).toString('base64'));
+  voice=e.lastVoice;provenance.unapprovedTest=true;
+  provenance.voiceReview={...(e.voiceFailure??{passed:false,attempts:[],error:String(e?.message??e)}),selectedBest:true,attempts:e.voiceFailure?.attempts?.length?e.voiceFailure.attempts:[{error:String(e?.message??e).slice(0,500)}],outputHash:reviewFingerprint({audioHash,words:voice.words,total:voice.total}),selectionReason:'The last generated take is retained because the timing review could not complete; unapproved.'};
   provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'voice-pacing-review'])];await save();
  }
  const roughTotal=voice.total+2.2;
@@ -360,7 +380,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
  const cueFile=join(workdir,'cues.designed.json');
  if(!await exists(cueFile)){
   const auto=autoCues(spec);
-  const designed=ask?await measure('sound design',()=>gen.designSound(ask,soundContext,auto,SFX_KINDS)):auto;
+  const designed=ask?await measure('sound design',()=>gen.designSound(ask,soundContext,auto,SFX_KINDS)).catch(error=>{log(`sound design unavailable (${String(error?.message??error).slice(0,200)}); using automatic cues`);provenance.soundDesignFallback=String(error?.message??error).slice(0,300);return auto;}):auto;
   // the answer moment: one tasteful hit on the final scene's first event or start
   await writeFile(cueFile,JSON.stringify(governCues(designed,total),null,1));
  }
@@ -371,7 +391,7 @@ export async function produce(workdir,{topic='',specFile=null,history=[],clients
   log(`mix v1 (${cues.length} cues)`);
   const c1=await measure('mix calibration and effects preparation',()=>calibrateMix({voice,lead:timed.lead,cues,sfx,bed,total,out:audio},log));
   const stats=await mixStats(audio,cues,total,!!bed,c1.clarity);provenance.mixStatsV1=stats;await save();
-  if(ask){log(`${reviewLabel}: sound review`);cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,soundContext,cues,stats)),total);}
+  if(ask){log(`${reviewLabel}: sound review`);cues=governCues(await measure('sound review',()=>gen.reviewSound(ask,soundContext,cues,stats)).catch(error=>{log(`sound review unavailable (${String(error?.message??error).slice(0,200)}); keeping designed cues (unapproved)`);provenance.failedReviews=[...new Set([...(provenance.failedReviews??[]),'sound-review'])];provenance.soundReviewUnavailable=String(error?.message??error).slice(0,300);return cues;}),total);}
   await writeFile(finalCues,JSON.stringify(cues,null,1));
  }
  cues=await readJson(finalCues);

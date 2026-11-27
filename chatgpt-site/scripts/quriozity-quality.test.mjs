@@ -212,7 +212,7 @@ test('problems that existed before a repair do not block an unrelated valid fix'
  assert.equal(result.valid,true,JSON.stringify(result.problems));assert.equal(result.spec.scenes[4].objects[0].scale,.85);
 });
 
-test('Opus realization echo differences in Sol-owned fields are restored, a reordered narration is not',async()=>{
+test('Opus realization echo differences in Sol-owned fields are restored, a reordered narration falls back to the storyboard',async()=>{
  const spec=reel();spec.scenes[0].text=[{text:'Light',style:'headline'}];
  const echo=structuredClone(spec);delete echo.beat;echo.scenes.forEach(s=>{delete s.words;delete s.duration;});echo.scenes[0].text=[{text:'LIGHT!',style:'headline'}];echo.scenes[2].hue='red';
  const calls=[];const log={};
@@ -221,7 +221,19 @@ test('Opus realization echo differences in Sol-owned fields are restored, a reor
  assert.deepEqual(out.scenes.map(s=>[s.say,s.duration,s.hue,JSON.stringify(s.text)]),spec.scenes.map(s=>[s.say,s.duration,s.hue,JSON.stringify(s.text)]));
  assert.ok(log.visualRealization[0].restored.includes('scene 1 text'));assert.ok(log.visualRealization[0].restored.includes('scene 3 hue'));
  const swapped=structuredClone(echo);[swapped.scenes[0],swapped.scenes[1]]=[swapped.scenes[1],swapped.scenes[0]];
- await assert.rejects(realizeVisuals(async()=>JSON.stringify(swapped),spec,catalogue,{}),e=>/narration, scene order/.test(e.message)&&e.details.attempts.length===2&&typeof e.details.attempts[0].raw==='string');
+ const fallbackLog={};
+ const fallback=await realizeVisuals(async()=>JSON.stringify(swapped),spec,catalogue,fallbackLog);
+ assert.equal(fallbackLog.visualRealizationFallback.used,'sol-storyboard');assert.match(fallbackLog.visualRealizationFallback.reason,/narration, scene order/);
+ assert.equal(fallbackLog.visualRealization.length,2);assert.equal(typeof fallbackLog.visualRealization[0].raw,'string');
+ assert.deepEqual(fallback.scenes.map(s=>s.say),spec.scenes.map(s=>s.say));
+});
+
+test('a failed Opus realization call never ends the reel',async()=>{
+ const spec=reel(),log={};let calls=0;
+ const out=await realizeVisuals(async()=>{calls++;throw Object.assign(Error('claude could not finish (SIGKILL)'),{code:'subscription_failed'});},spec,catalogue,log);
+ assert.equal(calls,2,'initial request plus its one repair');
+ assert.equal(log.visualRealizationFallback.used,'sol-storyboard');
+ assert.deepEqual(out.scenes.map(s=>s.say),spec.scenes.map(s=>s.say));
 });
 
 test('a repair longer than the requested 48 patches is still validated patch by patch',async()=>{

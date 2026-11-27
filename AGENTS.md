@@ -64,7 +64,11 @@ repair is worse. Save the selection and its reason, retain
 all findings and versions, and label unresolved results as unapproved rather than
 claiming that they passed. After review/repair limits, normal Quriozity reels
 finish and automatically publish the best actually reviewed selection, retaining
-all unresolved findings. Private experiments remain excluded from publication.
+all unresolved findings.
+Every Hedgy and Quriozity generation must end in a post, even when a review,
+model call or realization fails: retry from cache, fall back (for Quriozity, Sol's
+reviewed storyboard renders when Opus realization is unavailable), label the
+result unresolved/unapproved, and publish. Private experiments remain excluded from publication.
 Voice should feel calm, natural and unhurried, with pauses at thought boundaries.
 Let the reel run longer instead of compressing speech to a duration target.
 Use ElevenLabs' unchanged default voice speed. Do not send a speed override,

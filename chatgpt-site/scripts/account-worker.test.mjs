@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {HEDGY_CONCEPTS} from '../worker/hedgy-ideas.ts';
 import {hedgyTopicResearch} from './hedgy-topic-research.mjs';
-import {runOnce} from './account-worker.mjs';
+import {runOnce,REEL_ATTEMPTS} from './account-worker.mjs';
 import {runAccountCommand} from './account-worker-evidence.mjs';
 import {hedgyClient} from '../worker/hedgy-model-client.ts';
 import {createReelSubscription,waitForNetwork} from './reel-subscription.mjs';
@@ -235,13 +235,24 @@ test('evidence write failure still reports the job and logs its original error',
  });
 });
 
-test('an existing paid-generation guard prevents another provider request',async()=>{
- await fixture(async({cacheRoot,options,calls})=>{
+test('an interrupted Hedgy generation is regenerated instead of stopping the post',async()=>{
+ await fixture(async({cacheRoot,options})=>{
   await mkdir(join(cacheRoot,job.id));await writeFile(join(cacheRoot,job.id,'paid-generation-started'),'existing-start');
-  const original=globalThis.fetch;globalThis.fetch=()=>{throw Error('A guarded job must not call a provider');};
+  const original=globalThis.fetch;globalThis.fetch=()=>{throw Error('offline provider');};
   try{await runOnce(config,options);}finally{globalThis.fetch=original;}
-  assert.match(JSON.parse(calls.at(-1).init.body).message,/previous generation/);
-  assert.equal(await readFile(join(cacheRoot,job.id,'paid-generation-started'),'utf8'),'existing-start');
+  assert.notEqual(await readFile(join(cacheRoot,job.id,'paid-generation-started'),'utf8'),'existing-start');
+ });
+});
+
+test('a failed production is retried from cache before the job is reported',async()=>{
+ await fixture(async({cacheRoot,calls,options})=>{
+  let attempts=0;const done=join(cacheRoot,'done.mp4');await writeFile(done,'video');
+  const original=options.fetchSite;options.fetchSite=async(c,p,i)=>p.endsWith('/output')?(calls.push({path:p,init:i}),Response.json({materialId:'material-retry'})):original(c,p,i);
+  await runOnce(config,{...options,makeReel:async()=>{if(++attempts<REEL_ATTEMPTS)throw Error('transient');return {done,spec:{},provenance:{}};}});
+  assert.equal(attempts,REEL_ATTEMPTS);
+  assert.equal(calls.filter(c=>c.path.endsWith('/fail')).length,0);
+  assert.equal(calls.filter(c=>c.path.endsWith('/complete')).length,1);
+  assert.ok((await readdir(join(cacheRoot,job.id))).includes('retry-1.json'));
  });
 });
 

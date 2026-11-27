@@ -348,12 +348,12 @@ test('topic research rejects title-only legacy repeats and invented source refer
  assert.equal(result.topics[0].source,seedSource);
  assert.deepEqual(phases,['topic-query-1','topic-research-1','topic-query-2','topic-research-2']);
 });
-test('a covered topic blocks generation before ideation or reservation',async t=>{
- const {calls}=mockHedgy(t,format=>format==='hedgy_topic_query'?{query}:undefined);
- let reserved=false;
- await assert.rejects(generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,[{concept:'phantom-traffic-jam'}],undefined,{reserveTopic:async()=>{reserved=true;}}),e=>e.code==='hedgy_no_new_topic');
- assert.equal(reserved,false);
- assert.ok(calls.every(call=>['hedgy_topic_query','hedgy_topic_research'].includes(call.text.format.name)));
+test('a covered topic falls back to built-in concepts instead of stopping the post',async t=>{
+ mockHedgy(t,format=>format==='hedgy_topic_query'?{query}:undefined);
+ const result=await generateHedgyReel({OPENAI_API_KEY:'test'},HEDGY_TOPIC,undefined,[{concept:'phantom-traffic-jam'}],undefined,{reserveTopic:async()=>{}});
+ assert.match(result.provenance.editorial.researchFallback,/hedgy_no_new_topic/);
+ assert.notEqual(result.provenance.idea.topicKey,'phantom-traffic-jam');
+ assert.ok(result.spec.postCaption);
 });
 test('two concurrent attempts cannot reserve the same topic on the worker',async()=>{
  const {mkdtemp,rm}=await import('node:fs/promises');
