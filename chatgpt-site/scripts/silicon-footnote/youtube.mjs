@@ -10,8 +10,8 @@ const pack=action==='publish'?JSON.parse(await readFile(join(dir,'publication.js
 if(action==='publish'){
  const directoryRound=dir.match(/(?:^|[\/])evaluation[\/]r(\d+)(?:[\/]|$)/)?.[1];
  if(directoryRound||Object.hasOwn(pack,'round')){
-  // Owner-authorized YouTube releases: rounds 11 and 12 (Nov 24) and 9, 10, 13-20 (Nov 26, 2026).
-  if(![9,10,11,12,13,14,15,16,17,18,19,20].includes(pack.round)||(directoryRound&&Number(directoryRound)!==pack.round)){
+  // Owner-authorized YouTube releases: rounds 11 and 12 (Nov 24) and 9, 10, 13-20 (Nov 26, 2026) and 21-25 (Nov 28, 2026).
+  if(![9,10,11,12,13,14,15,16,17,18,19,20,21,22,23,24,25].includes(pack.round)||(directoryRound&&Number(directoryRound)!==pack.round)){
    throw Error('This round is not authorized for publication. Keep it in videos/.');
   }
  }
